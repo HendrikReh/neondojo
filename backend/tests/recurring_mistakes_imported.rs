@@ -7,6 +7,59 @@ use uuid::Uuid;
 fn app(pool: &PgPool) -> axum::Router {
     support::app(pool, "/unavailable")
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn decision_index_tracks_in_place_imported_changes(pool: PgPool) {
+    let (_, ids) = imported(&pool).await;
+    let router = app(&pool);
+    let search = || {
+        call(
+            &router,
+            "GET",
+            "/api/study/decisions?player=Alice",
+            Value::Null,
+        )
+    };
+    let (status, before) = search().await;
+    assert_eq!(status, 200, "{before}");
+    assert_eq!(before["total"], 2);
+
+    sqlx::query(
+        "UPDATE imported_analyses
+         SET data=jsonb_set(data,'{engine_version}',to_jsonb('9.9'::text)) WHERE id=$1",
+    )
+    .bind(ids[0])
+    .execute(&pool)
+    .await
+    .unwrap();
+    let (status, after) = search().await;
+    assert_eq!(status, 200, "{after}");
+    assert_eq!(after["total"], 2);
+    let updated = after["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["reference"]["imported_analysis_id"] == ids[0].to_string())
+        .unwrap();
+    assert!(
+        updated["engine"].as_str().unwrap().contains("9.9"),
+        "{updated}"
+    );
+
+    sqlx::query("DELETE FROM imported_analyses WHERE id=$1")
+        .bind(ids[0])
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, after_delete) = search().await;
+    assert_eq!(status, 200, "{after_delete}");
+    assert_eq!(after_delete["total"], 1);
+    assert_eq!(
+        after_delete["items"][0]["reference"]["imported_analysis_id"],
+        ids[1].to_string()
+    );
+}
+
 async fn checkpoint(pool: &PgPool, id: Uuid, game: i32) {
     let job = Uuid::new_v4();
     sqlx::query("INSERT INTO jobs(id,match_uuid,kind,plies,status,result,game_no,total_games,completed_games) VALUES($1,$2,'match',1,'completed','{}',$3,1,1)").bind(job).bind(id).bind(game).execute(pool).await.unwrap();

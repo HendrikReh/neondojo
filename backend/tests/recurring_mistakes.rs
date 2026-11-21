@@ -1358,15 +1358,6 @@ async fn decision_index_follows_saved_decisions(pool: PgPool) {
 
     assert_eq!(search().await["total"], 2);
     let built = index_entries(&pool, &matches).await;
-    assert!(built[0].0.ends_with(&format!(
-        "|4:{}",
-        sqlx::query_scalar::<_, i64>("SELECT sum(id)::bigint FROM move_analyses WHERE job_id=$1")
-            .bind(saved)
-            .fetch_one(&pool)
-            .await
-            .unwrap()
-    )));
-    assert!(built[1].0.ends_with("|0:0"), "{}", built[1].0);
     // An unchanged library is served from the index without rebuilding.
     assert_eq!(search().await["total"], 2);
     assert_eq!(index_entries(&pool, &matches).await, built);
@@ -1395,23 +1386,42 @@ async fn decision_index_follows_saved_decisions(pool: PgPool) {
     assert_ne!(after[0], before[0]);
     assert_eq!(after[1], before[1], "only the changed match is rebuilt");
 
-    // An in-place update keeps count and ids; the trigger drops the entry.
+    // An in-place update keeps count and ids, but changes the revision.
     sqlx::query("UPDATE move_analyses SET equity_loss=0.5,data=data||'{\"equity_loss\":0.5,\"best_equity\":0.5}'::jsonb WHERE job_id=$1 AND decision_no=1")
         .bind(saved)
         .execute(&pool)
         .await
         .unwrap();
-    let missing: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM decision_index_matches WHERE match_id=$1")
-            .bind(analyzed)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-    assert_eq!(missing, 0);
     let page = search().await;
     assert_eq!(page["total"], 2);
     assert_eq!(page["items"][0]["equity_loss"], 0.5);
     assert_eq!(page["items"][0]["kind"], "checker");
+    assert_ne!(index_entries(&pool, &matches).await[0], after[0]);
+
+    // A format/classifier version change rebuilds the projection with the same results.
+    sqlx::query("UPDATE decision_index_matches SET fingerprint='old:classifier' WHERE match_id=$1")
+        .bind(analyzed)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(search().await, page);
+    assert_ne!(index_entries(&pool, &matches).await[0].0, "old:classifier");
+
+    sqlx::query("UPDATE matches SET white='Alicia' WHERE id=$1")
+        .bind(analyzed)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(search().await["total"], 0);
+    assert_eq!(search_player("alicia").await["total"], 2);
+
+    // Removing the parent job cascades through its decisions and revision.
+    sqlx::query("DELETE FROM jobs WHERE id=$1")
+        .bind(saved)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(search_player("alicia").await["total"], 0);
 }
 
 #[sqlx::test(migrations = "./migrations")]

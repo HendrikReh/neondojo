@@ -2,17 +2,16 @@
 //!
 //! Mistake groups and the decision search read this index with SQL. A match
 //! is re-indexed when its fingerprint changes: another analysis is displayed,
-//! its saved decisions were added or removed, the source or a player name
-//! changed, or the index format moved on. Updating a saved decision drops the
-//! match's entry instead (migration 0080).
+//! its saved analysis revision changed, the source or a player name changed,
+//! or the index format moved on.
 use super::{
     can_practice_correct_cube, kind, opportunity,
     search::{DecisionHit, context, owner_filter},
-    source::{SourceDecision, load},
+    source::{self, SourceDecision},
 };
 use crate::api::{ApiError, ApiResult};
 use chrono::NaiveDate;
-use sqlx::{FromRow, PgPool};
+use sqlx::{FromRow, PgConnection, PgPool};
 use uuid::Uuid;
 
 /// Bump when the stored columns or the hit format change.
@@ -29,24 +28,31 @@ struct Candidate {
     id: Uuid,
     fingerprint: String,
     played: NaiveDate,
+    white: String,
+    black: String,
+    native_revision_job: Option<Uuid>,
+    imported_revision_match: Option<Uuid>,
     stored: Option<String>,
 }
 
+impl Candidate {
+    fn is_current(&self) -> bool {
+        self.stored.as_deref() == Some(self.fingerprint.as_str())
+    }
+}
+
 /// Each match's current fingerprint and stored index entry. `$1` is the index
-/// version; callers append their filter. The fingerprint covers the displayed
-/// analysis, the source, the player names and the format. Inserted or deleted
-/// decisions change the count or the sum of their never-reused ids, read from
-/// move_analyses_page without the analysis JSON. An UPDATE drops the affected
-/// matches' index entries in a trigger (migration 0080).
+/// version; callers append their filter. Transactional revision tokens describe
+/// the displayed analysis, including changes that leave its row IDs intact.
 const CANDIDATES: &str = "SELECT m.id,
                 concat_ws('|', $1::text, coalesce(sel.analysis_id,''), coalesce(sel.source,''),
                           coalesce(sel.job_id::text,''), m.source_revision::text,
                           lower(btrim(m.white)), lower(btrim(m.black)),
                           m.imported_analysis_loaded::text, m.moves_cataloged::text,
-                          live.blocked::text,
-                          (SELECT count(*)::text||':'||coalesce(sum(a.id),0)::text
-                           FROM move_analyses a WHERE a.job_id=sel.job_id)) AS fingerprint,
+                          live.blocked::text, coalesce(n.revision,'0:0'), nullif(i.revision,'')) AS fingerprint,
                 coalesce(m.played_on, m.created_at::date) AS played,
+                m.white, m.black,
+                n.job_id AS native_revision_job, i.match_id AS imported_revision_match,
                 x.fingerprint AS stored
          FROM matches m
          -- OFFSET 0 keeps the catalog lookup scoped to this match.
@@ -54,6 +60,8 @@ const CANDIDATES: &str = "SELECT m.id,
              SELECT s.analysis_id,s.source,s.job_id FROM effective_analysis_selections s
              WHERE s.match_id=m.id OFFSET 0
          ) sel ON true
+         LEFT JOIN native_analysis_revisions n ON n.job_id=sel.job_id
+         LEFT JOIN imported_analysis_revisions i ON i.match_id=m.id AND sel.source='imported'
          CROSS JOIN LATERAL (
              SELECT EXISTS(
                  SELECT 1 FROM play_sessions live
@@ -89,15 +97,16 @@ pub(super) async fn ensure(
     .fetch_all(pool)
     .await
     .map_err(anyhow::Error::from)?;
-    let stale: Vec<Candidate> = candidates
+    let stale: Vec<Uuid> = candidates
         .into_iter()
-        .filter(|candidate| candidate.stored.as_deref() != Some(candidate.fingerprint.as_str()))
+        .filter(|candidate| !candidate.is_current())
+        .map(|candidate| candidate.id)
         .collect();
     if stale.len() > MAX_REBUILDS {
         return Err(ApiError::invalid(super::source::TOO_BROAD));
     }
-    for candidate in stale {
-        publish(pool, candidate).await?;
+    for id in stale {
+        publish(pool, id).await?;
     }
     Ok(())
 }
@@ -107,16 +116,46 @@ enum Published {
     /// The index holds the match's current state, or the match left its scope.
     Current,
     /// The decisions changed after they were loaded; load them again.
-    Outdated(Candidate),
+    Outdated,
+}
+
+async fn candidate_on(connection: &mut PgConnection, id: Uuid) -> ApiResult<Option<Candidate>> {
+    Ok(sqlx::query_as(&format!("{CANDIDATES} AND m.id=$2"))
+        .bind(version())
+        .bind(id)
+        .fetch_optional(connection)
+        .await
+        .map_err(anyhow::Error::from)?)
+}
+
+async fn read_for_index(
+    pool: &PgPool,
+    id: Uuid,
+) -> ApiResult<Option<(Candidate, source::SavedDecisions)>> {
+    super::imported::catalog_legacy(pool, None, Some(id), None).await?;
+    let mut tx = source::read_snapshot(pool).await?;
+    // The fingerprint and decisions must describe the same selection even
+    // when the displayed analysis changes temporarily during a rebuild.
+    let Some(candidate) = candidate_on(&mut tx, id)
+        .await?
+        .filter(|candidate| !candidate.is_current())
+    else {
+        return Ok(None);
+    };
+    let saved = source::read_saved_decisions(&mut tx, None, Some(id), None).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Some((candidate, saved)))
 }
 
 /// Re-index one match until the stored entry matches its saved decisions.
-async fn publish(pool: &PgPool, mut candidate: Candidate) -> ApiResult<()> {
+async fn publish(pool: &PgPool, id: Uuid) -> ApiResult<()> {
     for _ in 0..MAX_PUBLISH_ATTEMPTS {
-        let rows = load(pool, None, Some(candidate.id), None).await?;
-        match store(pool, &candidate, rows).await? {
+        let Some((candidate, saved)) = read_for_index(pool, id).await? else {
+            return Ok(());
+        };
+        match store(pool, &candidate, saved.project().await?).await? {
             Published::Current => return Ok(()),
-            Published::Outdated(current) => candidate = current,
+            Published::Outdated => {}
         }
     }
     Err(ApiError::invalid(CHANGED))
@@ -180,39 +219,60 @@ async fn store(
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
+    // Keep participant and date updates from invalidating the match between
+    // the check and publication, including when the previous player is searched.
+    let match_exists: Option<Uuid> =
+        sqlx::query_scalar("SELECT id FROM matches WHERE id=$1 AND NOT collection_only FOR SHARE")
+            .bind(candidate.id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    if match_exists.is_none() {
+        return Ok(Published::Current);
+    }
+    // Writers upsert these rows. Lock the source used by the snapshot until
+    // commit so a correction cannot slip between the check and publication.
+    if let Some(job_id) = candidate.native_revision_job {
+        sqlx::query("SELECT job_id FROM native_analysis_revisions WHERE job_id=$1 FOR SHARE")
+            .bind(job_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    }
+    if let Some(match_id) = candidate.imported_revision_match {
+        sqlx::query("SELECT match_id FROM imported_analysis_revisions WHERE match_id=$1 FOR SHARE")
+            .bind(match_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    }
     // The rows describe the decisions saved under the candidate's fingerprint.
     // A slower request must not replace a newer entry with them.
-    let current: Option<Candidate> = sqlx::query_as(&format!("{CANDIDATES} AND m.id=$2"))
-        .bind(version())
-        .bind(candidate.id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    if let Some(current) = current
-        && current.fingerprint != candidate.fingerprint
+    let Some(current) = candidate_on(&mut tx, candidate.id).await? else {
+        return Ok(Published::Current);
+    };
+    if current.is_current() {
+        return Ok(Published::Current);
+    }
+    if current.fingerprint != candidate.fingerprint
+        || current.played != candidate.played
+        || current.white != candidate.white
+        || current.black != candidate.black
     {
-        if current.stored.as_deref() == Some(current.fingerprint.as_str()) {
-            return Ok(Published::Current);
-        }
-        return Ok(Published::Outdated(current));
+        return Ok(Published::Outdated);
     }
     sqlx::query("DELETE FROM decision_index_matches WHERE match_id=$1")
         .bind(candidate.id)
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
-    // The match may have been deleted since the fingerprint was read.
-    let inserted = sqlx::query(
-        "INSERT INTO decision_index_matches(match_id,fingerprint)
-         SELECT id,$2 FROM matches WHERE id=$1",
-    )
-    .bind(candidate.id)
-    .bind(&candidate.fingerprint)
-    .execute(&mut *tx)
-    .await
-    .map_err(anyhow::Error::from)?
-    .rows_affected();
-    if inserted == 1 && !seq.is_empty() {
+    sqlx::query("INSERT INTO decision_index_matches(match_id,fingerprint) VALUES($1,$2)")
+        .bind(candidate.id)
+        .bind(&candidate.fingerprint)
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    if !seq.is_empty() {
         sqlx::query(
             "INSERT INTO decision_index(match_id,seq,game_no,decision_no,player_name,question_kind,
                 game_plan,opportunity,mistake_kind,equity_loss,match_length,away_own,away_opponent,
@@ -462,6 +522,48 @@ mod tests {
         .unwrap()
     }
 
+    async fn native_source(pool: &PgPool) -> (Uuid, Uuid) {
+        let id = crate::store::import_match(
+            pool,
+            "revisions.sgf",
+            "sgf",
+            SOURCE.as_bytes(),
+            SOURCE,
+            &crate::import::parse_sgf(SOURCE).unwrap(),
+        )
+        .await
+        .unwrap()
+        .r#match
+        .id;
+        let job = sqlx::query_scalar(
+            "INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games)
+             VALUES(gen_random_uuid(),$1,'match',3,'completed',1,1) RETURNING id",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
+            .bind(job)
+            .execute(pool)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO move_analyses(job_id,game_no,decision_no,player,kind,equity_loss,data)
+             VALUES($1,1,1,0,'checker',0.1,$2)",
+        )
+        .bind(job)
+        .bind(serde_json::json!({
+            "decision_no":1, "checker_no":1, "player":0, "kind":"checker",
+            "played":"8/5 6/5", "best":"6/3 6/5", "played_equity":0.0, "best_equity":0.1,
+            "equity_loss":0.1, "severity":"bad", "dice":[3,1], "evaluation_status":"evaluated"
+        }))
+        .execute(pool)
+        .await
+        .unwrap();
+        (id, job)
+    }
+
     #[sqlx::test(migrations = "./migrations")]
     async fn slower_rebuilds_never_publish_an_older_fingerprint(pool: PgPool) {
         let parsed = crate::import::parse_sgf(SOURCE).unwrap();
@@ -491,15 +593,14 @@ mod tests {
             ..fresh.clone()
         };
 
-        let Published::Outdated(next) = ok(store(&pool, &read_before_change, Vec::new()).await)
-        else {
-            panic!("an outdated fingerprint was published");
-        };
-        assert_eq!(next.fingerprint, fresh.fingerprint);
+        assert!(matches!(
+            ok(store(&pool, &read_before_change, Vec::new()).await),
+            Published::Outdated
+        ));
         assert_eq!(entry(&pool, id).await, None);
 
         // The rebuild loads again under the current fingerprint.
-        ok(publish(&pool, read_before_change.clone()).await);
+        ok(publish(&pool, id).await);
         let published = entry(&pool, id).await.unwrap();
         assert_eq!(published.0, fresh.fingerprint);
 
@@ -509,5 +610,85 @@ mod tests {
             Published::Current
         ));
         assert_eq!(entry(&pool, id).await, Some(published));
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn in_place_decision_and_checkpoint_changes_invalidate_an_in_flight_rebuild(
+        pool: PgPool,
+    ) {
+        let (id, job) = native_source(&pool).await;
+        let before = current(&pool, id).await;
+        sqlx::query("UPDATE move_analyses SET equity_loss=0.2 WHERE job_id=$1")
+            .bind(job)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(
+            matches!(
+                ok(store(&pool, &before, Vec::new()).await),
+                Published::Outdated
+            ),
+            "published a rebuild that missed an in-place decision update"
+        );
+        assert_eq!(entry(&pool, id).await, None);
+        let after_update = current(&pool, id).await;
+
+        let mut tx = pool.begin().await.unwrap();
+        sqlx::query("DELETE FROM match_analysis_games WHERE job_id=$1")
+            .bind(job)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO match_analysis_games(job_id,game_no) VALUES($1,1)")
+            .bind(job)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert!(matches!(
+            ok(store(&pool, &after_update, Vec::new()).await),
+            Published::Outdated
+        ));
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn temporary_selection_change_cannot_label_a_projection_with_the_previous_selection(
+        pool: PgPool,
+    ) {
+        let (id, job) = native_source(&pool).await;
+        let (first, saved) = ok(read_for_index(&pool, id).await).unwrap();
+        assert_eq!(
+            ok(saved.project().await)[0].question.reference.job_id,
+            Some(job)
+        );
+
+        // An unavailable explicit choice hides the native result until reset.
+        sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2)")
+            .bind(id)
+            .bind(format!("job:{}", Uuid::new_v4()))
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (temporary, saved) = ok(read_for_index(&pool, id).await).unwrap();
+        sqlx::query("DELETE FROM analysis_selections WHERE match_id=$1")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_eq!(current(&pool, id).await.fingerprint, first.fingerprint);
+        let hidden_rows = ok(saved.project().await);
+        assert!(hidden_rows.is_empty());
+        assert!(matches!(
+            ok(store(&pool, &temporary, hidden_rows).await),
+            Published::Outdated
+        ));
+        ok(publish(&pool, id).await);
+        let cached: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM decision_index WHERE match_id=$1")
+                .bind(id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(cached, 1);
     }
 }
