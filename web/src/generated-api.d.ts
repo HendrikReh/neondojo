@@ -3483,14 +3483,14 @@ export interface components {
             valid: boolean;
         };
         /** @enum {string} */
-        ConfigurationBoardView: "Before" | "Arrows" | "After";
+        ConfigurationBoardView: "before" | "arrows" | "after";
         ConfigurationBook: {
             path: string;
             provider: components["schemas"]["ConfigurationBookProvider"];
             xg_path: string;
         };
         /** @enum {string} */
-        ConfigurationBookProvider: "Off" | "Automatic" | "Backgammondb" | "Xg";
+        ConfigurationBookProvider: "off" | "automatic" | "backgammondb" | "xg";
         ConfigurationCardFilters: {
             comment: string;
             game_plan?: string;
@@ -3508,9 +3508,9 @@ export interface components {
             saved: unknown;
         };
         /** @enum {string} */
-        ConfigurationDirection: "Left" | "Right";
+        ConfigurationDirection: "left" | "right";
         /** @enum {string} */
-        ConfigurationEngine: "Gnubg" | "OpenSage";
+        ConfigurationEngine: "gnubg" | "bgsage";
         ConfigurationErrorBody: {
             code: string;
             error: string;
@@ -3565,9 +3565,9 @@ export interface components {
             tournament: string;
         };
         /** @enum {string} */
-        ConfigurationLocale: "De" | "En" | "Es" | "Fr" | "It" | "Pl";
+        ConfigurationLocale: "de" | "en" | "es" | "fr" | "it" | "pl";
         /** @enum {string} */
-        ConfigurationMode: "Light" | "Dark" | "System";
+        ConfigurationMode: "light" | "dark" | "system";
         ConfigurationPlay: {
             default_mode: components["schemas"]["PlayMode"];
             engine: components["schemas"]["ConfigurationEngine"];
@@ -3608,11 +3608,11 @@ export interface components {
             severity: string;
         };
         /** @enum {string} */
-        ConfigurationScope: "Game" | "Match";
+        ConfigurationScope: "game" | "match";
         /** @enum {string} */
-        ConfigurationSearchFilter: "EngineDefault";
+        ConfigurationSearchFilter: "engine_default";
         /** @enum {string} */
-        ConfigurationSortDirection: "Asc" | "Desc";
+        ConfigurationSortDirection: "asc" | "desc";
         ConfigurationState: {
             active_profile: components["schemas"]["ConfigurationProfile"];
             current_configuration: components["schemas"]["ProfileConfiguration"];
@@ -3624,7 +3624,7 @@ export interface components {
             revision: number;
         };
         /** @enum {string} */
-        ConfigurationUiTheme: "Graphite" | "Club" | "Paper";
+        ConfigurationUiTheme: "graphite" | "club" | "paper";
         ConfigurationValidation: {
             issues: components["schemas"]["ConfigurationIssue"][];
             valid: boolean;

@@ -14888,9 +14888,9 @@
       "ConfigurationBoardView": {
         "type": "string",
         "enum": [
-          "Before",
-          "Arrows",
-          "After"
+          "before",
+          "arrows",
+          "after"
         ]
       },
       "ConfigurationBook": {
@@ -14916,10 +14916,10 @@
       "ConfigurationBookProvider": {
         "type": "string",
         "enum": [
-          "Off",
-          "Automatic",
-          "Backgammondb",
-          "Xg"
+          "off",
+          "automatic",
+          "backgammondb",
+          "xg"
         ]
       },
       "ConfigurationCardFilters": {
@@ -14982,15 +14982,15 @@
       "ConfigurationDirection": {
         "type": "string",
         "enum": [
-          "Left",
-          "Right"
+          "left",
+          "right"
         ]
       },
       "ConfigurationEngine": {
         "type": "string",
         "enum": [
-          "Gnubg",
-          "OpenSage"
+          "gnubg",
+          "bgsage"
         ]
       },
       "ConfigurationErrorBody": {
@@ -15213,20 +15213,20 @@
       "ConfigurationLocale": {
         "type": "string",
         "enum": [
-          "De",
-          "En",
-          "Es",
-          "Fr",
-          "It",
-          "Pl"
+          "de",
+          "en",
+          "es",
+          "fr",
+          "it",
+          "pl"
         ]
       },
       "ConfigurationMode": {
         "type": "string",
         "enum": [
-          "Light",
-          "Dark",
-          "System"
+          "light",
+          "dark",
+          "system"
         ]
       },
       "ConfigurationPlay": {
@@ -15366,21 +15366,21 @@
       "ConfigurationScope": {
         "type": "string",
         "enum": [
-          "Game",
-          "Match"
+          "game",
+          "match"
         ]
       },
       "ConfigurationSearchFilter": {
         "type": "string",
         "enum": [
-          "EngineDefault"
+          "engine_default"
         ]
       },
       "ConfigurationSortDirection": {
         "type": "string",
         "enum": [
-          "Asc",
-          "Desc"
+          "asc",
+          "desc"
         ]
       },
       "ConfigurationState": {
@@ -15433,9 +15433,9 @@
       "ConfigurationUiTheme": {
         "type": "string",
         "enum": [
-          "Graphite",
-          "Club",
-          "Paper"
+          "graphite",
+          "club",
+          "paper"
         ]
       },
       "ConfigurationValidation": {
