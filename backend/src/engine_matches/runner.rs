@@ -46,8 +46,16 @@ pub(super) async fn run_one(pool: &PgPool) -> Result<bool> {
         result = monitor(pool, series.id, token) => result,
     };
     if let Err(error) = result {
-        sqlx::query("UPDATE engine_match_runs SET status='failed',error=$3,lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now()")
-            .bind(series.id).bind(token).bind(format!("{error:#}")).execute(pool).await?;
+        let message = format!("{error:#}");
+        let failed = sqlx::query("UPDATE engine_match_runs SET status='failed',error=$3,lease_token=NULL,lease_until=NULL WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now()")
+            .bind(series.id).bind(token).bind(&message).execute(pool).await?
+            .rows_affected();
+        if failed == 1 {
+            tracing::warn!(series = %series.id, error = %message, "Engine match series failed");
+        } else {
+            // Cancelled, or another worker owns the series after a lost lease.
+            tracing::info!(series = %series.id, error = %message, "Engine match worker stopped without owning the series");
+        }
     }
     Ok(true)
 }

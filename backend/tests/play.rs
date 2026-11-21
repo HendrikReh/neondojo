@@ -482,6 +482,77 @@ async fn native_cube_take_drop_bot_response_and_forced_pass(pool: PgPool) {
 }
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and native GNUbg"]
+async fn roll_where_both_players_dance_returns_to_the_same_native_state(pool: PgPool) {
+    // Both players have a checker on the bar and enter only with a 1: White
+    // (human) on 24, Black (bot) on White's 1 point. A roll without a 1 for
+    // both players is accepted natively but restores the identical GNUbg ID.
+    // The bot recorded B[65] as a dance after White's partial entry W[31yx].
+    let sgf = "(;FF[4]GM[6]MI[length:1][game:0][ws:0][bs:0]PW[Human]PB[GNUbg]RU[Crawford];PL[W]AE[a:y]AW[y][y][b][b][c][c][d][d][e][e][f][f][m][m][m]AB[x][s][s][t][t][u][u][v][v][w][w][l][l][l][l];W[31yx];B[65])";
+    let native_id = "tm3AA0C2bcABUA:MAEgAAAAAAAE";
+    let board = json!([
+        -1, 0, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, -4, 3, 0, 0, 0, 0, 0, -2, -2, -2, -2, -2, 1, 1
+    ]);
+    let app = api::router(AppState::new(pool.clone(), engine()));
+    // Each roll uses GNUbg's own random dice; both dance with (25/36)² ≈ 48 %.
+    // Every attempt starts a new session, so its library match has no
+    // positions from an earlier attempt's different dice.
+    let mut double_dances = 0;
+    for _ in 0..40 {
+        let (status, mut s) = call(
+            app.clone(),
+            "POST",
+            "/api/play/sessions",
+            json!({"play_mode":"competition","human_player":0,"match_length":1}),
+        )
+        .await;
+        assert_eq!(status, 201, "{s}");
+        s["phase"] = json!("roll");
+        s["legal_moves"] = json!([]);
+        s["can_double"] = json!(false);
+        s["position"]["board"] = board.clone();
+        s["history"] = json!([
+            {"player":0,"dice":[3,1],"notation":"bar/24"},
+            {"player":1,"dice":[6,5],"notation":"pass"}
+        ]);
+        replace_native(&pool, &s, sgf, native_id).await;
+        let uri = format!("/api/play/sessions/{}/actions", s["id"].as_str().unwrap());
+        let (status, next) = call(
+            app.clone(),
+            "POST",
+            &uri,
+            json!({"version":0,"action":"roll"}),
+        )
+        .await;
+        assert_eq!(status, 200, "{next}");
+        let history = next["history"].as_array().unwrap();
+        let both_danced =
+            history.len() == 4 && history[2..].iter().all(|turn| turn["notation"] == "pass");
+        if both_danced {
+            assert_eq!(next["phase"], "roll");
+            assert_eq!(next["position"]["player"], 0);
+            assert_eq!(next["position"]["board"], board);
+            assert_eq!(
+                format!(
+                    "{}:{}",
+                    next["position"]["position_id"].as_str().unwrap(),
+                    next["position"]["gnubg_match_id"].as_str().unwrap()
+                ),
+                native_id
+            );
+            assert_eq!(history[2]["player"], 0);
+            assert_eq!(history[3]["player"], 1);
+            assert_library_checkpoint(&pool, &app, &next).await;
+            double_dances += 1;
+            if double_dances == 2 {
+                break;
+            }
+        }
+    }
+    assert_eq!(double_dances, 2, "no two rolls made both players dance");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and native GNUbg"]
 async fn saved_configuration_concurrent_actions_and_native_failure_are_atomic(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     let s = seed(

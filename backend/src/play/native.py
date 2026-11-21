@@ -91,12 +91,25 @@ if match_bots is None:
     configure_player(1 - human, plies)
 
 
+def progress():
+    """Native state plus the number of played records.
+
+    The GNUbg ID alone cannot show that an action was played: a roll where
+    both players dance (each with a checker on the bar) returns to the same
+    board, turn, dice and cube. Every accepted action either changes the ID or
+    adds a record, and records are never removed by play.
+    """
+    games = gnubg.match(analysis=0, statistics=0)['games']
+    return gnubg.gnubgid(), len(games), sum(len(game['game']) for game in games)
+
+
 # An opening result is always paused with both players human. Only explicit
 # continuation activates the bot; its first move consumes the same native dice.
 if action != 'opening_roll':
     if not external_bot:
         command('set player %d gnubg' % (1 - human))
     before = gnubg.gnubgid()
+    before_progress = progress()
     if action == 'inspect':
         assert external_bot
     elif action == 'start_opening_move':
@@ -135,7 +148,7 @@ if action != 'opening_roll':
         assert action in ('roll', 'double', 'take', 'drop')
         command(action)
     if action not in ('start_opening_move', 'inspect') and not resignation_declined:
-        assert gnubg.gnubgid() != before, 'GNUbg rejected action without changing state'
+        assert progress() != before_progress, 'GNUbg rejected action without changing state'
 
 # GNUbg can offer a bot resignation during ComputerTurn. The UI has no human
 # response to bot resignation offers;
@@ -169,7 +182,7 @@ if match_bots is not None and action != 'opening_roll':
         turn = state['turn']
         if state['gamestate'] != 1 or match_bots[turn] is None:
             break
-        before = gnubg.gnubgid()
+        before = progress()
         command('set player %d gnubg' % turn)
         # Engine duel cost: process CPU time of all GNUbg threads and wall time
         # of this native decision step only, without startup or SGF replay.
@@ -184,7 +197,7 @@ if match_bots is not None and action != 'opening_roll':
             command('decline')
         command('set player %d human' % turn)
         state = gnubg.posinfo()
-        assert not state['resigned'] and gnubg.gnubgid() != before, 'Native bot did not complete its decision'
+        assert not state['resigned'] and progress() != before, 'Native bot did not complete its decision'
     else:
         raise RuntimeError('Native bot action limit exceeded')
 
