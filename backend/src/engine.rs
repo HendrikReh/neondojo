@@ -103,6 +103,7 @@ pub struct Engine {
     threads: Option<i32>,
     move_filter: Option<GnubgMoveFilter>,
     installation_timeout: Duration,
+    roll_timeout: Duration,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -186,6 +187,7 @@ impl Engine {
             threads: None,
             move_filter: None,
             installation_timeout: INSTALLATION_CHECK_TIMEOUT,
+            roll_timeout: ROLL_TIMEOUT,
         }
     }
 
@@ -632,13 +634,15 @@ impl Engine {
         }
         let temp = tempfile::tempdir()?;
         let (finished, mut progress) = tokio::sync::watch::channel(0);
+        let mut roll_output = RollProgress::default();
+        let last_in_flight = rolls.len() - 1;
         let run = self.run_observed(
             temp.path(),
             &commands,
-            Some(ROLL_TIMEOUT * rolls.len() as u32),
+            Some(self.roll_timeout * rolls.len() as u32),
             move |output| {
-                // A roll's marker precedes its evaluation.
-                let done = roll_markers(output).saturating_sub(1);
+                // The final roll is only confirmed after validating the batch.
+                let done = roll_output.finished_rolls(output).min(last_in_flight);
                 finished.send_if_modified(|reported| {
                     let changed = *reported != done;
                     *reported = done;
@@ -989,12 +993,24 @@ const MAX_BATCH_ROLLS: usize = 36;
 /// The time a single position evaluation had before rolls were batched.
 const ROLL_TIMEOUT: Duration = Duration::from_secs(90);
 
-fn roll_markers(output: &[u8]) -> usize {
-    let marker = format!("\n{ROLL_MARKER}");
-    output
-        .windows(marker.len())
-        .filter(|window| *window == marker.as_bytes())
-        .count()
+#[derive(Default)]
+struct RollProgress {
+    scan_from: usize,
+    started: usize,
+}
+
+impl RollProgress {
+    fn finished_rolls(&mut self, output: &[u8]) -> usize {
+        let marker = ROLL_MARKER.as_bytes();
+        self.started += output[self.scan_from..]
+            .windows(marker.len() + 1)
+            .filter(|window| window[0] == b'\n' && &window[1..] == marker)
+            .count();
+        // Keep only the possible starts of a marker split across two reads.
+        self.scan_from = output.len().saturating_sub(marker.len());
+        // A marker precedes its roll's evaluation.
+        self.started.saturating_sub(1)
+    }
 }
 
 /// Each roll's evaluation output, in the order the rolls were set. The next
@@ -1346,10 +1362,154 @@ mod tests {
         assert_eq!(error.to_string(), "Job lease was lost");
     }
 
+    #[cfg(unix)]
+    fn dice_fixture(script: &str) -> (tempfile::TempDir, super::Engine) {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let binary = directory.path().join("dice-fixture");
+        std::fs::write(&binary, format!("#!/bin/sh\n{script}\n")).unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let engine = super::Engine::new(binary.to_str().unwrap().to_owned());
+        (directory, engine)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn dice_progress_never_finishes_on_extra_markers() {
+        let (directory, mut engine) = dice_fixture(
+            r#"printf '%s\n' "$$" > "${0%/*}/pid"
+             printf '%s\n' 'GNU Backgammon fixture' \
+              'The dice have been set to 1 and 1.' \
+              'The dice have been set to 1 and 2.' \
+              'The dice have been set to 1 and 3.' \
+              'The dice have been set to 1 and 4.'
+             exec sleep 60"#,
+        );
+        assert_eq!(engine.roll_timeout, std::time::Duration::from_secs(90));
+        engine.roll_timeout = std::time::Duration::from_millis(500);
+        let mut reports = Vec::new();
+        let error = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            engine.analyze_rolls(
+                "4HPwATDgc/ABMA",
+                "cInlAAAAAAAE",
+                1,
+                &[[1, 1], [1, 2]],
+                |done| {
+                    reports.push(done);
+                    std::future::ready(Ok(()))
+                },
+            ),
+        )
+        .await
+        .expect("the batch must enforce its scaled deadline")
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("GNUbg timed out after 1 seconds"),
+            "{error:#}"
+        );
+        assert_eq!(reports, [1]);
+        let pid = std::fs::read_to_string(directory.path().join("pid")).unwrap();
+        let process = std::process::Command::new("/bin/kill")
+            .args(["-0", pid.trim()])
+            .output()
+            .unwrap();
+        assert!(!process.status.success(), "timed-out child was not reaped");
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn dice_batch_rejects_output_past_the_limit() {
+        let (_directory, engine) = dice_fixture("exec head -c 8388609 /dev/zero");
+        let error = engine
+            .analyze_rolls("4HPwATDgc/ABMA", "cInlAAAAAAAE", 1, &[[1, 1]], |_| {
+                std::future::ready(Ok(()))
+            })
+            .await
+            .unwrap_err();
+        assert_eq!(error.to_string(), "GNUbg output limit exceeded");
+    }
+
+    #[test]
+    fn roll_progress_counts_markers_once_across_read_boundaries() {
+        let output = b"banner\nThe dice have been set to 1 and 1.\nanalysis\nThe dice have been set to 1 and 2.\nanalysis\nThe dice have been set to 1 and 3.\n";
+        let marker = format!("\n{}", super::ROLL_MARKER);
+        for chunk_size in 1..=marker.len() + 1 {
+            let mut progress = super::RollProgress::default();
+            for end in (chunk_size..output.len())
+                .step_by(chunk_size)
+                .chain([output.len()])
+            {
+                let prefix = &output[..end];
+                let expected = prefix
+                    .windows(marker.len())
+                    .filter(|window| *window == marker.as_bytes())
+                    .count()
+                    .saturating_sub(1);
+                assert_eq!(
+                    progress.finished_rolls(prefix),
+                    expected,
+                    "chunk size {chunk_size}, length {end}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    #[ignore = "requires replaying a synthetic 8 MiB GNUbg batch in a release build"]
+    fn benchmark_dice_progress_replay() {
+        use std::{hint::black_box, time::Instant};
+        const CHUNK_BYTES: usize = 8 * 1024;
+        for bytes in [80 * 1024, 8 * 1024 * 1024] {
+            let mut output = vec![b'x'; bytes];
+            for end in output.iter_mut().skip(79).step_by(80) {
+                *end = b'\n';
+            }
+            let rolls = all_rolls();
+            for (index, [a, b]) in rolls.iter().enumerate() {
+                let marker = format!("\n{}{a} and {b}.\n", super::ROLL_MARKER);
+                let start = (index + 1) * (bytes / (rolls.len() + 1));
+                output[start..start + marker.len()].copy_from_slice(marker.as_bytes());
+            }
+            let measure = |observe: &mut dyn FnMut(&[u8]) -> usize| {
+                let started = Instant::now();
+                let mut finished = 0;
+                for end in (CHUNK_BYTES..bytes).step_by(CHUNK_BYTES).chain([bytes]) {
+                    finished = black_box(observe(black_box(&output[..end])));
+                }
+                let elapsed_ms = started.elapsed().as_secs_f64() * 1_000.0;
+                assert_eq!(finished, rolls.len() - 1);
+                elapsed_ms
+            };
+            let mut before = Vec::new();
+            let mut after = Vec::new();
+            for _ in 0..5 {
+                // Mirror the full-prefix scan from main (0c8d0d0).
+                before.push(measure(&mut |prefix| {
+                    let marker = format!("\n{}", super::ROLL_MARKER);
+                    prefix
+                        .windows(marker.len())
+                        .filter(|window| *window == marker.as_bytes())
+                        .count()
+                        .saturating_sub(1)
+                }));
+                let mut scanner = super::RollProgress::default();
+                after.push(measure(&mut |prefix| scanner.finished_rolls(prefix)));
+            }
+            before.sort_by(f64::total_cmp);
+            after.sort_by(f64::total_cmp);
+            println!(
+                "{bytes} bytes, {CHUNK_BYTES} bytes/read, median ms {:.4} -> {:.4}",
+                before[2], after[2]
+            );
+        }
+    }
+
     #[test]
     fn roll_output_is_split_at_the_dice_markers_in_order() {
         let output = "banner\nThe dice have been set to 1 and 2.\n    1. first\nSetting GNUbg ID x\nboard\nThe dice have been set to 6 and 6.\n    1. second\n";
-        assert_eq!(super::roll_markers(output.as_bytes()), 2);
         let parts = super::split_rolls(output, &[[1, 2], [6, 6]]).unwrap();
         assert_eq!(
             parts,
