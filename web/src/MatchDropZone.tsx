@@ -5,10 +5,11 @@ import { useI18n } from './i18n';
 
 export default function MatchDropZone({
   disabled,
-  onFiles,
+  onDrop,
 }: {
   disabled: boolean;
-  onFiles: (files: File[]) => void;
+  /** Called during the drop event, while its files and folders are readable. */
+  onDrop: (transfer: DataTransfer) => void;
 }) {
   const { t } = useI18n();
   const formatsId = useId();
@@ -63,8 +64,7 @@ export default function MatchDropZone({
         event.preventDefault();
         event.stopPropagation();
         clearDrag();
-        const files = Array.from(event.dataTransfer.files);
-        if (!disabled && files.length) onFiles(files);
+        if (!disabled && hasFiles(event)) onDrop(event.dataTransfer);
       }}
     >
       <ActionIcon name="import" size={24} />

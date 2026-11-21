@@ -488,7 +488,7 @@ test('recapture the user guide screenshots', async ({ page }) => {
   await test.step('header and analysis', async () => {
     await page.goto('/');
     await openWorkspace(page, 'Analysis');
-    const drop = await page.getByText('Drop a match file here').locator('xpath=..').boundingBox();
+    const drop = await page.getByText('Drop match files or a folder here').locator('xpath=..').boundingBox();
     await save(page, 'analysis-welcome', {
       clip: { x: 0, y: 0, width: 1800, height: Math.ceil(drop!.y + drop!.height + 80) },
     });
