@@ -2,22 +2,37 @@ use super::{EngineCost, SageSnapshot};
 use crate::engine_process::{reap_child, terminate_and_reap};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-use std::{process::Stdio, time::Duration};
+use std::{process::Stdio, sync::LazyLock, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout, Command},
-    sync::{Mutex, MutexGuard},
+    sync::{Mutex, MutexGuard, Semaphore, SemaphorePermit},
 };
 
 const MAX_REQUEST: usize = 262_144;
 const MAX_RESPONSE: u64 = 2_097_152;
 // One worker for playing and one for everything else, each behind its own
-// lock. A move therefore never waits for an analysis block; the configured
-// play and analysis thread counts share the CPU while both evaluate. Game
-// blocks, other requests, probes and restarts stay serial on the general
-// slot, and benchmarks still exclude all engine work through the engine gate.
+// lock. A game retains its general worker, but each exchange reserves threads
+// separately so a waiting play request can run between evaluations. Benchmarks
+// still exclude all other engine work through the shared engine gate.
 static GENERAL: Mutex<Option<Worker>> = Mutex::const_new(None);
 static PLAY: Mutex<Option<Worker>> = Mutex::const_new(None);
+static CPU_BUDGET: LazyLock<(u32, Semaphore)> = LazyLock::new(|| {
+    let capacity = crate::configuration::available_cpu_threads()
+        .and_then(|count| u32::try_from(count).ok())
+        .unwrap_or(1);
+    (capacity, Semaphore::new(capacity as usize))
+});
+
+async fn acquire_threads(profile: &SageSnapshot) -> Result<SemaphorePermit<'static>> {
+    let (capacity, permits) = &*CPU_BUDGET;
+    // A profile from a larger host keeps its configured thread count and
+    // runs alone here. It must never queue for more permits than exist.
+    permits
+        .acquire_many(profile.threads.clamp(1, *capacity))
+        .await
+        .context("NeonGammon CPU budget is unavailable")
+}
 
 #[derive(Clone, Copy)]
 pub(super) enum Slot {
@@ -196,6 +211,14 @@ impl Worker {
         validate_payload(&self.profile, &payload, &result)?;
         Ok((result, cost))
     }
+
+    async fn batch_exchange(self, payload: Value) -> Result<(Self, (Value, Option<EngineCost>))> {
+        let _threads = acquire_threads(&self.profile).await?;
+        // The worker is dropped before its reservation if an exchange fails or is cancelled.
+        let mut worker = self;
+        let result = worker.validated_exchange(payload).await?;
+        Ok((worker, result))
+    }
 }
 
 /// Exclusive game-scoped ownership. Callers keep provisional results private
@@ -210,6 +233,7 @@ impl VerifiedBatch {
     pub(super) async fn begin(profile: &SageSnapshot) -> Result<Self> {
         let mut cache = GENERAL.lock().await;
         let worker = tokio::time::timeout(Duration::from_secs(120), async {
+            let _threads = acquire_threads(profile).await?;
             reap_other_runtime(&mut cache).await?;
             let mut worker = Worker::checkout(&mut cache, profile).await?;
             worker
@@ -218,7 +242,7 @@ impl VerifiedBatch {
             Ok::<_, anyhow::Error>(worker)
         })
         .await
-        .context("NeonGammon batch initialization timed out; worker terminated")??;
+        .context("NeonGammon batch initialization timed out")??;
         Ok(Self {
             worker: Some(worker),
             cache,
@@ -230,14 +254,14 @@ impl VerifiedBatch {
         payload: Value,
         timeout: Duration,
     ) -> Result<(Value, Option<EngineCost>)> {
-        let mut worker = self.worker.take().context("NeonGammon batch was aborted")?;
+        let worker = self.worker.take().context("NeonGammon batch was aborted")?;
         ensure!(
             matches!(payload["operation"].as_str(), Some("checker" | "cube")),
             "Unsupported NeonGammon game operation"
         );
         // Removing ownership also poisons the block if this individual future
         // is cancelled while its caller still retains the batch object.
-        let result = tokio::time::timeout(timeout, worker.validated_exchange(payload))
+        let (worker, result) = tokio::time::timeout(timeout, worker.batch_exchange(payload))
             .await
             .context("NeonGammon evaluation timed out; worker terminated")??;
         self.worker = Some(worker);
@@ -245,10 +269,10 @@ impl VerifiedBatch {
     }
 
     pub(super) async fn finish(mut self) -> Result<()> {
-        let mut worker = self.worker.take().context("NeonGammon batch was aborted")?;
-        tokio::time::timeout(
+        let worker = self.worker.take().context("NeonGammon batch was aborted")?;
+        let (worker, _) = tokio::time::timeout(
             Duration::from_secs(120),
-            worker.validated_exchange(json!({"operation":"end_batch"})),
+            worker.batch_exchange(json!({"operation":"end_batch"})),
         )
         .await
         .context("NeonGammon final integrity check timed out; worker terminated")??;
@@ -286,6 +310,7 @@ pub(super) async fn request_costed(
     );
     crate::engine::with_shared_access_timeout(timeout, async {
         let mut cache = slot.worker().lock().await;
+        let _threads = acquire_threads(profile).await?;
         reap_other_runtime(&mut cache).await?;
         // Own the worker while awaiting I/O so cancellation discards its stream.
         let mut worker = Worker::checkout(&mut cache, profile).await?;
@@ -294,13 +319,14 @@ pub(super) async fn request_costed(
         Ok(result)
     })
     .await
-    .context("NeonGammon request timed out, including the wait for its worker and engine access")?
+    .context("NeonGammon request timed out, including the wait for its worker, CPU budget and engine access")?
 }
 
 pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
     crate::engine::with_shared_access(async {
         let mut cache = GENERAL.lock().await;
         tokio::time::timeout(Duration::from_secs(120), async {
+            let _threads = acquire_threads(profile).await?;
             reap_other_runtime(&mut cache).await?;
             let mut worker = Worker::start(profile).await?;
             let (identity, _) = worker
@@ -310,7 +336,7 @@ pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
             Ok(identity)
         })
         .await
-        .context("NeonGammon installation check timed out; worker terminated")?
+        .context("NeonGammon installation check timed out")?
     })
     .await
 }
@@ -321,6 +347,7 @@ pub(super) async fn restart(profile: &SageSnapshot) -> Result<()> {
     crate::engine::with_shared_access(async {
         let mut cache = GENERAL.lock().await;
         tokio::time::timeout(Duration::from_secs(120), async {
+            let _threads = acquire_threads(profile).await?;
             reap_other_runtime(&mut cache).await?;
             if let Some(previous) = cache.take() {
                 previous.shutdown().await?;
@@ -330,7 +357,7 @@ pub(super) async fn restart(profile: &SageSnapshot) -> Result<()> {
             Ok(())
         })
         .await
-        .context("NeonGammon restart timed out; worker terminated")?
+        .context("NeonGammon restart timed out")?
     })
     .await
 }
@@ -343,12 +370,19 @@ pub(super) async fn warm_play(profile: &SageSnapshot) -> Result<()> {
         let mut cache = PLAY.lock().await;
         tokio::time::timeout(Duration::from_secs(120), async {
             reap_other_runtime(&mut cache).await?;
+            if cache
+                .as_ref()
+                .is_some_and(|worker| worker.profile == *profile)
+            {
+                return Ok(());
+            }
+            let _threads = acquire_threads(profile).await?;
             let worker = Worker::checkout(&mut cache, profile).await?;
             *cache = Some(worker);
             Ok(())
         })
         .await
-        .context("NeonGammon play warm-up timed out; worker terminated")?
+        .context("NeonGammon play warm-up timed out")?
     })
     .await
 }
@@ -488,6 +522,9 @@ for line in sys.stdin:
             (root / 'checker_started').write_text('ready')
             if mode == 'batch_block':
                 time.sleep(60)
+            if mode == 'batch_gated':
+                while not (root / 'checker_release').exists():
+                    time.sleep(.005)
             result = [{'board': request['force_board'], 'notation': '8/5 6/5', 'equity': .2,
                        'probabilities': [.6, .1, .01, .4, .1, .01]}]
             if mode == 'batch_bad_checker':
@@ -1179,5 +1216,175 @@ for line in sys.stdin:
         drop(PLAY.lock().await.take());
         assert_reaped(&pid).await;
         assert_eq!(completions, [samples, 0]);
+    }
+
+    #[tokio::test]
+    async fn play_shares_budget_between_verified_evaluations() {
+        let _serial = TEST_LOCK.lock().await;
+        let capacity =
+            u32::try_from(crate::configuration::available_cpu_threads().unwrap_or(1)).unwrap();
+        crate::engine::with_shared_access(async {
+            for (threads, waits) in [
+                (2, capacity < 4),
+                (capacity.max(2), true),
+                (capacity.saturating_add(1).max(2), true),
+            ] {
+                let mut analysis = FakeWorker::new("batch_gated");
+                analysis.profile.threads = threads;
+                let play = FakeWorker::new("healthy");
+                warm_play(&play.profile).await.unwrap();
+                let pid = play.pid();
+                let mut batch = VerifiedBatch::begin(&analysis.profile).await.unwrap();
+                let checker = json!({"operation":"checker", "force_board":vec![0; 26]});
+                let first_checker = checker.clone();
+                let evaluation = tokio::spawn(async move {
+                    batch
+                        .request_costed(first_checker, Duration::from_secs(5))
+                        .await
+                        .unwrap();
+                    batch
+                });
+                tokio::time::timeout(Duration::from_secs(3), async {
+                    while !analysis.directory.path().join("checker_started").exists() {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                })
+                .await
+                .unwrap();
+                let identity = json!({"operation":"identity"});
+                let timeout = if waits {
+                    Duration::from_millis(200)
+                } else {
+                    Duration::from_secs(3)
+                };
+                let play_result =
+                    super::request(&play.profile, identity.clone(), timeout, Slot::Play).await;
+                let started = play.directory.path().join("started").exists();
+                let queued = super::request(
+                    &play.profile,
+                    identity,
+                    Duration::from_secs(3),
+                    Slot::Play,
+                );
+                tokio::pin!(queued);
+                if waits {
+                    std::future::poll_fn(|cx| {
+                        assert!(queued.as_mut().poll(cx).is_pending());
+                        std::task::Poll::Ready(())
+                    })
+                    .await;
+                }
+                std::fs::write(analysis.directory.path().join("checker_release"), "").unwrap();
+                let mut batch = evaluation.await.unwrap();
+                let play_finished = std::cell::Cell::new(false);
+                // Poll the next analysis exchange first. It must respect the
+                // play request already queued behind the previous exchange.
+                tokio::join!(
+                    biased;
+                    async {
+                        batch.request_costed(checker, Duration::from_secs(5)).await.unwrap();
+                        if waits {
+                            assert!(play_finished.get(), "A new analysis bypassed the waiting move");
+                        }
+                    },
+                    async {
+                        queued.await.unwrap();
+                        play_finished.set(true);
+                    },
+                );
+                batch.finish().await.unwrap();
+                assert_eq!(play.pid(), pid, "Waiting displaced the warm play worker");
+                drop(PLAY.lock().await.take());
+                drop(GENERAL.lock().await.take());
+                assert_reaped(&pid).await;
+                assert_reaped(&analysis.pid()).await;
+                assert_eq!(
+                    started, !waits,
+                    "{threads} analysis threads, capacity {capacity}"
+                );
+                if waits {
+                    assert!(play_result.unwrap_err().to_string().contains("timed out"));
+                } else {
+                    play_result.unwrap();
+                }
+            }
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires a locked NeonGammon installation and an isolated CPU benchmark"]
+    async fn benchmark_play_with_analysis_thread_budget() {
+        use super::super::SageEngine;
+        use sha2::{Digest, Sha256};
+
+        let _serial = TEST_LOCK.lock().await;
+        let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
+        let capacity =
+            u32::try_from(crate::configuration::available_cpu_threads().unwrap()).unwrap();
+        assert!(capacity >= 6, "Benchmark needs at least six logical CPUs");
+        let profile = SageEngine::probe_profile(python, 3, 2).await.unwrap();
+        let play = SageEngine::for_play(profile.clone()).unwrap();
+        let sgf = include_str!("../../tests/fixtures/WC2014.gnubg.sgf");
+        let imported = crate::import::sgf::parse_sgf(sgf).unwrap();
+        let game = 3;
+        let positions: Vec<_> = imported
+            .positions
+            .iter()
+            .filter(|position| position.game_no == game)
+            .take(20)
+            .collect();
+        assert_eq!(positions.len(), 20);
+        play.warm_play().await.unwrap();
+        for threads in [4, capacity] {
+            let mut analysis_profile = profile.clone();
+            analysis_profile.threads = threads;
+            let analysis = SageEngine::new(analysis_profile).unwrap();
+            analysis.version().await.unwrap();
+            let (background, (mut wall, mut engine_wall, signature)) = tokio::join!(
+                async {
+                    let start = std::time::Instant::now();
+                    let mut signature = Sha256::new();
+                    for _ in 0..2 {
+                        let result = analysis.analyze_game(sgf, game, 3).await.unwrap();
+                        signature.update(serde_json::to_vec(&result.decisions).unwrap());
+                    }
+                    (
+                        start.elapsed().as_secs_f64(),
+                        format!("{:x}", signature.finalize()),
+                    )
+                },
+                async {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    let mut wall = Vec::new();
+                    let mut engine_wall = Vec::new();
+                    let mut signature = Sha256::new();
+                    for position in &positions {
+                        let start = std::time::Instant::now();
+                        let (candidates, cost) = play
+                            .checker_boards_costed(
+                                &position.position_id,
+                                &position.match_id,
+                                None,
+                                None,
+                            )
+                            .await
+                            .unwrap();
+                        wall.push(start.elapsed().as_secs_f64() * 1000.);
+                        engine_wall.push(cost.unwrap().wall_us as f64 / 1000.);
+                        signature.update(serde_json::to_vec(&candidates).unwrap());
+                    }
+                    (wall, engine_wall, format!("{:x}", signature.finalize()))
+                }
+            );
+            wall.sort_by(f64::total_cmp);
+            engine_wall.sort_by(f64::total_cmp);
+            let median = (wall[9] + wall[10]) / 2.;
+            let engine_median = (engine_wall[9] + engine_wall[10]) / 2.;
+            eprintln!(
+                "{threads}+2 configured threads, capacity {capacity}: play median {median:.2} ms, p95 {:.2} ms, engine median {engine_median:.2} ms, p95 {:.2} ms, analyses {:.2} s; play {signature}; analysis {}",
+                wall[18], engine_wall[18], background.0, background.1
+            );
+        }
     }
 }

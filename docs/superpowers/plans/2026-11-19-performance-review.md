@@ -196,6 +196,29 @@ cargo test -p neondojo --lib \
   -- --ignored --exact --nocapture
 ```
 
+### Gemeinsames Threadbudget für NeonGammon
+
+Auf `main` (`44a9b05`) konnten die beiden Worker gleichzeitig mehr konfigurierte Threads beanspruchen als der Rechner logische CPUs hat. Jetzt reserviert jede Auswertung das Threadbudget ihres gespeicherten Profils. Passen beide Anforderungen in das Budget, laufen sie parallel. Bei Überbelegung erhält eine wartende Spielanfrage die nächste Freigabe zwischen Einzelauswertungen. Der Analyse-Worker behält dabei seinen verifizierten Spielblock. Die Wartezeit zählt zur bestehenden Zugfrist. Profile, die von einem Rechner mit mehr logischen CPUs stammen, behalten ihre gespeicherte Threadzahl und reservieren das gesamte Budget, solange sie laufen.
+
+Der Abnahmetest hält eine einzelne Auswertung in einem verifizierten Block offen. Er prüft erlaubte Parallelität, Fristablauf bei Überbelegung und die Wiederverwendung des warmen Spiel-Workers. Sobald Threads frei werden, kommt eine bereits wartende Spielanfrage vor der nächsten Analyseauswertung zum Zug. Der Test deckt auch ein Profil mit mehr Threads als logischen CPUs ab.
+
+Messung auf einem Mac mini M4 Pro mit 14 logischen CPUs, macOS 27.0.1, Rust-Debug-Build und NeonGammon 3.1.0. Je Szenario stellt der Spiel-Worker nach kurzem Vorlauf 20 Checker-Anfragen aus Spiel 3 von `WC2014.gnubg.sgf`, während der Analyse-Worker dasselbe Spiel zweimal vollständig bei 3-ply analysiert. Beide Worker sind vor der Messung warm. Die Spielanfragen nutzen ebenfalls 3-ply. Die Spielzeit misst die Antwort am Rust-Adapter, die Engine-Zeit stammt aus dem Sidecar für die reine Auswertung. Die Analysezeit umfasst beide Spiele. Die Play- und Analyse-Prüfsummen waren für alle vier Läufe identisch.
+
+| Analyse + Spiel | Spiel-Median vorher → nachher | Spiel-p95 vorher → nachher | Engine-Median vorher → nachher | Beide Analysen vorher → nachher |
+| --- | ---: | ---: | ---: | ---: |
+| 4 + 2 Threads | 193,26 → 191,76 ms | 516,88 → 507,22 ms | 160,75 → 157,90 ms | 6,97 → 6,89 s |
+| 14 + 2 Threads | 203,49 → 202,36 ms | 467,28 → 477,89 ms | 177,13 → 146,62 ms | 3,62 → 7,39 s |
+
+Bei 14 + 2 begrenzt die Reservierung die gleichzeitige Worker-Auslastung von 16 auf 14 konfigurierte Threads. Der Spiel-Median blieb ähnlich und der p95 stieg in diesem Lauf leicht. Die beiden Hintergrundanalysen dauerten länger, da die Worker bei dieser Kombination abwechselnd Auswertungen ausführen. Die Messung zählt konfigurierte Threadbudgets und erfasst keine Betriebssystem-Threadbelegung.
+
+Zur Wiederholung auf `44a9b05` die Benchmark-Funktion in das Testmodul von `backend/src/engines/process.rs` übernehmen. Beide Läufe separat mit demselben 3.1.0-Interpreter und ohne parallele Builds ausführen.
+
+```bash
+NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --lib \
+  engines::process::tests::benchmark_play_with_analysis_thread_budget \
+  -- --ignored --exact --nocapture
+```
+
 ## P3 · Kleine Arbeitspakete
 
 | Paket | Änderung | Abnahme |
