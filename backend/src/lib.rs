@@ -9,6 +9,7 @@ pub mod match_analysis;
 pub mod model;
 pub mod store;
 
+mod job_events;
 mod match_jobs;
 
 pub mod annotations;

@@ -31,6 +31,7 @@ pub struct AppState {
     pub engine: Engine,
     pub wake: Arc<Notify>,
     pub(crate) assessment_wake: Arc<Notify>,
+    job_notifications: Arc<crate::job_events::JobNotifications>,
     pub shutdown: CancellationToken,
     imports: Arc<Semaphore>,
     pub(crate) backup: Arc<crate::database_backup::Access>,
@@ -46,6 +47,7 @@ impl AppState {
             engine,
             wake: Arc::new(Notify::new()),
             assessment_wake: Arc::new(Notify::new()),
+            job_notifications: Arc::default(),
             shutdown: CancellationToken::new(),
             imports: Arc::new(Semaphore::new(2)),
             backup: Arc::default(),
@@ -951,9 +953,15 @@ async fn events(
         .unwrap_or(Some(0))
         .filter(|n| *n >= 0)
         .ok_or_else(|| ApiError::invalid("Invalid Last-Event-ID"))?;
+    let mut notifications = state
+        .job_notifications
+        .subscribe(&state.pool, &state.shutdown);
     let stream = async_stream::stream! {
         loop {
             if state.shutdown.is_cancelled() { return; }
+            // The replay sees commits covered by queued hints. Keep listening
+            // for any commits made while the replay queries run.
+            notifications = notifications.resubscribe();
             match store::events(&state.pool,id,after).await {
                 Ok(events) => {
                     let count = events.len();
@@ -976,7 +984,7 @@ async fn events(
             }
             tokio::select! {
                 _ = state.shutdown.cancelled() => return,
-                _ = tokio::time::sleep(Duration::from_millis(350)) => {},
+                _ = crate::job_events::wait(&mut notifications, id) => {},
             }
         }
     };

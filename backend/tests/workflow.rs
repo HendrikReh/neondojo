@@ -7,7 +7,9 @@ use neondojo::{
     model::{ImportResponse, Job, PositionPage},
 };
 use sqlx::PgPool;
+use std::time::Duration;
 use tower::ServiceExt;
+use uuid::Uuid;
 
 async fn json_call(
     app: axum::Router,
@@ -29,6 +31,207 @@ async fn json_call(
     let status = response.status().as_u16();
     let data = response.into_body().collect().await.unwrap().to_bytes();
     (status, serde_json::from_slice(&data).unwrap())
+}
+
+async fn queued_job(pool: &PgPool) -> Job {
+    let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
+    let imported = neondojo::store::import_match(
+        pool,
+        "events.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &neondojo::import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap();
+    let position: Uuid = sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1")
+        .bind(imported.r#match.id)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+    neondojo::store::create_job(pool, position, "analysis", 1)
+        .await
+        .unwrap()
+}
+
+async fn event_body(app: &axum::Router, job: Uuid, after: i64) -> Body {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/jobs/{job}/events"))
+                .header("last-event-id", after)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    response.into_body()
+}
+
+async fn event_frame(body: &mut Body) -> String {
+    let frame = tokio::time::timeout(Duration::from_secs(5), body.frame())
+        .await
+        .expect("No SSE frame")
+        .expect("SSE ended early")
+        .unwrap();
+    String::from_utf8(frame.into_data().unwrap().to_vec()).unwrap()
+}
+
+fn event_ids(text: &str) -> Vec<i64> {
+    text.lines()
+        .filter_map(|line| line.strip_prefix("id: "))
+        .map(|id| id.parse().unwrap())
+        .collect()
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn job_events_replay_committed_rows_after_listener_disconnect(pool: PgPool) {
+    let job = queued_job(&pool).await;
+    let request_pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
+    let state = api::AppState::new(request_pool, Engine::new("unused".into()));
+    let app = api::router(state.clone());
+    let mut body = event_body(&app, job.id, 0).await;
+    assert!(event_frame(&mut body).await.contains("event: queued"));
+
+    let mut tx = pool.begin().await.unwrap();
+    let running: i64 = sqlx::query_scalar(
+        "INSERT INTO job_events(job_id,event,data) VALUES($1,'running',
+          '{\"status\":\"running\",\"progress\":0}') RETURNING id",
+    )
+    .bind(job.id)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_millis(50), body.frame())
+            .await
+            .is_err()
+    );
+    tx.commit().await.unwrap();
+    assert_eq!(event_ids(&event_frame(&mut body).await), [running]);
+    // Let the stream discard any remaining wake hint for the running event.
+    assert!(
+        tokio::time::timeout(Duration::from_millis(100), body.frame())
+            .await
+            .is_err()
+    );
+    let mut tx = pool.begin().await.unwrap();
+    // Exercise durable replay even if reconnect is fast enough to see the commit.
+    sqlx::query("ALTER TABLE job_events DISABLE TRIGGER job_events_notify")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let mut ids: Vec<i64> = sqlx::query_scalar(
+        "INSERT INTO job_events(job_id,event,data)
+         SELECT $1,'progress',jsonb_build_object('status','running','progress',n*100/105)
+         FROM generate_series(1,105) AS n RETURNING id",
+    )
+    .bind(job.id)
+    .fetch_all(&mut *tx)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE jobs SET status='completed',progress=100 WHERE id=$1")
+        .bind(job.id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    ids.push(
+        sqlx::query_scalar(
+            "INSERT INTO job_events(job_id,event,data) VALUES($1,'completed',
+             '{\"status\":\"completed\",\"progress\":100}') RETURNING id",
+        )
+        .bind(job.id)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap(),
+    );
+    let stopped: Vec<bool> = sqlx::query_scalar(
+        "SELECT pg_terminate_backend(pid,5000) FROM pg_stat_activity
+         WHERE datname=current_database() AND application_name='neondojo-job-events'",
+    )
+    .fetch_all(&mut *tx)
+    .await
+    .unwrap();
+    assert_eq!(stopped, [true]);
+    tx.commit().await.unwrap();
+    ids.sort_unstable();
+    let collect = async |body: Body| {
+        let bytes = tokio::time::timeout(Duration::from_secs(5), body.collect())
+            .await
+            .expect("Stream did not terminate")
+            .unwrap()
+            .to_bytes();
+        String::from_utf8(bytes.to_vec()).unwrap()
+    };
+    let events = collect(body).await;
+    assert_eq!(event_ids(&events), ids);
+    assert!(events.contains("event: completed"));
+    let resumed = collect(event_body(&app, job.id, ids[100]).await).await;
+    assert_eq!(event_ids(&resumed), ids[101..]);
+    assert!(
+        collect(event_body(&app, job.id, *ids.last().unwrap()).await)
+            .await
+            .is_empty()
+    );
+    state.shutdown.cancel();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires pg_stat_statements preloaded on isolated PostgreSQL"]
+async fn benchmark_idle_job_event_streams(pool: PgPool) {
+    sqlx::query("CREATE EXTENSION pg_stat_statements")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let job = queued_job(&pool).await;
+    let state = api::AppState::new(pool.clone(), Engine::new("unused".into()));
+    let app = api::router(state.clone());
+    let mut readers = Vec::new();
+    for _ in 0..12 {
+        let mut body = event_body(&app, job.id, 0).await;
+        assert!(event_frame(&mut body).await.contains("event: queued"));
+        readers.push(tokio::spawn(body.collect()));
+    }
+    let stats = async || -> (i64, i64, f64) {
+        sqlx::query_as(
+            "SELECT coalesce(sum(calls) FILTER (WHERE query LIKE 'SELECT * FROM job_events WHERE%'),0)::bigint,
+                    coalesce(sum(calls) FILTER (WHERE query = 'SELECT * FROM jobs WHERE id=$1'),0)::bigint,
+                    coalesce(sum(total_exec_time),0)
+             FROM pg_stat_statements
+             WHERE dbid=(SELECT oid FROM pg_database WHERE datname=current_database())
+               AND (query LIKE 'SELECT * FROM job_events WHERE%' OR query = 'SELECT * FROM jobs WHERE id=$1')",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    };
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let before = stats().await;
+    tokio::time::sleep(Duration::from_millis(2100)).await;
+    let after = stats().await;
+    state.shutdown.cancel();
+    for reader in readers {
+        tokio::time::timeout(Duration::from_secs(3), reader)
+            .await
+            .expect("Idle stream did not close on shutdown")
+            .unwrap()
+            .unwrap();
+    }
+    let calls = (after.0 - before.0, after.1 - before.1);
+    eprintln!(
+        "12 idle streams, 2100 ms: {} event reads, {} job reads, {:.3} ms PostgreSQL execution",
+        calls.0,
+        calls.1,
+        after.2 - before.2
+    );
+    assert_eq!(calls, (0, 0));
 }
 
 #[sqlx::test(migrations = "./migrations")]
