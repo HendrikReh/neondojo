@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Added
+
+- **Duplicate match finder.** **Duplicates** in the Match database groups matches with the same played record in the selected database or in all databases, including the same match imported from different formats or with the sides swapped. Groups of byte-identical files are marked. **Select copies** selects all but the oldest match of each group for the existing bulk actions. New endpoint `GET /api/library/duplicates`. [Duplicate match finder](docs/reference/library.md#duplicate-match-finder)
+
 ## [1.1.0] - 2026-11-20
 
 NeonDojo 1.1.0 adds virtual player profiles, catalogues bot matches as real NeonDojo players and opens a new match in a setup dialog with per-match bot choices. One schema baseline replaces the migrations 0001–0084. Databases from 1.0.0 and later development builds are updated automatically at startup without changing their data, and backups stay restorable. Migration `0085_bot_match_players` then runs.

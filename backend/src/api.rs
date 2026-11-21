@@ -96,6 +96,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::imported_analysis::routes())
         .merge(crate::analysis_catalog::routes())
         .merge(crate::databases::routes())
+        .merge(crate::duplicate_matches::routes())
         .merge(crate::player_directory::routes())
         .merge(crate::move_catalog::routes())
         .merge(crate::annotations::routes())
@@ -1022,6 +1023,7 @@ impl OpenApi for ApiDoc {
         doc.merge(crate::imported_analysis::ImportedAnalysisDoc::openapi());
         doc.merge(crate::analysis_catalog::AnalysisCatalogDoc::openapi());
         doc.merge(crate::databases::DatabaseDoc::openapi());
+        doc.merge(crate::duplicate_matches::DuplicateMatchesDoc::openapi());
         doc.merge(crate::database_backup::BackupDoc::openapi());
         doc.merge(crate::player_directory::openapi());
         doc.merge(crate::move_catalog::MoveCatalogDoc::openapi());

@@ -63,6 +63,7 @@ import LibraryFilters, {
   type LibraryFilterKey,
 } from './LibraryFilters';
 import LibraryDialogs, { type LibraryDialogState } from './LibraryDialogs';
+import DuplicateMatchFinder from './DuplicateMatchFinder';
 import './library.css';
 import { prDigits } from './pr-format';
 
@@ -71,7 +72,7 @@ export interface PositionSearchRequest {
   token: number;
 }
 
-type SearchPanel = 'filters' | 'notes' | 'position';
+type SearchPanel = 'filters' | 'notes' | 'position' | 'duplicates';
 const defaultLibraryFilters = emptyFilters();
 
 const resultKey: Record<string, LibraryMessageKey> = {
@@ -159,6 +160,7 @@ export default function MatchDatabase({
     columns.activeColumns.some((column) => column === id);
   const [databases, setDatabases] = useState<Database[]>([]),
     [localRevision, setRevision] = useState(0),
+    [duplicateRefresh, setDuplicateRefresh] = useState(0),
     [searchPanel, setSearchPanel] = useState<SearchPanel>(),
     [databaseError, setDatabaseError] = useState<unknown>(),
     [selectedRows, setSelectedRows] = useState<LibraryMatch[]>([]),
@@ -178,6 +180,7 @@ export default function MatchDatabase({
   const filterToggle = useRef<HTMLButtonElement>(null);
   const notesToggle = useRef<HTMLButtonElement>(null);
   const positionToggle = useRef<HTMLButtonElement>(null);
+  const duplicatesToggle = useRef<HTMLButtonElement>(null);
   const searchId = useId();
   const selectionHintId = `${searchId}-selection`;
   const searchPanels = [
@@ -193,6 +196,12 @@ export default function MatchDatabase({
       label: l('positionSearch'),
       icon: 'similar',
       trigger: positionToggle,
+    },
+    {
+      id: 'duplicates',
+      label: l('duplicates'),
+      icon: 'duplicates',
+      trigger: duplicatesToggle,
     },
   ] as const;
   filterDraft.current = draftFilters;
@@ -384,11 +393,13 @@ export default function MatchDatabase({
     );
     setSelectedRows((rows) => rows.filter((row) => failed.has(row.id)));
     setRevision((n) => n + 1);
+    setDuplicateRefresh((n) => n + 1);
     onChanged(deleted);
   }
   function changed(id?: string, validateSelection = false) {
     if (id !== undefined) changeDatabase(id);
     setRevision((n) => n + 1);
+    setDuplicateRefresh((n) => n + 1);
     onChanged([], validateSelection);
   }
   function sortBy(key: LibrarySort) {
@@ -642,6 +653,17 @@ export default function MatchDatabase({
                 <p role="alert">{l('invalidPositionId')}</p>
               )}
             </div>
+            <DuplicateMatchFinder
+              open={visible && searchPanel === 'duplicates'}
+              panelId={`${searchId}-duplicates`}
+              databaseId={databaseId}
+              databases={databases}
+              refreshToken={duplicateRefresh + revision}
+              selected={selected}
+              onSelect={changeSelection}
+              onOpen={openMatchRow}
+              openingDisabled={rowOpeningDisabled}
+            />
           </div>
           <LibraryFilterChips filters={filters} onRemove={removeFilter} />
           {!!error && (

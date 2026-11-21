@@ -1075,6 +1075,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/library/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["duplicate_matches"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/library/export": {
         parameters: {
             query?: never;
@@ -3995,6 +4011,32 @@ export interface components {
             name: string;
             /** Format: int64 */
             version: number;
+        };
+        DuplicateMatchGroup: {
+            /** @description Up to 50 members, oldest library entry (lowest ID) first. */
+            items: components["schemas"]["DatabaseMatch"][];
+            kind: components["schemas"]["DuplicateMatchKind"];
+            /**
+             * Format: int64
+             * @description Number of matches in the group, including any beyond `items`.
+             */
+            match_count: number;
+        };
+        /** @enum {string} */
+        DuplicateMatchKind: "identical_files" | "same_moves";
+        DuplicateMatchPage: {
+            groups: components["schemas"]["DuplicateMatchGroup"][];
+            next_cursor?: string | null;
+            /**
+             * Format: int64
+             * @description Duplicate groups in the scope, across all pages.
+             */
+            total_groups: number;
+            /**
+             * Format: int64
+             * @description Matches that belong to a duplicate group, across all pages.
+             */
+            total_matches: number;
         };
         DuplicatePage: {
             items: components["schemas"]["DuplicateCard"][];
@@ -9561,6 +9603,51 @@ export interface operations {
             };
             /** @description Target is reserved for paused sessions */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    duplicate_matches: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Compare only matches in this database; omitted compares all library
+                 *     databases. Paused Matches and saved-position context are never included.
+                 */
+                database_id?: string;
+                /** @description `next_cursor` of the previous page. */
+                after?: string;
+                /** @description Groups per page, 1–100 (default 50). */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateMatchPage"];
+                };
+            };
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -125,6 +125,79 @@
   color: var(--ui-danger-text);
   font-size: var(--font-size-table);
 }
+.match-database .library-duplicates {
+  margin: 12px 0 0;
+  padding: 12px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface-alt);
+}
+.library-duplicates-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.library-duplicates-toolbar h2 {
+  margin: 0;
+  font-size: var(--font-size-panel);
+}
+.library-duplicates-toolbar [role='status'] {
+  flex: 1;
+  margin: 0;
+  color: var(--ui-muted);
+  font-size: var(--font-size-table);
+}
+.library-duplicates > .fineprint {
+  margin: 6px 0 0;
+}
+.library-duplicate-group {
+  margin-top: 12px;
+}
+.library-duplicate-group h3 {
+  margin: 0 0 4px;
+  font-size: var(--font-size-label);
+  font-weight: 600;
+}
+.library-duplicate-kind {
+  color: var(--ui-accent);
+}
+/* Fixed widths keep the columns of all groups aligned; the name takes the rest. */
+.match-database .database-table.library-duplicate-table {
+  width: 100%;
+  min-width: 960px;
+}
+.library-duplicate-table th:nth-child(1) {
+  width: 32px;
+}
+.library-duplicate-table th:nth-child(2),
+.library-duplicate-table th:nth-child(7),
+.library-duplicate-table th:nth-child(9) {
+  width: 64px;
+}
+.library-duplicate-table th:nth-child(3),
+.library-duplicate-table th:nth-child(4),
+.library-duplicate-table th:nth-child(6) {
+  width: 150px;
+}
+.library-duplicate-table th:nth-child(8),
+.library-duplicate-table th:nth-child(10) {
+  width: 112px;
+}
+.library-duplicate-table tbody tr {
+  cursor: default;
+}
+.library-duplicate-table tr[aria-selected='true'] td {
+  background: var(--ui-selected);
+}
+.match-database .library-duplicate-name .match-card {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.library-duplicates > .action-button {
+  margin-top: 12px;
+}
 .library-occurrence-selection {
   margin: 0 0 6px;
   color: var(--ui-muted);

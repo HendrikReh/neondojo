@@ -152,6 +152,23 @@ export const loadLibrary = (
     `/library/matches?${libraryParams(databaseId, filters, sort, direction, page)}`,
     { signal },
   );
+export type DuplicateKind = Schema['DuplicateMatchKind'];
+export type DuplicateGroup = Omit<Schema['DuplicateMatchGroup'], 'items'> & {
+  items: LibraryMatch[];
+};
+export type DuplicatePage = Omit<Schema['DuplicateMatchPage'], 'groups'> & {
+  groups: DuplicateGroup[];
+};
+export const loadDuplicates = (
+  databaseId: string,
+  after: string | undefined,
+  signal: AbortSignal,
+) => {
+  const params = new URLSearchParams();
+  if (databaseId) params.set('database_id', databaseId);
+  if (after) params.set('after', after);
+  return request<DuplicatePage>(`/library/duplicates?${params}`, { signal });
+};
 export const loadDecisions = (
   matchId: string,
   gameNo: number,
