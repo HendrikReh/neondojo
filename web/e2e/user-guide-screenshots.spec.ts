@@ -2,7 +2,8 @@
 // disposable database. It seeds the database only with the public fixtures in
 // backend/tests/fixtures, runs real GNUbg and NeonGammon work and writes WebP
 // files with `cwebp`. Opt in with NEONDOJO_GUIDE_SCREENSHOTS=1 and set
-// NEONDOJO_SAGE_PYTHON to the NeonGammon interpreter.
+// NEONDOJO_SAGE_PYTHON to the NeonGammon interpreter. NEONDOJO_GUIDE_INTERFACE_THEME,
+// NEONDOJO_GUIDE_DISPLAY_MODE and NEONDOJO_GUIDE_BOARD_THEME choose the appearance.
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -25,6 +26,27 @@ const output =
   join(root, 'docs/user-guide/images');
 const sagePython = process.env.NEONDOJO_SAGE_PYTHON;
 
+// Optional appearance for the captures. Unset values keep the default
+// configuration; the backend validates the values that are set.
+type Appearance = Schemas['ConfigurationAppearance'];
+const interfaceTheme = process.env.NEONDOJO_GUIDE_INTERFACE_THEME as Appearance['ui_theme'] | undefined;
+const displayMode = process.env.NEONDOJO_GUIDE_DISPLAY_MODE as Appearance['mode'] | undefined;
+const boardTheme = process.env.NEONDOJO_GUIDE_BOARD_THEME;
+
+/** Accepts a configured board theme ID or a BGBlitz archive name without the `bgblitz:` prefix. */
+function boardThemeId(value: string): string {
+  const options = JSON.parse(readFileSync(join(root, 'shared/configuration-options.json'), 'utf8')) as {
+    board_themes: string[];
+  };
+  const id = [value, `bgblitz:${value}`].find((candidate) => options.board_themes.includes(candidate));
+  if (!id) {
+    throw new Error(
+      `Unknown NEONDOJO_GUIDE_BOARD_THEME "${value}". Available: ${options.board_themes.join(', ')}`,
+    );
+  }
+  return id;
+}
+
 test.skip(
   process.env.NEONDOJO_GUIDE_SCREENSHOTS !== '1' || !sagePython,
   'Set NEONDOJO_GUIDE_SCREENSHOTS=1 and NEONDOJO_SAGE_PYTHON to recapture the user guide',
@@ -33,7 +55,8 @@ test.skip(
 test.use({
   viewport: { width: 1800, height: 1169 },
   deviceScaleFactor: 1,
-  colorScheme: 'light',
+  // "system" follows the browser, which stays light unless dark is requested.
+  colorScheme: displayMode === 'dark' ? 'dark' : 'light',
   locale: 'en-US',
   timezoneId: 'Europe/Berlin',
 });
@@ -125,6 +148,9 @@ async function playBotMatch(
       data: { human_player: 0, match_length: matchLength, play_mode: mode },
     }),
   );
+  const rejected: string[] = [];
+  // Number of rejections before the last accepted action, to count consecutive ones.
+  let accepted = 0;
   for (let step = 0; step < 3_000 && session.phase !== 'match_over'; step++) {
     const pending = session.pending_decision;
     let body: Record<string, unknown>;
@@ -149,9 +175,18 @@ async function playBotMatch(
         body.action = random() < 0.7 ? 'take' : 'drop';
       }
     }
-    session = await json<Schemas['PlaySession']>(
-      await request.post(`/api/play/sessions/${session.id}/actions`, { data: body }),
-    );
+    const response = await request.post(`/api/play/sessions/${session.id}/actions`, { data: body });
+    if (response.status() === 503) {
+      // GNUbg occasionally rejects an action and leaves the saved session
+      // unchanged. Reload it and choose again rather than losing the seed.
+      rejected.push(`${session.phase} ${JSON.stringify(body)}: ${await response.text()}`);
+      console.warn(`Play action rejected, retrying: ${rejected.at(-1)}`);
+      expect(rejected.length - accepted, rejected.join('\n')).toBeLessThan(5);
+      session = await json<Schemas['PlaySession']>(await request.get(`/api/play/sessions/${session.id}`));
+      continue;
+    }
+    session = await json<Schemas['PlaySession']>(response);
+    accepted = rejected.length;
   }
   expect(session.phase).toBe('match_over');
   await json(
@@ -293,10 +328,14 @@ test('recapture the user guide screenshots', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByRole('button', { name: /^Profile:/ })).toBeVisible();
 
-    // Neutral player name, saved into the profile so the header is not "modified".
+    // Neutral player name and the requested appearance, saved into the profile
+    // so the header is not "modified".
     const state = await json<Schemas['ConfigurationState']>(await request.get('/api/configuration'));
     const configuration = state.current_configuration;
     configuration.general.player_name = 'Sam';
+    if (interfaceTheme) configuration.appearance.ui_theme = interfaceTheme;
+    if (displayMode) configuration.appearance.mode = displayMode;
+    if (boardTheme) configuration.appearance.board_theme = boardThemeId(boardTheme);
     const updated = await json<Schemas['ConfigurationState']>(
       await request.put('/api/configuration', {
         data: { expected_revision: state.revision, configuration },
@@ -406,12 +445,16 @@ test('recapture the user guide screenshots', async ({ page }) => {
         },
       }),
     );
-    await until(
+    const duelRun = await until(
       async () =>
-        json<{ series: { status: string } }>(await request.get(`/api/engine-matches/${duel.id}`)),
+        json<{ series: { status: string; error: string | null } }>(
+          await request.get(`/api/engine-matches/${duel.id}`),
+        ),
       (run) => ['completed', 'failed', 'cancelled'].includes(run.series.status),
       'engine duel',
     );
+    // A failed series would end up in extras-duels.webp; stop with its cause instead.
+    expect(duelRun.series.status, duelRun.series.error ?? 'engine duel did not complete').toBe('completed');
 
     // Practice answers for Practice history, given through the dialog.
     await page.reload();
