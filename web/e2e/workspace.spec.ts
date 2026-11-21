@@ -21,7 +21,7 @@ test('analysis-first tabs preserve the selected game, notes and database navigat
       `(;GM[6]PW[Workspace ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])(;GM[6]MI[length:7][ws:1][bs:0];W[31hefe];B[42qusu])`,
     ),
   });
-  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('2');
   await expect(page.locator('.board-heading')).toContainText('Spiel 2');
   await expect(page.locator('.analysis-workspace .moves-list')).toBeVisible();
@@ -88,7 +88,7 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   await page
     .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
-  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await expect(
     page.locator('.workspace-analysis-command button.primary'),
   ).toBeDisabled();
@@ -152,7 +152,7 @@ test('an analysis submission error appears once in the errors view', async ({
   await page
     .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
-  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await page.route('**/api/matches/*/analysis', async (route) =>
     route.request().method() === 'POST'
       ? route.fulfill({
@@ -179,7 +179,7 @@ test('accepted position jobs remain tracked without a duplicate banner after a p
   await page
     .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
-  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   let release = () => {},
     accepted = () => {},
     job: Record<string, unknown> | undefined;
@@ -234,7 +234,7 @@ test('accepted game jobs remain tracked when the game changes during submission'
       `(;GM[6]PW[Queued ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe])(;GM[6]MI[length:7][ws:1][bs:0];W[31hefe])`,
     ),
   });
-  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   let release = () => {},
     accepted = () => {},
     job: Record<string, unknown> | undefined;
@@ -284,7 +284,7 @@ test('next position error respects the player filter', async ({ page }) => {
       `(;GM[6]PW[Filtered ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31xufe];B[42aeac])`,
     ),
   });
-  await expect(page.locator('.board')).toBeVisible();
+  await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   await page
     .locator('.workspace-analysis-command')
     .getByRole('button', { name: /^Spiel (erneut )?analysieren$/ })

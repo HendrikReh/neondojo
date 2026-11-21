@@ -77,11 +77,14 @@ test('actively answers and reviews all three card types, with an idempotent retr
   test.setTimeout(90_000);
   const deck = await createDeck(page);
   const nextUrl = `/api/decks/${deck.id}/next`;
-  await page.route(
-    '**/api/play/checker-turns',
-    (route) =>
-      route.fulfill({ status: 503, json: { error: 'Moves unavailable' } }),
-    { times: 1 },
+  // Fail every legal-move request until the card's retry. React StrictMode
+  // aborts and repeats the first request in development, so a one-shot route
+  // could be spent on the aborted request.
+  let turnsUnavailable = true;
+  await page.route('**/api/play/checker-turns', (route) =>
+    turnsUnavailable
+      ? route.fulfill({ status: 503, json: { error: 'Moves unavailable' } })
+      : route.fallback(),
   );
   await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.goto('/');
@@ -126,6 +129,7 @@ test('actively answers and reviews all three card types, with an idempotent retr
         .filter({ hasText: 'Moves unavailable' });
       await expect(turnsError).toBeVisible();
       await expect(card.getByRole('button', { name: /pass/i })).toHaveCount(0);
+      turnsUnavailable = false;
       await turnsError.getByRole('button', { name: 'Try again' }).click();
       await expect(point).toBeEnabled();
       await point.focus();
