@@ -8,11 +8,16 @@ NeonDojo is a local backgammon application for importing matches, finding positi
 
 ## Quick start
 
+### Requirements
+
 - Rust, tested with 1.94.1
 - Node.js 22.12 or later in the 22.x series, or Node.js 24 or later, with npm
 - Docker Compose for the bundled PostgreSQL 17 database, or an existing PostgreSQL server
 - Python 3.10 or later for the frontend build and development scripts
 - A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
+- Optional: NeonGammon 3.0.0 as a second engine. See [Local NeonGammon setup](docs/open-sage-local.md).
+
+### Database and engine
 
 From the repository root, create `.env` if needed and start PostgreSQL. Use the Compose command below for the bundled database. To use another server, set `DATABASE_URL` in `.env` to the intended database. If you change the Compose port with `NEONDOJO_DB_PORT`, update `DATABASE_URL` to match.
 
@@ -21,9 +26,24 @@ From the repository root, create `.env` if needed and start PostgreSQL. Use the 
 docker compose up -d --wait db
 ```
 
-The backend applies migrations at startup. Cargo can compile with PostgreSQL stopped. The backend reads `.env` from its working directory. See [.env.example](.env.example) for available settings.
+The backend applies migrations at startup. Cargo can compile with PostgreSQL stopped. The backend reads `.env` only from its working directory, not from parent directories. See [.env.example](.env.example) and [Environment variables](#environment-variables).
 
 Check that `gnubg --version` works. If the executable is outside the backend's `PATH`, set `GNUBG_BIN` in `.env` before the first launch or configure the executable under **Settings → Analysis → Engines on this computer**. Use **Check installation** to verify that GNUbg can evaluate a position with its installed weights.
+
+### Environment variables
+
+The backend reads these settings from its environment or from `.env` in its working directory.
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `DATABASE_URL` | `postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo` | PostgreSQL database |
+| `NEONDOJO_BIND` | `127.0.0.1:8787` | Listen address for the API and the built frontend |
+| `NEONDOJO_WEB_DIR` | unset | Serve the built frontend from this directory, usually `web/dist` |
+| `GNUBG_BIN` | `gnubg` | GNUbg executable until a path is saved in **Settings** |
+| `RUST_LOG` | `neondojo=info,tower_http=info` | Log filter |
+| `NEONDOJO_ANKI_PYTHON` | `python3` | Python with the Anki package for importing third-party Anki decks. See [Flashcards and Anki](docs/reference/study.md#flashcards-and-anki). |
+| `NEONDOJO_ANKI_CONNECT_KEY` | unset | API key for a local AnkiConnect add-on that requires one |
+| `OPENAI_API_KEY`, `NEONDOJO_ASSESSMENT_MODEL` | unset, `gpt-6.1-terra` | Optional AI assessment of saved reports. See [AI assessment](docs/reference/study.md#ai-assessment). |
 
 ### Local use with the built frontend
 
@@ -76,7 +96,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
    NEONDOJO_BIND=127.0.0.1:8787 NEONDOJO_WEB_DIR="$PWD/web/dist" ./target/local-restart/neondojo
    ```
 
-5. Check the health endpoint from another terminal, then open or reload NeonDojo and verify the workflow you changed. A response with `"status":"ok"` confirms PostgreSQL responds and the configured GNUbg reports its version. Allow up to five seconds for the GNUbg version command. During a benchmark, the health check can reuse the recorded engine version. **Check installation** runs the evaluation probe. [NeonDojo on port 8787](http://127.0.0.1:8787/)
+5. Check the health endpoint from another terminal, then open or reload NeonDojo and verify the workflow you changed. A response with `"status":"ok"` confirms PostgreSQL responds and the configured GNUbg reports its version. If either check fails, the endpoint returns HTTP 503 with `"status":"degraded"`, and `curl --fail` exits with an error. Allow up to five seconds for the GNUbg version command. During a benchmark, the health check can reuse the recorded engine version. The health check does not evaluate a position; **Check installation** runs that probe. [NeonDojo on port 8787](http://127.0.0.1:8787/)
 
    ```sh
    curl --fail --silent --show-error http://127.0.0.1:8787/api/health
@@ -105,8 +125,13 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 | | [Settings, engines and profiles](docs/reference/settings.md) | Settings, engine installations and threads, configuration profiles, themes and languages |
 | | [Extras](docs/reference/extras.md) | Version information, engine benchmark, engine duels and database backup |
 | | [HedgeHog comparison](docs/reference/hedgehog-comparison.md) | Feature comparison with HedgeHog |
-| Developers | [API reference](docs/development/api.md) | Common REST endpoints and OpenAPI generation |
+| Developers | [API reference](docs/development/api.md) | Common REST endpoints, other endpoint groups and OpenAPI generation |
 | | [Verification and tests](docs/development/testing.md) | Quality checks, PostgreSQL and GNUbg integration tests, import corpus, browser tests and native play tests |
-| | [Architecture and data](docs/development/architecture.md) | Repository layout, storage of matches and positions, private demo data |
-| | [Local NeonGammon setup](docs/open-sage-local.md) | Installing and checking NeonGammon 3.0.0 |
+| | [Architecture and data](docs/development/architecture.md) | Repository layout, schema baseline, storage of matches and positions, private demo data |
+| | [UI navigation](docs/ui-navigation.md) and [typography](docs/typography.md) | Text navigation, keyboard operation, type scale and tokens for interface changes |
+| | [Local NeonGammon setup](docs/open-sage-local.md) | Installing and checking NeonGammon 3.0.0, measurements and limits |
+| | [Engine duel CPU budget](docs/engine-duel-cpu-budget.md) | Concept for comparing engines with the same computing budget |
+| | [Import corpus results](docs/import-corpus-results.md) | Results of importing the local match corpus |
 | | [Repository guidance](AGENTS.md) | Rules for changes to this repository |
+
+Dated plans and design specifications under [`docs/superpowers/`](docs/superpowers/) and product research under [`docs/research/`](docs/research/) record how features were planned. They are historical; the reference documents above describe the current behavior.

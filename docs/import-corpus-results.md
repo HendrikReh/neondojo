@@ -1,81 +1,87 @@
-# Importprüfung des lokalen Dateibestands
+# Import check of the local file corpus
 
-Stand: 8. November 2026. Alle Dateien aus `games/xg`, `games/mat` und `games/bgf` wurden über den tatsächlichen Multipart-REST-Handler in einer separaten SQLx-Testdatenbank importiert. Die persönliche Bibliothek wurde für den vollständigen Bestandslauf nicht verwendet.
+This page collects the dated results of the optional corpus test `all_local_game_files_import_atomically_and_deduplicate` ([`backend/tests/import_corpus.rs`](../backend/tests/import_corpus.rs)). Each run imports all files from `games/xg`, `games/mat`, and `games/bgf` through the actual multipart REST handler into a separate SQLx test database. The personal match database is not used for this. The test requires every supplied file to be imported.
 
-## Prüfung vom 20. November 2026: Turniertranskripte
+Latest run: November 20, 2026. The two older sections from November 8, 2026 describe earlier corpora and import rules and are kept as history. [Rerun](#rerun) describes the test command.
 
-Die neun am 8. November abgewiesenen Turnierdateien werden jetzt importiert. Der Korpustest lief mit 41 lokalen XG-Dateien aus dem Bestand auf Halle4 (Turniertranskripte, Ligamatches und vier Sessions mit je 200 Partien) über den Multipart-REST-Handler in einer isolierten SQLx-Testdatenbank: **41 Dateien, 41 Importe, 0 Fehler.** Der Import löst die folgenden Unregelmäßigkeiten ausdrücklich auf und meldet sie mit dem Ergebnis:
+## November 20, 2026 check: tournament transcripts
 
-- `InvalidM=2`: Neun gespielte Züge in acht Dateien (R1-04, R1-05, R1-11, R1-14 zweimal, R2-01, R2-02, R2-05 und Michy-Junko Nakamura). Der Import setzt mit der von XG gespeicherten Stellung fort und speichert den Zug nicht als Entscheidung.
-- `R2-04_Statter-MullerKreth.xg`: Das offene sechste Spiel bleibt ohne Ergebnis. Das siebte Spiel beginnt mit der bearbeiteten ersten Stellung.
-- `R2-06_Birkle-Larsen.xg`: Das erste Spiel beginnt mit der gespeicherten Stellung statt mit der Grundstellung.
+The nine tournament files rejected on November 8 are now imported. The corpus test ran with 41 local XG files from the corpus on Halle4 (tournament transcripts, league matches, and four sessions of 200 games each) through the multipart REST handler in an isolated SQLx test database: **41 files, 41 imports, 0 errors.** The import explicitly resolves the following irregularities and reports them with the result:
 
-Jede andere gespeicherte Stellung muss der nachgespielten Partie entsprechen. Die vier großen Sessions mit rund 30.000 Checker-Records bestehen diese Prüfung.
+- `InvalidM=2`: Nine played moves in eight files (R1-04, R1-05, R1-11, R1-14 twice, R2-01, R2-02, R2-05, and Michy-Junko Nakamura). The import continues from the position stored by XG and does not store the move as a decision.
+- `R2-04_Statter-MullerKreth.xg`: The open sixth game remains without a result. The seventh game starts with the edited first position.
+- `R2-06_Birkle-Larsen.xg`: The first game starts with the stored position instead of the standard starting position.
 
-## Erneute Prüfung nach Änderung des privaten Korpus
+Every other stored position must match the replayed game. The four large sessions with about 30,000 checker records pass this check.
 
-Im selben Arbeitstag wurde der lokale Bestand verändert: 20 Duplikatpfade wurden entfernt und 25 Dateien ergänzt. Der aktuelle vollständige Lauf umfasst **42 Dateien: 33 erfolgreich importiert, neun XG-Dateien strikt abgewiesen** (47,936 gespeicherte Positionen im isolierten Testbestand). Alle MAT- und BGF-Dateien sind erfolgreich; die neun Ablehnungen betreffen neu hinzugekommene Turnierdateien.
+## Recheck after the private corpus changed
 
-- Sieben Dateien enthalten `InvalidM=2` in tatsächlich gespielten Checker-Records. Die [offizielle XG-Formatbeschreibung](https://www.extremegammon.com/xgformat.aspx) definiert diese Markierung als ungültig. Betroffen: R1-04, R1-05, R1-11, R1-14, R2-01, R2-02 und R2-05.
-- `R2-04_Statter-MullerKreth.xg`: sieben Spielheader und sechs Spielabschlüsse; nach dem noch offenen sechsten Spiel beginnt ein siebtes.
-- `R2-06_Birkle-Larsen.xg`: die gespeicherte erste Checkerstellung widerspricht der deklarierten Startstellung; daraus folgt eine unmögliche Bar-Eingabe beim nächsten Zug.
+As of November 8, 2026 (historical). During that day the local corpus changed: 20 duplicate paths were removed and 25 files were added. The current full run covers **42 files: 33 imported successfully, nine XG files strictly rejected** (47,936 stored positions in the isolated test data). All MAT and BGF files succeed; the nine rejections concern newly added tournament files.
 
-Archive, Stream-CRC und Recordversion30 wurden unabhängig dekodiert und geprüft. Die bestehenden zwölf XG-Regressionstests sind grün. Diese Dateien werden nicht durch Abschwächen der Importvalidierung als vollständige Matches gespeichert; die persönliche Bibliothek und die Quelldateien blieben bei der Diagnose unangetastet. Der optionale Test `all_local_game_files_import_atomically_and_deduplicate` blieb für diesen Bestand rot und nannte sämtliche Ablehnungen; zum aktuellen Stand siehe die Prüfung vom 20. November. Der nachstehende frühere 37/37-Bericht beschreibt den damaligen Bestand.
+- Seven files contain `InvalidM=2` in checker records that were actually played. The [official XG format description](https://www.extremegammon.com/xgformat.aspx) defines this marker as invalid. Affected: R1-04, R1-05, R1-11, R1-14, R2-01, R2-02, and R2-05.
+- `R2-04_Statter-MullerKreth.xg`: seven game headers and six game endings; after the still open sixth game, a seventh begins.
+- `R2-06_Birkle-Larsen.xg`: the stored first checker position contradicts the declared starting position; this leads to an impossible bar entry on the next move.
 
-**Früherer Bestand: 37/37 erfolgreich, 17 verschiedene Inhalte, 20 erkannte Duplikate und 14.836 gespeicherte Positionen ohne Duplikatkopien.** HTTP 201 bezeichnet einen neuen Import; HTTP 200 bezeichnet eine identische, bereits importierte Datei. Die Prüfungen vergleichen die gespeicherte Positionszahl und die Identität von Duplikaten; ein fehlgeschlagener Import darf keine Teilpartie hinterlassen.
+Archives, stream CRC, and record version 30 were decoded and checked independently. The existing twelve XG regression tests pass. These files are not stored as complete matches by weakening the import validation; the personal match database and the source files remained untouched during the diagnosis. The optional test `all_local_game_files_import_atomically_and_deduplicate` stayed red for this corpus and named all rejections; for the current state, see the November 20 check. The earlier 37/37 report below describes the corpus at that time.
 
-| Format | Dateien | Verschiedene Inhalte | Erfolgreich |
+### Earlier corpus of November 8, 2026
+
+**37/37 successful, 17 distinct contents, 20 detected duplicates, and 14,836 stored positions without duplicate copies.** HTTP 201 denotes a new import; HTTP 200 denotes an identical file that was already imported. The checks compare the stored position count and the identity of duplicates; a failed import must not leave a partial game behind.
+
+| Format | Files | Distinct contents | Successful |
 | --- | ---: | ---: | ---: |
 | XG | 27 | 7 | 27 |
 | MAT | 5 | 5 | 5 |
 | BGBlitz BGF | 5 | 5 | 5 |
 
-Behoben wurden gültige XG-Zwischenstände ohne Matchabschluss, MAT-Aufgabezeilen und zusammengesetztes Auswürfeln sowie die falsche Pflicht, nach dem letzten ausgelegten Stein noch weitere Würfel zu verwenden. BGF 1.0 wurde als nativer Rust-Import ergänzt, einschließlich Smile/Gzip, Aussetzen und Dopplerentscheidungen. Unbekannte Varianten, ungültige gespielte Züge und beschädigte Transporte werden weiterhin ausdrücklich abgelehnt.
+Fixed: valid XG interim states without a match conclusion, MAT resignation lines and combined opening rolls, and the incorrect requirement to use further dice after the last checker was borne off. BGF 1.0 was added as a native Rust import, including Smile/Gzip, forced passes, and cube decisions. Unknown variants, invalid played moves, and corrupted transports are still explicitly rejected.
 
-| Datei | HTTP | Positionen | Duplikat |
+| File | HTTP | Positions | Duplicate |
 | --- | ---: | ---: | --- |
-| `bgf/test1.bgf` | 201 | 527 | nein |
-| `bgf/test2.bgf` | 201 | 579 | nein |
-| `bgf/test3.bgf` | 201 | 357 | nein |
-| `bgf/test4.bgf` | 201 | 460 | nein |
-| `bgf/test5.bgf` | 201 | 460 | nein |
-| `mat/test1.mat` | 201 | 846 | nein |
-| `mat/test2.mat` | 201 | 912 | nein |
-| `mat/test3.mat` | 201 | 836 | nein |
-| `mat/test4.mat` | 201 | 554 | nein |
-| `mat/test5.mat` | 201 | 486 | nein |
-| `xg/1 (1).xg` | 201 | 7476 | nein |
-| `xg/1 (10).xg` | 200 | 7476 | ja |
-| `xg/1 (11).xg` | 200 | 7476 | ja |
-| `xg/1 (12).xg` | 200 | 7476 | ja |
-| `xg/1 (13).xg` | 200 | 7476 | ja |
-| `xg/1 (14).xg` | 200 | 7476 | ja |
-| `xg/1 (15).xg` | 200 | 7476 | ja |
-| `xg/1 (16).xg` | 200 | 7476 | ja |
-| `xg/1 (17).xg` | 200 | 7476 | ja |
-| `xg/1 (18).xg` | 200 | 7476 | ja |
-| `xg/1 (19).xg` | 200 | 7476 | ja |
-| `xg/1 (2).xg` | 200 | 7476 | ja |
-| `xg/1 (20).xg` | 200 | 7476 | ja |
-| `xg/1 (3).xg` | 200 | 7476 | ja |
-| `xg/1 (4).xg` | 200 | 7476 | ja |
-| `xg/1 (5).xg` | 200 | 7476 | ja |
-| `xg/1 (6).xg` | 200 | 7476 | ja |
-| `xg/1 (7).xg` | 200 | 7476 | ja |
-| `xg/1 (8).xg` | 200 | 7476 | ja |
-| `xg/1 (9).xg` | 200 | 7476 | ja |
-| `xg/1.xg` | 200 | 7476 | ja |
-| `xg/Hendrik-Beginner 21 point match 25-10-2026.xg` | 201 | 160 | nein |
-| `xg/Hendrik-Intermediate 21 point match 24-10-2026 #2.xg` | 201 | 230 | nein |
-| `xg/Hendrik-Intermediate 21 point match 24-10-2026.xg` | 201 | 279 | nein |
-| `xg/Hendrik-Intermediate 7 point match 26-10-2026 #2.xg` | 201 | 225 | nein |
-| `xg/Hendrik-Intermediate 7 point match 26-10-2026.xg` | 201 | 227 | nein |
-| `xg/Hendrik-XG Roller+ 5 point match 24-10-2026.xg` | 201 | 222 | nein |
+| `bgf/test1.bgf` | 201 | 527 | no |
+| `bgf/test2.bgf` | 201 | 579 | no |
+| `bgf/test3.bgf` | 201 | 357 | no |
+| `bgf/test4.bgf` | 201 | 460 | no |
+| `bgf/test5.bgf` | 201 | 460 | no |
+| `mat/test1.mat` | 201 | 846 | no |
+| `mat/test2.mat` | 201 | 912 | no |
+| `mat/test3.mat` | 201 | 836 | no |
+| `mat/test4.mat` | 201 | 554 | no |
+| `mat/test5.mat` | 201 | 486 | no |
+| `xg/1 (1).xg` | 201 | 7476 | no |
+| `xg/1 (10).xg` | 200 | 7476 | yes |
+| `xg/1 (11).xg` | 200 | 7476 | yes |
+| `xg/1 (12).xg` | 200 | 7476 | yes |
+| `xg/1 (13).xg` | 200 | 7476 | yes |
+| `xg/1 (14).xg` | 200 | 7476 | yes |
+| `xg/1 (15).xg` | 200 | 7476 | yes |
+| `xg/1 (16).xg` | 200 | 7476 | yes |
+| `xg/1 (17).xg` | 200 | 7476 | yes |
+| `xg/1 (18).xg` | 200 | 7476 | yes |
+| `xg/1 (19).xg` | 200 | 7476 | yes |
+| `xg/1 (2).xg` | 200 | 7476 | yes |
+| `xg/1 (20).xg` | 200 | 7476 | yes |
+| `xg/1 (3).xg` | 200 | 7476 | yes |
+| `xg/1 (4).xg` | 200 | 7476 | yes |
+| `xg/1 (5).xg` | 200 | 7476 | yes |
+| `xg/1 (6).xg` | 200 | 7476 | yes |
+| `xg/1 (7).xg` | 200 | 7476 | yes |
+| `xg/1 (8).xg` | 200 | 7476 | yes |
+| `xg/1 (9).xg` | 200 | 7476 | yes |
+| `xg/1.xg` | 200 | 7476 | yes |
+| `xg/Hendrik-Beginner 21 point match 25-10-2026.xg` | 201 | 160 | no |
+| `xg/Hendrik-Intermediate 21 point match 24-10-2026 #2.xg` | 201 | 230 | no |
+| `xg/Hendrik-Intermediate 21 point match 24-10-2026.xg` | 201 | 279 | no |
+| `xg/Hendrik-Intermediate 7 point match 26-10-2026 #2.xg` | 201 | 225 | no |
+| `xg/Hendrik-Intermediate 7 point match 26-10-2026.xg` | 201 | 227 | no |
+| `xg/Hendrik-XG Roller+ 5 point match 24-10-2026.xg` | 201 | 222 | no |
 
-## Wiederholen
+## Rerun
 
 ```sh
-DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo NEONDOJO_CORPUS_REPORT=/tmp/neondojo-import-results.json cargo test -p neondojo --test import_corpus -- --ignored --nocapture
+DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/postgres \
+NEONDOJO_CORPUS_REPORT=/tmp/neondojo-import-results.json \
+  cargo test -p neondojo --test import_corpus -- --ignored --nocapture
 ```
 
-`NEONDOJO_GAMES_DIR` kann einen anderen Stammordner mit den drei Format-Unterordnern angeben. Die lokalen Spieldateien bleiben unversioniert. Ohne diese Dateien überspringt der optionale Bestandstest seine Ausführung; die portablen Format- und Regeltests laufen unabhängig davon.
+`DATABASE_URL` points to a maintenance database on a PostgreSQL server with a `CREATEDB` role; SQLx creates its own test database there and removes it again (see [PostgreSQL and GNUbg integration tests](development/testing.md#postgresql-and-gnubg-integration-tests)). The test requires GNUbg; if it is not on the `PATH`, set `GNUBG_BIN`. `NEONDOJO_CORPUS_REPORT` writes the per-file report as JSON. `NEONDOJO_GAMES_DIR` can specify a different root folder with the three format subfolders. The local game files remain unversioned. If one of the subfolders `xg`, `mat`, or `bgf` is missing, the optional corpus test skips its run; the portable format and rule tests run independently of it.
