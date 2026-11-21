@@ -148,9 +148,6 @@ async function playBotMatch(
       data: { human_player: 0, match_length: matchLength, play_mode: mode },
     }),
   );
-  const rejected: string[] = [];
-  // Number of rejections before the last accepted action, to count consecutive ones.
-  let accepted = 0;
   for (let step = 0; step < 3_000 && session.phase !== 'match_over'; step++) {
     const pending = session.pending_decision;
     let body: Record<string, unknown>;
@@ -175,18 +172,9 @@ async function playBotMatch(
         body.action = random() < 0.7 ? 'take' : 'drop';
       }
     }
-    const response = await request.post(`/api/play/sessions/${session.id}/actions`, { data: body });
-    if (response.status() === 503) {
-      // GNUbg occasionally rejects an action and leaves the saved session
-      // unchanged. Reload it and choose again rather than losing the seed.
-      rejected.push(`${session.phase} ${JSON.stringify(body)}: ${await response.text()}`);
-      console.warn(`Play action rejected, retrying: ${rejected.at(-1)}`);
-      expect(rejected.length - accepted, rejected.join('\n')).toBeLessThan(5);
-      session = await json<Schemas['PlaySession']>(await request.get(`/api/play/sessions/${session.id}`));
-      continue;
-    }
-    session = await json<Schemas['PlaySession']>(response);
-    accepted = rejected.length;
+    session = await json<Schemas['PlaySession']>(
+      await request.post(`/api/play/sessions/${session.id}/actions`, { data: body }),
+    );
   }
   expect(session.phase).toBe('match_over');
   await json(
