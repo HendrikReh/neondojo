@@ -3654,7 +3654,7 @@ export interface components {
             play_mode?: null | components["schemas"]["PlayMode"];
             /**
              * Format: int32
-             * @description Bot strength for this match only; must be a verified play depth of the chosen engine.
+             * @description Bot checker depth for this match only. A named preset pins its own depth.
              */
             play_plies?: number | null;
             training_auto_analysis?: boolean | null;
@@ -5035,7 +5035,10 @@ export interface components {
         PlayEngine: {
             difficulty?: null | components["schemas"]["SageDifficulty"];
             id: string;
-            /** Format: int32 */
+            /**
+             * Format: int32
+             * @description Checker search depth. The NeonGammon Full Strength preset uses 2-ply for cube decisions.
+             */
             plies: number;
             version: string;
         };

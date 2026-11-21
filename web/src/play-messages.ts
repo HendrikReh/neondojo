@@ -76,6 +76,7 @@ const en = {
   casual: 'Casual',
   intermediate: 'Intermediate',
   full_strength: 'Full Strength',
+  fullStrengthDepth: '3-ply checkers / 2-ply cube',
   matchChoicesHelp:
     'Name, bot engine and strength apply to this match only. Saved settings stay unchanged.',
   passReady: 'Click the dice pair to pass.',
@@ -194,6 +195,7 @@ const de: Record<Key, string> = {
   casual: 'Hobby',
   intermediate: 'Fortgeschritten',
   full_strength: 'Volle Stärke',
+  fullStrengthDepth: '3-Ply Steinzüge / 2-Ply Cube',
   matchChoicesHelp:
     'Name, Gegner-Engine und Spielstärke gelten nur für dieses Match. Die gespeicherten Einstellungen bleiben unverändert.',
   passReady: 'Klicke auf das Würfelpaar, um auszusetzen.',
@@ -469,6 +471,7 @@ Object.assign(extra.es, {
   casual: 'Aficionado',
   intermediate: 'Intermedio',
   full_strength: 'Máxima fuerza',
+  fullStrengthDepth: '3-ply jugadas / 2-ply cubo',
   matchChoicesHelp:
     'El nombre, el motor del rival y la fuerza solo se aplican a esta partida. Los ajustes guardados no cambian.',
   passReady: 'Haz clic en los dados para pasar el turno.',
@@ -509,6 +512,7 @@ Object.assign(extra.fr, {
   casual: 'Loisir',
   intermediate: 'Intermédiaire',
   full_strength: 'Pleine puissance',
+  fullStrengthDepth: '3-ply déplacements / 2-ply videau',
   matchChoicesHelp:
     'Le nom, le moteur adverse et la force ne s’appliquent qu’à ce match. Les réglages enregistrés restent inchangés.',
   passReady: 'Cliquez sur les dés pour passer votre tour.',
@@ -550,6 +554,7 @@ Object.assign(extra.it, {
   casual: 'Amatoriale',
   intermediate: 'Intermedio',
   full_strength: 'Massima forza',
+  fullStrengthDepth: '3-ply mosse / 2-ply cubo',
   matchChoicesHelp:
     'Nome, motore avversario e forza valgono solo per questo match. Le impostazioni salvate restano invariate.',
   passReady: 'Fai clic sui dadi per passare il turno.',
@@ -590,6 +595,7 @@ Object.assign(extra.pl, {
   casual: 'Amator',
   intermediate: 'Średniozaawansowany',
   full_strength: 'Pełna siła',
+  fullStrengthDepth: '3-ply ruchy / 2-ply kostka dublująca',
   matchChoicesHelp:
     'Imię, silnik przeciwnika i siła gry dotyczą tylko tego meczu. Zapisane ustawienia pozostają bez zmian.',
   passReady: 'Kliknij parę kości, aby spasować.',

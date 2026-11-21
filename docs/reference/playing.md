@@ -8,15 +8,22 @@ How matches against GNUbg or NeonGammon, feedback modes and game results behave.
 
 In **New match**, select **NeonGammon** as the bot engine and choose a preset
 under **Playing strength**. The presets are **Beginner**, **Casual**,
-**Intermediate**, and **Full Strength**. For a five-point match the chooser
-shows approximately **21**, **14.4**, **7.4**, and **0.9 PR**, respectively.
-These are the measured averages against Full Strength, using Stage 11 at
-3-ply to score the sampled decisions. The labels show the preset names in
-other match formats.
+**Intermediate**, and **Full Strength**. Beginner, Casual, and Intermediate
+sample 1-ply checker alternatives and close cube decisions. For five-point
+matches, their labels show about **22**, **16.2**, and **8.1 PR**, respectively.
+These values come from matches against Full Strength, with sampled decisions
+scored using Stage 11 at 3-ply. [Five-point preset PR benchmark](../open-sage-local.md#five-point-preset-pr-benchmark)
 
-The three easier presets sample checker alternatives and close cube decisions.
-Full Strength chooses Stage 11's 2-ply actions. The chosen preset is saved
-with the match and shown in the match bar after reload or resume.
+In new matches, **Full Strength** plays Stage 11 at **3-ply for checker moves**
+and **2-ply for cube decisions**, following the engine's recommendation for
+each. Its five-point label shows **≈ 1.0 PR**, measured against a full-rollout
+reference. The match saves its preset and checker depth. On reload or resume, the
+match bar shows the saved preset, and Full Strength matches started with the
+original 2-ply preset continue to play at their saved depth. [Full Strength rollout PR](../open-sage-local.md#full-strength-rollout-pr)
+
+API clients can omit `play_plies` when selecting a preset. For new Full
+Strength matches, the former explicit value `2` is also accepted and the
+session records the current checker depth (`engine.plies: 3`).
 
 ### Start, resume, or end a match
 
