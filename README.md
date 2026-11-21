@@ -3,7 +3,7 @@
 # NeonDojo
 
 <!-- Static badges: the repository is private, so dynamic GitHub badges cannot read it. Update the version badge together with backend/Cargo.toml and web/package.json for each release. -->
-[![Version 1.1.0](https://img.shields.io/badge/version-1.1.0-2ea44f)](CHANGELOG.md)
+[![Version 1.2.0](https://img.shields.io/badge/version-1.2.0-2ea44f)](CHANGELOG.md)
 [![Platform: macOS on Apple Silicon](https://img.shields.io/badge/platform-macOS%20%7C%20Apple%20Silicon-000000?logo=apple&logoColor=white)](#requirements)
 [![Rust 1.94.1](https://img.shields.io/badge/Rust-1.94.1-CE422B?logo=rust&logoColor=white)](#requirements)
 [![Node.js 22.12+ or 24+](https://img.shields.io/badge/Node.js-22.12%2B%20%7C%2024%2B-5FA04E?logo=nodedotjs&logoColor=white)](#requirements)
