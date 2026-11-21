@@ -6170,6 +6170,61 @@
         }
       }
     },
+    "/api/matches/{id}/import-warnings": {
+      "get": {
+        "tags": [
+          "Library"
+        ],
+        "summary": "Irregularities in the source file that the import resolved, in game order.",
+        "operationId": "match_import_warnings",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ImportWarning"
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/matches/{id}/imported-analysis": {
       "get": {
         "tags": [
@@ -15857,6 +15912,7 @@
           "display_name",
           "result_state",
           "game_count",
+          "import_warning_count",
           "tags",
           "comment",
           "version"
@@ -15912,6 +15968,11 @@
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "import_warning_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Source irregularities the import resolved; see `/api/matches/{id}/import-warnings`."
           },
           "match_length": {
             "type": "integer",
@@ -17338,6 +17399,17 @@
           "game_no"
         ],
         "properties": {
+          "expected_score": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "White and Black score that follows from the previous game's result."
+          },
           "game_no": {
             "type": "integer",
             "format": "int32",
@@ -17345,6 +17417,26 @@
           },
           "kind": {
             "$ref": "#/components/schemas/ImportWarningKind"
+          },
+          "recorded_score": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "integer",
+              "format": "int32"
+            },
+            "description": "White and Black score recorded in the game header."
+          },
+          "source_line": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "One-based line of a text source.",
+            "minimum": 1
           },
           "source_ply": {
             "type": [
@@ -17354,6 +17446,13 @@
             "format": "int32",
             "description": "Checker move number as counted in the source file.",
             "minimum": 1
+          },
+          "source_text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The rejected source text, trimmed and shortened."
           }
         }
       },
@@ -17363,7 +17462,10 @@
         "enum": [
           "illegal_play_replaced",
           "custom_start_position",
-          "unfinished_game"
+          "unfinished_game",
+          "illegal_play_truncated",
+          "unreadable_play_truncated",
+          "score_mismatch"
         ]
       },
       "ImportedAnalysisData": {

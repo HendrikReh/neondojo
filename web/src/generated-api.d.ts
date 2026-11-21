@@ -1331,6 +1331,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/matches/{id}/import-warnings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Irregularities in the source file that the import resolved, in game order. */
+        get: operations["match_import_warnings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/matches/{id}/imported-analysis": {
         parameters: {
             query?: never;
@@ -3787,6 +3804,11 @@ export interface components {
             game_count: number;
             /** Format: uuid */
             id: string;
+            /**
+             * Format: int32
+             * @description Source irregularities the import resolved; see `/api/matches/{id}/import-warnings`.
+             */
+            import_warning_count: number;
             /** Format: int32 */
             match_length: number;
             /**
@@ -4242,21 +4264,32 @@ export interface components {
             warnings: components["schemas"]["ImportWarning"][];
         };
         ImportWarning: {
+            /** @description White and Black score that follows from the previous game's result. */
+            expected_score?: number[] | null;
             /** Format: int32 */
             game_no: number;
             kind: components["schemas"]["ImportWarningKind"];
+            /** @description White and Black score recorded in the game header. */
+            recorded_score?: number[] | null;
+            /**
+             * Format: int32
+             * @description One-based line of a text source.
+             */
+            source_line?: number | null;
             /**
              * Format: int32
              * @description Checker move number as counted in the source file.
              */
             source_ply?: number | null;
+            /** @description The rejected source text, trimmed and shortened. */
+            source_text?: string | null;
         };
         /**
          * @description An irregularity in the source file that the import kept visible instead
          *     of rejecting the whole match.
          * @enum {string}
          */
-        ImportWarningKind: "illegal_play_replaced" | "custom_start_position" | "unfinished_game";
+        ImportWarningKind: "illegal_play_replaced" | "custom_start_position" | "unfinished_game" | "illegal_play_truncated" | "unreadable_play_truncated" | "score_mismatch";
         ImportedAnalysisData: {
             candidates: components["schemas"]["ImportedCandidate"][];
             /** Format: int32 */
@@ -10351,6 +10384,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GameDecisions"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    match_import_warnings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportWarning"][];
                 };
             };
             404: {

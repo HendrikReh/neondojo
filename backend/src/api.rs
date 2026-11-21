@@ -116,6 +116,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/matches", get(matches))
         .route("/api/matches/{id}", get(get_match))
         .route("/api/matches/{id}/games", get(match_games))
+        .route(
+            "/api/matches/{id}/import-warnings",
+            get(match_import_warnings),
+        )
         .route("/api/matches/{id}/dice", get(dice))
         .route("/api/matches/{id}/source", get(source))
         .route(
@@ -313,16 +317,20 @@ async fn upload(
     }
     let mut warnings = Vec::new();
     let sgf = match format.as_str() {
-        "mat" => Engine::new(crate::settings::load(&state).await?.gnubg_path)
-            .normalize_mat(&bytes)
-            .await
-            .map_err(|e| {
-                ApiError::invalid(if extension == "txt" {
-                    format!("TXT import failed; expected a MAT match transcript: {e:#}")
-                } else {
-                    format!("MAT import failed: {e:#}")
-                })
-            })?,
+        "mat" => {
+            let converted = Engine::new(crate::settings::load(&state).await?.gnubg_path)
+                .import_mat(&bytes)
+                .await
+                .map_err(|e| {
+                    ApiError::invalid(if extension == "txt" {
+                        format!("TXT import failed; expected a MAT match transcript: {e:#}")
+                    } else {
+                        format!("MAT import failed: {e:#}")
+                    })
+                })?;
+            warnings = converted.warnings;
+            converted.sgf
+        }
         "sgf" => {
             String::from_utf8(bytes.to_vec()).map_err(|_| ApiError::invalid("SGF must be UTF-8"))?
         }
@@ -366,13 +374,14 @@ async fn upload(
             .map_err(anyhow::Error::from)?,
     };
     crate::databases::require_library_destination(&state.pool, database_id).await?;
-    let mut result = store::import_match_in_database(
+    let mut result = store::import_source_in_database(
         &state.pool,
         &filename,
         &format,
         &bytes,
         &sgf,
         &imported,
+        warnings.clone(),
         database_id,
     )
     .await?;
@@ -438,6 +447,20 @@ async fn match_games(
     crate::play::require_review_available(&state.pool, id).await?;
     Ok(Json(
         store::match_games(&state.pool, id)
+            .await?
+            .ok_or_else(ApiError::missing)?,
+    ))
+}
+
+/// Irregularities in the source file that the import resolved, in game order.
+#[utoipa::path(get, path="/api/matches/{id}/import-warnings", params(("id"=Uuid, Path)), responses((status=200, body=Vec<ImportWarning>), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Library")]
+async fn match_import_warnings(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<ImportWarning>>> {
+    crate::play::require_review_available(&state.pool, id).await?;
+    Ok(Json(
+        store::import_warnings(&state.pool, id)
             .await?
             .ok_or_else(ApiError::missing)?,
     ))
@@ -957,6 +980,7 @@ async fn events(
         matches,
         get_match,
         match_games,
+        match_import_warnings,
         source,
         positions,
         get_position,

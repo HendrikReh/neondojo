@@ -562,7 +562,7 @@ Details: [Match databases](../reference/library.md#match-databases)
 
 Select **Import match**, or drop files on the Analysis welcome panel. Supported formats are **MAT** (Jellyfish/GNUbg, also as a `.txt` match transcript), **XG** (eXtreme Gammon), **SGF** (GNUbg), **BGF** (BGBlitz) and **OGXM** (HedgeHog). Each file may be up to 16 MiB. Each file is imported separately, and duplicates and errors are reported per file. Analyses stored in the file are kept as *imported analysis* with their original depth and units.
 
-Unsupported content is rejected, for example XG1 files, edits later in an XG game, custom starting positions in BGF and OGXM files, beavers and other variants. An XG game that starts from a recorded mid-game position is imported from that position, and the import result lists it.
+Unsupported content is rejected, for example XG1 files, edits later in an XG game, custom starting positions in BGF and OGXM files, beavers and other variants. An XG game that starts from a recorded mid-game position is imported from that position, and the import result lists it. In a MAT or `.txt` transcript, an illegal or unreadable move ends its game before that move, and a header score that contradicts the previous result is kept as recorded. The match is still imported; the import result lists each such case, and **Notes** shows them as **Import notes** above the match or game comment. A warning sign next to the PR in the match database marks these matches.
 
 Details: [Import formats](../reference/library.md#import-formats)
 

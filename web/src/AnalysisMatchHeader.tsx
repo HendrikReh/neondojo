@@ -250,6 +250,13 @@ export function AnalysisMatchHeaderView({
             : 'n/a',
           players.black,
         )}
+        {!!details?.import_warning_count &&
+          field(
+            'import-notes',
+            libraryText(locale, 'importNotes'),
+            formatNumber(details.import_warning_count),
+            libraryText(locale, 'importNotesHint'),
+          )}
       </dl>
       {error !== undefined && (
         <div className="analysis-match-error" role="alert">

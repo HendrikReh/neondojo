@@ -61,6 +61,7 @@ const metadata: LibraryMatch = {
   display_name: 'Retained test',
   comment: '',
   game_count: 15,
+  import_warning_count: 0,
   played_on: null,
   tournament: null,
   round: null,

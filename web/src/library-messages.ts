@@ -1008,6 +1008,54 @@ const rows = {
     'Partia {game} nie ma wyniku: plik zaczyna następną partię, zanim ta się skończy.',
     'La partita {game} non ha risultato: il file inizia la successiva prima che questa finisca.',
   ],
+  importWarningIllegalTruncated: [
+    'Game {game}, move {ply} (line {line}): “{text}” is not a legal move. The game ends before it.',
+    'Partie {game}, Zug {ply} (Zeile {line}): „{text}“ ist kein legaler Zug. Die Partie endet davor.',
+    'Partida {game}, movimiento {ply} (línea {line}): «{text}» no es un movimiento legal. La partida termina antes de él.',
+    'Partie {game}, coup {ply} (ligne {line}) : « {text} » n’est pas un coup légal. La partie s’arrête avant lui.',
+    'Partia {game}, ruch {ply} (wiersz {line}): „{text}” nie jest dozwolonym ruchem. Partia kończy się przed nim.',
+    'Partita {game}, mossa {ply} (riga {line}): «{text}» non è una mossa legale. La partita termina prima di essa.',
+  ],
+  importWarningUnreadableTruncated: [
+    'Game {game}, move {ply} (line {line}): “{text}” cannot be read. The game ends before it.',
+    'Partie {game}, Zug {ply} (Zeile {line}): „{text}“ ist nicht lesbar. Die Partie endet davor.',
+    'Partida {game}, movimiento {ply} (línea {line}): «{text}» no se puede leer. La partida termina antes de él.',
+    'Partie {game}, coup {ply} (ligne {line}) : « {text} » est illisible. La partie s’arrête avant lui.',
+    'Partia {game}, ruch {ply} (wiersz {line}): „{text}” jest nieczytelny. Partia kończy się przed nim.',
+    'Partita {game}, mossa {ply} (riga {line}): «{text}» non è leggibile. La partita termina prima di essa.',
+  ],
+  importWarningScoreMismatch: [
+    'Game {game} (line {line}) starts at {recorded}, but the previous result gives {expected}. The recorded score is used.',
+    'Partie {game} (Zeile {line}) beginnt bei {recorded}, das vorige Ergebnis ergibt aber {expected}. Verwendet wird der aufgezeichnete Stand.',
+    'La partida {game} (línea {line}) empieza con {recorded}, pero el resultado anterior da {expected}. Se usa el marcador registrado.',
+    'La partie {game} (ligne {line}) commence à {recorded}, mais le résultat précédent donne {expected}. Le score enregistré est utilisé.',
+    'Partia {game} (wiersz {line}) zaczyna się od {recorded}, ale poprzedni wynik daje {expected}. Używany jest zapisany wynik.',
+    'La partita {game} (riga {line}) inizia da {recorded}, ma il risultato precedente dà {expected}. Si usa il punteggio registrato.',
+  ],
+  importNotes: [
+    'Import notes',
+    'Importhinweise',
+    'Notas de importación',
+    'Notes d’import',
+    'Uwagi z importu',
+    'Note di importazione',
+  ],
+  importNotesHint: [
+    'Found in the source file during import. Analyses and statistics include only the imported moves.',
+    'Beim Import in der Quelldatei gefunden. Analysen und Statistiken umfassen nur die importierten Züge.',
+    'Encontradas en el archivo de origen durante la importación. Los análisis y las estadísticas solo incluyen los movimientos importados.',
+    'Trouvées dans le fichier source lors de l’import. Les analyses et statistiques ne comprennent que les coups importés.',
+    'Znalezione w pliku źródłowym podczas importu. Analizy i statystyki obejmują tylko zaimportowane ruchy.',
+    'Trovate nel file di origine durante l’importazione. Analisi e statistiche comprendono solo le mosse importate.',
+  ],
+  importNotesCount: [
+    'Import notes: {count}',
+    'Importhinweise: {count}',
+    'Notas de importación: {count}',
+    'Notes d’import : {count}',
+    'Uwagi z importu: {count}',
+    'Note di importazione: {count}',
+  ],
 } as const;
 type Key = keyof typeof rows;
 const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
@@ -1038,13 +1086,23 @@ const importWarningKeys = {
   illegal_play_replaced: 'importWarningIllegalPlay',
   custom_start_position: 'importWarningCustomStart',
   unfinished_game: 'importWarningUnfinishedGame',
+  illegal_play_truncated: 'importWarningIllegalTruncated',
+  unreadable_play_truncated: 'importWarningUnreadableTruncated',
+  score_mismatch: 'importWarningScoreMismatch',
 } as const satisfies Record<ImportWarning['kind'], Key>;
+const score = (value: readonly number[] | null | undefined) =>
+  value ? value.join(':') : '–';
 export function importWarningText(
   warning: ImportWarning,
   t: ReturnType<typeof useLibraryText>,
 ) {
   return t(importWarningKeys[warning.kind], {
     game: warning.game_no,
-    ply: warning.source_ply ?? '',
+    ply: warning.source_ply ?? '–',
+    // A line reference, not a quantity: no digit grouping.
+    line: warning.source_line == null ? '–' : String(warning.source_line),
+    text: warning.source_text ?? '',
+    expected: score(warning.expected_score),
+    recorded: score(warning.recorded_score),
   });
 }

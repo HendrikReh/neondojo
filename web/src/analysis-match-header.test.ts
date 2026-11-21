@@ -25,6 +25,7 @@ const metadata: LibraryMatch = {
   database_id: '00000000-0000-0000-0000-000000000001',
   display_name: 'Final training',
   game_count: 15,
+  import_warning_count: 0,
   played_on: '2026-11-08',
   tournament: 'Autumn Open',
   round: null,

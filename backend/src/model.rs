@@ -185,6 +185,15 @@ pub enum ImportWarningKind {
     CustomStartPosition,
     /// The game has no result because the next game starts without its footer.
     UnfinishedGame,
+    /// A MAT move is not legal in the replayed position. The game ends before
+    /// it without a result; later games are imported from their headers.
+    IllegalPlayTruncated,
+    /// A MAT move cannot be read. The game ends before it without a result;
+    /// later games are imported from their headers.
+    UnreadablePlayTruncated,
+    /// The game header's score differs from the previous game's result. The
+    /// recorded header score is used.
+    ScoreMismatch,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -195,6 +204,34 @@ pub struct ImportWarning {
     /// Checker move number as counted in the source file.
     #[schema(minimum = 1)]
     pub source_ply: Option<i32>,
+    /// One-based line of a text source.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(minimum = 1)]
+    pub source_line: Option<i32>,
+    /// The rejected source text, trimmed and shortened.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_text: Option<String>,
+    /// White and Black score that follows from the previous game's result.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_score: Option<[i32; 2]>,
+    /// White and Black score recorded in the game header.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recorded_score: Option<[i32; 2]>,
+}
+
+impl ImportWarning {
+    /// A warning located by game and source move number only.
+    pub fn at(kind: ImportWarningKind, game_no: i32, source_ply: Option<i32>) -> Self {
+        Self {
+            kind,
+            game_no,
+            source_ply,
+            source_line: None,
+            source_text: None,
+            expected_score: None,
+            recorded_score: None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
