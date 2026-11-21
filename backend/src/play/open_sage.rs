@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use tokio::sync::Semaphore;
 use tokio_util::sync::CancellationToken;
@@ -17,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 // Session reads can arrive in bursts. Keep at most one speculative task
 // pending, including while an analysis or benchmark holds the engine gate.
 static WARMUP: Semaphore = Semaphore::const_new(1);
+const TURN_TIMEOUT: Duration = Duration::from_secs(180);
 
 pub(super) fn schedule_warmup(session: &PlaySession, shutdown: &CancellationToken) {
     if session.paused
@@ -272,7 +273,7 @@ pub(super) async fn advance(
     notation: Option<&str>,
     resign_level: Option<i32>,
 ) -> Result<(NativeSnapshot, String)> {
-    crate::engine::with_shared_access(async {
+    crate::engine::with_shared_access_timeout(TURN_TIMEOUT, async {
         let accept_resignation = if action == "resign" {
             Some(
                 bot.accepts_resignation(
@@ -345,6 +346,7 @@ pub(super) async fn advance(
         anyhow::bail!("NeonGammon did not yield within the bounded action chain")
     })
     .await
+    .context("NeonGammon play action timed out, including the wait for engine access")?
 }
 
 pub(super) async fn benchmark_checker_turn(
