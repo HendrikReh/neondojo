@@ -2,9 +2,14 @@
 use crate::{api::AppState, match_analysis::AnalyzedGame, model::*};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
 use std::time::Instant;
 use uuid::Uuid;
+
+#[cfg(test)]
+mod checkpoint_tests;
+
+const CHECKPOINT_BATCH_SIZE: usize = 500;
 
 pub(crate) async fn execute(
     state: &AppState,
@@ -199,32 +204,67 @@ async fn checkpoint(
     };
     accumulate_performance_rating(&mut game_summary, game);
     game_summary.completed_games = 1;
+    // Validate and encode the game before locking the lease row. Heartbeats
+    // only have to wait for the transaction that publishes the checkpoint.
+    let mut inserts = Vec::new();
+    for (batch_index, batch) in game.decisions.chunks(CHECKPOINT_BATCH_SIZE).enumerate() {
+        let mut rows = Vec::with_capacity(batch.len());
+        for (index, decision) in batch.iter().enumerate() {
+            let number = batch_index * CHECKPOINT_BATCH_SIZE + index + 1;
+            ensure!(
+                decision.decision_no == number as i32 && (0..=1).contains(&decision.player),
+                "Invalid GNUbg decision order/player"
+            );
+            ensure!(
+                decision.equity_loss.is_finite() && decision.equity_loss >= 0.0,
+                "Invalid equity loss"
+            );
+            let position_uuid = if decision.kind == "checker" {
+                Some(
+                    positions[decision.checker_no.context("Missing checker index")? as usize - 1]
+                        .id,
+                )
+            } else {
+                None
+            };
+            crate::match_analysis::accumulate_decision(&mut next.players, decision)?;
+            crate::match_analysis::accumulate_decision(&mut game_summary.players, decision)?;
+            rows.push((position_uuid, decision, serde_json::to_value(decision)?));
+        }
+        let mut insert = QueryBuilder::<Postgres>::new(
+            "INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) ",
+        );
+        insert.push_values(rows, |mut row, (position_uuid, decision, data)| {
+            row.push_bind(job.id)
+                .push_bind(position_uuid)
+                .push_bind(game.game_no)
+                .push_bind(decision.decision_no)
+                .push_bind(decision.player)
+                .push_bind(&decision.kind)
+                .push_bind(decision.equity_loss)
+                .push_bind(data);
+        });
+        inserts.push(insert);
+    }
+    let game_summary = serde_json::to_value(game_summary)?;
+    let result = serde_json::to_value(&next)?;
+    let progress = next.completed_games * 100 / job.total_games;
+    let progress_event = json!({
+        "status": "running",
+        "progress": progress,
+        "total_games": job.total_games,
+        "completed_games": next.completed_games,
+    });
     let mut tx = pool.begin().await?;
     assert_lease(&mut tx, job.id, token).await?;
-    for (index, decision) in game.decisions.iter().enumerate() {
-        ensure!(
-            decision.decision_no == index as i32 + 1 && (0..=1).contains(&decision.player),
-            "Invalid GNUbg decision order/player"
-        );
-        ensure!(
-            decision.equity_loss.is_finite() && decision.equity_loss >= 0.0,
-            "Invalid equity loss"
-        );
-        let position_uuid = if decision.kind == "checker" {
-            Some(positions[decision.checker_no.context("Missing checker index")? as usize - 1].id)
-        } else {
-            None
-        };
-        crate::match_analysis::accumulate_decision(&mut next.players, decision)?;
-        crate::match_analysis::accumulate_decision(&mut game_summary.players, decision)?;
-        sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,$4,$5,$6,$7,$8)")
-            .bind(job.id).bind(position_uuid).bind(game.game_no).bind(decision.decision_no).bind(decision.player).bind(&decision.kind)
-            .bind(decision.equity_loss).bind(serde_json::to_value(decision)?).execute(&mut *tx).await?;
+    for insert in &mut inserts {
+        // Variable row counts produce different SQL and would churn the cache.
+        insert.build().persistent(false).execute(&mut *tx).await?;
     }
     sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,$2,$3)")
         .bind(job.id)
         .bind(game.game_no)
-        .bind(serde_json::to_value(&game_summary)?)
+        .bind(game_summary)
         .execute(&mut *tx)
         .await?;
     if let Some(started) = started {
@@ -237,12 +277,13 @@ async fn checkpoint(
         )
         .await?;
     }
-    let progress = next.completed_games * 100 / job.total_games;
     sqlx::query("UPDATE jobs SET completed_games=$3,progress=$4,result=$5,updated_at=now(),lease_until=now()+interval '120 seconds' WHERE id=$1 AND lease_token=$2")
-        .bind(job.id).bind(token).bind(next.completed_games).bind(progress).bind(serde_json::to_value(&next)?).execute(&mut *tx).await?;
+        .bind(job.id).bind(token).bind(next.completed_games).bind(progress).bind(result).execute(&mut *tx).await?;
     sqlx::query("INSERT INTO job_events(job_id,event,data) VALUES($1,'progress',$2)")
-        .bind(job.id).bind(json!({"status":"running","progress":progress,"total_games":job.total_games,"completed_games":next.completed_games}))
-        .execute(&mut *tx).await?;
+        .bind(job.id)
+        .bind(progress_event)
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     *summary = next;
     Ok(())
