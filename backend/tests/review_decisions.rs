@@ -1,9 +1,9 @@
+use crate::support;
 use neondojo::{import, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use uuid::Uuid;
-mod support;
 use support::{foreign_analysis as imported, send as call};
+use uuid::Uuid;
 fn app(pool: &PgPool) -> axum::Router {
     support::app(pool, "/unavailable")
 }

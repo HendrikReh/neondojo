@@ -2,7 +2,7 @@
 
 ## Verification
 
-Run the checks relevant to the change from the repository root. Install the frontend dependencies with `npm ci --prefix web`. `cargo test --workspace` includes every SQLx test that needs only PostgreSQL, so export `DATABASE_URL` as described under [PostgreSQL test server](#postgresql-test-server) first. Use `cargo test --workspace --lib` to run the Rust library tests without the SQLx integration targets.
+Run the checks relevant to the change from the repository root. Install the frontend dependencies with `npm ci --prefix web`. `cargo test --workspace` includes every SQLx test that needs only PostgreSQL, so export `DATABASE_URL` as described under [PostgreSQL test server](#postgresql-test-server) first. Use `cargo test --workspace --lib` to run the Rust library tests without the SQLx integration tests.
 
 ```sh
 cargo fmt --all --check
@@ -16,7 +16,15 @@ npm run build --prefix web
 
 After changing an API contract, run `npm run api:types --prefix web` before the frontend checks. It regenerates [OpenAPI](../openapi.json) and [the TypeScript types](../../web/src/generated-api.d.ts) from the Rust API. `typecheck:e2e` then checks the browser specs, their API mocks, and the components they mount against the regenerated types. Playwright itself only strips types, so a mock that has fallen behind the API would otherwise still run. The `test:themes` script discovers the Python tests under `tools/`, including tests for tools beyond theme preparation.
 
-[cargo-nextest](https://nexte.st/) runs the same Rust tests in separate processes and in parallel across test targets. With nextest installed, `cargo nextest run --workspace` replaces `cargo test --workspace` and does not run doctests. On November 21, 2026, on the Mac mini M4 Pro, the default suite of 601 tests took 91 s with `cargo test` and 53 s with nextest, after the build.
+All integration tests in [`backend/tests/`](../../backend/tests/) link into one test binary, `integration`. Each file is a module of [`backend/tests/integration.rs`](../../backend/tests/integration.rs), and Cargo's automatic test discovery is off, so add a `mod` line there for a new test file; the test `every_test_file_is_a_module` fails until you do. Select a file's tests by its module path:
+
+```sh
+cargo test -p neondojo --test integration position_browser::
+```
+
+The filter matches substrings, so `play::` also selects `open_sage_play::` and `settings::` also selects `open_sage_settings::`. Exclude those with `--skip open_sage_play::` or `--skip open_sage_settings::` after `--`. Tests of all modules share one process. Use `--test-threads=1` for tests that need exclusive use of a process-wide resource, such as the NeonGammon worker described in [Local NeonGammon setup](../open-sage-local.md).
+
+[cargo-nextest](https://nexte.st/) runs each test in its own process and in parallel across test binaries. With nextest installed, `cargo nextest run --workspace` replaces `cargo test --workspace` and does not run doctests; `-E 'binary(integration) & test(/^play::/)'` selects exactly the `play` module of the integration tests. On November 21, 2026, on the Mac mini M4 Pro, the default suite of 604 tests took 56 s with `cargo test` and 54 s with nextest, after the build. With one binary per test file, `cargo test` had needed 100 s. After a change in the library, rebuilding the tests took 4.0 s instead of 6.3 s.
 
 ### Which Rust tests run by default
 
@@ -26,7 +34,7 @@ After changing an API contract, run `npm run api:types --prefix web` before the 
 | PostgreSQL only | Runs; needs `DATABASE_URL` | `#[sqlx::test]` |
 | GNUbg, NeonGammon, Anki, opening books, local corpora, or large synthetic datasets | Skipped | `#[ignore = "requires …"]` naming the resource |
 
-Mark a test `#[ignore]` only for a resource beyond PostgreSQL and name that resource in the reason. Keep long waits out of the default suite by injecting shorter intervals, as `AppState::with_job_heartbeat` does for the lease heartbeat. Pure checks of OpenAPI or of fixed reference data need no database; use `#[test]` and `api::ApiDoc::openapi()` for them. Shared HTTP helpers for the integration targets are in [`backend/tests/support/mod.rs`](../../backend/tests/support/mod.rs); a target uses them with `mod support;`.
+Mark a test `#[ignore]` only for a resource beyond PostgreSQL and name that resource in the reason. Keep long waits out of the default suite by injecting shorter intervals, as `AppState::with_job_heartbeat` does for the lease heartbeat. Pure checks of OpenAPI or of fixed reference data need no database; use `#[test]` and `api::ApiDoc::openapi()` for them. Shared HTTP helpers for the integration tests are in [`backend/tests/support/mod.rs`](../../backend/tests/support/mod.rs); a test module uses them with `use crate::support;`.
 
 ### PostgreSQL test server
 
@@ -46,7 +54,7 @@ The ignored tests need a native engine or other local resources in addition to t
 cargo test --workspace -- --ignored --nocapture --skip all_local_game_files_import_atomically_and_deduplicate
 ```
 
-Use `cargo test -p neondojo --test <target> -- --ignored --nocapture` for an affected integration test target. Integration coverage includes import and deduplication, game catalogs and older matches, scope-bound cursors, SSE replay, worker claims and lease recovery, Dice Distribution, and native checker and cube analysis. The reference match exercises 10 games and 460 moves. Native depth tests check actual 3- and 4-ply engine output and game and match exports. Parser tests compare XG positions with the same match imported from MAT through GNUbg.
+Use `cargo test -p neondojo --test integration <module>:: -- --ignored --nocapture` for the tests of an affected file. Integration coverage includes import and deduplication, game catalogs and older matches, scope-bound cursors, SSE replay, worker claims and lease recovery, Dice Distribution, and native checker and cube analysis. The reference match exercises 10 games and 460 moves. Native depth tests check actual 3- and 4-ply engine output and game and match exports. Parser tests compare XG positions with the same match imported from MAT through GNUbg.
 
 The search performance test builds 50,000 synthetic matches and 250,000 positions in an isolated database. It uses `EXPLAIN (ANALYZE, BUFFERS)` to verify a GIN trigram index for a selective player-name search and a B-tree index for an exact Position ID search. Each query returns one row. On November 8, 2026, the warm test queries took 0.279 ms and 0.036 ms respectively in PostgreSQL. These measurements cover database execution only.
 
@@ -56,13 +64,13 @@ The corpus test reads `games/xg`, `games/mat`, and `games/bgf` by default. Set `
 
 ```sh
 NEONDOJO_CORPUS_REPORT=/tmp/neondojo-import-results.json \
-  cargo test -p neondojo --test import_corpus -- --ignored --nocapture
+  cargo test -p neondojo --test integration import_corpus:: -- --ignored --nocapture
 ```
 
-The separate `mat_corpus` target replays each file in `games/mat` through GNUbg and checks that it normalizes to strictly replayable SGF. It needs GNUbg but no database.
+The `mat_corpus` tests replay each file in `games/mat` through GNUbg and check that it normalizes to strictly replayable SGF. They need GNUbg but no database.
 
 ```sh
-cargo test -p neondojo --test mat_corpus -- --ignored --nocapture
+cargo test -p neondojo --test integration mat_corpus:: -- --ignored --nocapture
 ```
 
 The November 8, 2026 rerun imported 33 of 42 files and rejected nine XG tournament transcripts. On November 20, 2026, after the importer started resolving their irregularities, 41 of 41 local XG files imported. The earlier 37-of-37 result used a different corpus with 17 distinct contents and 20 recognized duplicates. The corpus test requires every supplied file to pass. See the [import corpus report](../import-corpus-results.md).
@@ -163,7 +171,7 @@ With PostgreSQL running and `DATABASE_URL` set as described under [Verification]
 
 ```sh
 GNUBG_BIN=/absolute/path/to/gnubg \
-cargo test -p neondojo --test play -- --ignored
+cargo test -p neondojo --test integration play:: -- --ignored --skip open_sage_play::
 ```
 
 The opt-in browser suite uses Playwright's test backend, native GNUbg with seeded randomness, and browser clicks for play actions. Its two full three-point matches use white/bear off right and black/bear off left. They check the hover destination and move for each die, swap dice, use the roll and cube controls, and reload the saved match. Three additional scenarios verify opening rolls and ties across reloads. Three cube scenarios verify real bot offers, taking or passing, and starting the next game. Native SGF evaluations verify 0-, 1-, and 2-ply play after resuming and changing games.

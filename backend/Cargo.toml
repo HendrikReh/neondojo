@@ -2,6 +2,8 @@
 name = "neondojo"
 version = "1.1.0"
 edition = "2024"
+# All integration tests link into one binary; see tests/integration.rs.
+autotests = false
 
 [dependencies]
 anyhow = "1"
@@ -33,3 +35,7 @@ serde-smile = "=0.3.1"
 [dev-dependencies]
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
+
+[[test]]
+name = "integration"
+path = "tests/integration.rs"

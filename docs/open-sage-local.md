@@ -85,14 +85,14 @@ The application process stays fully local. The sidecar has no download path; ins
 ```sh
 python3 -m unittest discover -s tools -p 'test_*open_sage*.py'
 cargo test -p neondojo engines:: --lib
-NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test open_sage -- --ignored --test-threads=1
+NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test integration open_sage:: -- --ignored --test-threads=1
 NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo sage_executes_reference_checker_turns_using_gnubg_rules --lib -- --ignored --test-threads=1
-OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test open_sage_settings -- --ignored --test-threads=1
-OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test open_sage_play -- --ignored --test-threads=1
+OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test integration open_sage_settings:: -- --ignored --test-threads=1
+OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test integration open_sage_play:: -- --ignored --test-threads=1
 NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python npm run test:e2e --prefix web -- e2e/open-sage-native.spec.ts
 ```
 
-The test targets run individually and with `--test-threads=1`. A combined run of `cargo test --workspace -- --include-ignored` with the Sage variables set makes the process tests in `engines::process` fail, because they share the global worker with the real engine tests. The browser test skips itself without `NEONDOJO_SAGE_PYTHON` and uses the Playwright harness's own database and backend ([Browser tests](development/testing.md#browser-tests)).
+Run these groups one at a time and with `--test-threads=1`. A combined run of `cargo test --workspace -- --include-ignored` with the Sage variables set makes the process tests in `engines::process` fail, because they share the global worker with the real engine tests. The browser test skips itself without `NEONDOJO_SAGE_PYTHON` and uses the Playwright harness's own database and backend ([Browser tests](development/testing.md#browser-tests)).
 
 The probe and the worker reject earlier `bgsage` builds already at the version check; no test needs the original wheel or an earlier fork.
 

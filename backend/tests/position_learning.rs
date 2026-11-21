@@ -1,9 +1,9 @@
+use crate::support;
 use neondojo::{api, engine::Engine, import, model::Position, store};
 use serde_json::{Value, json};
 use sqlx::PgPool;
-use uuid::Uuid;
-mod support;
 use support::call;
+use uuid::Uuid;
 
 const SOURCE: &str = "(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])";
 

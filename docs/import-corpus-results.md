@@ -81,7 +81,7 @@ Fixed: valid XG interim states without a match conclusion, MAT resignation lines
 ```sh
 DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/postgres \
 NEONDOJO_CORPUS_REPORT=/tmp/neondojo-import-results.json \
-  cargo test -p neondojo --test import_corpus -- --ignored --nocapture
+  cargo test -p neondojo --test integration import_corpus:: -- --ignored --nocapture
 ```
 
 `DATABASE_URL` points to a maintenance database on a PostgreSQL server with a `CREATEDB` role; SQLx creates its own test database there and removes it again (see [PostgreSQL and GNUbg integration tests](development/testing.md#postgresql-and-gnubg-integration-tests)). The test requires GNUbg; if it is not on the `PATH`, set `GNUBG_BIN`. `NEONDOJO_CORPUS_REPORT` writes the per-file report as JSON. `NEONDOJO_GAMES_DIR` can specify a different root folder with the three format subfolders. The local game files remain unversioned. If one of the subfolders `xg`, `mat`, or `bgf` is missing, the optional corpus test skips its run; the portable format and rule tests run independently of it.

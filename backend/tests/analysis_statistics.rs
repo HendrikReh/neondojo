@@ -6,8 +6,7 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 use uuid::Uuid;
 
-mod profile_support;
-mod support;
+use crate::profile_support;
 
 const SOURCE: &str = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])\n(;GM[6]FF[4]MI[length:7][ws:1][bs:0];W[double];B[drop])\n(;GM[6]FF[4]MI[length:7][ws:6][bs:0]RU[CrawfordGame])";
 

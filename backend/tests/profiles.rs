@@ -1,5 +1,4 @@
-mod profile_support;
-mod support;
+use crate::profile_support;
 use profile_support::{activate, call, create, initialized};
 use serde_json::{Value, json};
 use sqlx::PgPool;

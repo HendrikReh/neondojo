@@ -1,11 +1,11 @@
+use crate::profile_support;
+use crate::support;
 use neondojo::{
     api::{self, AppState},
     engine::Engine,
 };
 use serde_json::{Value, json};
 use sqlx::PgPool;
-mod profile_support;
-mod support;
 use support::call;
 
 #[sqlx::test(migrations = "./migrations")]

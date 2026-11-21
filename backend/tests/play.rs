@@ -1,3 +1,4 @@
+use crate::profile_support;
 use axum::{body::Body, http::Request};
 use http_body_util::BodyExt;
 use neondojo::{
@@ -7,8 +8,6 @@ use neondojo::{
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;
-mod profile_support;
-mod support;
 
 async fn call(app: axum::Router, method: &str, uri: &str, body: Value) -> (u16, Value) {
     let response = app
