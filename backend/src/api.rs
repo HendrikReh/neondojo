@@ -35,6 +35,8 @@ pub struct AppState {
     imports: Arc<Semaphore>,
     pub(crate) backup: Arc<crate::database_backup::Access>,
     pub(crate) anki_connection: Arc<crate::learning::AnkiConnection>,
+    /// How often a running analysis job renews its lease.
+    pub(crate) job_heartbeat: Duration,
 }
 
 impl AppState {
@@ -48,7 +50,25 @@ impl AppState {
             imports: Arc::new(Semaphore::new(2)),
             backup: Arc::default(),
             anki_connection: Arc::default(),
+            job_heartbeat: crate::jobs::DEFAULT_HEARTBEAT,
         }
+    }
+
+    /// Sets how often running analysis jobs renew their lease. Each renewal
+    /// extends the lease by [`crate::jobs::LEASE`], so the interval must stay
+    /// at most half of it; at least one renewal then fits into every lease.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the interval is zero or longer than half the lease.
+    pub fn with_job_heartbeat(mut self, interval: Duration) -> Self {
+        assert!(
+            !interval.is_zero() && interval <= crate::jobs::LEASE / 2,
+            "job heartbeat must be positive and at most half the {:?} lease",
+            crate::jobs::LEASE
+        );
+        self.job_heartbeat = interval;
+        self
     }
 }
 

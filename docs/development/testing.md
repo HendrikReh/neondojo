@@ -26,7 +26,7 @@ After changing an API contract, run `npm run api:types --prefix web` before the 
 | PostgreSQL only | Runs; needs `DATABASE_URL` | `#[sqlx::test]` |
 | GNUbg, NeonGammon, Anki, opening books, local corpora, or large synthetic datasets | Skipped | `#[ignore = "requires …"]` naming the resource |
 
-Mark a test `#[ignore]` only for a resource beyond PostgreSQL and name that resource in the reason. Pure checks of OpenAPI or of fixed reference data need no database; use `#[test]` and `api::ApiDoc::openapi()` for them. Shared HTTP helpers for the integration targets are in [`backend/tests/support/mod.rs`](../../backend/tests/support/mod.rs); a target uses them with `mod support;`.
+Mark a test `#[ignore]` only for a resource beyond PostgreSQL and name that resource in the reason. Keep long waits out of the default suite by injecting shorter intervals, as `AppState::with_job_heartbeat` does for the lease heartbeat. Pure checks of OpenAPI or of fixed reference data need no database; use `#[test]` and `api::ApiDoc::openapi()` for them. Shared HTTP helpers for the integration targets are in [`backend/tests/support/mod.rs`](../../backend/tests/support/mod.rs); a target uses them with `mod support;`.
 
 ### PostgreSQL test server
 
@@ -36,7 +36,7 @@ Start PostgreSQL with `docker compose up -d --wait db` or use a dedicated test s
 export DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/postgres
 ```
 
-SQLx creates and drops a separate database for each test and keeps its bookkeeping in a `_sqlx_test` schema of the database that `DATABASE_URL` names. Without an exported value, the tests read `DATABASE_URL` from `.env`, which names the local library, so export the maintenance URL before running them. A failed test leaves its `_sqlx_test_*` database behind for inspection.
+SQLx creates and drops a separate database for each test and keeps its bookkeeping in a `_sqlx_test` schema of the database that `DATABASE_URL` names. Without an exported value, the tests read `DATABASE_URL` from `.env`, which names the local library, so export the maintenance URL before running them. A failed test leaves its `_sqlx_test_*` database behind for inspection. SQLx derives the database name from the test's path, so two processes that run the same test against the same server at the same time, for example two checkouts, fail with a duplicate key in `_sqlx_test.databases`; rerun one of them afterwards.
 
 ### PostgreSQL and GNUbg integration tests
 

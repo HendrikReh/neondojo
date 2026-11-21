@@ -12,6 +12,14 @@ use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
+/// Lease that a claim, a progress update and each heartbeat grant a running
+/// job. The job SQL here and in `match_jobs.rs` spells it as
+/// `interval '120 seconds'`; change them together.
+pub const LEASE: Duration = Duration::from_secs(120);
+/// Lease renewal interval of running analysis jobs unless the application
+/// state sets another one with [`AppState::with_job_heartbeat`].
+pub const DEFAULT_HEARTBEAT: Duration = Duration::from_secs(20);
+
 /// Runs queued benchmarks and up to the configured number of analysis jobs at
 /// the same time. Each job runs in its own task and keeps its own lease,
 /// heartbeat and checkpoints. Stopping the worker aborts running tasks; their
@@ -165,7 +173,7 @@ async fn execute_with_heartbeat(state: &AppState, job: &Job, token: Uuid) -> Res
         job.id,
         token,
         execute(state, job, token),
-        Duration::from_secs(20),
+        state.job_heartbeat,
     )
     .await
 }
@@ -274,6 +282,26 @@ async fn progress(pool: &PgPool, id: Uuid, token: Uuid, progress: i32) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn heartbeat_interval_defaults_and_must_fit_into_half_the_lease() {
+        let pool = sqlx::postgres::PgPoolOptions::new()
+            .connect_lazy("postgres://unused:unused@127.0.0.1:1/unused")
+            .unwrap();
+        let state = || AppState::new(pool.clone(), crate::engine::Engine::new("/unused".into()));
+        assert_eq!(state().job_heartbeat, DEFAULT_HEARTBEAT);
+        assert_eq!(
+            state().with_job_heartbeat(LEASE / 2).job_heartbeat,
+            LEASE / 2
+        );
+        for invalid in [Duration::ZERO, LEASE / 2 + Duration::from_millis(1)] {
+            let state = state();
+            let rejected = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                state.with_job_heartbeat(invalid)
+            }));
+            assert!(rejected.is_err(), "{invalid:?}");
+        }
+    }
 
     #[sqlx::test(migrations = "./migrations")]
     async fn claims_run_one_open_sage_job_at_a_time(pool: PgPool) {

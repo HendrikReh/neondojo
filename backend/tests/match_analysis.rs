@@ -445,14 +445,14 @@ async fn engine_failure_is_visible_and_empty_job_results_remain_readable(pool: P
 
 #[cfg(unix)]
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL; runs a 22-second engine-process heartbeat check"]
 async fn heartbeat_renews_lease_during_a_long_game(pool: PgPool) {
     use std::{os::unix::fs::PermissionsExt, time::Duration};
     let temp = tempfile::tempdir().unwrap();
     let binary = temp.path().join("slow-engine");
-    // Exercise a process that is silent for longer than one heartbeat interval.
-    // Native GNUbg correctness is covered separately by the real-engine tests.
-    std::fs::write(&binary, "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'GNU Backgammon heartbeat fixture'; exit 0; fi\nsleep 22\nexit 1\n").unwrap();
+    // Exercise a process that is silent for many heartbeat intervals and long
+    // enough for the one-second timing samples. Native GNUbg correctness is
+    // covered separately by the real-engine tests.
+    std::fs::write(&binary, "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'GNU Backgammon heartbeat fixture'; exit 0; fi\nsleep 4\nexit 1\n").unwrap();
     std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
     let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
     let imported = store::import_match(
@@ -471,7 +471,8 @@ async fn heartbeat_renews_lease_during_a_long_game(pool: PgPool) {
     let state = api::AppState::new(
         pool.clone(),
         Engine::new(binary.to_string_lossy().into_owned()),
-    );
+    )
+    .with_job_heartbeat(Duration::from_millis(200));
     let worker = tokio::spawn(async move { jobs::run_one(&state).await });
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
@@ -507,7 +508,7 @@ async fn heartbeat_renews_lease_during_a_long_game(pool: PgPool) {
     })
     .await
     .expect("monotonic samples must persist while a silent native process is running");
-    tokio::time::timeout(Duration::from_secs(24), async {
+    tokio::time::timeout(Duration::from_secs(3), async {
         loop {
             let lease: Option<chrono::DateTime<chrono::Utc>> =
                 sqlx::query_scalar("SELECT lease_until FROM jobs WHERE id=$1")
