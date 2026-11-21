@@ -112,7 +112,7 @@ it('integrates the match header with identity and loading fields while omitting 
     },
     theme: 'forest',
     defaultPlies: 2,
-    sourceRevision: 0,
+    openingBookRevision: 0,
     bookmarkRevision: 0,
     configured: true,
     detail: 'overview',

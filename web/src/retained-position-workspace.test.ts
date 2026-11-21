@@ -114,7 +114,7 @@ function props(
     },
     theme: 'forest',
     defaultPlies: 2,
-    sourceRevision: 0,
+    openingBookRevision: 0,
     bookmarkRevision: 0,
     configured: true,
     detail,

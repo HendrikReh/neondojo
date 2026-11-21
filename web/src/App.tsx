@@ -1087,7 +1087,7 @@ export default function App() {
             defaultEngine={analysisEngine}
             defaultPlies={analysisPlies}
             analysisInstallationKey={analysisInstallationKey}
-            sourceRevision={bookRevision}
+            openingBookRevision={bookRevision}
             configured
             detail={detail}
             onDetail={setDetail}

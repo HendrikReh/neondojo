@@ -87,7 +87,7 @@ export default function AnalysisWorkspace({
   defaultEngine = 'gnubg',
   defaultPlies,
   analysisInstallationKey,
-  sourceRevision,
+  openingBookRevision,
   analysisRevision,
   metadataRevision,
   bookmarkRevision,
@@ -123,7 +123,7 @@ export default function AnalysisWorkspace({
   defaultEngine?: MatchAnalysisEngine;
   defaultPlies: number;
   analysisInstallationKey?: string;
-  sourceRevision: number;
+  openingBookRevision: number;
   analysisRevision?: string;
   metadataRevision?: number;
   bookmarkRevision: number;
@@ -196,7 +196,6 @@ export default function AnalysisWorkspace({
     match?.id,
     position?.id,
     JSON.stringify([
-      sourceRevision,
       analysisRevision,
       jobs.jobs.analysis?.id,
       jobs.jobs.analysis?.status,
@@ -934,7 +933,7 @@ export default function AnalysisWorkspace({
                     : match.black
                   : undefined
               }
-              sourceRevision={sourceRevision}
+              openingBookRevision={openingBookRevision}
               analysisRevision={catalogRevision}
               onPreview={onPreview}
               selectedPreview={selectedPreview}

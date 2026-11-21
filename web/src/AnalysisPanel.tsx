@@ -65,7 +65,7 @@ export default function AnalysisPanel({
   defaultPlies = DEFAULT_ANALYSIS_PLIES,
   configuredEngine = 'gnubg',
   positionId,
-  sourceRevision = 0,
+  openingBookRevision = 0,
   onPreview,
   selectedPreview,
   position,
@@ -85,7 +85,7 @@ export default function AnalysisPanel({
   defaultPlies?: number;
   configuredEngine?: MatchAnalysisEngine;
   positionId?: string;
-  sourceRevision?: number;
+  openingBookRevision?: number;
   onPreview?: (candidate: PreviewCandidate | null, view?: BoardView) => void;
   selectedPreview?: PreviewCandidate;
   position?: Position;
@@ -108,7 +108,7 @@ export default function AnalysisPanel({
   const candidateText = useCandidateText();
   const catalogText = useAnalysisCatalogText();
   const library = useLibraryText();
-  const book = useOpeningBook(positionId, sourceRevision);
+  const book = useOpeningBook(positionId, openingBookRevision);
   const saved = useAnalysisResult(
     positionId,
     catalog.analysisId,
@@ -129,11 +129,10 @@ export default function AnalysisPanel({
     observedMatchId && gameNo !== undefined
       ? `/matches/${encodeURIComponent(observedMatchId)}/dice?game_no=${gameNo}`
       : undefined;
-  const observedKey = JSON.stringify([observedPath, sourceRevision]);
   const [observed, setObserved] = useState<
     { key: string; stats: DiceStats } | { key: string; error: unknown }
   >();
-  const currentObserved = observed?.key === observedKey ? observed : undefined;
+  const currentObserved = observed?.key === observedPath ? observed : undefined;
   const stats =
     currentObserved && 'stats' in currentObserved
       ? currentObserved.stats
@@ -149,14 +148,14 @@ export default function AnalysisPanel({
     const abort = new AbortController();
     void request<DiceStats>(observedPath, { signal: abort.signal }).then(
       (stats) => {
-        if (!abort.signal.aborted) setObserved({ key: observedKey, stats });
+        if (!abort.signal.aborted) setObserved({ key: observedPath, stats });
       },
       (error: unknown) => {
-        if (!abort.signal.aborted) setObserved({ key: observedKey, error });
+        if (!abort.signal.aborted) setObserved({ key: observedPath, error });
       },
     );
     return () => abort.abort();
-  }, [observedPath, observedKey, loadObserved]);
+  }, [observedPath, loadObserved]);
   useEffect(() => resetPreview(), [catalog.analysisId, positionId, view]);
   const [calculation, setCalculation] = useState<{
     positionId: string;

@@ -141,6 +141,25 @@ npm run test:e2e --prefix web -- e2e/observed-rolls-navigation.spec.ts \
   --workers=1 --reporter=line
 ```
 
+#### Eröffnungsbuch-Einstellungen und Analyseansicht
+
+Beim Speichern der Eröffnungsbuch-Einstellungen auf `main` (`319bf1c`) lud die Analyseansicht Buchvorschläge, den Analysekatalog und die aufgezeichneten Würfe neu. Die Buchrevision aktualisiert jetzt nur die Buchvorschläge. Die Ansicht verwendet bereits geladene Würfe anhand der Match-ID und Spielnummer wieder. Der Analysekatalog reagiert weiterhin auf die gewählte Stellung, Analyseänderungen und den Auftragsstatus.
+
+Der Browser-Test lädt Spiel 1 aus `WC2014.xg`, öffnet **Spielwürfe** und prüft, dass der nächste Zug im selben Spiel die Tabelle wiederverwendet. Dann wechselt er fünfmal die Buchquelle zwischen **Automatisch** und **Aus**. Er wartet nach jeder Speicherung auf die Buchantwort für dieselbe Stellung und zählt die Browser-Anfragen. Der Test simuliert das Speichern der persönlichen Konfiguration und verwendet das Testbackend für die gemessenen Abrufe. Der Vergleich lief auf einem Mac mini M4 Pro mit macOS 27.0.1, Chrome 158 im Headless-Modus, dem Playwright-Testbackend im Debug-Build und isoliertem PostgreSQL 16.13 auf Loopback.
+
+| Anfragen bei fünf Speicherungen | Ausgangsstand | Mit Änderung |
+| --- | ---: | ---: |
+| Buchvorschläge für die gewählte Stellung | 10 | 10 |
+| Spielwürfe | 10 | 0 |
+| Analysekatalog | 10 | 0 |
+
+Zur Wiederholung in einem separaten Checkout von `319bf1c` nur `web/e2e/observed-rolls-navigation.spec.ts` übernehmen. Dieselbe Messung mit isolierter Datenbank auf beiden Ständen ausführen. Der Ausgangsstand protokolliert die Anfragen und meldet die erwarteten Abnahmefehler. [Browser-Testanleitung](../../development/testing.md#browser-tests)
+
+```bash
+npm run test:e2e --prefix web -- e2e/observed-rolls-navigation.spec.ts \
+  --grep 'saving opening-book settings' --workers=1 --reporter=line
+```
+
 ## P2 · Nummerierte Fehlerliste
 
 Aus dem gemeinsamen Review-Pfad eine schmale Relation für validierte Treffer und einen Detailpfad für die gewählte Seite ableiten. Für Importe die revisionsgebundene Projektion als Ausgangspunkt prüfen. Der Cache `imported_analysis_projections` wird heute nur für Checker-Entscheidungen gespeicherter Positionen gefüllt. Eine Wiederverwendung setzt daher voraus, dass er alle Entscheidungen des Matches einschließlich Cube-Kontext abdeckt, oder einen eigenen Pfad für die übrigen. PostgreSQL führt Sortierung, Trefferzählung und Seitenauswahl unter derselben Lesesicht aus. Wendet ein Filter die aktuellen Schwellenwerte an, dieselbe Klassifikation wie im bestehenden Review verwenden. [Seitenschleife](../../../backend/src/review_decisions.rs#L380) · [Importprojektion](../../../backend/src/imported_analysis/projections.rs#L42)

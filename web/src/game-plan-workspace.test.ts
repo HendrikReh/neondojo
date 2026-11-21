@@ -128,7 +128,7 @@ function props(player: 0 | 1 = 0) {
     },
     theme: 'forest',
     defaultPlies: 2,
-    sourceRevision: 0,
+    openingBookRevision: 0,
     configured: true,
     detail: 'overview',
     onDetail: noop,
