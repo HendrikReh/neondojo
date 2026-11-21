@@ -1399,6 +1399,7 @@ export default function PlayWorkspace({
                             disabled={
                               !!sageInfo &&
                               (!sageInfo.available ||
+                                sageInfo.difficulty_presets === false ||
                                 !sageInfo.plies.includes(plies))
                             }
                           >

@@ -21,6 +21,7 @@ test('five-point difficulty labels and the selected opponent survive pause and r
     },
   });
   expect(verified.status(), await verified.text()).toBe(200);
+  expect((await verified.json()).snapshot.package_version).toBe('3.1.0');
 
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();

@@ -138,6 +138,9 @@ pub struct EngineInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fork: Option<EngineFork>,
     pub plies: Vec<i32>,
+    /// Whether the verified NeonGammon wheel provides named opponent presets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub difficulty_presets: Option<bool>,
     /// Upper bound on simultaneous CPU execution for this engine on the backend host.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(minimum = 1)]
@@ -584,6 +587,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             version,
             fork: None,
             plies: crate::configuration::engine_depths("gnubg", "analysis"),
+            difficulty_presets: None,
             max_parallel_threads: gnubg_parallel_limit,
         },
         EngineInfo {
@@ -593,6 +597,10 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             version: sage_version,
             fork: sage.as_ref().and_then(SageSnapshot::known_fork),
             plies: sage_plies,
+            difficulty_presets: Some(
+                sage.as_ref()
+                    .is_some_and(SageSnapshot::supports_difficulty_presets),
+            ),
             max_parallel_threads: cpu_threads,
         },
     ]))

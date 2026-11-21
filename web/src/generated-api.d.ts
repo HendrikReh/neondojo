@@ -4098,6 +4098,8 @@ export interface components {
         };
         EngineInfo: {
             available: boolean;
+            /** @description Whether the verified NeonGammon wheel provides named opponent presets. */
+            difficulty_presets?: boolean | null;
             fork?: null | components["schemas"]["EngineFork"];
             id: string;
             /**
