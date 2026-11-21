@@ -9,11 +9,13 @@ export default function LibraryImport({
   databaseId,
   uploading,
   onImport,
+  onImportFolder,
 }: {
   databases: readonly Database[];
   databaseId: string;
   uploading: boolean;
   onImport: (databaseId: string) => void;
+  onImportFolder: (databaseId: string) => void;
 }) {
   const { t } = useI18n();
   const l = useLibraryText();
@@ -35,6 +37,14 @@ export default function LibraryImport({
         type="button"
         disabled={uploading || !target}
         onClick={() => target && onImport(target.id)}
+      />
+      <ActionButton
+        icon="import-folder"
+        label={l('importFolder')}
+        tooltip={l('importFolderHelp')}
+        type="button"
+        disabled={uploading || !target}
+        onClick={() => target && onImportFolder(target.id)}
       />
       <select
         aria-label={l('importDestination')}

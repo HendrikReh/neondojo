@@ -684,8 +684,19 @@
   background: var(--ui-surface-alt);
 }
 .import-results ul {
+  max-height: min(40vh, 480px);
+  overflow-y: auto;
   margin: 8px 0 0;
   padding-left: 20px;
+  font-size: var(--font-size-body);
+}
+.import-results .import-progress {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+.import-results .import-summary {
+  margin: 8px 0 0;
   font-size: var(--font-size-body);
 }
 ul.import-warnings {
@@ -709,6 +720,10 @@ ul.import-warnings {
   border-start-end-radius: 0;
   border-end-end-radius: 0;
   white-space: nowrap;
+}
+.library-import > .action-button + .action-button {
+  border-inline-start: 0;
+  border-radius: 0;
 }
 .library-import > select {
   min-width: 0;

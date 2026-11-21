@@ -102,6 +102,7 @@ export default function MatchDatabase({
   onPosition,
   onAnnotation,
   onImport,
+  onImportFolder,
   uploading,
   onOpenPlay,
   onChanged,
@@ -131,6 +132,7 @@ export default function MatchDatabase({
   onPosition: (p: Position) => void;
   onAnnotation: (hit: AnnotationHit) => void;
   onImport: (databaseId: string) => void;
+  onImportFolder: (databaseId: string) => void;
   uploading: boolean;
   onOpenPlay?: (id: string, resume?: boolean) => void;
   onChanged: (deletedIds?: string[], validateSelection?: boolean) => void;
@@ -544,6 +546,7 @@ export default function MatchDatabase({
           databaseId={databaseId}
           uploading={uploading}
           onImport={onImport}
+          onImportFolder={onImportFolder}
         />
       </div>
       <div className="library-layout">
