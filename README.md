@@ -5,7 +5,7 @@
 <!-- Static badges: the repository is private, so dynamic GitHub badges cannot read it. Update the version badge together with backend/Cargo.toml and web/package.json for each release. -->
 [![Version 1.2.0](https://img.shields.io/badge/version-1.2.0-2ea44f)](CHANGELOG.md)
 [![Platform: macOS on Apple Silicon](https://img.shields.io/badge/platform-macOS%20%7C%20Apple%20Silicon-000000?logo=apple&logoColor=white)](#requirements)
-[![Rust 1.94.1](https://img.shields.io/badge/Rust-1.94.1-CE422B?logo=rust&logoColor=white)](#requirements)
+[![Rust 1.93.1](https://img.shields.io/badge/Rust-1.93.1-CE422B?logo=rust&logoColor=white)](#requirements)
 [![Node.js 22.12+ or 24+](https://img.shields.io/badge/Node.js-22.12%2B%20%7C%2024%2B-5FA04E?logo=nodedotjs&logoColor=white)](#requirements)
 [![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)](#database-and-engine)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](web/package.json)
@@ -34,7 +34,7 @@ NeonDojo is a local backgammon application for importing matches, finding positi
 
 ### Requirements
 
-- Rust, tested with 1.94.1
+- Rust, tested with 1.93.1
 - Node.js 22.12 or later in the 22.x series, or Node.js 24 or later, with npm
 - Docker Compose for the bundled PostgreSQL 17 database, or an existing PostgreSQL server
 - Python 3.10 or later for the frontend build and development scripts
