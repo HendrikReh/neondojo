@@ -72,7 +72,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     assert_eq!(status, 200, "{settings}");
     assert_eq!(
         settings,
-        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":3,"play_engine":"gnubg","play_plies":1,"gnubg_path":"/missing/injected-gnubg","gnubg_threads":null,"gnubg_play_threads":null,"open_sage_threads":null,"open_sage_play_threads":null,"parallel_analysis_jobs":null,"bearoff_direction":"right","default_play_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true})
+        json!({"version":0,"player_name":"","analysis_engine":"gnubg","analysis_plies":3,"play_engine":"gnubg","play_plies":1,"play_top_two":false,"gnubg_path":"/missing/injected-gnubg","gnubg_threads":null,"gnubg_play_threads":null,"open_sage_threads":null,"open_sage_play_threads":null,"parallel_analysis_jobs":null,"bearoff_direction":"right","default_play_mode":"coach","tutor_threshold":0.04,"training_auto_analysis":true})
     );
     let second = api::router(AppState::new(pool.clone(), Engine::new("different".into())));
     assert_eq!(
