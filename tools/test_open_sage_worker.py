@@ -285,6 +285,21 @@ class OpponentPolicyTests(unittest.TestCase):
         policy.select_checker_move.assert_called_once_with(before, 3, 1, beaver=False, **context)
         policy.cube_decision.assert_called_once_with(before, beaver=False, **context)
 
+        runtime.profile['plies'] = 3
+        runtime.analyzer = SimpleNamespace(checker_play=Mock(return_value=SimpleNamespace(
+            moves=[SimpleNamespace(board=selected)]
+        )))
+        policy.select_checker_move.reset_mock()
+        policy.cube_decision.reset_mock()
+        request['difficulty'] = 'full_strength'
+        checker, _ = runtime.dispatch(dict(request, operation='opponent_checker', dice=[3, 1]))
+        cube, _ = runtime.dispatch(dict(request, operation='opponent_cube'))
+        self.assertEqual(checker, selected)
+        self.assertEqual(cube, {'should_double': True, 'should_take': False})
+        runtime.analyzer.checker_play.assert_called_once_with(before, 3, 1, beaver=False, **context)
+        policy.select_checker_move.assert_not_called()
+        policy.cube_decision.assert_called_once_with(before, beaver=False, **context)
+
 
 if __name__ == '__main__':
     unittest.main()

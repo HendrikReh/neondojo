@@ -73,12 +73,12 @@ import { actionFrames, checkerFrame, reverseFrame } from './play-animation';
 import { usePlayAnimation, useRollingFaces } from './usePlayAnimation';
 import './play.css';
 const storageKey = 'neondojo.play-session';
-// Rounded live 5-point benchmark values against Full Strength, re-scored at 3-ply.
+// Rounded five-point PRs. Full Strength uses the rollout reference.
 const sageDifficulties = [
-  { id: 'beginner', pr: 21, plies: 1 },
-  { id: 'casual', pr: 14.4, plies: 1 },
-  { id: 'intermediate', pr: 7.4, plies: 1 },
-  { id: 'full_strength', pr: 0.9, plies: 2 },
+  { id: 'beginner', pr: 22, plies: 1 },
+  { id: 'casual', pr: 16.2, plies: 1 },
+  { id: 'intermediate', pr: 8.1, plies: 1 },
+  { id: 'full_strength', pr: 1, plies: 3 },
 ] as const satisfies ReadonlyArray<{
   id: SageDifficulty;
   pr: number;
@@ -1404,7 +1404,10 @@ export default function PlayWorkspace({
                             }
                           >
                             {t(id)}
-                            {length === 5 ? ` · ≈ ${formatNumber(pr)} PR` : ''}
+                            {id === 'full_strength' &&
+                              ` · ${t('fullStrengthDepth')}`}
+                            {length === 5 &&
+                              ` · ≈ ${formatNumber(pr, { minimumFractionDigits: id === 'full_strength' ? 1 : 0 })} PR`}
                           </option>
                         ))}
                       </optgroup>

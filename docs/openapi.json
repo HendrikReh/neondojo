@@ -15551,7 +15551,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "Bot strength for this match only; must be a verified play depth of the chosen engine."
+            "description": "Bot checker depth for this match only. A named preset pins its own depth."
           },
           "training_auto_analysis": {
             "type": [
@@ -20058,7 +20058,8 @@
           },
           "plies": {
             "type": "integer",
-            "format": "int32"
+            "format": "int32",
+            "description": "Checker search depth. The NeonGammon Full Strength preset uses 2-ply for cube decisions."
           },
           "version": {
             "type": "string"

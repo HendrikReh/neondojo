@@ -43,17 +43,20 @@ test('five-point difficulty labels and the selected opponent survive pause and r
       'optgroup[label="Difficulty presets · 5-point PR"] option',
     ),
   ).toHaveText([
-    'Beginner · ≈ 21 PR',
-    'Casual · ≈ 14.4 PR',
-    'Intermediate · ≈ 7.4 PR',
-    'Full Strength · ≈ 0.9 PR',
+    'Beginner · ≈ 22 PR',
+    'Casual · ≈ 16.2 PR',
+    'Intermediate · ≈ 8.1 PR',
+    'Full Strength · 3-ply checkers / 2-ply cube · ≈ 1.0 PR',
   ]);
   await length.selectOption('7');
   await expect(strength.locator('option[value="beginner"]')).toHaveText(
     'Beginner',
   );
+  await expect(strength.locator('option[value="full_strength"]')).toHaveText(
+    'Full Strength · 3-ply checkers / 2-ply cube',
+  );
   await length.selectOption('5');
-  await strength.selectOption('beginner');
+  await strength.selectOption('full_strength');
   for (const [width, height] of [
     [1800, 1169],
     [2560, 1440],
@@ -71,11 +74,13 @@ test('five-point difficulty labels and the selected opponent survive pause and r
   let session = await opening();
   expect(session.engine).toMatchObject({
     id: 'bgsage',
-    plies: 1,
-    difficulty: 'beginner',
+    plies: 3,
+    difficulty: 'full_strength',
   });
   expect(session.match_length).toBe(5);
-  await expect(workspace.getByText('Beginner', { exact: true })).toBeVisible();
+  await expect(
+    workspace.getByText('Full Strength', { exact: true }),
+  ).toBeVisible();
   const uri = `/api/play/sessions/${session.id}`;
   async function action(action: string, move?: number) {
     const response = await page.request.post(`${uri}/actions`, {
@@ -123,7 +128,9 @@ test('five-point difficulty labels and the selected opponent survive pause and r
   expect(session.paused).toBe(true);
   await page.reload();
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-  await expect(workspace.getByText('Beginner', { exact: true })).toBeVisible();
+  await expect(
+    workspace.getByText('Full Strength', { exact: true }),
+  ).toBeVisible();
   const restored = await (await page.request.get(uri)).json();
   expect(restored.engine).toEqual(session.engine);
   await action('resume');
@@ -140,4 +147,19 @@ test('five-point difficulty labels and the selected opponent survive pause and r
     },
   });
   expect(rejected.status()).toBe(422);
+
+  const legacyRequest = await page.request.post('/api/play/sessions', {
+    data: {
+      human_player: 0,
+      match_length: 5,
+      play_engine: 'bgsage',
+      play_plies: 2,
+      play_difficulty: 'full_strength',
+    },
+  });
+  expect(legacyRequest.status(), await legacyRequest.text()).toBe(201);
+  expect((await legacyRequest.json()).engine).toMatchObject({
+    plies: 3,
+    difficulty: 'full_strength',
+  });
 });
