@@ -183,7 +183,16 @@ test('the setup dialog overlays the match and sends this match’s name, engine 
   });
   await expect(strength.locator('option')).toHaveCount(3);
   await engine.selectOption('bgsage');
-  await expect(strength.locator('option')).toHaveText(['1-ply', '2-ply']);
+  // NeonGammon adds its difficulty presets and 2-ply + Top-2 to the depths.
+  await expect(strength.locator('option')).toHaveText([
+    'Beginner',
+    'Casual',
+    'Intermediate',
+    'Full Strength · 3-ply checkers / 2-ply cube',
+    '1-ply',
+    '2-ply',
+    '2-ply + Top-2 (10 mEq)',
+  ]);
   await strength.selectOption('2');
   await dialog
     .getByRole('button', { name: 'Start match', exact: true })
@@ -194,6 +203,7 @@ test('the setup dialog overlays the match and sends this match’s name, engine 
       human_name: 'Guest',
       play_engine: 'bgsage',
       play_plies: 2,
+      play_top_two: false,
     }),
   ]);
 });
