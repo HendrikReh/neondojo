@@ -20,7 +20,7 @@ NeonDojo is a local backgammon application for importing matches, finding positi
 
 ## Features
 
-- **Match library.** Import MAT (also as plain-text `.txt` transcripts, preserving saved import notes for transcript irregularities), XG, SGF, BGF and OGXM files one by one or as a whole folder. Search by player, file name, metadata, notes or exact Position ID, find duplicate matches, and export the original file, SGF or XG. [Match library](docs/reference/library.md#match-databases)
+- **Match library.** Import MAT (also as plain-text `.txt` transcripts, preserving saved import notes for transcript irregularities), XG, SGF, BGF and OGXM files one by one or as a whole folder. Search by player, file name, metadata or notes, find duplicate matches, and export the original file, SGF or XG. [Match library](docs/reference/library.md#match-databases)
 - **Positions.** Find an exact GNUbg position ID in the library, search all analyzed decisions, save positions and searches, and practice similar positions. [Saved positions](docs/reference/library.md#saved-positions-and-searches)
 - **Analysis.** Analyze positions, games and matches as persistent background jobs with GNUbg up to 5-ply or NeonGammon up to 4-ply. Imported analyses stay separate from local ones. Review candidates and cube decisions, dice equity, error statistics, game plans and opening books. [Analysis](docs/reference/analysis.md#analysis-workspace)
 - **Playing.** Play point matches and money games against GNUbg or NeonGammon — including NeonGammon difficulty presets and 2-ply + Top-2 (10 mEq) — in Competition, Training, Coach or Tutor feedback mode. [Playing](docs/reference/playing.md#playing-against-an-engine)
