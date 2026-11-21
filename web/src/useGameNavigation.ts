@@ -5,7 +5,6 @@ import {
   type MatchGame,
   type Position,
   type Page,
-  type DiceStats,
 } from './api';
 import { AppError } from './i18n-core';
 
@@ -15,7 +14,7 @@ type Navigation = {
   gameNo?: number;
   positions: Position[];
   index: number;
-  stats: DiceStats | null;
+  gameLoaded: boolean;
   loading: boolean;
   error: unknown;
   targetId?: string;
@@ -26,7 +25,7 @@ const initial = (): Navigation => ({
   games: [],
   positions: [],
   index: 0,
-  stats: null,
+  gameLoaded: false,
   loading: false,
   error: null,
 });
@@ -89,7 +88,7 @@ export function useGameNavigation() {
       gameNo,
       positions: [],
       index: 0,
-      stats: null,
+      gameLoaded: false,
       targetId,
     });
     const games = cached.length
@@ -105,38 +104,34 @@ export function useGameNavigation() {
     if (!game) throw new AppError('error.positionMissing');
     update({ games, gameNo: game.game_no });
     const scope = `match_id=${match.id}&game_no=${game.game_no}`;
-    const positionsPromise = (async () => {
-      const all: Position[] = [];
-      let cursor: string | null = null;
-      do {
-        const page: Page<Position> = await request(
-          `/positions?${scope}&limit=100${cursor ? `&after=${cursor}` : ''}`,
-          { signal: task.controller.signal },
-        );
-        ensureCurrent(task);
-        if (
-          page.items.some(
-            (p) => p.match_uuid !== match.id || p.game_no !== game.game_no,
-          )
+    const positions: Position[] = [];
+    let cursor: string | null = null;
+    do {
+      const page: Page<Position> = await request(
+        `/positions?${scope}&limit=100${cursor ? `&after=${cursor}` : ''}`,
+        { signal: task.controller.signal },
+      );
+      ensureCurrent(task);
+      if (
+        page.items.some(
+          (p) => p.match_uuid !== match.id || p.game_no !== game.game_no,
         )
-          throw new AppError('error.invalidResponse');
-        all.push(...page.items);
-        cursor = page.next_cursor;
-      } while (cursor);
-      if (all.length !== game.position_count)
+      )
         throw new AppError('error.invalidResponse');
-      return all;
-    })();
-    const [positions, stats] = await Promise.all([
-      positionsPromise,
-      request<DiceStats>(`/matches/${match.id}/dice?game_no=${game.game_no}`, {
-        signal: task.controller.signal,
-      }),
-    ]);
-    ensureCurrent(task);
+      positions.push(...page.items);
+      cursor = page.next_cursor;
+    } while (cursor);
+    if (positions.length !== game.position_count)
+      throw new AppError('error.invalidResponse');
     const index = targetId ? positions.findIndex((p) => p.id === targetId) : 0;
     if (targetId && index < 0) throw new AppError('error.positionMissing');
-    update({ positions, index, stats, loading: false, targetId: undefined });
+    update({
+      positions,
+      index,
+      gameLoaded: true,
+      loading: false,
+      targetId: undefined,
+    });
     return true;
   }
   async function selectMatch(match: Match) {
@@ -223,7 +218,7 @@ export function useGameNavigation() {
     const previous = current.current;
     if (!previous.match || previous.loading) return;
     const game = previous.games.find((g) => g.game_no === previous.gameNo);
-    if (!previous.error && game && previous.stats !== null) return;
+    if (!previous.error && game && previous.gameLoaded) return;
     const task = begin(previous.match.id);
     try {
       await load(previous.match, previous.gameNo, previous.targetId, task);
@@ -242,7 +237,7 @@ export function useGameNavigation() {
         gameNo: undefined,
         positions: [],
         index: 0,
-        stats: null,
+        gameLoaded: false,
         error: null,
         targetId: undefined,
       });

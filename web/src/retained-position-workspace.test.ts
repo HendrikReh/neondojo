@@ -84,7 +84,7 @@ function props(
       positions: [position],
       position,
       index: 0,
-      stats: { total: 99, rolls: [] },
+      gameLoaded: true,
       loading: false,
       error: null,
       selectIndex: noop,
@@ -200,9 +200,11 @@ it('keeps full-match controls and waits for a catalog selection before requestin
   );
 });
 
-it('withholds pruned-game observed dice from the individual position panel', () => {
+it('withholds the observed-roll source for a retained position', () => {
   render();
-  expect(vi.mocked(AnalysisPanel).mock.calls[0][0].stats).toBeNull();
+  expect(
+    vi.mocked(AnalysisPanel).mock.calls[0][0].observedMatchId,
+  ).toBeUndefined();
 });
 
 it('limits card creation to the current retained position', () => {
@@ -220,11 +222,11 @@ it('preserves card batch creation for an available source', () => {
   });
 });
 
-it('preserves observed dice for an available original source', () => {
+it('provides the loaded game as the observed-roll source', () => {
   render('overview', true);
-  expect(vi.mocked(AnalysisPanel).mock.calls[0][0].stats).toEqual({
-    total: 99,
-    rolls: [],
+  expect(vi.mocked(AnalysisPanel).mock.calls[0][0]).toMatchObject({
+    observedMatchId: match.id,
+    gameNo: position.game_no,
   });
 });
 

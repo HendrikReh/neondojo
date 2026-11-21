@@ -443,7 +443,7 @@ export default function App() {
       navigation.game &&
       !navigation.loading &&
       !navigation.error &&
-      navigation.stats
+      navigation.gameLoaded
     ) {
       saveSelection({
         matchId: navigation.match.id,
@@ -456,7 +456,7 @@ export default function App() {
     navigation.game,
     navigation.loading,
     navigation.error,
-    navigation.stats,
+    navigation.gameLoaded,
     navigation.position,
   ]);
   useEffect(() => {

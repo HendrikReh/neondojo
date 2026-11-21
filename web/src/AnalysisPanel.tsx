@@ -8,6 +8,7 @@ import { useLibraryText } from './library-messages';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+  request,
   type Distribution,
   type DiceStats,
   type Match,
@@ -54,7 +55,7 @@ function rollKey(dice: readonly number[] | undefined) {
 export default function AnalysisPanel({
   positionJobs,
   catalog,
-  stats,
+  observedMatchId,
   gameNo,
   disabled,
   active = true,
@@ -74,7 +75,7 @@ export default function AnalysisPanel({
 }: {
   positionJobs: ReturnType<typeof useJobs>;
   catalog: AnalysisCatalog;
-  stats: DiceStats | null;
+  observedMatchId?: string;
   gameNo?: number;
   disabled: boolean;
   active?: boolean;
@@ -124,6 +125,38 @@ export default function AnalysisPanel({
   const [view, setView] = useState<
     'analysis' | 'comparison' | 'dice' | 'observed'
   >('analysis');
+  const observedPath =
+    observedMatchId && gameNo !== undefined
+      ? `/matches/${encodeURIComponent(observedMatchId)}/dice?game_no=${gameNo}`
+      : undefined;
+  const observedKey = JSON.stringify([observedPath, sourceRevision]);
+  const [observed, setObserved] = useState<
+    { key: string; stats: DiceStats } | { key: string; error: unknown }
+  >();
+  const currentObserved = observed?.key === observedKey ? observed : undefined;
+  const stats =
+    currentObserved && 'stats' in currentObserved
+      ? currentObserved.stats
+      : undefined;
+  const loadObserved =
+    resultsVisible && view === 'observed' && !currentObserved;
+  useEffect(() => {
+    if (!observedPath) {
+      setObserved(undefined);
+      return;
+    }
+    if (!loadObserved) return;
+    const abort = new AbortController();
+    void request<DiceStats>(observedPath, { signal: abort.signal }).then(
+      (stats) => {
+        if (!abort.signal.aborted) setObserved({ key: observedKey, stats });
+      },
+      (error: unknown) => {
+        if (!abort.signal.aborted) setObserved({ key: observedKey, error });
+      },
+    );
+    return () => abort.abort();
+  }, [observedPath, observedKey, loadObserved]);
   useEffect(() => resetPreview(), [catalog.analysisId, positionId, view]);
   const [calculation, setCalculation] = useState<{
     positionId: string;
@@ -529,9 +562,20 @@ export default function AnalysisPanel({
               ))}
             </div>
           </div>
+        ) : currentObserved && 'error' in currentObserved ? (
+          <div className="panel-empty">
+            <p className="error" role="alert">
+              {formatError(currentObserved.error)}
+            </p>
+            <button type="button" onClick={() => setObserved(undefined)}>
+              {t('versions.retry')}
+            </button>
+          </div>
         ) : (
           <div className="panel-empty">
-            <p>{t('analysis.selectMatch')}</p>
+            <p role={observedPath ? 'status' : undefined}>
+              {t(observedPath ? 'versions.loading' : 'analysis.selectMatch')}
+            </p>
           </div>
         ))}
       {view !== 'observed' && latestJob?.status === 'failed' && (

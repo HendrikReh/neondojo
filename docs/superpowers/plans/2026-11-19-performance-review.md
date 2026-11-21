@@ -26,7 +26,7 @@ Rust, Axum und PostgreSQL bleiben für Ergebnisse, Quellen und Jobzustände maß
 
 Die Wiederholung am 21. November 2026 nutzte Release-Builds auf einem Mac mini M4 Pro mit macOS 27.0.1 und PostgreSQL 16.13 auf Loopback. Rezept A verglich 2.000 Matches, davon 1.000 mit passendem Spieler und insgesamt 200.000 Entscheidungen. Auf beiden Ständen waren genau 1.000 native Fingerabdrücke aktuell. Die drei warmen SQL-Läufe ergaben **1.247,7 → 14,2 ms** Median für die Aktualitätsprüfung. Die mittleren JSON-Größen betrugen 1.670 Textbytes und 655 gespeicherte Bytes.
 
-Rezept C nutzte GNU Backgammon 1.08.003 mit einem Thread und je fünf frischen Aufträgen pro Tiefe und Stand. Die beobachtete Zeit bis zum Abschluss sank von **5,13 auf 0,58 s** bei 1-ply und von **6,67 auf 1,83 s** bei 3-ply. Pro Auftrag sanken die Versionsstarts von **43 auf 3** und die Auswertungsstarts von **21 auf 1**. Alle Stichproben enthielten die 21 erwarteten Würfelpaare mit Gesamtgewicht 36. Rezept B misst die HTTP-Antwortzeit. Seine Ergebnisse stehen bei der [nummerierten Fehlerliste](#p2--nummerierte-fehlerliste).
+Rezept C nutzte GNU Backgammon 1.08.003 mit einem Thread und je fünf frischen Aufträgen pro Tiefe und Stand. Die beobachtete Zeit bis zum Abschluss sank von **5,13 auf 0,58 s** bei 1-ply und von **6,67 auf 1,83 s** bei 3-ply. Pro Auftrag sanken die Versionsstarts von **43 auf 3** und die Auswertungsstarts von **21 auf 1**. Alle Stichproben enthielten die 21 erwarteten Würfelpaare mit Gesamtgewicht 36. Rezept B misst die HTTP-Antwortzeit. Seine Ergebnisse stehen bei der [nummerierten Fehlerliste](#p2--nummerierte-fehlerliste). Die Browserzeit wurde beim [Spielwechsel](#spielwechsel-und-aufgezeichnete-würfe) separat gemessen.
 
 ## P1 · Entscheidungssuche
 
@@ -119,6 +119,26 @@ npm run test:e2e --prefix web -- e2e/game-selection.spec.ts \
   --grep 'stepping through moves' --workers=1 --reporter=line
 npm run test:e2e --prefix web -- e2e/analysis-catalog.spec.ts \
   e2e/game-selection.spec.ts --workers=1 --reporter=line
+```
+
+### Spielwechsel und aufgezeichnete Würfe
+
+Auf `main` (`da42b9c`) wartete der Spielwechsel auf die Stellungen und die aufgezeichneten Würfe. Jetzt stehen Brett und Zughistorie nach dem Laden der Stellungen zur Verfügung. Die Statistik lädt beim Öffnen von **Spielwürfe** und bleibt beim Wechsel zwischen Auswertungstabs desselben Spiels verfügbar. Ein Spielwechsel verwirft die ausstehende Antwort. Fehler und erneuter Abruf bleiben im Tab.
+
+Die Messung verwendet `WC2014.xg` mit 10 Spielen und 460 Zugstellungen. Nach einem Warmlauf wechselt der Test je Szenario zehnmal zwischen Spiel 3 und Spiel 4. Er misst im Browser vom `change`-Ereignis bis zum ersten Animationsframe, in dem die Überschrift am Brett das gewählte Spiel zeigt und der aktuelle Zug in der Zughistorie markiert ist. Pro Lauf zählt er die Anfragen an den Würfelstatistik-Endpunkt. Umgebung sind ein Mac mini M4 Pro mit macOS 27.0.1, Google Chrome 158 im Headless-Modus, das Playwright-Testbackend im Debug-Build und ein isoliertes PostgreSQL 16.13 auf Loopback.
+
+| Verzögerung der Würfelantwort | HTTP-Anfragen vorher → nachher | Browser-Median vorher → nachher | Spannweite vorher → nachher |
+| --- | ---: | ---: | ---: |
+| Keine zusätzliche Verzögerung | 10 → 0 | 42,8 → 41,2 ms | 36,8–90,1 → 39,1–117,1 ms |
+| 250 ms zusätzlich | 10 → 0 | 347,8 → 38,8 ms | 316,0–414,7 → 36,7–40,7 ms |
+
+Die Spannweiten ohne künstliche Verzögerung überlappen. Im zweiten Szenario hält Playwright nur die Statistikantwort zurück. Die Zeitwerte erfassen den Browserablauf. Die Messung verwendet keine neue Engine-Auswertung.
+
+Zur Wiederholung denselben Test in beiden Checkouts verwenden und auf dem Ausgangsstand nur die Testdatei übernehmen. Dort melden die Prüfungen für null Würfelabrufe die Regression, nachdem beide Messreihen protokolliert wurden. Der zweite Test prüft den ersten Abruf, die Wiederverwendung, eine verspätete Antwort nach Spielwechsel und die Wiederholung nach einem HTTP-Fehler. Playwright nutzt pro Lauf eine eigene Testdatenbank gemäß [Testanleitung](../../development/testing.md#browser-tests).
+
+```bash
+npm run test:e2e --prefix web -- e2e/observed-rolls-navigation.spec.ts \
+  --workers=1 --reporter=line
 ```
 
 ## P2 · Nummerierte Fehlerliste

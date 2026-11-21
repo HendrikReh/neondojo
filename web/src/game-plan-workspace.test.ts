@@ -100,7 +100,7 @@ function props(player: 0 | 1 = 0) {
       index: 0,
       loading: false,
       error: null,
-      stats: null,
+      gameLoaded: true,
       selectIndex: noop,
       previous: noop,
       next: noop,

@@ -80,7 +80,7 @@ it('integrates the match header with identity and loading fields while omitting 
       games: [],
       positions: [],
       index: 0,
-      stats: null,
+      gameLoaded: false,
       game: undefined,
       position: undefined as unknown as Position,
       loading: false,
