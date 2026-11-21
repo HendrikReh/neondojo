@@ -19,7 +19,7 @@ test('drop zone aligns with both buttons, highlights nested file drags and reset
 }) => {
   const zone = page.locator('.match-drop-zone');
   await expect(zone).toBeVisible();
-  await expect(zone).toContainText('Match-Datei hier ablegen');
+  await expect(zone).toContainText('Match-Dateien oder Ordner hier ablegen');
   await expect(zone).toContainText('MAT · TXT · XG · SGF · BGF');
   const buttons = page.locator('.welcome-actions > button');
   const first = await buttons.first().boundingBox(),
@@ -82,7 +82,9 @@ for (const extension of ['mat', 'txt', 'xg', 'sgf', 'bgf'])
       await expect(page.getByRole('alert')).toContainText(
         'Drop fixture rejected',
       );
-      await expect(zone).toContainText('Match-Datei hier ablegen');
+      await expect(zone).toContainText(
+        'Match-Dateien oder Ordner hier ablegen',
+      );
     } finally {
       release();
     }

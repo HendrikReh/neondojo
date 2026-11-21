@@ -147,3 +147,87 @@ test('a folder without supported match files reports that nothing was imported',
   );
   await expect(panel.locator('ul')).toHaveCount(0);
 });
+
+test('a folder dropped on the welcome drop zone imports like a chosen folder', async ({
+  page,
+}) => {
+  const database = await libraryDatabase(page);
+  await page.goto('/');
+  const zone = page.locator('.match-drop-zone');
+  await expect(zone).toContainText('Drop match files or a folder here');
+  const uploads: (string | null)[] = [];
+  page.on('request', (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === '/api/imports')
+      uploads.push(url.searchParams.get('database_id'));
+  });
+  // Playwright cannot hand a real folder to a drop, so the drop carries
+  // stand-ins for the browser's directory entries around real files.
+  await zone.evaluate(
+    (element, players) => {
+      const sgf = (player: string) =>
+        `(;GM[6]PW[${player}]PB[Opponent]MI[length:5][ws:0][bs:0];W[31hefe];B[42qusu])`;
+      const file = (fullPath: string, content: string) => {
+        const name = fullPath.split('/').pop()!;
+        return {
+          isFile: true,
+          isDirectory: false,
+          name,
+          fullPath,
+          file: (ok: (file: File) => void) => ok(new File([content], name)),
+        };
+      };
+      type Entry = ReturnType<typeof file> | ReturnType<typeof folder>;
+      function folder(fullPath: string, children: Entry[]) {
+        return {
+          isFile: false,
+          isDirectory: true,
+          name: fullPath.split('/').pop()!,
+          fullPath,
+          createReader: () => {
+            let done = false;
+            return {
+              readEntries: (ok: (entries: Entry[]) => void) => {
+                ok(done ? [] : children);
+                done = true;
+              },
+            };
+          },
+        };
+      }
+      const root = folder('/Dropped', [
+        file('/Dropped/b.sgf', sgf(players[1])),
+        file('/Dropped/notes.pdf', '%PDF-1.4'),
+        file('/Dropped/._a.sgf', 'AppleDouble metadata'),
+        folder('/Dropped/Round 1', [
+          file('/Dropped/Round 1/a.sgf', sgf(players[0])),
+        ]),
+      ]);
+      const transfer = {
+        types: ['Files'],
+        files: [],
+        items: { length: 1, 0: { kind: 'file', webkitGetAsEntry: () => root } },
+        dropEffect: 'none',
+      };
+      for (const type of ['dragenter', 'drop']) {
+        const event = new DragEvent(type, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, 'dataTransfer', { value: transfer });
+        element.dispatchEvent(event);
+      }
+    },
+    [`Drop A ${crypto.randomUUID()}`, `Drop B ${crypto.randomUUID()}`],
+  );
+  const panel = page.locator('.import-results');
+  await expect(panel.locator('.import-summary').first()).toContainText(
+    'Import finished: 2 files. Imported: 2 · Duplicates: 0 · Failed: 0',
+  );
+  await expect(panel).toContainText(
+    '2 files without a supported match format skipped',
+  );
+  await expect(panel.locator('ul > li')).toHaveText([
+    'Dropped/b.sgf: Imported',
+    'Dropped/Round 1/a.sgf: Imported',
+  ]);
+  expect(uploads).toEqual([database.id, database.id]);
+  await expect(page.locator('.database-table tbody tr')).toHaveCount(2);
+});

@@ -70,9 +70,12 @@ import ImportRunPanel, {
 } from './ImportRunPanel';
 import {
   MATCH_FILE_ACCEPT,
-  matchFilePath,
+  matchFileEntries,
+  readDroppedMatchFiles,
   selectFolderMatchFiles,
+  type MatchFileEntry,
 } from './match-import';
+
 import { isUnfinishedCompetition } from './library-match-summary';
 import type { PlaySession } from './play-api';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
@@ -81,6 +84,12 @@ import { useUiAppearance } from './useUiAppearance';
 import { useButtonShortcuts } from './useButtonShortcuts';
 import DecisionSearch from './DecisionSearch';
 import { useDecisionSearchText } from './decision-search-messages';
+
+type ImportSource = {
+  files: readonly MatchFileEntry[];
+  /** Set for a folder, with the number of files left out. */
+  folder?: { skipped: number };
+};
 
 type View =
   | 'analysis'
@@ -173,6 +182,7 @@ export default function App() {
   const [moveNotes, setMoveNotes] = useState<MoveNotesTarget>();
   const [importRun, setImportRun] = useState<ImportRun>();
   const importStop = useRef(false);
+  const importBusy = useRef(false);
   const annotationNavigation = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => annotationNavigation.current?.abort(), []);
   const [bulkAnalysis, setBulkAnalysis] = useWorkspaceSession(
@@ -500,13 +510,42 @@ export default function App() {
     importDestination.current = destination;
     folderInput.current?.click();
   }
+  /**
+   * Imports files one by one. `source` may still be reading a dropped folder;
+   * the import counts as running from the call on, so a second drop or pick
+   * waits for this one.
+   */
   async function upload(
-    files: File[] | FileList | undefined,
+    source: ImportSource | Promise<ImportSource>,
     destination = databaseId,
-    folder?: { skipped: number },
   ) {
-    const selected = Array.from(files ?? []);
-    if (uploading || (!selected.length && !folder)) return;
+    if (importBusy.current) return;
+    importBusy.current = true;
+    setUploading(true);
+    const navigationIntent = navigation.intent();
+    try {
+      let files: readonly MatchFileEntry[];
+      let folder: ImportSource['folder'];
+      try {
+        ({ files, folder } = await source);
+      } catch (e) {
+        setError(e);
+        return;
+      }
+      await importFiles(files, destination, folder, navigationIntent);
+    } finally {
+      importBusy.current = false;
+      setUploading(false);
+      if (input.current) input.current.value = '';
+    }
+  }
+  async function importFiles(
+    selected: readonly MatchFileEntry[],
+    destination: string,
+    folder: ImportSource['folder'],
+    navigationIntent: ReturnType<typeof navigation.intent>,
+  ) {
+    if (!selected.length && !folder) return;
     cancelRestoration();
     setError(undefined);
     setNotice(undefined);
@@ -524,20 +563,17 @@ export default function App() {
     };
     setImportRun(batch ? run : undefined);
     if (!selected.length) return;
-    setUploading(true);
     const target =
       destination && acceptsLibraryMatches(destination)
         ? `?database_id=${encodeURIComponent(destination)}`
         : '';
-    const navigationIntent = navigation.intent();
     const results: ImportResult[] = [];
     // Large batches refresh the library at most every two seconds instead of
     // reloading the list after every file.
     let refreshedAt = 0;
     let unrefreshed = false;
-    for (const file of selected) {
+    for (const { file, path: name } of selected) {
       if (importStop.current) break;
-      const name = matchFilePath(file);
       try {
         if (file.size > 16 * 1024 * 1024) throw new AppError('error.fileSize');
         const body = new FormData();
@@ -592,8 +628,20 @@ export default function App() {
       );
       if (navigation.intent() === navigationIntent) setView('database');
     }
-    setUploading(false);
-    if (input.current) input.current.value = '';
+  }
+  /** Reads a drop now, while its data is still available. */
+  function dropImport(transfer: DataTransfer) {
+    if (importBusy.current) return;
+    void upload(
+      readDroppedMatchFiles(transfer).then(({ files, folder }) => {
+        if (!folder) return { files };
+        const selected = selectFolderMatchFiles(files);
+        return {
+          files: selected.files,
+          folder: { skipped: selected.skipped },
+        };
+      }),
+    );
   }
   function stopImport() {
     importStop.current = true;
@@ -711,7 +759,7 @@ export default function App() {
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
-        if (!uploading) void upload(event.dataTransfer.files);
+        dropImport(event.dataTransfer);
       }}
     >
       <span className="eyebrow">NEONDOJO</span>
@@ -737,10 +785,7 @@ export default function App() {
         >
           {uploading ? t('app.importRunning') : t('app.importPlain')}
         </ActionButton>
-        <MatchDropZone
-          disabled={uploading}
-          onFiles={(files) => void upload(files)}
-        />
+        <MatchDropZone disabled={uploading} onDrop={dropImport} />
       </div>
       {restoring && <p role="status">{w('lastMatch')}</p>}
     </section>
@@ -896,7 +941,10 @@ export default function App() {
           onChange={(event) => {
             const destination = importDestination.current;
             importDestination.current = undefined;
-            void upload(event.target.files ?? undefined, destination);
+            void upload(
+              { files: matchFileEntries(event.target.files ?? []) },
+              destination,
+            );
           }}
         />
         <input
@@ -909,11 +957,11 @@ export default function App() {
             const destination = importDestination.current;
             importDestination.current = undefined;
             const { files, skipped } = selectFolderMatchFiles(
-              event.target.files ?? [],
+              matchFileEntries(event.target.files ?? []),
             );
             // Choosing the same folder again must fire another change.
             event.target.value = '';
-            void upload(files, destination, { skipped });
+            void upload({ files, folder: { skipped } }, destination);
           }}
         />
       </header>

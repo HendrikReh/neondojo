@@ -211,7 +211,7 @@ Details: [Playing against an engine](../reference/playing.md#playing-against-an-
 
 ![The Analysis welcome panel with Open match and Import match](images/analysis-welcome.webp)
 
-Select **Open match** to go to the Match database, select **Import match**, or drop a file on the panel. See [Importing](#importing) for the supported formats.
+Select **Open match** to go to the Match database, select **Import match**, or drop match files or a whole folder on the panel. See [Importing](#importing) for the supported formats.
 
 ### Screen layout
 
@@ -560,7 +560,7 @@ Details: [Match databases](../reference/library.md#match-databases)
 
 ### Importing
 
-Select **Import match**, or drop files on the Analysis welcome panel. Supported formats are **MAT** (Jellyfish/GNUbg, also as a `.txt` match transcript), **XG** (eXtreme Gammon), **SGF** (GNUbg), **BGF** (BGBlitz) and **OGXM** (HedgeHog). Each file may be up to 16 MiB. Each file is imported separately, and duplicates and errors are reported per file. **Import folder** in the Match database imports all supported files of a folder and its subfolders; other and hidden files are skipped, and **Stop import** ends the run after the current file. Analyses stored in the file are kept as *imported analysis* with their original depth and units.
+Select **Import match**, or drop files or a folder on the Analysis welcome panel. Supported formats are **MAT** (Jellyfish/GNUbg, also as a `.txt` match transcript), **XG** (eXtreme Gammon), **SGF** (GNUbg), **BGF** (BGBlitz) and **OGXM** (HedgeHog). Each file may be up to 16 MiB. Each file is imported separately, and duplicates and errors are reported per file. **Import folder** in the Match database, or dropping a folder on the welcome panel, imports all supported files of the folder and its subfolders; other and hidden files are skipped, and **Stop import** ends the run after the current file. Analyses stored in the file are kept as *imported analysis* with their original depth and units.
 
 Unsupported content is rejected, for example XG1 files, edits later in an XG game, custom starting positions in BGF and OGXM files, beavers and other variants. An XG game that starts from a recorded mid-game position is imported from that position, and the import result lists it. In a MAT or `.txt` transcript, an illegal or unreadable move ends its game before that move, and a header score that contradicts the previous result is kept as recorded. The match is still imported; the import result lists each such case, and **Notes** shows them as **Import notes** above the match or game comment. A warning sign next to the PR in the match database marks these matches.
 
