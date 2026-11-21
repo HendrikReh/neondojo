@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Fixed
+
+- **White plays the light checkers on BGBlitz boards.** BGBlitz names its checker and dice sets after the players "red" and "green", and in most themes "red" is the dark set. Theme preparation assigned "red" to White, so with BG Moon and eleven other archives choosing **White** in **New match** gave you the dark checkers, and the board preview in **Settings → Board** labelled them the other way round. `npm run themes:prepare` now assigns the set whose opaque checker pixels are lighter to White, with its dice. Run it again (or restart `npm run dev`) to rebuild the local catalog. [Board theme formats](themes/README.md)
+
 ## [1.1.0] - 2026-11-20
 
 NeonDojo 1.1.0 adds virtual player profiles, catalogues bot matches as real NeonDojo players and opens a new match in a setup dialog with per-match bot choices. One schema baseline replaces the migrations 0001–0084. Databases from 1.0.0 and later development builds are updated automatically at startup without changing their data, and backups stay restorable. Migration `0085_bot_match_players` then runs.

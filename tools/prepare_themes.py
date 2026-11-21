@@ -11,10 +11,12 @@ from pathlib import Path, PurePosixPath
 import struct
 import xml.etree.ElementTree as ET
 from zipfile import ZipFile, BadZipFile
+import zlib
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_ARCHIVE = 32 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
+MAX_CHECKER_PIXELS = 1024 * 1024
 
 
 def dimensions(data):
@@ -72,6 +74,119 @@ def write_changed(path, data):
         temporary.replace(path)
 
 
+def png_luminance(data):
+    """Mean relative luminance (0–255) of the opaque pixels of a PNG image.
+
+    BGBlitz names its two checker sets "red" and "green" after the players, not
+    after their colours, so the light set is identified from the artwork.
+    """
+    if not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("Checker artwork must be PNG")
+    position, idat, palette, transparency, header = 8, [], b"", b"", None
+    while position + 8 <= len(data):
+        (size,) = struct.unpack(">I", data[position : position + 4])
+        kind = data[position + 4 : position + 8]
+        body = data[position + 8 : position + 8 + size]
+        position += 12 + size
+        if kind == b"IHDR":
+            header = struct.unpack(">IIBBBBB", body)
+        elif kind == b"PLTE":
+            palette = body
+        elif kind == b"tRNS":
+            transparency = body
+        elif kind == b"IDAT":
+            idat.append(body)
+        elif kind == b"IEND":
+            break
+    if header is None:
+        raise ValueError("PNG has no header")
+    width, height, depth, color, _, _, interlace = header
+    channels = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}.get(color)
+    if channels is None or depth not in (1, 2, 4, 8, 16) or interlace not in (0, 1):
+        raise ValueError("Unsupported PNG format")
+    if width * height > MAX_CHECKER_PIXELS:
+        raise ValueError("Checker artwork has more than 1024 × 1024 pixels")
+    bits = channels * depth
+    passes = (
+        [
+            (0, 0, 8, 8),
+            (4, 0, 8, 8),
+            (0, 4, 4, 8),
+            (2, 0, 4, 4),
+            (0, 2, 2, 4),
+            (1, 0, 2, 2),
+            (0, 1, 1, 2),
+        ]
+        if interlace
+        else [(0, 0, 1, 1)]
+    )
+    sizes = [
+        ((width - x + dx - 1) // dx, (height - y + dy - 1) // dy)
+        for x, y, dx, dy in passes
+    ]
+    expected = sum(h * (1 + (w * bits + 7) // 8) for w, h in sizes if w and h)
+    inflater = zlib.decompressobj()
+    raw = inflater.decompress(b"".join(idat), expected + 1)
+    if len(raw) != expected:
+        raise ValueError("PNG image data has an unexpected size")
+    step = max(1, bits // 8)
+    total = weight = 0.0
+    offset = 0
+    for pass_width, pass_height in sizes:
+        if not pass_width or not pass_height:
+            continue
+        stride = (pass_width * bits + 7) // 8
+        previous = bytearray(stride)
+        for _ in range(pass_height):
+            kind, line = raw[offset], bytearray(raw[offset + 1 : offset + 1 + stride])
+            offset += 1 + stride
+            for i in range(stride):
+                left = line[i - step] if i >= step else 0
+                up = previous[i]
+                corner = previous[i - step] if i >= step else 0
+                if kind == 1:
+                    line[i] = (line[i] + left) & 255
+                elif kind == 2:
+                    line[i] = (line[i] + up) & 255
+                elif kind == 3:
+                    line[i] = (line[i] + ((left + up) >> 1)) & 255
+                elif kind == 4:
+                    guess = left + up - corner
+                    a, b, c = abs(guess - left), abs(guess - up), abs(guess - corner)
+                    paeth = left if a <= b and a <= c else up if b <= c else corner
+                    line[i] = (line[i] + paeth) & 255
+                elif kind != 0:
+                    raise ValueError("Invalid PNG filter")
+            previous = line
+            if depth < 8:
+                samples = [
+                    (byte >> shift) & ((1 << depth) - 1)
+                    for byte in line
+                    for shift in range(8 - depth, -1, -depth)
+                ][: pass_width * channels]
+                scale = 255 / ((1 << depth) - 1)
+            else:
+                samples = line[:: depth // 8]
+                scale = 1
+            for pixel in range(pass_width):
+                s = samples[pixel * channels : (pixel + 1) * channels]
+                if color == 3:
+                    index = s[0]
+                    if 3 * index + 3 > len(palette):
+                        raise ValueError("PNG palette index out of range")
+                    r, g, b = palette[3 * index : 3 * index + 3]
+                    alpha = transparency[index] if index < len(transparency) else 255
+                else:
+                    r, g, b = (s[0] * scale,) * 3 if channels <= 2 else s[:3]
+                    alpha = s[-1] * scale if channels in (2, 4) else 255
+                if alpha >= 128:
+                    total += 0.2126 * r + 0.7152 * g + 0.0722 * b
+                    weight += 1
+    if not weight:
+        raise ValueError("Checker artwork has no opaque pixels")
+    return total / weight
+
+
 def load_archive(path, output, used):
     if path.stat().st_size > MAX_ARCHIVE:
         raise ValueError("ZIP exceeds 32 MiB")
@@ -126,6 +241,8 @@ def load_archive(path, output, used):
                     existing.rename(temporary)
                     temporary.rename(output / slug)
 
+        artwork = {}
+
         def element(name):
             value = theme.find(name)
             if value is None:
@@ -151,11 +268,13 @@ def load_archive(path, output, used):
             used.add(target)
             from urllib.parse import quote
 
-            return dict(
+            result = dict(
                 src="/themes/" + quote(slug) + "/" + quote(str(relative)),
                 width=width,
                 height=height,
             )
+            artwork[result["src"]] = data
+            return result
 
         def integer(node, key, default=0):
             value = int(node.get(key, str(default)))
@@ -220,6 +339,18 @@ def load_archive(path, output, used):
             value = image(cube.attrib["name"].replace("?", "64_" + side), optional=True)
             if value:
                 cubes["64_" + side] = value
+        checker_sets = {
+            color: variations(checker.attrib[color]) for color in ("red", "green")
+        }
+        # NeonDojo's "white" is the light set; player 0 and the White choice
+        # use it on every board, independent of BGBlitz's red/green order.
+        brightness = {
+            color: png_luminance(artwork[images[0]["src"]])
+            for color, images in checker_sets.items()
+        }
+        light, dark = ("red", "green")
+        if brightness["green"] > brightness["red"]:
+            light, dark = dark, light
         return dict(
             id="bgblitz:" + slug,
             name=theme.attrib["displayName"],
@@ -228,15 +359,12 @@ def load_archive(path, output, used):
             columns=columns,
             checkerOffsetX=integer(checker, "offsetX"),
             checkerOffsetY=integer(checker, "offsetY"),
-            checkers=dict(
-                white=variations(checker.attrib["red"]),
-                black=variations(checker.attrib["green"]),
-            ),
+            checkers=dict(white=checker_sets[light], black=checker_sets[dark]),
             dice={
                 side: [
                     image(dice.attrib[color].replace("?", str(i))) for i in range(1, 7)
                 ]
-                for side, color in [("white", "red"), ("black", "green")]
+                for side, color in [("white", light), ("black", dark)]
             },
             diceLeftX=integer(dice, "leftX"),
             diceRightX=integer(dice, "rightX"),
@@ -263,7 +391,9 @@ def prepare(source, output, manifest, options_manifest=None):
     for archive in archives:
         try:
             catalog.append(load_archive(archive, output, used))
-        except (ValueError, KeyError, BadZipFile, ET.ParseError, struct.error) as error:
+        except (
+            ValueError, KeyError, BadZipFile, ET.ParseError, struct.error, zlib.error
+        ) as error:
             raise ValueError(f"{archive.name}: {error}") from error
     if output.exists():
         for stale in output.rglob("*"):
