@@ -8,7 +8,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ### Added
 
-- **Duplicate match finder.** **Duplicates** in the Match database groups matches with the same played record in the selected database or in all databases, including the same match imported from different formats or with the sides swapped. Groups of byte-identical files are marked. **Select copies** selects all but the oldest match of each group for the existing bulk actions. New endpoint `GET /api/library/duplicates`. [Duplicate match finder](docs/reference/library.md#duplicate-match-finder)
+- **Duplicate match finder.** **Duplicates** in the Match database groups matches with the same played record in the selected database or in all databases, including the same match imported from different formats or with the sides swapped. Groups of byte-identical files are marked. **Select copies** selects all but the oldest match of each group for the existing bulk actions. New endpoint `GET /api/library/duplicates`. Migration `0086_played_record_fingerprint` stores the played record of every library match, keeps it current on every write to its positions and fills it for existing matches at startup. Like every schema migration, it changes the backup schema: a backup made before the update can only be restored with the earlier version. [Duplicate match finder](docs/reference/library.md#duplicate-match-finder)
 
 ### Fixed
 
