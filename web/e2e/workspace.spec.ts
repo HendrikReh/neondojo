@@ -89,9 +89,10 @@ test('a delayed initial settings response cannot replace a newer saved profile',
     .getByLabel('Matchdatei')
     .setInputFiles('../backend/tests/fixtures/tutorial.mat');
   await expect(page.locator('.analysis-workspace .board')).toBeVisible();
+  // Match analysis waits for the engine catalog, not for the held settings.
   await expect(
     page.locator('.workspace-analysis-command button.primary'),
-  ).toBeDisabled();
+  ).toBeEnabled();
   dialogOpening = true;
   await page
     .getByRole('button', { name: 'Einstellungen', exact: true })
