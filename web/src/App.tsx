@@ -64,6 +64,15 @@ import {
 } from './library-api';
 import { useLibraryText, type ImportWarning } from './library-messages';
 import { ImportWarningList } from './ImportWarningList';
+import ImportRunPanel, {
+  type ImportResult,
+  type ImportRun,
+} from './ImportRunPanel';
+import {
+  MATCH_FILE_ACCEPT,
+  matchFilePath,
+  selectFolderMatchFiles,
+} from './match-import';
 import { isUnfinishedCompetition } from './library-match-summary';
 import type { PlaySession } from './play-api';
 import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
@@ -162,14 +171,8 @@ export default function App() {
     sessionString,
   );
   const [moveNotes, setMoveNotes] = useState<MoveNotesTarget>();
-  const [importResults, setImportResults] = useState<
-    {
-      name: string;
-      status: 'importedFile' | 'duplicate' | 'error';
-      detail?: unknown;
-      warnings?: ImportWarning[];
-    }[]
-  >([]);
+  const [importRun, setImportRun] = useState<ImportRun>();
+  const importStop = useRef(false);
   const annotationNavigation = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => annotationNavigation.current?.abort(), []);
   const [bulkAnalysis, setBulkAnalysis] = useWorkspaceSession(
@@ -283,6 +286,7 @@ export default function App() {
   const jobs = useJobs(navigation.position?.id, analysisEngine, track);
   const settingsLoad = useRef<AbortController | undefined>(undefined);
   const input = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
   const importDestination = useRef<string | undefined>(undefined);
   const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
   useEffect(() => {
@@ -290,8 +294,15 @@ export default function App() {
     const clearDestination = () => {
       importDestination.current = undefined;
     };
+    const folderChooser = folderInput.current;
+    // React has no typed prop for the directory picker attribute.
+    if (folderChooser) folderChooser.webkitdirectory = true;
     chooser?.addEventListener('cancel', clearDestination);
-    return () => chooser?.removeEventListener('cancel', clearDestination);
+    folderChooser?.addEventListener('cancel', clearDestination);
+    return () => {
+      chooser?.removeEventListener('cancel', clearDestination);
+      folderChooser?.removeEventListener('cancel', clearDestination);
+    };
   }, []);
   useEffect(() => {
     if (!confirmed) saveTheme(theme);
@@ -485,29 +496,48 @@ export default function App() {
     importDestination.current = destination;
     input.current?.click();
   }
+  function chooseImportFolder(destination: string) {
+    importDestination.current = destination;
+    folderInput.current?.click();
+  }
   async function upload(
     files: File[] | FileList | undefined,
     destination = databaseId,
+    folder?: { skipped: number },
   ) {
     const selected = Array.from(files ?? []);
-    if (!selected.length || uploading) return;
+    if (uploading || (!selected.length && !folder)) return;
     cancelRestoration();
-    setUploading(true);
     setError(undefined);
     setNotice(undefined);
-    setImportResults([]);
+    importStop.current = false;
+    // A folder run always reports in the results panel, even for one file.
+    const batch = !!folder || selected.length > 1;
+    const run: ImportRun = {
+      results: [],
+      total: selected.length,
+      skipped: folder?.skipped ?? 0,
+      folder: !!folder,
+      running: selected.length > 0,
+      stopping: false,
+      stopped: false,
+    };
+    setImportRun(batch ? run : undefined);
+    if (!selected.length) return;
+    setUploading(true);
     const target =
       destination && acceptsLibraryMatches(destination)
         ? `?database_id=${encodeURIComponent(destination)}`
         : '';
     const navigationIntent = navigation.intent();
-    const results: {
-      name: string;
-      status: 'importedFile' | 'duplicate' | 'error';
-      detail?: unknown;
-      warnings?: ImportWarning[];
-    }[] = [];
+    const results: ImportResult[] = [];
+    // Large batches refresh the library at most every two seconds instead of
+    // reloading the list after every file.
+    let refreshedAt = 0;
+    let unrefreshed = false;
     for (const file of selected) {
+      if (importStop.current) break;
+      const name = matchFilePath(file);
       try {
         if (file.size > 16 * 1024 * 1024) throw new AppError('error.fileSize');
         const body = new FormData();
@@ -517,13 +547,18 @@ export default function App() {
           duplicate: boolean;
           warnings: ImportWarning[];
         }>(`/imports${target}`, { method: 'POST', body });
-        setRevision((n) => n + 1);
+        unrefreshed = true;
+        if (!batch || Date.now() - refreshedAt >= 2000) {
+          setRevision((n) => n + 1);
+          refreshedAt = Date.now();
+          unrefreshed = false;
+        }
         results.push({
-          name: file.name,
+          name,
           status: imported.duplicate ? 'duplicate' : 'importedFile',
           warnings: imported.warnings,
         });
-        if (selected.length === 1 && navigation.intent() === navigationIntent) {
+        if (!batch && navigation.intent() === navigationIntent) {
           setView('analysis');
           setDetail('overview');
           void navigation.selectMatch(imported.match);
@@ -534,15 +569,35 @@ export default function App() {
           });
         }
       } catch (e) {
-        results.push({ name: file.name, status: 'error', detail: e });
-        if (selected.length === 1) setError(e);
+        results.push({ name, status: 'error', detail: e });
+        if (!batch) setError(e);
       }
-      setImportResults([...results]);
+      if (batch)
+        setImportRun(
+          (current) => current && { ...current, results: [...results] },
+        );
     }
-    if (selected.length > 1 && navigation.intent() === navigationIntent)
-      setView('database');
+    if (unrefreshed) setRevision((n) => n + 1);
+    if (batch) {
+      const stopped = results.length < selected.length;
+      setImportRun(
+        (current) =>
+          current && {
+            ...current,
+            results: [...results],
+            running: false,
+            stopping: false,
+            stopped,
+          },
+      );
+      if (navigation.intent() === navigationIntent) setView('database');
+    }
     setUploading(false);
     if (input.current) input.current.value = '';
+  }
+  function stopImport() {
+    importStop.current = true;
+    setImportRun((current) => current && { ...current, stopping: true });
   }
   function goHome(event: MouseEvent<HTMLAnchorElement>) {
     if (
@@ -836,12 +891,29 @@ export default function App() {
           className="sr-only"
           type="file"
           aria-label={t('app.matchFile')}
-          accept=".mat,.txt,.sgf,.xg,.bgf,.ogxm"
+          accept={MATCH_FILE_ACCEPT}
           multiple
           onChange={(event) => {
             const destination = importDestination.current;
             importDestination.current = undefined;
             void upload(event.target.files ?? undefined, destination);
+          }}
+        />
+        <input
+          ref={folderInput}
+          className="sr-only"
+          type="file"
+          aria-label={l('matchFolder')}
+          multiple
+          onChange={(event) => {
+            const destination = importDestination.current;
+            importDestination.current = undefined;
+            const { files, skipped } = selectFolderMatchFiles(
+              event.target.files ?? [],
+            );
+            // Choosing the same folder again must fire another change.
+            event.target.value = '';
+            void upload(files, destination, { skipped });
           }}
         />
       </header>
@@ -927,28 +999,12 @@ export default function App() {
             <ImportWarningList warnings={notice.warnings} />
           </div>
         )}
-        {importResults.length > 1 && (
-          <div className="import-results" role="status">
-            <div className="section-heading">
-              <h2>{l('importResults')}</h2>
-              <ActionButton
-                onClick={() => setImportResults([])}
-                aria-label={l('close')}
-                icon="close"
-                label={l('close')}
-                compact
-              ></ActionButton>
-            </div>
-            <ul>
-              {importResults.map((result, i) => (
-                <li key={i}>
-                  {result.name}: {l(result.status)}
-                  {result.detail ? ` · ${formatError(result.detail)}` : ''}
-                  <ImportWarningList warnings={result.warnings} />
-                </li>
-              ))}
-            </ul>
-          </div>
+        {importRun && (
+          <ImportRunPanel
+            run={importRun}
+            onStop={stopImport}
+            onClose={() => setImportRun(undefined)}
+          />
         )}
         <div
           id="workspace-panel-analysis"
@@ -1064,6 +1120,7 @@ export default function App() {
             onAnnotation={openAnnotation}
             uploading={uploading}
             onImport={chooseImportFiles}
+            onImportFolder={chooseImportFolder}
           />
           {view === 'database' && analysisDialogs}
         </div>
