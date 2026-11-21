@@ -110,29 +110,55 @@ pub(crate) async fn load(
 ) -> ApiResult<Vec<SourceDecision>> {
     super::imported::catalog_legacy(pool, database, match_id, player).await?;
     let mut tx = read_snapshot(pool).await?;
+    let saved = read_saved_decisions(&mut tx, database, match_id, player).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    saved.project().await
+}
+
+pub(super) struct SavedDecisions {
+    games: Vec<Game>,
+    rows: Vec<Row>,
+    imported: super::imported::Imported,
+}
+
+pub(super) async fn read_saved_decisions(
+    tx: &mut Transaction<'_, Postgres>,
+    database: Option<Uuid>,
+    match_id: Option<Uuid>,
+    player: Option<&[String]>,
+) -> ApiResult<SavedDecisions> {
     if let Some(id) = database {
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
         )
         .bind(id)
-        .fetch_one(&mut *tx)
+        .fetch_one(&mut **tx)
         .await
         .map_err(anyhow::Error::from)?;
         if !exists {
             return Err(ApiError::invalid("Choose an existing database"));
         }
     }
-    let (games, rows) = native_rows(&mut tx, database, match_id, player).await?;
+    let (games, rows) = native_rows(tx, database, match_id, player).await?;
     let imported =
-        super::imported::load(&mut tx, database, match_id, player, games.len(), rows.len()).await?;
-    tx.commit().await.map_err(anyhow::Error::from)?;
-    tokio::task::spawn_blocking(move || {
-        let mut output = reconstruct(games, rows)?;
-        output.extend(super::imported::reconstruct(imported));
-        Ok(output)
+        super::imported::load(tx, database, match_id, player, games.len(), rows.len()).await?;
+    Ok(SavedDecisions {
+        games,
+        rows,
+        imported,
     })
-    .await
-    .map_err(anyhow::Error::from)?
+}
+
+impl SavedDecisions {
+    pub(super) async fn project(self) -> ApiResult<Vec<SourceDecision>> {
+        tokio::task::spawn_blocking(move || {
+            let mut output = reconstruct(self.games, self.rows)?;
+            output.extend(super::imported::reconstruct(self.imported));
+            Ok(output)
+        })
+        .await
+        .map_err(anyhow::Error::from)?
+    }
 }
 /// Read the same completed native checkpoints without cataloging imported
 /// analysis. The checkpoint count also distinguishes an empty analysis from a
@@ -166,7 +192,7 @@ pub(super) async fn require_database(pool: &PgPool, id: Uuid) -> ApiResult<()> {
     }
 }
 
-async fn read_snapshot(pool: &PgPool) -> ApiResult<Transaction<'_, Postgres>> {
+pub(super) async fn read_snapshot(pool: &PgPool) -> ApiResult<Transaction<'_, Postgres>> {
     let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *tx)

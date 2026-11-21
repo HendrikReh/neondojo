@@ -35,9 +35,14 @@ const MAX_DATA_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 const DERIVED_TABLES: &[&str] = &[
     "decision_index",
     "decision_index_matches",
+    "native_analysis_revisions",
+    "imported_analysis_revisions",
     "review_hits",
     "review_hit_sets",
 ];
+// These migrations only affect derived data. The backed-up table layout and
+// format stay compatible with archives made before them.
+const DERIVED_ONLY_MIGRATIONS: &[i64] = &[89];
 
 // Parent tables precede their children so foreign keys remain enforced. Host
 // installations and the benchmark machine identity belong to the destination.
@@ -138,6 +143,9 @@ async fn schema(connection: &mut PgConnection) -> Result<String> {
     .await?;
     let mut digest = Sha256::new();
     for (version, checksum) in crate::schema_migrations::expanded_history(migrations) {
+        if DERIVED_ONLY_MIGRATIONS.contains(&version) {
+            continue;
+        }
         digest.update(version.to_be_bytes());
         digest.update(checksum);
     }
@@ -447,6 +455,20 @@ pub(crate) struct BackupDoc;
 #[cfg(test)]
 mod tests {
     use super::TABLES;
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn decision_revision_migration_keeps_existing_backup_fingerprint(pool: sqlx::PgPool) {
+        let mut tx = pool.begin().await.unwrap();
+        let after = super::schema(&mut tx).await.unwrap();
+        let removed = sqlx::query("DELETE FROM _sqlx_migrations WHERE version=89")
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        assert_eq!(removed.rows_affected(), 1);
+        let before = super::schema(&mut tx).await.unwrap();
+        tx.rollback().await.unwrap();
+        assert_eq!(before, after);
+    }
 
     #[test]
     fn every_migrated_table_has_an_explicit_backup_policy() {
