@@ -149,7 +149,7 @@ export default function AnalysisWorkspace({
   const review = useBoardReviewText();
   const statistics = useStatisticsText();
   const headerText = useAnalysisMatchHeaderText();
-  const { match, game, games, positions, position, index, loading, stats } =
+  const { match, game, games, positions, position, index, loading, gameLoaded } =
     navigation;
   const sourceAvailable = hasMatchSource(match);
   const detail =
@@ -918,7 +918,9 @@ export default function AnalysisWorkspace({
               resultsVisible={active && overview && !cubeBoard && !loading}
               calculationTarget={positionControls}
               onShowResults={() => onDetail('overview')}
-              stats={sourceAvailable ? stats : null}
+              observedMatchId={
+                sourceAvailable && gameLoaded ? match.id : undefined
+              }
               gameNo={game?.game_no}
               defaultPlies={defaultPlies}
               configuredEngine={defaultEngine}

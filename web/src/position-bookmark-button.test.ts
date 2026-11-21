@@ -347,7 +347,7 @@ it('uses the real source occurrence beside review controls during candidate and 
       index: 0,
       loading: false,
       error: null,
-      stats: null,
+      gameLoaded: true,
       selectIndex: noop,
       previous: noop,
       next: noop,
