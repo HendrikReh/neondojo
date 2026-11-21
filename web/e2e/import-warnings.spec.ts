@@ -1,8 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 
 // The backend reports resolved source irregularities with each import; the
 // XG conversion tests cover when they occur. This checks that both import
-// summaries show them in the user's language.
+// summaries show them in the user's language. The shared fixture keeps the
+// configuration per test, so the stored locale seeds this test's profile and
+// no earlier test's persisted profile language replaces it after startup.
 const warnings = [
   { kind: 'illegal_play_replaced', game_no: 1, source_ply: 19 },
   { kind: 'custom_start_position', game_no: 2, source_ply: null },
