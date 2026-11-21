@@ -88,28 +88,37 @@ test('an invalid projection leaves the original board and dice visible', () => {
   expect(html).toContain('⚅');
 });
 
-test('renders before, outlined legal arrows and after across every archive theme and mover', () => {
-  expect(archiveThemes).toHaveLength(13);
-  for (const theme of archiveThemes)
-    for (const player of [0, 1]) {
-      const source = position(player);
-      const arrows = render(source, theme.id, 'arrows');
-      expect(arrows).toContain(`data-theme="${theme.id}"`);
-      expect(arrows).toContain('class="move-arrows"');
-      expect(arrows).toContain(
-        `data-number-orientation="${player === 0 ? 'RLD' : 'RLU'}"`,
-      );
-      expect(arrows).toContain('data-dice="6-1"');
-      const after = render(source, theme.id, 'after');
-      expect(after).toContain('data-dice=""');
-      expect(after).toContain(
-        `data-number-orientation="${player === 0 ? 'RLD' : 'RLU'}"`,
-      );
-      expect(after).toContain(
-        `data-point="${player === 0 ? 6 : 19}" data-count="${player === 0 ? 1 : -1}"`,
-      );
-    }
-});
+// CI prepares themes without the BGBlitz archives
+// (NEONDOJO_ALLOW_MISSING_THEMES=1), which leaves the archive catalog empty.
+const archivesOmitted =
+  archiveThemes.length === 0 &&
+  process.env.NEONDOJO_ALLOW_MISSING_THEMES === '1';
+
+test.skipIf(archivesOmitted)(
+  'renders before, outlined legal arrows and after across every archive theme and mover',
+  () => {
+    expect(archiveThemes).toHaveLength(13);
+    for (const theme of archiveThemes)
+      for (const player of [0, 1]) {
+        const source = position(player);
+        const arrows = render(source, theme.id, 'arrows');
+        expect(arrows).toContain(`data-theme="${theme.id}"`);
+        expect(arrows).toContain('class="move-arrows"');
+        expect(arrows).toContain(
+          `data-number-orientation="${player === 0 ? 'RLD' : 'RLU'}"`,
+        );
+        expect(arrows).toContain('data-dice="6-1"');
+        const after = render(source, theme.id, 'after');
+        expect(after).toContain('data-dice=""');
+        expect(after).toContain(
+          `data-number-orientation="${player === 0 ? 'RLD' : 'RLU'}"`,
+        );
+        expect(after).toContain(
+          `data-point="${player === 0 ? 6 : 19}" data-count="${player === 0 ? 1 : -1}"`,
+        );
+      }
+  },
+);
 
 test('arrow endpoints follow actual archive checker offsets and compressed stacks', () => {
   for (const theme of archiveThemes)
