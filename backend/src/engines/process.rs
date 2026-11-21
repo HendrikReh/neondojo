@@ -284,23 +284,17 @@ pub(super) async fn request_costed(
         ),
         "Unsupported NeonGammon single-request operation"
     );
-    crate::engine::with_shared_access(async {
-        // The deadline includes waiting for the slot, so a request ends on time
-        // even while another request of the same slot holds its worker. The
-        // worker is removed from the slot while awaiting I/O, so dropping this
-        // future always drops/kills its process instead of caching a dirty stream.
-        tokio::time::timeout(timeout, async {
-            let mut cache = slot.worker().lock().await;
-            reap_other_runtime(&mut cache).await?;
-            let mut worker = Worker::checkout(&mut cache, profile).await?;
-            let result = worker.validated_exchange(payload).await?;
-            *cache = Some(worker);
-            Ok(result)
-        })
-        .await
-        .context("NeonGammon request timed out, including the wait for its worker")?
+    crate::engine::with_shared_access_timeout(timeout, async {
+        let mut cache = slot.worker().lock().await;
+        reap_other_runtime(&mut cache).await?;
+        // Own the worker while awaiting I/O so cancellation discards its stream.
+        let mut worker = Worker::checkout(&mut cache, profile).await?;
+        let result = worker.validated_exchange(payload).await?;
+        *cache = Some(worker);
+        Ok(result)
     })
     .await
+    .context("NeonGammon request timed out, including the wait for its worker and engine access")?
 }
 
 pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
@@ -1086,5 +1080,104 @@ for line in sys.stdin:
         );
         drop(held);
         assert!(PLAY.lock().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn play_request_deadline_includes_exclusive_benchmark_wait() {
+        let _serial = TEST_LOCK.lock().await;
+        let game = FakeWorker::new("healthy");
+        let identity = json!({"operation":"identity"});
+        warm_play(&game.profile).await.unwrap();
+        let pid = game.pid();
+        let profile = game.profile.clone();
+        let benchmark_identity = identity.clone();
+        let (entered, ready) = tokio::sync::oneshot::channel();
+        let (release, done) = tokio::sync::oneshot::channel();
+        let benchmark = tokio::spawn(crate::engine::benchmark_exclusive(async move {
+            entered.send(()).unwrap();
+            done.await.unwrap();
+            // Benchmark-owned requests still reuse the task's engine access.
+            super::request(
+                &game.profile,
+                benchmark_identity,
+                Duration::from_secs(5),
+                Slot::Play,
+            )
+            .await
+            .map(|_| game)
+        }));
+        ready.await.unwrap();
+        let result = tokio::time::timeout(
+            Duration::from_secs(5),
+            super::request(&profile, identity, Duration::from_millis(60), Slot::Play),
+        )
+        .await;
+        release.send(()).unwrap();
+        let game = benchmark.await.unwrap().unwrap();
+        let operations = std::fs::read_to_string(game.directory.path().join("operations")).unwrap();
+        assert_eq!(
+            game.pid(),
+            pid,
+            "Waiting for the gate displaced the play worker"
+        );
+        drop(PLAY.lock().await.take());
+        assert_reaped(&pid).await;
+        let error = result
+            .expect("Play request never reached its deadline")
+            .unwrap_err();
+        assert!(error.to_string().contains("timed out"), "{error:#}");
+        assert_eq!(operations, "initialize\nidentity\n");
+    }
+
+    #[tokio::test]
+    #[ignore = "requires isolated timing of an exclusive benchmark with a synthetic worker"]
+    async fn benchmark_play_request_gate_wait() {
+        let _serial = TEST_LOCK.lock().await;
+        let game = FakeWorker::new("healthy");
+        let identity = json!({"operation":"identity"});
+        let deadline = Duration::from_millis(60);
+        let hold = Duration::from_millis(250);
+        let samples = 7;
+        warm_play(&game.profile).await.unwrap();
+        let mut completions = [0; 2];
+        for (phase, blocked) in [false, true].into_iter().enumerate() {
+            let mut elapsed = Vec::new();
+            for _ in 0..samples {
+                let benchmark = if blocked {
+                    let (entered, ready) = tokio::sync::oneshot::channel();
+                    let benchmark = tokio::spawn(crate::engine::benchmark_exclusive(async move {
+                        entered.send(()).unwrap();
+                        tokio::time::sleep(hold).await;
+                    }));
+                    ready.await.unwrap();
+                    Some(benchmark)
+                } else {
+                    None
+                };
+                let start = std::time::Instant::now();
+                let result =
+                    super::request(&game.profile, identity.clone(), deadline, Slot::Play).await;
+                elapsed.push(start.elapsed().as_secs_f64() * 1000.0);
+                match result {
+                    Ok(_) => completions[phase] += 1,
+                    Err(error) => assert!(error.to_string().contains("timed out"), "{error:#}"),
+                }
+                if let Some(benchmark) = benchmark {
+                    benchmark.await.unwrap();
+                }
+            }
+            elapsed.sort_by(f64::total_cmp);
+            eprintln!(
+                "benchmark gate held: {blocked}, completed: {}/{samples}, median: {:.2} ms, range: {:.2}–{:.2} ms",
+                completions[phase],
+                elapsed[samples / 2],
+                elapsed[0],
+                elapsed[samples - 1],
+            );
+        }
+        let pid = game.pid();
+        drop(PLAY.lock().await.take());
+        assert_reaped(&pid).await;
+        assert_eq!(completions, [samples, 0]);
     }
 }

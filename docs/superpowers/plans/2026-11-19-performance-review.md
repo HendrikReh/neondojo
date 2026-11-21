@@ -177,6 +177,25 @@ Messung (Engine-Schicht, Open Sage `2.0.20261119`, Bot 1-ply mit 2 Threads in de
 - [x] Ein deterministischer Test hält einen Analyseblock offen und stellt gleichzeitig eine Spielanfrage. Bei verfügbarem Budget liefert sie vor Abschluss der Analyse ein gültiges Ergebnis. Bei serieller Auswertung erhält sie den nächsten Blockwechsel. Ein eigener Sättigungstest prüft die dokumentierte Frist einschließlich Wartezeit. Batch-Integrität, atomare Spiel-Checkpoints, Worker-Bereinigung und exklusive Benchmarks bleiben abgesichert.
 - [x] Auf isoliertem Backend identische Open-Sage-Züge mit warmer Engine einmal ohne Hintergrundlast und einmal während einer laufenden Spielanalyse wiederholen. Threadlimits, Tiefe, Teststellung, Median und p95 für Wartezeit und Gesamtantwort festhalten. Danach dieselbe Gegenprobe mit dem neuen Ablauf fahren. Die Codeprüfung lieferte dafür noch keine gemessene Baseline. *Gemessen an der Engine-Schicht statt über das HTTP-Backend: Die Spielanfrage geht direkt über `SageEngine::for_play`, ohne GNUbg-Regelprozess und Sitzung. Tests: `moves_finish_while_an_analysis_block_holds_the_general_worker` hält einen Spielblock offen, die Spielanfrage endet sofort, eine allgemeine Anfrage wartet und endet an ihrer Frist; `a_move_ends_at_its_deadline_including_the_wait_for_the_play_worker` prüft die Frist inklusive Wartezeit und die Bereinigung des blockierten Workers.*
 
+### Frist bei exklusiven Benchmarks
+
+Auf `main` (`9e7c3c8`) begann der Timer einer NeonGammon-Einzelanfrage erst nach Erwerb des gemeinsamen Engine-Zugangs. Die eigentliche Spielaktion hielt diesen Zugang bereits über die gesamte Zugfolge. Jetzt umfasst die Frist in beiden Fällen auch die Wartezeit vor dem Start. Der native Teil einer Spielaktion hat insgesamt 180 Sekunden für den Zugang und die Verarbeitung durch GNUbg und NeonGammon. Bei Fristablauf vor dem Start bleibt der wartende Auftrag ohne Worker-Aufruf. Der Benchmark bleibt exklusiv und kann weiterhin seine eigenen Engine-Aufrufe ausführen.
+
+Nachmessung auf einem Mac mini M4 Pro mit macOS 27.0.1 und Rust-Debug-Build. Ein warmer Python-3.14.7-Testworker beantwortet je sieben Identitätsanfragen über den Spiel-Worker. Die Frist beträgt 60 ms. Im zweiten Szenario hält eine Testaufgabe den exklusiven Engine-Zugang jeweils 250 ms. Gemessen wird die Dauer bis zur Rückgabe aus dem Rust-Adapter. Der Test benötigt keine Datenbank, keine Engine-Gewichte und keine HTTP-Anfrage.
+
+| Szenario | Median vorher → nachher | Spannweite vorher → nachher | Ausgeführte Anfragen vorher → nachher |
+| --- | ---: | ---: | ---: |
+| Zugang frei | 0,20 → 0,21 ms | 0,18–0,27 → 0,18–0,29 ms | 7 → 7 |
+| Zugang exklusiv belegt | 254,25 → 62,22 ms | 252,86–254,67 → 60,87–62,31 ms | 7 → 0 |
+
+Zur Wiederholung auf `9e7c3c8` nur die unten genannte Benchmark-Funktion aus `backend/src/engines/process.rs` übernehmen und in beiden Checkouts denselben Befehl ausführen. Der Ausgangsstand meldet den erwarteten Testfehler nach der Ausgabe beider Messreihen. Der reguläre Abnahmetest `play_request_deadline_includes_exclusive_benchmark_wait` hält den Zugang bis zur Antwort oder einem separaten Watchdog blockiert. Er prüft, dass der vorhandene Spiel-Worker erhalten bleibt und der Benchmark darin weiterhin eine eigene Anfrage ausführen kann.
+
+```bash
+cargo test -p neondojo --lib \
+  engines::process::tests::benchmark_play_request_gate_wait \
+  -- --ignored --exact --nocapture
+```
+
 ## P3 · Kleine Arbeitspakete
 
 | Paket | Änderung | Abnahme |

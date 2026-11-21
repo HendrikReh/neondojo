@@ -25,6 +25,14 @@ pub(crate) async fn with_shared_access<F: std::future::Future>(work: F) -> F::Ou
     ENGINE_ACCESS.scope((), work).await
 }
 
+/// Bound a request's total time, including admission to the shared engine gate.
+pub(crate) async fn with_shared_access_timeout<F: std::future::Future>(
+    timeout: Duration,
+    work: F,
+) -> Result<F::Output, tokio::time::error::Elapsed> {
+    tokio::time::timeout(timeout, with_shared_access(work)).await
+}
+
 pub(crate) async fn benchmark_exclusive<F: std::future::Future>(work: F) -> F::Output {
     let _exclusive = ENGINE_WORK.write().await;
     ENGINE_ACCESS.scope((), work).await
