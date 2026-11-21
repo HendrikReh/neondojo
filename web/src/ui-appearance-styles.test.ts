@@ -1,6 +1,4 @@
 import { expect, it } from 'vitest';
-// The browser app omits Node typings; these files are read only by Vitest.
-// @ts-expect-error Node's filesystem module is available in the test runtime.
 import { readFileSync } from 'node:fs';
 
 const css: string = readFileSync(
