@@ -3,6 +3,7 @@ import {
   openMatchAnalysisOptions,
   submitFullMatchAnalysis,
 } from './analysis-controls';
+import { sql } from './stack';
 import { test, expect, type Page } from './test';
 
 test.beforeEach(async ({ page }) => {
@@ -358,7 +359,8 @@ test('a saved whole-match result stays identified while game navigation loads', 
 
 test('stepping through moves keeps move colors and statistics without reloading them', async ({
   page,
-}) => {
+  databaseUrl,
+}, info) => {
   await page.goto('/');
   const imported = page.waitForResponse(
     (r) =>
@@ -411,15 +413,34 @@ test('stepping through moves keeps move colors and statistics without reloading 
       attributeFilter: ['class'],
     });
   });
-  const reloads: string[] = [];
-  page.on('request', (request) => {
-    const path = new URL(request.url()).pathname;
-    if (
+  const reads: string[] = [];
+  const bodies: Promise<number>[] = [];
+  const derived = (url: string) => {
+    const path = new URL(url).pathname;
+    return (
       path.endsWith('/move-assessments') ||
       path.endsWith('/analysis-statistics')
-    )
-      reloads.push(request.url());
+    );
+  };
+  page.on('request', (request) => {
+    if (derived(request.url()))
+      reads.push(new URL(request.url()).pathname.split('/').at(-1)!);
   });
+  page.on('requestfinished', (request) => {
+    if (derived(request.url()))
+      bodies.push(request.sizes().then((sizes) => sizes.responseBodySize));
+  });
+  async function measure(phase: string) {
+    const endpoints = reads.splice(0);
+    const bytes = (await Promise.all(bodies.splice(0))).reduce(
+      (total, size) => total + size,
+      0,
+    );
+    console.log(
+      `Analysis navigation ${phase}: ${endpoints.length} requests, ${bytes} body bytes`,
+    );
+    return endpoints.sort();
+  }
   const visited = new Set<string>();
   async function step(name: 'Nächster Zug' | 'Vorheriger Zug') {
     const before = await page.locator('.position-code code').textContent();
@@ -440,11 +461,62 @@ test('stepping through moves keeps move colors and statistics without reloading 
   await page.waitForLoadState('networkidle');
 
   expect(visited.size).toBeGreaterThanOrEqual(10);
-  expect(reloads).toEqual([]);
+  expect(await measure('20 stable moves')).toEqual([]);
   expect(
     await page.evaluate(
       () => (window as unknown as { minColored: number }).minColored,
     ),
   ).toBe(coloredRows);
   await expect(colored).toHaveCount(coloredRows);
+
+  // The replacement keeps the match UUID and the imported analysis ID.
+  const revision = Number(
+    (
+      await sql(
+        new URL(databaseUrl),
+        `UPDATE matches SET source_revision=source_revision+1 WHERE id='${match.id}' RETURNING source_revision`,
+      )
+    ).split('\n')[0],
+  );
+  expect(revision).toBeGreaterThan(0);
+  const refreshed = page.waitForResponse(
+    async (response) =>
+      new URL(response.url()).pathname ===
+        `/api/matches/${match.id}/analyses` &&
+      (await response.json()).source_revision === revision,
+  );
+  await step('Nächster Zug');
+  await refreshed;
+  let revisionEndpoints: string[];
+  try {
+    await expect.poll(() => bodies.length).toBe(2);
+  } finally {
+    revisionEndpoints = await measure('source revision');
+  }
+  expect(revisionEndpoints).toEqual([
+    'analysis-statistics',
+    'move-assessments',
+  ]);
+  await expect(colored).toHaveCount(coloredRows);
+
+  const workspace = page.locator('#workspace-panel-analysis');
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await step('Vorheriger Zug');
+    await step('Nächster Zug');
+    await expect(workspace.locator('.board-heading')).toBeInViewport();
+    await expect(
+      workspace.locator('.moves-list .move-history-row.current'),
+    ).toHaveCount(1);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    await page.screenshot({
+      path: info.outputPath(`analysis-navigation-${width}.png`),
+    });
+  }
 });

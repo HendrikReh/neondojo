@@ -205,6 +205,7 @@ export default function AnalysisWorkspace({
   const catalogRevision = JSON.stringify([
     analysisRevision,
     catalog.analysisId,
+    catalog.sourceRevision,
     catalog.selected?.job?.status,
     catalog.selected?.job?.completed_games,
     catalog.selected?.job?.updated_at,

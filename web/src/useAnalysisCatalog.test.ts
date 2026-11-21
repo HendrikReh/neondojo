@@ -172,6 +172,111 @@ it('updates polled entries and preserves already loaded older pages', async () =
   }
 });
 
+it.each([0, 1])(
+  'keeps the latest checkpoint when a delayed older page arrives (source revision %i)',
+  async (sourceRevision) => {
+    vi.useFakeTimers();
+    try {
+      const running = entryForJob({
+        ...entry.job!,
+        status: 'running',
+        completed_games: 1,
+      });
+      fetch.mockResolvedValueOnce(
+        response({ ...page, items: [running], selected: running }),
+      );
+      render();
+      commit();
+      await vi.advanceTimersByTimeAsync(0);
+
+      let finishPage!: (value: Response) => void;
+      fetch.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            finishPage = resolve;
+          }),
+      );
+      const pending = render().loadMore();
+      const newer = entryForJob({ ...running.job!, completed_games: 2 });
+      fetch.mockResolvedValueOnce(
+        response({
+          ...page,
+          source_revision: sourceRevision,
+          items: [newer],
+          selected: newer,
+        }),
+      );
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(render().selected?.job?.completed_games).toBe(2);
+
+      const older = { ...entry, id: 'job:older' };
+      finishPage(
+        response({
+          ...page,
+          items: [older],
+          selected: running,
+          next_cursor: null,
+        }),
+      );
+      await pending;
+      const catalog = render();
+      expect(catalog.sourceRevision).toBe(sourceRevision);
+      expect(catalog.selected?.job?.completed_games).toBe(2);
+      expect(catalog.entries.map((item) => item.id)).toEqual(
+        sourceRevision === 0 ? [newer.id, older.id] : [newer.id],
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  },
+);
+
+it('polls an active displayed analysis outside the first catalog page', async () => {
+  vi.useFakeTimers();
+  try {
+    const running = entryForJob({
+      ...entry.job!,
+      status: 'running',
+      completed_games: 1,
+    });
+    const visible = { ...entry, id: 'job:visible' };
+    fetch.mockResolvedValueOnce(
+      response({ ...page, items: [visible], selected: running }),
+    );
+    render();
+    commit();
+    await vi.advanceTimersByTimeAsync(0);
+    fetch.mockResolvedValueOnce(
+      response({
+        ...page,
+        items: [running],
+        selected: running,
+        next_cursor: null,
+      }),
+    );
+    await render().loadMore();
+    const complete = entryForJob({
+      ...running.job!,
+      status: 'completed',
+      completed_games: 2,
+    });
+    fetch.mockResolvedValueOnce(
+      response({
+        ...page,
+        items: [visible],
+        selected: complete,
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(render().selected?.job?.completed_games).toBe(2);
+    expect(render().entries.find((item) => item.id === running.id)).toEqual(
+      complete,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('refreshes the same match after a selection write finishes on another position', async () => {
   fetch.mockResolvedValueOnce(response(page));
   render();
