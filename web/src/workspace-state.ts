@@ -30,13 +30,13 @@ export function decodeBulkAnalysisSession(
           (typeof databaseId !== 'string' || !uuid.test(databaseId)))
       )
         return;
-      jobs[id] = databaseId;
+      jobs[id.toLowerCase()] = databaseId?.toLowerCase() ?? null;
     }
   } else {
     if (!('jobIds' in value) || !Array.isArray(value.jobIds)) return;
     for (const id of value.jobIds) {
       if (typeof id !== 'string' || !uuid.test(id)) return;
-      jobs[id] = null;
+      jobs[id.toLowerCase()] = null;
     }
   }
   return {

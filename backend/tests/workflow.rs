@@ -55,6 +55,36 @@ async fn queued_job(pool: &PgPool) -> Job {
         .unwrap()
 }
 
+#[sqlx::test(migrations = "./migrations")]
+async fn batch_job_status_returns_full_available_jobs_and_identifies_missing_ids(pool: PgPool) {
+    let job = queued_job(&pool).await;
+    let missing = Uuid::new_v4();
+    let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));
+    let (status, result) = json_call(
+        app.clone(),
+        "POST",
+        "/api/jobs/status",
+        serde_json::json!({"ids":[job.id,missing,job.id]}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(
+        result,
+        serde_json::json!({"jobs":[job],"missing":[missing],"restricted":[]})
+    );
+    for invalid in [
+        serde_json::json!({"ids":vec![job.id;101]}),
+        serde_json::json!({"ids":["invalid-uuid"]}),
+    ] {
+        assert_eq!(
+            json_call(app.clone(), "POST", "/api/jobs/status", invalid)
+                .await
+                .0,
+            422
+        );
+    }
+}
+
 async fn event_body(app: &axum::Router, job: Uuid, after: i64) -> Body {
     let response = app
         .clone()

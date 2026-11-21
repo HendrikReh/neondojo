@@ -251,6 +251,19 @@ cargo test -p neondojo --test integration workflow::job_events_replay_committed_
   -- --exact
 ```
 
+### Gebündelte Statusabfragen für Sammelanalysen
+
+Auf `main` (`15a43de`) startete die gemeinsame Jobüberwachung für jeden ausschließlich im Hintergrund beobachteten Auftrag eine eigene Statusabfrage alle drei Sekunden. Jetzt fragt ein gemeinsamer Timer diese Aufträge in Gruppen von höchstens 100 IDs ab. `POST /api/jobs/status` liest eine Gruppe in einer PostgreSQL-Abfrage und prüft den Wettbewerbsschutz für dieselben Auftragstypen wie der Einzelabruf. Sichtbare Ansichten nutzen weiter ihren vorhandenen SSE-Stream, und ein allein beobachteter Auftrag nutzt den Einzelabruf. Fehlende Aufträge enden in der Überwachung. Vorübergehend gesperrte Aufträge werden weiter geprüft.
+
+Der Vitest-Vergleich beobachtet 24 laufende Aufträge und zählt die initialen Requests sowie fünf weitere Abfragen mit einer simulierten Uhr. Er misst **144 → 6 HTTP-Aufrufe** bei jeweils **144 angeforderten Auftragsdatensätzen** und null SSE-Verbindungen. Der Test misst die Transportaufrufe bei simulierten Antworten. Er erfasst keine Netzwerklatenz.
+
+Zur Wiederholung auf `15a43de` nur den Test `24 background jobs use one request per refresh` aus `web/src/job-watch.test.ts` übernehmen. Der Ausgangsstand gibt die 144 früheren Aufrufe aus und meldet den erwarteten Testfehler.
+
+```bash
+npm test --prefix web -- src/job-watch.test.ts -t '24 background jobs' \
+  --disableConsoleIntercept
+```
+
 ### Nachmessung zum Checkpoint-Schreibvorgang
 
 Ausgangsstand `main` (`70af44a)), Mac mini M4 Pro (14 Kerne, 64 GB, macOS 27.0.1), PostgreSQL 16.13 auf Loopback, Rust-Debug-Build, GNU Backgammon 1.08.003 bei 1-ply. `WC2014.gnubg.sgf` enthält 10 Spiele und 460 Checkerzüge. Das längste Spiel (Nr. 8) hat 83 Checkerzüge und 138 gespeicherte Entscheidungen. Der Benchmark berechnet das Spiel einmal je Testlauf und speichert dasselbe Ergebnis je Runde in 5 neuen Aufträgen zum Aufwärmen und 30 neuen Aufträgen zur Messung.

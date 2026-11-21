@@ -1,5 +1,9 @@
 import { expect, it } from 'vitest';
-import { readSelection, saveSelection } from './workspace-state';
+import {
+  decodeBulkAnalysisSession,
+  readSelection,
+  saveSelection,
+} from './workspace-state';
 import { workspaceMessages } from './workspace-messages';
 
 it('restores only validated match/game/position selections and tolerates blocked storage', () => {
@@ -35,6 +39,21 @@ it('restores only validated match/game/position selections and tolerates blocked
     ),
   ).not.toThrow();
 });
+
+it('normalizes restored bulk job and database IDs to the API spelling', () => {
+  const id = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee';
+  const databaseId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  expect(
+    decodeBulkAnalysisSession({
+      jobs: { [id.toUpperCase()]: databaseId.toUpperCase() },
+      showMatchList: true,
+    }),
+  ).toEqual({ jobs: { [id]: databaseId }, showMatchList: true });
+  expect(decodeBulkAnalysisSession({ jobIds: [id.toUpperCase(), id] })).toEqual(
+    { jobs: { [id]: null }, showMatchList: false },
+  );
+});
+
 it('keeps workspace translations and dynamic arguments complete', () => {
   const source = workspaceMessages.en;
   for (const locale of Object.values(workspaceMessages)) {
