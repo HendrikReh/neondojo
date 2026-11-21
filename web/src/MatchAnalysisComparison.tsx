@@ -178,6 +178,7 @@ export default function MatchAnalysisComparison({
   const chosen = comparisonEntries(entries, selection);
   const identity = JSON.stringify([
     matchId,
+    catalog.sourceRevision,
     ...chosen.map((entry) => [
       entry?.id,
       entry?.status,

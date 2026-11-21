@@ -4,9 +4,23 @@ import {
   analysisCatalogPath,
   analysisResultPath,
   mergeCatalogEntries,
+  type AnalysisCatalogEntry,
   type AnalysisCatalogPage,
   type PositionAnalysisResult,
 } from './analysis-catalog-api';
+
+function isPending(entry: AnalysisCatalogEntry | null | undefined) {
+  return entry?.status === 'running' || entry?.status === 'queued';
+}
+
+function withSelectedEntry(
+  items: AnalysisCatalogEntry[],
+  selected: AnalysisCatalogEntry | null | undefined,
+) {
+  return selected
+    ? items.map((item) => (item.id === selected.id ? selected : item))
+    : items;
+}
 
 export function useAnalysisCatalog(
   matchId?: string,
@@ -35,6 +49,8 @@ export function useAnalysisCatalog(
   const [busy, setBusy] = useState<string>();
   const [loadingMore, setLoadingMore] = useState<string>();
   const page = state?.scope === scope ? state.page : undefined;
+  const currentPage = useRef(page);
+  currentPage.current = page;
   const refresh = () => {
     readVersion.current += 1;
     setGeneration((value) => value + 1);
@@ -58,12 +74,17 @@ export function useAnalysisCatalog(
         )
           return;
         setState((previous) =>
-          poll && previous?.scope === scope
+          poll &&
+          previous?.scope === scope &&
+          previous.page.source_revision === next.source_revision
             ? {
                 scope,
                 page: {
                   ...next,
-                  items: mergeCatalogEntries(previous.page.items, next.items),
+                  items: withSelectedEntry(
+                    mergeCatalogEntries(previous.page.items, next.items),
+                    next.selected,
+                  ),
                   next_cursor: previous.page.next_cursor,
                 },
               }
@@ -71,11 +92,7 @@ export function useAnalysisCatalog(
         );
         setMatchPage({ matchId: matchId!, page: next });
         setFailure(undefined);
-        if (
-          next.items.some(
-            (entry) => entry.status === 'running' || entry.status === 'queued',
-          )
-        )
+        if (isPending(next.selected) || next.items.some(isPending))
           timer = setTimeout(() => {
             void load(true);
           }, 3000);
@@ -135,33 +152,51 @@ export function useAnalysisCatalog(
   async function loadMore() {
     if (!matchId || !page?.next_cursor || loadingMore === scope) return;
     const version = readVersion.current;
+    const { next_cursor: cursor, source_revision: source } = page;
+    const isCurrentPage = () =>
+      current.current === scope &&
+      version === readVersion.current &&
+      currentPage.current?.source_revision === source &&
+      currentPage.current.next_cursor === cursor;
     setLoadingMore(scope);
     try {
       const next = await request<AnalysisCatalogPage>(
-        analysisCatalogPath(matchId, positionId, page.next_cursor),
+        analysisCatalogPath(matchId, positionId, cursor),
       );
       if (
-        current.current !== scope ||
-        version !== readVersion.current ||
-        next.match_id !== matchId
+        !isCurrentPage() ||
+        next.match_id !== matchId ||
+        next.source_revision !== source
       )
         return;
-      setState((previous) =>
-        previous?.scope === scope
-          ? {
-              scope,
-              page: {
-                ...next,
-                items: mergeCatalogEntries(previous.page.items, next.items),
-              },
-            }
-          : previous,
-      );
-      setMatchPage({ matchId, page: next });
+      setState((previous) => {
+        if (
+          previous?.scope !== scope ||
+          previous.page.source_revision !== source ||
+          previous.page.next_cursor !== cursor
+        )
+          return previous;
+        // A page can arrive after a newer head response. Only the head owns
+        // the displayed selection and checkpoint metadata.
+        const loaded = new Set(previous.page.items.map((item) => item.id));
+        return {
+          scope,
+          page: {
+            ...previous.page,
+            next_cursor: next.next_cursor,
+            items: withSelectedEntry(
+              [
+                ...previous.page.items,
+                ...next.items.filter((item) => !loaded.has(item.id)),
+              ],
+              previous.page.selected,
+            ),
+          },
+        };
+      });
       setFailure(undefined);
     } catch (error) {
-      if (current.current === scope && version === readVersion.current)
-        setFailure({ scope, error });
+      if (isCurrentPage()) setFailure({ scope, error });
     } finally {
       setLoadingMore((pending) => (pending === scope ? undefined : pending));
     }

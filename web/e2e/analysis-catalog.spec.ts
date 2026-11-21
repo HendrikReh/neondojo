@@ -1,6 +1,7 @@
-import { expect, test } from './test';
+import { expect, test, type Route } from './test';
 import { profileBackend } from './profile-backend';
 import { openFullMatchAnalysis } from './analysis-controls';
+import { sql } from './stack';
 
 // The catalog assertions use persisted jobs and wait for the native engine.
 test.describe.configure({ timeout: 240_000 });
@@ -87,6 +88,7 @@ test('a selected analysis can be deleted while a deeper result remains available
 // navigation and a changed calculation profile without borrowing other results.
 test('one saved choice drives every view and remains strict across games and reloads', async ({
   page,
+  databaseUrl,
 }) => {
   const profile = await profileBackend(page);
   await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
@@ -201,4 +203,124 @@ test('one saved choice drives every view and remains strict across games and rel
   expect(catalog.items.map((entry: { id: string }) => entry.id).sort()).toEqual(
     [`job:${whole.id}`, `job:${game.id}`].sort(),
   );
+
+  const workspace = page.locator('#workspace-panel-analysis');
+  const picker = workspace.getByLabel('Select game', { exact: true });
+  const colored = workspace.locator(
+    '.moves-list .move-history-row[class*="move-assessment-"]',
+  );
+  const assessmentsPath = `/api/matches/${match.id}/move-assessments`;
+  const assessmentsPattern = `**${assessmentsPath}?*`;
+  let requested = () => {};
+  let release = () => {};
+  let delivered = () => {};
+  const started = new Promise<void>((resolve) => {
+    requested = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const settled = new Promise<void>((resolve) => {
+    delivered = resolve;
+  });
+  const delayPreviousGame = async (route: Route) => {
+    const params = new URL(route.request().url()).searchParams;
+    if (
+      params.get('analysis_id') !== `job:${game.id}` ||
+      params.get('game_no') !== '1'
+    )
+      return route.continue();
+    const response = await route.fetch();
+    requested();
+    await gate;
+    try {
+      await route.fulfill({ response });
+    } finally {
+      delivered();
+    }
+  };
+  await page.route(assessmentsPattern, delayPreviousGame);
+  const statistics = workspace.getByRole('tabpanel', { name: 'Statistics' });
+  try {
+    await picker.selectOption('1');
+    await expect(workspace.locator('.board-heading')).toContainText('Game 1');
+    await selection.selectOption(`job:${game.id}`);
+    await started;
+    const updated = page.waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        url.pathname === assessmentsPath &&
+        url.searchParams.get('analysis_id') === `job:${whole.id}` &&
+        url.searchParams.get('game_no') === '2'
+      );
+    });
+    await selection.selectOption(`job:${whole.id}`);
+    await picker.selectOption('2');
+    const assessments = (await (await updated).json()).items;
+    expect(assessments.length).toBeGreaterThan(0);
+    await expect(colored).toHaveCount(assessments.length);
+    await expect(
+      statistics.locator('.statistics-coverage').first(),
+    ).toContainText('2 of 2 games');
+    release();
+    await settled;
+    await page.unroute(assessmentsPattern, delayPreviousGame);
+    await expect(selection).toHaveValue(`job:${whole.id}`);
+    await expect(colored).toHaveCount(assessments.length);
+  } finally {
+    release();
+  }
+
+  // Replay a committed checkpoint on the disposable database using the
+  // original evaluation rows. The selected job and position stay the same.
+  const db = new URL(databaseUrl);
+  const stored = await (await page.request.get(`/api/jobs/${whole.id}`)).json();
+  const checkpoint = await sql(
+    db,
+    `SELECT summary FROM match_analysis_games WHERE job_id='${whole.id}' AND game_no=2`,
+  );
+  expect(checkpoint).toBeTruthy();
+  const json = (value: string) => `'${value.replaceAll("'", "''")}'::jsonb`;
+  await sql(
+    db,
+    `BEGIN;
+    DELETE FROM match_analysis_games WHERE job_id='${whole.id}' AND game_no=2;
+    UPDATE jobs j SET status='running', completed_games=1, progress=50, lease_until=now()+interval '1 hour',
+      result=(SELECT summary || jsonb_build_object('total_games',2,'total_moves',j.result->'total_moves')
+              FROM match_analysis_games WHERE job_id=j.id AND game_no=1)
+    WHERE j.id='${whole.id}'; COMMIT;`,
+  );
+  await page.reload();
+  await workspace.getByRole('tab', { name: 'Statistics', exact: true }).click();
+  const gameTwo = statistics.getByRole('row').filter({
+    has: page.getByRole('button', { name: 'Open game 2', exact: true }),
+  });
+  await expect(selection).toHaveValue(`job:${whole.id}`);
+  await expect(picker).toHaveValue('2');
+  await expect(
+    gameTwo.getByText('Not analyzed', { exact: true }),
+  ).toBeVisible();
+  await expect(colored).toHaveCount(0);
+  const updated = page.waitForResponse(async (response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === `/api/matches/${match.id}/analysis-statistics` &&
+      url.searchParams.get('analysis_id') === `job:${whole.id}` &&
+      (await response.json()).summary?.completed_games === 2
+    );
+  });
+  await sql(
+    db,
+    `BEGIN;
+    INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES('${whole.id}',2,${json(checkpoint)});
+    UPDATE jobs SET status='completed', completed_games=2, progress=100, lease_until=NULL,
+      result=${json(JSON.stringify(stored.result))}, updated_at=now()
+    WHERE id='${whole.id}'; COMMIT;`,
+  );
+  await updated;
+  await expect(gameTwo.getByText('Analyzed', { exact: true })).toBeVisible();
+  await expect(
+    statistics.locator('.statistics-coverage').first(),
+  ).toContainText('2 of 2 games');
+  await expect(colored.first()).toBeVisible();
 });

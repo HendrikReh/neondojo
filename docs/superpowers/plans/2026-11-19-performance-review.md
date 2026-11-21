@@ -90,8 +90,21 @@ Heute bindet `useAnalysisCatalog` die geladene Seite an `[matchId, positionId]`.
 **Umgesetzt (19. November 2026).** Die Katalogantwort liefert `selected`, `selected_id` und `source_revision` je Match; nur `items` hängt von der Position ab. `useAnalysisCatalog` merkt sich deshalb die letzte Seite je Match und liefert Auswahl, Auswahl-ID und Quellrevision daraus, solange die Seite der neuen Position lädt. Eigene Schreibvorgänge (Auswahl, Löschen) leeren diese Erinnerung wie bisher die Seite, ein Fehler der aktuellen Seite blendet sie aus, und ein anderer Match nutzt sie nie. Damit bleiben `analysisId` und die Schlüssel von `useMoveAssessments` und der Statistik über Zugwechsel stabil; Spielwechsel, Checkpoints, Schwellenwerte und Ergebnisrevision ändern sie weiterhin. Der Test `stepping through moves keeps move colors and statistics without reloading them` in `e2e/game-selection.spec.ts` zählt beim Vor- und Zurückschalten um je zehn Züge mit dem alten Hook **42**, mit dem neuen **0** Requests an `move-assessments` und `analysis-statistics`. Die Zugfarben fehlen in keinem Zwischenzustand, und für jede neue Position wird das Analyseergebnis geladen.
 
 - [x] Nach geladenem Match in einem Spiel zehn Züge vor- oder zurückwechseln. Playwright zählt für unveränderte Analyse und unverändertes Spiel **0** weitere Requests an `move-assessments` und `analysis-statistics`. Die Zugfarben der Zughistorie bleiben dabei ohne leeren Zwischenzustand sichtbar. Kandidaten und Brett folgen weiterhin dem Zug.
-- [ ] Beim Wechsel der Analyse oder der Quelle erscheinen nur passende Ergebnisse. Ein neues Spiel aktualisiert die Bewertungen seines Spielbereichs. Nach einem neuen Checkpoint aktualisiert sich die Statistik. Nach künstlich verzögerten Antworten bleiben Auswahl, Zugfarben und Ergebnisse konsistent.
-- [ ] `e2e/analysis-catalog.spec.ts` und `e2e/game-selection.spec.ts` erweitern. Anzahl und Antwortumfang der betroffenen Requests mit Playwright erfassen. Den sichtbaren Wechsel der Position auf den Referenz-Desktopgrößen kontrollieren.
+- [x] Beim Wechsel der Analyse oder der Quelle erscheinen nur passende Ergebnisse. Ein neues Spiel aktualisiert die Bewertungen seines Spielbereichs. Nach einem neuen Checkpoint aktualisiert sich die Statistik. Nach künstlich verzögerten Antworten bleiben Auswahl, Zugfarben und Ergebnisse konsistent.
+- [x] `e2e/analysis-catalog.spec.ts` und `e2e/game-selection.spec.ts` erweitern. Anzahl und Antwortumfang der betroffenen Requests mit Playwright erfassen. Den sichtbaren Wechsel der Position auf den Referenz-Desktopgrößen kontrollieren.
+
+**Abschluss am 21. November 2026.** Die Quellrevision invalidiert die abhängigen Ansichten auch bei gleicher Analyse-ID. Folgeseiten dürfen Auswahl und Checkpoints der ersten Katalogseite nicht überschreiben. Der Katalog fragt aktive ausgewählte Analysen auch außerhalb der ersten Seite weiter ab. Der Playwright-Abnahmelauf umfasst die verzögerte Antwort einer vorherigen Auswahl, den Wechsel des Spielbereichs und den Wechsel von einem auf zwei gespeicherte Checkpoints. Der Zugwechsel wurde bei 1800 × 1169, 2560 × 1440 und 3840 × 2160 geprüft.
+
+**Nachmessung gegen `main` (`d978649`).** Google Chrome mit isoliertem PostgreSQL und `WC2014.xg` (10 Spiele, 460 Zugstellungen, Spiel 3 mit 30 Zügen). Gezählt werden `move-assessments` und `analysis-statistics`. Nach dem Warmlauf verursachen 20 Zugwechsel in beiden Ständen **0 Requests und 0 Antwortbytes**. Nach einem gezielten Anheben der Quellrevision in der Testdatenbank bei gleicher Match- und Analyse-ID unterbleibt das Neuladen auf `main` (**0 Requests und 0 Antwortbytes**, erwarteter Testfehler). Mit der Änderung lädt die Ansicht beide Endpunkte einmal (**2 Requests und 16.946 Antwortbytes**). Die Messung erfasst Browser-Requests und Antwortkörper ohne Header.
+
+Zur Wiederholung den erweiterten Test in einem separaten Checkout für beide Stände verwenden. Auf dem Ausgangsstand ausschließlich die Testdatei übernehmen. Playwright startet für jeden Lauf eine eigene Testdatenbank gemäß [Testanleitung](../../development/testing.md#browser-tests).
+
+```bash
+npm run test:e2e --prefix web -- e2e/game-selection.spec.ts \
+  --grep 'stepping through moves' --workers=1 --reporter=line
+npm run test:e2e --prefix web -- e2e/analysis-catalog.spec.ts \
+  e2e/game-selection.spec.ts --workers=1 --reporter=line
+```
 
 ## P2 · Nummerierte Fehlerliste
 
