@@ -307,6 +307,7 @@ export default function PlayFeedback({
           onClick={onContinue}
           icon="confirm"
           label={t(!quiet && decision.warning ? 'anyway' : 'continue')}
+          shortcut="Enter"
         />
       )}
     </div>

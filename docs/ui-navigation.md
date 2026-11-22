@@ -118,7 +118,8 @@ Buttons that have a shortcut name it in their tooltip, for example
 continues, **A** shows the answer, **1**–**4** rate a flashcard, and **E** /
 **Shift+E** move to the next or previous error (or decision, without an error
 filter) in Analysis. In **Playing**, **Enter** rolls, confirms a complete turn
-or passes, **D** doubles, **H** requests a hint, **Z** undoes a checker step,
+or passes, also after a Coach or Tutor warning, and continues Training and
+Tutor feedback, **D** doubles, **H** requests a hint, **Z** undoes a checker step,
 and **Escape** returns from a reviewed move to the game.
 
 The shortcuts are declared with the `shortcut` property of `ActionButton` and

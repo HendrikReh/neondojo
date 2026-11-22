@@ -475,6 +475,62 @@ test('the dice resume a saved Coach move with its decision identity', async ({
   expect(submitted).toBe(true);
 });
 
+for (const mode of ['coach', 'tutor'] as const) {
+  test(`Enter plays the move after a ${mode} warning`, async ({ page }) => {
+    const state =
+      mode === 'coach'
+        ? saved('coach', {
+            ...decision,
+            revealed: true,
+            warning: false,
+            loss: 0.08,
+            first_loss: 0.08,
+            severity: 'bad',
+            alternatives: [],
+          })
+        : saved('tutor', decision);
+    await resume(page, state);
+    const actions: unknown[] = [];
+    await page.route(`**/api/play/sessions/${id}/actions`, async (route) => {
+      actions.push(route.request().postDataJSON());
+      await route.fulfill({
+        json: {
+          ...state,
+          version: 2,
+          pending_decision: null,
+          phase: 'roll',
+          legal_moves: [],
+          history: [{ player: 0, dice: [3, 1], notation: '8/5 6/5' }],
+        },
+      });
+    });
+    const feedback = page.getByTestId('play-feedback');
+    await expect(feedback).toBeVisible();
+    await expect(
+      feedback.getByRole('button', {
+        name: mode === 'coach' ? /^Confirm turn/ : /^Play anyway/,
+      }),
+    ).toBeVisible();
+    // `resume` opens the mode details in Tutor; a newly opened dialog
+    // focuses its title, where Enter reaches the shortcut.
+    if (mode === 'tutor')
+      await page
+        .getByRole('alertdialog', { name: 'Tutor' })
+        .getByRole('heading', { name: 'Tutor' })
+        .focus();
+    await page.keyboard.press('Enter');
+    await expect(feedback).toHaveCount(0);
+    expect(actions).toEqual([
+      expect.objectContaining({
+        version: 1,
+        action: 'move',
+        move: 0,
+        decision_id: decision.id,
+      }),
+    ]);
+  });
+}
+
 test('requesting a hint preserves unconfirmed checker steps', async ({
   page,
 }) => {
