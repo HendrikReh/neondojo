@@ -1,7 +1,7 @@
 import { expect, type Locator } from '@playwright/test';
 import type { Locale } from '../src/shared/i18n/i18n-core';
-import { profileText } from '../src/profile-messages';
-import { settingsText } from '../src/settings-messages';
+import { profileText } from '../src/settings/profiles/profile-messages';
+import { settingsText } from '../src/settings/settings-messages';
 
 export async function closeSettings(dialog: Locator, locale: Locale = 'en') {
   await expect(

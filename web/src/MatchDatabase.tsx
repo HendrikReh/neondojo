@@ -1,5 +1,5 @@
 import Tooltip from './shared/ui/Tooltip';
-import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { useWorkspaceDefaults } from './settings/configuration/ConfigurationProvider';
 import { Children, type HTMLAttributes, type ReactNode } from 'react';
 import {
   sessionFields,

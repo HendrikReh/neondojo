@@ -5,7 +5,7 @@ import {
   isConfigurationDirty,
   normalizeConfiguration,
 } from './configuration-model';
-import vectors from '../../tests/fixtures/configuration-normalization.json';
+import vectors from '../../../../tests/fixtures/configuration-normalization.json';
 
 describe('configuration comparison', () => {
   it('defaults legacy profiles to the four analysis thresholds', () => {

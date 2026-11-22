@@ -1,7 +1,7 @@
 import { applyAndCloseSettings } from './settings-actions';
 import { backendTest as test, expect } from './test';
 import { profileBackend } from './profile-backend';
-import { defaultConfiguration } from '../src/configuration-model';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
 test('leads with the active profile and compares the selected profile before saved details', async ({
   page,

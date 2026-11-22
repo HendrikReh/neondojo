@@ -4,38 +4,42 @@ import {
   normalizeLibraryFilters,
   type LibraryFilters,
   type LibrarySort,
-} from './library-api';
+} from '../../library-api';
 import {
   ALL_CARDS,
   isCollectionScope,
   emptyCardFilters,
   normalizeCardFilters,
   type CardFilters,
-} from './card-search-api';
+} from '../../card-search-api';
 import {
   DEFAULT_LIBRARY_COLUMNS,
   LIBRARY_DATA_COLUMNS,
   type LibraryDataColumn,
-} from './library-column-preferences';
-import { LIBRARY_WIDTH_COLUMNS } from './library-columns';
+} from '../../library-column-preferences';
+import { LIBRARY_WIDTH_COLUMNS } from '../../library-columns';
 import {
   DEFAULT_POSITION_COLUMNS,
   POSITION_COLUMNS,
   POSITION_DATA_COLUMNS,
   type PositionDataColumn,
-} from './position-table-columns';
+} from '../../position-table-columns';
 import {
   positionDefinition,
   positionDraft,
   type PositionFilterDefinition,
-} from './position-browser-api';
-import type { AnnotationFilters } from './annotation-api';
-import { isLocale, type Locale } from './shared/i18n/i18n-core';
-import { isPlayMode, type PlayMode } from './play-mode-messages';
-import { uiThemes, type UiTheme, type UiMode } from './ui-appearance';
-import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
+} from '../../position-browser-api';
+import type { AnnotationFilters } from '../../annotation-api';
+import { isLocale, type Locale } from '../../shared/i18n/i18n-core';
+import { isPlayMode, type PlayMode } from '../../play-mode-messages';
+import {
+  uiThemes,
+  type UiTheme,
+  type UiMode,
+} from '../appearance/ui-appearance';
+import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
 
-import type { components } from './generated-api';
+import type { components } from '../../generated-api';
 
 export type ErrorThresholds = components['schemas']['ErrorThresholds'];
 export const defaultErrorThresholds: ErrorThresholds =

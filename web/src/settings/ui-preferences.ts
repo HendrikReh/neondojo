@@ -1,4 +1,4 @@
-import { themes, type Theme } from './shared/board/themes';
+import { themes, type Theme } from '../shared/board/themes';
 
 export const themeStorageKey = 'neondojo.theme';
 

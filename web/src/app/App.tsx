@@ -1,14 +1,14 @@
 import {
   useConfirmedConfiguration,
   useWorkspaceDefaults,
-} from '../ConfigurationProvider';
+} from '../settings/configuration/ConfigurationProvider';
 import {
   sessionString,
   useWorkspaceSession,
 } from '../shared/hooks/useWorkspaceSession';
-import ProfileSelector from '../ProfileSelector';
-import { openingBookConfigurationKey } from '../configuration-model';
-import { settingsFromConfiguration } from '../configuration-settings';
+import ProfileSelector from '../settings/profiles/ProfileSelector';
+import { openingBookConfigurationKey } from '../settings/configuration/configuration-model';
+import { settingsFromConfiguration } from '../settings/configuration/configuration-settings';
 import { loadBenchmarkStatus } from '../benchmark-api';
 import ExtrasWorkspace, {
   readExtrasTool,
@@ -45,9 +45,9 @@ import type { AssessmentEntry } from '../match-assessment-api';
 import PositionBrowser from '../PositionBrowser';
 import SimilarPositions from '../SimilarPositions';
 import { usePositionText } from '../position-browser-messages';
-import SettingsDialog from '../SettingsDialog';
-import { loadSettings, type AppSettings } from '../settings-api';
-import { readTheme, saveTheme } from '../ui-preferences';
+import SettingsDialog from '../settings/SettingsDialog';
+import { loadSettings, type AppSettings } from '../settings/settings-api';
+import { readTheme, saveTheme } from '../settings/ui-preferences';
 import type { Theme } from '../shared/board/themes';
 import { useGameNavigation } from './useGameNavigation';
 import { useJobs } from '../shared/jobs/useJobs';
@@ -90,7 +90,7 @@ import { isUnfinishedCompetition } from '../library-match-summary';
 import type { PlaySession } from '../play-api';
 import { DEFAULT_ANALYSIS_PLIES } from '../shared/engine/analysis-depth';
 import MoveNotesDialog, { type MoveNotesTarget } from '../MoveNotesDialog';
-import { useUiAppearance } from '../useUiAppearance';
+import { useUiAppearance } from '../settings/appearance/useUiAppearance';
 import { useButtonShortcuts } from './useButtonShortcuts';
 import DecisionSearch from '../DecisionSearch';
 import { useDecisionSearchText } from '../decision-search-messages';

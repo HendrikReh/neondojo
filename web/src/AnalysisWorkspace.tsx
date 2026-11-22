@@ -1,4 +1,4 @@
-import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { useWorkspaceDefaults } from './settings/configuration/ConfigurationProvider';
 import ActionButton from './shared/ui/ActionButton';
 import {
   Fragment,

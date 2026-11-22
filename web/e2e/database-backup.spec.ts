@@ -1,6 +1,6 @@
 import { expect, backendTest as test, type FileChooser } from './test';
 import type { components } from '../src/generated-api';
-import { defaultConfiguration } from '../src/configuration-model';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 import { profileBackend } from './profile-backend';
 
 test('exports a backup and restores it only after confirmation', async ({

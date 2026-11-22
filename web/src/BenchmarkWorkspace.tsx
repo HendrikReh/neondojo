@@ -19,7 +19,7 @@ import {
   type BenchmarkHistorySort,
 } from './benchmark-history-sort';
 import { useI18n } from './shared/i18n/i18n';
-import { loadEngines, type EngineInfo } from './settings-api';
+import { loadEngines, type EngineInfo } from './settings/settings-api';
 import {
   cancelBenchmark,
   deleteBenchmark,

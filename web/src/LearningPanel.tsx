@@ -1,6 +1,6 @@
-import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { useWorkspaceDefaults } from './settings/configuration/ConfigurationProvider';
 import { useDecimalInput } from './shared/format/decimal-input';
-import { defaultConfiguration } from './configuration-model';
+import { defaultConfiguration } from './settings/configuration/configuration-model';
 import {
   sessionFields,
   sessionString,

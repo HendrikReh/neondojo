@@ -173,8 +173,8 @@ export const configurationApi: ConfigurationApi = {
   initialize: async () => {
     const [{ loadSettings }, { bookSettings }, { readLegacyConfiguration }] =
       await Promise.all([
-        import('./settings-api'),
-        import('./source-analysis-api'),
+        import('../settings-api'),
+        import('../../source-analysis-api'),
         import('./configuration-legacy'),
       ]);
     const controller = new AbortController();

@@ -1,11 +1,11 @@
 import { useRef, useState } from 'react';
-import { useConfiguration } from './ConfigurationProvider';
+import { useConfiguration } from '../configuration/ConfigurationProvider';
 import {
   ConfigurationApiError,
   type ConfigurationProfile,
-} from './configuration-api';
-import ActionButton from './shared/ui/ActionButton';
-import LibraryDialog from './shared/ui/LibraryDialog';
+} from '../configuration/configuration-api';
+import ActionButton from '../../shared/ui/ActionButton';
+import LibraryDialog from '../../shared/ui/LibraryDialog';
 import ProfileSummary from './ProfileSummary';
 import { profileFieldKey, useProfileText } from './profile-messages';
 

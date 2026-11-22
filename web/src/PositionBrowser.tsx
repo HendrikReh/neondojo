@@ -1,7 +1,7 @@
 import {
   useConfirmedConfiguration,
   useWorkspaceDefaults,
-} from './ConfigurationProvider';
+} from './settings/configuration/ConfigurationProvider';
 import {
   useWorkspaceLayout,
   useWorkspaceSession,

@@ -1,27 +1,27 @@
-import { ConfigurationApiError } from './configuration-api';
-import { openingBookConfigurationKey } from './configuration-model';
-import ProfileActionDialog from './ProfileActionDialog';
-import { useOptionalConfiguration } from './ConfigurationProvider';
-import { useProfileText } from './profile-messages';
-import ActionButton from './shared/ui/ActionButton';
-import EngineLabel from './shared/engine/EngineLabel';
+import { ConfigurationApiError } from './configuration/configuration-api';
+import { openingBookConfigurationKey } from './configuration/configuration-model';
+import ProfileActionDialog from './profiles/ProfileActionDialog';
+import { useOptionalConfiguration } from './configuration/ConfigurationProvider';
+import { useProfileText } from './profiles/profile-messages';
+import ActionButton from '../shared/ui/ActionButton';
+import EngineLabel from '../shared/engine/EngineLabel';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import LibraryDialog from './shared/ui/LibraryDialog';
-import { request } from './shared/api/api';
-import { AppError } from './shared/i18n/i18n-core';
-import { useI18n } from './shared/i18n/i18n';
+import LibraryDialog from '../shared/ui/LibraryDialog';
+import { request } from '../shared/api/api';
+import { AppError } from '../shared/i18n/i18n-core';
+import { useI18n } from '../shared/i18n/i18n';
 import {
   openingBookProviderLabel,
   openingBookProviders,
   useSourceText,
-} from './analysis-source-messages';
+} from '../analysis-source-messages';
 import {
   bookSettings,
   type BookSettings,
   type BookConfig,
   type BookStatus,
   type XgBookStatus,
-} from './source-analysis-api';
+} from '../source-analysis-api';
 export default function OpeningBookDialog({
   onClose,
   onRefresh,

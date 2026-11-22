@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readLegacyConfiguration } from './configuration-legacy';
-import type { AppSettings } from './settings-api';
+import type { AppSettings } from '../settings-api';
 const settings: AppSettings = {
   version: 4,
   player_name: 'Existing Player',

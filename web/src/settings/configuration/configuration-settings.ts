@@ -4,10 +4,10 @@ import {
   type ErrorThresholds,
   type ProfileConfiguration,
 } from './configuration-model';
-import type { AppSettings } from './settings-api';
-import { loadSettings, saveSettings, SettingsApiError } from './settings-api';
-import type { Locale } from './shared/i18n/i18n-core';
-import type { UiAppearance } from './ui-appearance';
+import type { AppSettings } from '../settings-api';
+import { loadSettings, saveSettings, SettingsApiError } from '../settings-api';
+import type { Locale } from '../../shared/i18n/i18n-core';
+import type { UiAppearance } from '../appearance/ui-appearance';
 
 const installationFields = [
   'gnubg_path',

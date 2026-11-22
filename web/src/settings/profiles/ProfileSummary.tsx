@@ -1,23 +1,23 @@
-import { useI18n } from './shared/i18n/i18n';
-import { errorThresholdLabels } from './shared/review/review-statistics-messages';
+import { useI18n } from '../../shared/i18n/i18n';
+import { errorThresholdLabels } from '../../shared/review/review-statistics-messages';
 import {
   normalizeConfiguration,
   type ProfileConfiguration,
-} from './configuration-model';
+} from '../configuration/configuration-model';
 import {
   profileFieldKey,
   useProfileText,
   type ProfileMessageKey,
 } from './profile-messages';
-import { themes } from './shared/board/themes';
-import { languages } from './shared/i18n/i18n-core';
-import { ALL_CARDS, CARDS_WITHOUT_DECK } from './card-search-api';
-import { useCardSearchText } from './card-search-messages';
-import { useSettingsText } from './settings-messages';
-import { LIBRARY_COLUMNS } from './library-columns';
+import { themes } from '../../shared/board/themes';
+import { languages } from '../../shared/i18n/i18n-core';
+import { ALL_CARDS, CARDS_WITHOUT_DECK } from '../../card-search-api';
+import { useCardSearchText } from '../../card-search-messages';
+import { useSettingsText } from '../settings-messages';
+import { LIBRARY_COLUMNS } from '../../library-columns';
 import { useEffect, useId, useState } from 'react';
-import { request } from './shared/api/api';
-import ActionButton from './shared/ui/ActionButton';
+import { request } from '../../shared/api/api';
+import ActionButton from '../../shared/ui/ActionButton';
 import { profileChangeRows } from './profile-changes';
 
 export function configurationSummaryRows(configuration: ProfileConfiguration) {

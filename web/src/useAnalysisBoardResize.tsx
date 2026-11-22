@@ -6,7 +6,7 @@ import {
   type RefObject,
 } from 'react';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
-import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { useWorkspaceDefaults } from './settings/configuration/ConfigurationProvider';
 import { useWorkspaceLayout } from './shared/hooks/useWorkspaceSession';
 import { useBoardReviewText } from './shared/board/board-review-messages';
 import Tooltip from './shared/ui/Tooltip';

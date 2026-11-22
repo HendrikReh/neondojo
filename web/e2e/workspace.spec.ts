@@ -5,7 +5,7 @@ import {
 } from './analysis-controls';
 import { expect, test } from './test';
 import { profileBackend } from './profile-backend';
-import { defaultConfiguration } from '../src/configuration-model';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
 test('analysis-first tabs preserve the selected game, notes and database navigation', async ({
   page,

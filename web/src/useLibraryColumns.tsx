@@ -1,4 +1,4 @@
-import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { useWorkspaceDefaults } from './settings/configuration/ConfigurationProvider';
 import { layoutColumns, useWorkspaceLayout } from './shared/hooks/useWorkspaceSession';
 import { useLibraryText } from './library-messages';
 import { useMemo } from 'react';

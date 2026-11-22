@@ -3,7 +3,7 @@ import {
   normalizeConfiguration,
   type ConfigurationDifference,
   type ProfileConfiguration,
-} from './configuration-model';
+} from '../configuration/configuration-model';
 
 // A pair is one user-facing filter: restoring only an endpoint can reorder
 // native dice or make a previously valid interval invalid.

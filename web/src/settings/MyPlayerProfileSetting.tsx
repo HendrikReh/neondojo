@@ -4,8 +4,8 @@ import {
   loadVirtualPlayers,
   saveMyPlayerProfile,
   type VirtualPlayerProfile,
-} from './virtual-player-api';
-import { useVirtualPlayerText } from './virtual-player-messages';
+} from '../virtual-player-api';
+import { useVirtualPlayerText } from '../virtual-player-messages';
 
 /**
  * The Settings draft for "My player profile". The choice belongs to the

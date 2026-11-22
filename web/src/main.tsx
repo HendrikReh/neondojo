@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './app/App';
-import { ConfigurationProvider } from './ConfigurationProvider';
+import { ConfigurationProvider } from './settings/configuration/ConfigurationProvider';
 import { I18nProvider } from './shared/i18n/i18n';
 import './styles/style.css';
 import './styles/desktop-analysis.css';

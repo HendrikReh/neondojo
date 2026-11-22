@@ -1,4 +1,4 @@
-import { useConfirmedConfiguration } from './ConfigurationProvider';
+import { useConfirmedConfiguration } from '../configuration/ConfigurationProvider';
 import { useLayoutEffect, useState, useSyncExternalStore } from 'react';
 import {
   applyUiAppearance,

@@ -5,7 +5,7 @@ import {
   sessionFields,
   useWorkspaceSession,
 } from './shared/hooks/useWorkspaceSession';
-import { useConfirmedConfiguration } from './ConfigurationProvider';
+import { useConfirmedConfiguration } from './settings/configuration/ConfigurationProvider';
 import ActionButton from './shared/ui/ActionButton';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';

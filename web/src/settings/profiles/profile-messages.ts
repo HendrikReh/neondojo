@@ -1,5 +1,5 @@
-import { useI18n } from './shared/i18n/i18n';
-import { matchEventLabels, type Locale } from './shared/i18n/i18n-core';
+import { useI18n } from '../../shared/i18n/i18n';
+import { matchEventLabels, type Locale } from '../../shared/i18n/i18n-core';
 
 const rows = {
   profiles: [

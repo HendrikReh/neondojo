@@ -1,4 +1,4 @@
-import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { useWorkspaceDefaults } from './settings/configuration/ConfigurationProvider';
 import {
   layoutColumns,
   useWorkspaceLayout,

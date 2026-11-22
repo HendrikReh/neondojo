@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { useConfiguration } from './ConfigurationProvider';
+import { useConfiguration } from '../configuration/ConfigurationProvider';
 import {
   ConfigurationApiError,
   type ConfigurationProfile,
-} from './configuration-api';
+} from '../configuration/configuration-api';
 import { useProfileText } from './profile-messages';
-import { clippedTooltipText } from './shared/format/overflow-title';
-import Tooltip from './shared/ui/Tooltip';
+import { clippedTooltipText } from '../../shared/format/overflow-title';
+import Tooltip from '../../shared/ui/Tooltip';
 import ProfileActionDialog from './ProfileActionDialog';
 import ProfileChangesDialog from './ProfileChangesDialog';
 import './profiles.css';

@@ -5,7 +5,7 @@ import {
   settingsFromConfiguration,
   saveInstallationSettings,
 } from './configuration-settings';
-import type { AppSettings } from './settings-api';
+import type { AppSettings } from '../settings-api';
 
 const installed: AppSettings = {
   version: 4,

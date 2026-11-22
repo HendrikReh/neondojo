@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defaultConfiguration,
   normalizeConfiguration,
-} from './configuration-model';
+} from '../configuration/configuration-model';
 import {
   profileChangeRows,
   restoreConfigurationField,

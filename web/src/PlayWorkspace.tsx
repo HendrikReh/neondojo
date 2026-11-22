@@ -1,8 +1,11 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import { useDecimalInput } from './shared/format/decimal-input';
 import { engineDisplayName } from './shared/engine/engine-version';
-import { playStrengthLabel, useSettingsText } from './settings-messages';
-import { loadEngines, type EngineInfo } from './settings-api';
+import {
+  playStrengthLabel,
+  useSettingsText,
+} from './settings/settings-messages';
+import { loadEngines, type EngineInfo } from './settings/settings-api';
 import {
   preferredDepth,
   TOP_TWO_PLAY_STRENGTH,
@@ -10,8 +13,8 @@ import {
 } from './shared/engine/analysis-depth';
 import EngineLabel from './shared/engine/EngineLabel';
 import Tooltip from './shared/ui/Tooltip';
-import { useConfirmedConfiguration } from './ConfigurationProvider';
-import { defaultConfiguration } from './configuration-model';
+import { useConfirmedConfiguration } from './settings/configuration/ConfigurationProvider';
+import { defaultConfiguration } from './settings/configuration/configuration-model';
 import ActionButton from './shared/ui/ActionButton';
 import {
   useEffect,
@@ -39,7 +42,7 @@ import {
   usePlayModeText,
   type PlayMode,
 } from './play-mode-messages';
-import type { AppSettings } from './settings-api';
+import type { AppSettings } from './settings/settings-api';
 import { usePlayReview } from './usePlayReview';
 import {
   projectMove,

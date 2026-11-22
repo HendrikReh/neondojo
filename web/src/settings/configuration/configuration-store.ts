@@ -11,7 +11,7 @@ import {
   normalizeConfiguration,
   type ProfileConfiguration,
 } from './configuration-model';
-import { restoreConfigurationField } from './profile-changes';
+import { restoreConfigurationField } from '../profiles/profile-changes';
 
 export const configurationJournalKey = 'neondojo.configuration-pending.v1';
 type StorageAccess = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;

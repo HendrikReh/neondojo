@@ -1,7 +1,7 @@
-import { errorThresholdLabels } from './shared/review/review-statistics-messages';
+import { errorThresholdLabels } from '../../shared/review/review-statistics-messages';
 import { describe, expect, it } from 'vitest';
 import { configurationSummaryRows } from './ProfileSummary';
-import { defaultConfiguration } from './configuration-model';
+import { defaultConfiguration } from '../configuration/configuration-model';
 import {
   profileFieldKey,
   profileMessageKeys,

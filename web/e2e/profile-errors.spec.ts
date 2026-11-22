@@ -1,6 +1,6 @@
 import { backendTest as test, expect } from './test';
 import { profileBackend } from './profile-backend';
-import { configurationJournalKey } from '../src/configuration-store';
+import { configurationJournalKey } from '../src/settings/configuration/configuration-store';
 
 test('profile recovery shows one localized conflict alert with both actions', async ({
   page,

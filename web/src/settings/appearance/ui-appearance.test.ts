@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import html from '../index.html?raw';
+import html from '../../../index.html?raw';
 import {
   defaultUiAppearance,
   readUiAppearance,

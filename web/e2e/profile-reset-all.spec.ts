@@ -1,6 +1,6 @@
 import { backendTest as test, expect, type Page } from './test';
 import { profileBackend } from './profile-backend';
-import { defaultConfiguration } from '../src/configuration-model';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
 test.beforeEach(({ page }) => page.setDefaultTimeout(10_000));
 async function setup(page: Page, locale: 'en' | 'de' = 'en') {

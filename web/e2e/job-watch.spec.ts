@@ -1,5 +1,5 @@
 import { profileBackend } from './profile-backend';
-import { defaultConfiguration } from '../src/configuration-model';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 import { expect, test } from './test';
 
 test.describe.configure({ timeout: 180_000 });

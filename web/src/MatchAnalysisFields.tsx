@@ -7,8 +7,8 @@ import {
   preferredDepth,
 } from './shared/engine/analysis-depth';
 import { useI18n } from './shared/i18n/i18n';
-import { loadEngines, type EngineInfo } from './settings-api';
-import { useSettingsText } from './settings-messages';
+import { loadEngines, type EngineInfo } from './settings/settings-api';
+import { useSettingsText } from './settings/settings-messages';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
 
 export function useMatchAnalysisOptions({

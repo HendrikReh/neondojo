@@ -1,14 +1,14 @@
 import { createPortal } from 'react-dom';
 import { useId, useRef, useState } from 'react';
-import ActionButton from './shared/ui/ActionButton';
-import { useConfiguration } from './ConfigurationProvider';
+import ActionButton from '../../shared/ui/ActionButton';
+import { useConfiguration } from '../configuration/ConfigurationProvider';
 import {
   ConfigurationApiError,
   type ConfigurationProfile,
-} from './configuration-api';
+} from '../configuration/configuration-api';
 import { useProfileText } from './profile-messages';
-import { useI18n } from './shared/i18n/i18n';
-import LibraryDialog from './shared/ui/LibraryDialog';
+import { useI18n } from '../../shared/i18n/i18n';
+import LibraryDialog from '../../shared/ui/LibraryDialog';
 import ProfileActionDialog from './ProfileActionDialog';
 import ProfileSummary from './ProfileSummary';
 import { profileChangeRows } from './profile-changes';

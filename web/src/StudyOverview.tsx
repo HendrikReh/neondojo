@@ -2,7 +2,7 @@ import IndependentOnlyToggle from './IndependentOnlyToggle';
 import UnanalyzedMatches from './UnanalyzedMatches';
 import { useEffect, useId, useRef, useState } from 'react';
 import ActionButton from './shared/ui/ActionButton';
-import { useConfirmedConfiguration } from './ConfigurationProvider';
+import { useConfirmedConfiguration } from './settings/configuration/ConfigurationProvider';
 import MistakeGroupTable from './MistakeGroupTable';
 import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';

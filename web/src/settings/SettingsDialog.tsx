@@ -1,20 +1,20 @@
 import OpenSageInstallation, {
   useOpenSageInstallation,
 } from './OpenSageInstallation';
-import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
-import { ConfigurationApiError } from './configuration-api';
-import { useOptionalConfiguration } from './ConfigurationProvider';
+import configurationOptions from '../../../shared/configuration-options.json' with { type: 'json' };
+import { ConfigurationApiError } from './configuration/configuration-api';
+import { useOptionalConfiguration } from './configuration/ConfigurationProvider';
 import OpeningBookDialog from './OpeningBookDialog';
-import ProfileSettingsPanel from './ProfileSettingsPanel';
-import EngineLabel from './shared/engine/EngineLabel';
-import LibraryDialog from './shared/ui/LibraryDialog';
-import { useProfileText } from './profile-messages';
+import ProfileSettingsPanel from './profiles/ProfileSettingsPanel';
+import EngineLabel from '../shared/engine/EngineLabel';
+import LibraryDialog from '../shared/ui/LibraryDialog';
+import { useProfileText } from './profiles/profile-messages';
 import {
   applySettingsDraft,
   changedInstallationFields,
   settingsFromConfiguration,
   saveInstallationSettings,
-} from './configuration-settings';
+} from './configuration/configuration-settings';
 import {
   defaultConfiguration,
   defaultErrorThresholds,
@@ -22,16 +22,16 @@ import {
   validErrorThresholds,
   type ErrorThresholds,
   type ProfileConfiguration,
-} from './configuration-model';
-import { useBenchmarkText } from './benchmark-messages';
-import ActionButton from './shared/ui/ActionButton';
+} from './configuration/configuration-model';
+import { useBenchmarkText } from '../benchmark-messages';
+import ActionButton from '../shared/ui/ActionButton';
 import {
   ANALYSIS_PLIES,
   isAnalysisDepth,
   PLAY_PLIES,
   preferredDepth,
   TOP_TWO_PLAY_STRENGTH,
-} from './shared/engine/analysis-depth';
+} from '../shared/engine/analysis-depth';
 import {
   useEffect,
   useId,
@@ -41,18 +41,18 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import Board from './shared/board/Board';
-import { readPlaySounds, savePlaySounds } from './shared/board/play-audio';
-import { usePlayText } from './play-messages';
+import Board from '../shared/board/Board';
+import { readPlaySounds, savePlaySounds } from '../shared/board/play-audio';
+import { usePlayText } from '../play-messages';
 import {
   playModes,
   usePlayModeText,
   type PlayMode,
-} from './play-mode-messages';
-import type { Position } from './shared/api/api';
-import { useI18n, languages, type Locale } from './shared/i18n/i18n';
-import { saveLocale } from './shared/i18n/i18n-core';
-import { archiveThemes, themes, type Theme } from './shared/board/themes';
+} from '../play-mode-messages';
+import type { Position } from '../shared/api/api';
+import { useI18n, languages, type Locale } from '../shared/i18n/i18n';
+import { saveLocale } from '../shared/i18n/i18n-core';
+import { archiveThemes, themes, type Theme } from '../shared/board/themes';
 import {
   checkGnubg,
   loadEngines,
@@ -68,22 +68,22 @@ import {
   useSettingsText,
   type SettingsMessageKey,
 } from './settings-messages';
-import { errorThresholdLabels } from './shared/review/review-statistics-messages';
+import { errorThresholdLabels } from '../shared/review/review-statistics-messages';
 import { saveTheme } from './ui-preferences';
 import './settings.css';
 import {
   openingBookProviderLabel,
   useSourceText,
-} from './analysis-source-messages';
+} from '../analysis-source-messages';
 import {
   uiThemes,
   type UiAppearance,
   type UiMode,
   type UiTheme,
-} from './ui-appearance';
-import { useUiAppearanceText } from './ui-appearance-messages';
-import UiAppearancePreview from './UiAppearancePreview';
-import { useVirtualPlayerText } from './virtual-player-messages';
+} from './appearance/ui-appearance';
+import { useUiAppearanceText } from './appearance/ui-appearance-messages';
+import UiAppearancePreview from './appearance/UiAppearancePreview';
+import { useVirtualPlayerText } from '../virtual-player-messages';
 import {
   MyPlayerProfileField,
   useMyPlayerProfileDraft,

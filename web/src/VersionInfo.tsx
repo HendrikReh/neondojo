@@ -7,7 +7,7 @@ import {
   loadEngines,
   type AppVersion,
   type EngineInfo,
-} from './settings-api';
+} from './settings/settings-api';
 import { versionInfoMessages } from './version-info-messages';
 import './version-info.css';
 

@@ -10,7 +10,7 @@ export const errorThresholdLabels = {
   blunder: 'severity.blunder',
   large_blunder: 'severity.very_bad',
 } as const satisfies Record<
-  keyof import('../../configuration-model').ErrorThresholds,
+  keyof import('../../settings/configuration/configuration-model').ErrorThresholds,
   TranslationKey
 >;
 

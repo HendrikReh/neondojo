@@ -25,7 +25,7 @@ import {
 } from './engine-match-messages';
 import { useI18n } from './shared/i18n/i18n';
 import LibraryDialog from './shared/ui/LibraryDialog';
-import { loadEngines, type EngineInfo } from './settings-api';
+import { loadEngines, type EngineInfo } from './settings/settings-api';
 import './engine-match.css';
 
 type Competitor = CreateSeries['a'];
