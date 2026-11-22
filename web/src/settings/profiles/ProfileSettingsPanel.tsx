@@ -86,7 +86,7 @@ export default function ProfileSettingsPanel() {
     {
       title: string;
       message: string;
-      choices: { label: string; action: () => void }[];
+      choices: { label: string; action: () => void; primary?: boolean }[];
     }
   > = {
     switch: {
@@ -95,6 +95,7 @@ export default function ProfileSettingsPanel() {
       choices: [
         {
           label: t('saveSwitch'),
+          primary: true,
           action: () =>
             void run(() => config.activateProfile(selected, 'save_current')),
         },

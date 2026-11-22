@@ -85,7 +85,8 @@ the member and name dialogs focus their field.
 
 **Saved positions** and **All analyzed decisions** switch the Positions
 workspace between the bookmarked collection and a search over every analyzed
-decision of one player. The decision search keeps its filters above a result
+decision of one player. They stay visible while **Similar positions** is open
+and close it. The decision search keeps its filters above a result
 table with a board preview on the right. **Practice results** opens the
 recurring-mistakes practice dialog with the errors of the current page.
 
@@ -105,7 +106,9 @@ Study; after adding positions to a deck, **Study this deck** appears beside
 the transfer outcome.
 
 **All analyzed decisions** uses the same filter card and keeps its filters,
-results and chosen row while the saved positions are open. A row is selected
+results and chosen row while the saved positions are open. Before the first
+search it names **Search decisions** as the next step. The preview of a checker
+decision offers **Add to deck**. A row is selected
 with a click or the arrow keys; Enter or a double-click opens the decision in
 Analysis (checker decisions in **Checker**, cube decisions in **Cube**). The
 **Loss** heading reverses the order.
@@ -146,7 +149,10 @@ when opened, so switching games paints the board without waiting for observed
 rolls; failed requests offer **Try again**. Move history defaults to
 **All moves**. Filter by **All errors** or by a specific grade without changing
 the board selection. Unrated moves remain visible under **All moves**.
-**Cube** reviews cube decisions on the board. Native match and
+**Previous error** and **Next error** sit above the board whenever the
+displayed analysis has matching checker errors.
+**Cube** reviews cube decisions on the board and opens on the next matching
+decision from the board position when none is selected. Native match and
 game statistics are available in **Statistics**. Matches imported with
 irregularities show their **Import notes** count in the analysis header and
 list the read-only **Import notes** above the match or game comment in **Notes**.
@@ -442,7 +448,7 @@ the NeonGammon Python path on the NeonDojo computer.
 
 ## Profiles in navigation
 
-The global header contains the profile switcher with the active name, change marker, and save status. **Manage profiles** opens the **Profiles** category directly in the Settings dialog.
+The global header contains the profile switcher with the active name, change marker, and save status. Warnings and a failed switch collapse into one warning badge beside it, which opens a popover with the details, so the header keeps a single row. Switching from a modified profile offers **Save and switch** as the primary choice. **Manage profiles** opens the **Profiles** category directly in the Settings dialog.
 
 Database selection, search filters, result sorting, the active Study deck, card creation, and analysis filters belong to the browser tab's session. The browser stores columns, column widths, and the analysis board layout locally. Profile switches and reloads preserve these views.
 

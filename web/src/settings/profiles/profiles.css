@@ -38,6 +38,60 @@
   border-radius: 0.4rem;
   box-shadow: 0 4px 20px #0003;
 }
+/* Header notices stay one compact badge so the header keeps a single row. */
+.profile-notices {
+  position: relative;
+  flex: 0 0 auto;
+}
+.profile-notices > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 28px;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: var(--ui-warning-bg);
+  color: var(--ui-warning-text);
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
+  list-style: none;
+  cursor: pointer;
+}
+.profile-notices > summary::-webkit-details-marker {
+  display: none;
+}
+.profile-notices[data-severity='error'] > summary {
+  background: var(--ui-danger-bg);
+  color: var(--ui-danger-text);
+}
+.profile-notices > summary:focus-visible {
+  outline: 3px solid var(--ui-accent);
+  outline-offset: 2px;
+}
+.profile-notices-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  gap: 0.6rem;
+  width: max-content;
+  max-width: min(28rem, 90vw);
+  max-height: 60vh;
+  overflow: auto;
+  padding: 0.6rem 0.75rem;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  border: 1px solid var(--ui-border);
+  border-radius: 0.4rem;
+  box-shadow: 0 4px 20px #0003;
+  font-size: var(--font-size-body);
+  overflow-wrap: anywhere;
+}
+.profile-notices-panel p {
+  margin: 0 0 0.3rem;
+}
 .profile-menu button {
   text-align: left;
   white-space: normal;

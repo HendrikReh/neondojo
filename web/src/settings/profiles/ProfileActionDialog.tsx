@@ -18,7 +18,8 @@ export default function ProfileActionDialog({
   title: string;
   message: string;
   children?: ReactNode;
-  choices: { label: string; action: () => void }[];
+  /** A primary choice is the recommended answer. */
+  choices: { label: string; action: () => void; primary?: boolean }[];
   onCancel: () => void;
   busy?: boolean;
   lockScroll?: boolean;
@@ -58,6 +59,7 @@ export default function ProfileActionDialog({
           <button
             key={choice.label}
             type="button"
+            className={choice.primary ? 'primary' : undefined}
             disabled={busy}
             onClick={choice.action}
           >

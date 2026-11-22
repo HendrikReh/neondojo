@@ -716,8 +716,82 @@ for (const viewport of [
     await expect(page.locator('.candidates tbody tr').first()).toBeVisible();
     await page.getByRole('tab', { name: 'Notes', exact: true }).click();
     await expect(comment).toHaveValue('Desktop draft');
+    // The grid leaves room for the footer, so no analysis tab scrolls the page.
+    for (const tab of ['Checker', 'Statistics', 'Cube', 'Notes', 'Study cards']) {
+      await page.getByRole('tab', { name: tab, exact: true }).click();
+      await expect(
+        page.getByRole('tab', { name: tab, exact: true }),
+      ).toHaveAttribute('aria-selected', 'true');
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.documentElement.scrollHeight - window.innerHeight,
+          ),
+        )
+        .toBeLessThanOrEqual(0);
+      await expect(page.locator('.app-footer')).toBeInViewport();
+    }
   });
 }
+
+test('Checker steps through checker errors without opening Statistics', async ({
+  page,
+}, testInfo) => {
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await page.goto('/');
+  await page
+    .getByLabel('Match file', { exact: true })
+    .setInputFiles('../backend/tests/fixtures/WC2014.xg');
+  const heading = page.locator('.board-heading');
+  await expect(heading).toContainText('Game 1');
+  await expect(
+    page.getByRole('tab', { name: 'Checker', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  const navigation = page
+    .locator('.board-panel')
+    .getByRole('group', { name: 'Review errors', exact: true });
+  await expect(navigation).toContainText('Checker');
+  const next = navigation.getByRole('button', {
+    name: 'Next error',
+    exact: true,
+  });
+  const previous = navigation.getByRole('button', {
+    name: 'Previous error',
+    exact: true,
+  });
+  await expect(next).toHaveAttribute('aria-keyshortcuts', 'E');
+  await expect(previous).toHaveAttribute('aria-keyshortcuts', 'Shift+E');
+  await expect(next).toHaveAttribute('data-shortcut', 'E');
+  const count = navigation.locator('.board-error-count');
+  await expect(count).toHaveText(/^Errors: [1-9]/);
+  // The statistics review filters stay closed.
+  await expect(
+    page.getByRole('button', { name: 'Close statistics selection' }),
+  ).toHaveCount(0);
+  await heading.click();
+  await page.keyboard.press('e');
+  await expect(count).toHaveText(/^Error 1 of \d+/);
+  const first = (await heading.textContent()) ?? '';
+  await page.keyboard.press('e');
+  await expect(count).toHaveText(/^Error 2 of \d+/);
+  await expect(heading).not.toHaveText(first);
+  await page.keyboard.press('Shift+E');
+  await expect(count).toHaveText(/^Error 1 of \d+/);
+  await expect(heading).toHaveText(first);
+  await expect(
+    page.getByRole('tab', { name: 'Checker', exact: true }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.board-panel .board')).toBeInViewport({
+    ratio: 0.99,
+  });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollHeight - window.innerHeight,
+    ),
+  ).toBeLessThanOrEqual(0);
+  await page.screenshot({ path: testInfo.outputPath('checker-errors.png') });
+});
 
 test('a background position analysis refreshes its history row after navigating to another move', async ({
   page,

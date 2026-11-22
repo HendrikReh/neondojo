@@ -6,7 +6,8 @@ import {
   openPositionCalculation,
   submitFullMatchAnalysis,
 } from './analysis-controls';
-import { test, expect, type Page } from './test';
+import { backendTest, test, expect, type Page } from './test';
+import { profileBackend } from './profile-backend';
 import { readFileSync } from 'node:fs';
 
 const themes: { id: string; name: string }[] = [
@@ -815,3 +816,95 @@ for (const plies of [4, 5]) {
     ).toHaveValue(String(plies));
   });
 }
+
+backendTest(
+  'the header saves a modified profile before switching and keeps notices in one badge',
+  async ({ page }, testInfo) => {
+    const backend = await profileBackend(page);
+    await page.route('**/api/configuration/availability', (route) =>
+      route.fulfill({
+        json: {
+          revision: backend.state.revision,
+          valid: false,
+          issues: [
+            {
+              path: 'opening_book.path',
+              code: 'unavailable',
+              message: 'The opening book file is missing on this computer.',
+            },
+            {
+              path: 'opening_book.xg_path',
+              code: 'unavailable',
+              message: 'The XG opening book file is missing on this computer.',
+            },
+          ],
+        },
+      }),
+    );
+    await page.setViewportSize({ width: 1800, height: 1169 });
+    await page.goto('/');
+    const header = page.locator('.app-header');
+    const notices = header.getByRole('group', {
+      name: 'Profile notices: 2',
+    });
+    const badge = header.locator('.profile-notices > summary');
+    await expect(badge).toHaveAccessibleName('Profile notices: 2');
+    await expect(notices).toBeHidden();
+    // The header stays one row: the badge sits beside the profile trigger.
+    const trigger = page.getByRole('button', { name: /Profile: Standard/ });
+    const tabs = header.getByRole('tablist').first();
+    const [triggerBox, badgeBox, tabsBox] = await Promise.all([
+      trigger.boundingBox(),
+      badge.boundingBox(),
+      tabs.boundingBox(),
+    ]);
+    expect(Math.abs(badgeBox!.y - triggerBox!.y)).toBeLessThan(
+      triggerBox!.height,
+    );
+    expect(tabsBox!.y).toBeLessThan(triggerBox!.y + triggerBox!.height);
+    expect((await header.boundingBox())!.height).toBeLessThanOrEqual(80);
+    await badge.focus();
+    await page.keyboard.press('Enter');
+    await expect(notices).toBeVisible();
+    await expect(notices).toContainText(
+      'opening_book.path: The opening book file is missing on this computer.',
+    );
+    await page.screenshot({ path: testInfo.outputPath('header-notices.png') });
+    await page.keyboard.press('Escape');
+    await expect(notices).toBeHidden();
+    await expect(badge).toBeFocused();
+
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page
+      .getByLabel('Player name', { exact: true })
+      .fill('Saved from the header');
+    await applyAndCloseSettings(
+      page.getByRole('dialog', { name: 'Settings', exact: true }),
+    );
+    await expect(trigger).toContainText('modified');
+    await trigger.click();
+    await page
+      .getByRole('menuitemradio', { name: 'Deep analysis', exact: true })
+      .click();
+    const switchDialog = page.getByRole('dialog', {
+      name: 'Switch profile',
+      exact: true,
+    });
+    const save = switchDialog.getByRole('button', {
+      name: 'Save and switch',
+      exact: true,
+    });
+    await expect(save).toHaveClass(/primary/);
+    await save.click();
+    await expect(switchDialog).toBeHidden();
+    await expect(
+      page.getByRole('button', { name: /Profile: Deep analysis/ }),
+    ).not.toContainText('modified');
+    expect(backend.profiles[0].configuration.general.player_name).toBe(
+      'Saved from the header',
+    );
+    expect(
+      backend.calls.some((call) => call.body?.source_action === 'save_current'),
+    ).toBe(true);
+  },
+);

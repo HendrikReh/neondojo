@@ -21,6 +21,10 @@ import {
   useWorkspaceLayout,
 } from '../../shared/hooks/useWorkspaceSession';
 import PositionBookmarkButton from './PositionBookmarkButton';
+import DecisionDeckAction, {
+  DecisionDeckStatus,
+  type DecisionDeckOutcome,
+} from './DecisionDeckAction';
 import { usePositionText } from './position-browser-messages';
 import { SearchResultRow } from '../../shared/ui/SearchResultList';
 import { useGamePlanText } from '../analysis/game-plans/game-plan-messages';
@@ -128,6 +132,8 @@ export default function DecisionSearch({
   revision,
   bookmarkRevision,
   onBookmarkChanged,
+  deckRevision,
+  onDeckChanged,
   theme,
   onOpenPosition,
   onOpenCubeDecision,
@@ -136,6 +142,8 @@ export default function DecisionSearch({
   revision: number;
   bookmarkRevision: number;
   onBookmarkChanged: () => void;
+  deckRevision: number;
+  onDeckChanged: () => void;
   theme: Theme;
   onOpenPosition: (id: string) => void;
   /** Opens a cube decision, which has no position of its own, in its game. */
@@ -178,6 +186,7 @@ export default function DecisionSearch({
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string>();
   const [practice, setPractice] = useState<MistakeQuestion[]>();
+  const [deckOutcome, setDeckOutcome] = useState<DecisionDeckOutcome>();
   const practiceButton = useRef<HTMLButtonElement>(null);
   // "My player profile" fills the player until one is chosen here.
   const playerChosen = useRef(false);
@@ -522,6 +531,11 @@ export default function DecisionSearch({
         </form>
       </div>
 
+      {result.status === 'idle' && !loading && !!draft.player && (
+        <p className="position-empty decision-search-idle" role="status">
+          {t('idle', { action: t('search'), player: draft.player })}
+        </p>
+      )}
       {loading && result.status !== 'ready' && (
         <p role="status">{t('loading')}</p>
       )}
@@ -725,6 +739,22 @@ export default function DecisionSearch({
                             onChanged={onBookmarkChanged}
                           />
                         )}
+                        {hasPosition(preview) && preview.kind === 'checker' && (
+                          <DecisionDeckAction
+                            positionId={preview.position.id}
+                            analysisId={
+                              preview.reference.job_id
+                                ? `job:${preview.reference.job_id}`
+                                : undefined
+                            }
+                            revision={deckRevision}
+                            onAdded={(outcome) => {
+                              setDeckOutcome(outcome);
+                              onDeckChanged();
+                            }}
+                            onDeckCreated={onDeckChanged}
+                          />
+                        )}
                         <ActionButton
                           type="button"
                           icon="analysis"
@@ -735,6 +765,10 @@ export default function DecisionSearch({
                       </div>
                     )}
                   </div>
+                  {hasPosition(preview) &&
+                    deckOutcome?.positionId === preview.position.id && (
+                      <DecisionDeckStatus outcome={deckOutcome} />
+                    )}
                   <CubeContextLine
                     matchId={preview.position.gnubg_match_id}
                     players={preview.players}

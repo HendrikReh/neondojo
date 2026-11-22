@@ -1077,6 +1077,14 @@ const rows = {
     'Tutte le schede',
     'Wszystkie fiszki',
   ],
+  notices: [
+    'Profile notices: {count}',
+    'Profilhinweise: {count}',
+    'Avisos del perfil: {count}',
+    'Avis du profil : {count}',
+    'Avvisi del profilo: {count}',
+    'Powiadomienia profilu: {count}',
+  ],
   acknowledge: [
     'Understood',
     'Verstanden',
