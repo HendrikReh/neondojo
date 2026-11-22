@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import ActionButton from './shared/ui/ActionButton';
-import type { Match } from './shared/api/api';
-import { useI18n } from './shared/i18n/i18n';
-import { AppError } from './shared/i18n/i18n-core';
-import LibraryDialog from './shared/ui/LibraryDialog';
-import type { Database } from './workspaces/library/library-api';
-import { useLibraryText } from './workspaces/library/library-messages';
+import ActionButton from '../../shared/ui/ActionButton';
+import type { Match } from '../../shared/api/api';
+import { useI18n } from '../../shared/i18n/i18n';
+import { AppError } from '../../shared/i18n/i18n-core';
+import LibraryDialog from '../../shared/ui/LibraryDialog';
+import type { Database } from '../library/library-api';
+import { useLibraryText } from '../library/library-messages';
 import { usePlayerText } from './player-directory-messages';
 import { usePlayerDetails } from './PlayerProfileDialogs';
 import { aliasLabel, PlayerResults } from './PlayerResults';

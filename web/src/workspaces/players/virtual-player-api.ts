@@ -1,5 +1,5 @@
-import { request } from './shared/api/api';
-import type { components } from './generated-api';
+import { request } from '../../shared/api/api';
+import type { components } from '../../generated-api';
 
 type Schema = components['schemas'];
 export type VirtualPlayerProfile = Schema['VirtualPlayerProfile'];

@@ -83,7 +83,7 @@ import {
 } from './appearance/ui-appearance';
 import { useUiAppearanceText } from './appearance/ui-appearance-messages';
 import UiAppearancePreview from './appearance/UiAppearancePreview';
-import { useVirtualPlayerText } from '../virtual-player-messages';
+import { useVirtualPlayerText } from '../workspaces/players/virtual-player-messages';
 import {
   MyPlayerProfileField,
   useMyPlayerProfileDraft,

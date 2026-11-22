@@ -1,17 +1,20 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import { request } from './shared/api/api';
-import { cursorSearchParams } from './shared/api/cursor-search';
-import type { components } from './generated-api';
-import { useI18n } from './shared/i18n/i18n';
-import LibrarySortHeading from './shared/ui/LibrarySortHeading';
+import { request } from '../../shared/api/api';
+import { cursorSearchParams } from '../../shared/api/cursor-search';
+import type { components } from '../../generated-api';
+import { useI18n } from '../../shared/i18n/i18n';
+import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';
 import { usePlayerText } from './player-directory-messages';
 import { useVirtualPlayerText } from './virtual-player-messages';
-import { NumberedSearchPagination } from './shared/ui/SearchPagination';
+import { NumberedSearchPagination } from '../../shared/ui/SearchPagination';
 import {
   SearchResultRow,
   SearchResultTable,
-} from './shared/ui/SearchResultList';
-import { useSearchPages, type SearchPage } from './shared/hooks/useSearchPages';
+} from '../../shared/ui/SearchResultList';
+import {
+  useSearchPages,
+  type SearchPage,
+} from '../../shared/hooks/useSearchPages';
 
 type Schema = components['schemas'];
 type PlayerSort = Schema['PlayerSort'];

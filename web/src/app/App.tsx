@@ -37,8 +37,8 @@ import {
 import AnalysisWorkspace, {
   type AnalysisDetail,
 } from '../workspaces/analysis/AnalysisWorkspace';
-import PlayerDirectory from '../PlayerDirectory';
-import { usePlayerText } from '../player-directory-messages';
+import PlayerDirectory from '../workspaces/players/PlayerDirectory';
+import { usePlayerText } from '../workspaces/players/player-directory-messages';
 import MatchDatabase, {
   type PositionSearchRequest,
 } from '../workspaces/library/MatchDatabase';
