@@ -479,3 +479,29 @@ async fn loads_pre_play_mode_profiles_without_changing_saved_preferences(pool: P
     assert_eq!(status, 200, "{result}");
     assert_eq!(result, loaded);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn changing_only_the_play_engine_verifies_its_installation(pool: PgPool) {
+    let (app, state) = profile_support::initialized(&pool, false).await;
+    let mut config = state["current_configuration"].clone();
+    assert_eq!(config["play"]["engine"], "gnubg");
+    config["play"]["engine"] = json!("bgsage");
+    let (code, error) = call(
+        app.clone(),
+        "PUT",
+        "/api/configuration",
+        json!({"expected_revision":state["revision"],"configuration":config}),
+    )
+    .await;
+    assert_eq!(code, 422, "{error}");
+    assert!(
+        error["issues"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|issue| issue["path"] == "play.engine" && issue["code"] == "engine_unavailable"),
+        "{error}"
+    );
+    let (_, after) = call(app, "GET", "/api/configuration", Value::Null).await;
+    assert_eq!(after, state);
+}

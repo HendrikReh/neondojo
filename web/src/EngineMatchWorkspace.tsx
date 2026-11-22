@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { engineDisplayName } from './engine-version';
 import { depthLabel } from './analysis-depth';
 import type { Match } from './api';
 import { formatBenchmarkDuration } from './benchmark-duration';
@@ -58,8 +59,7 @@ const isMoney = (config: { format?: Format }) =>
 const unitLabel = (money: boolean, paired: boolean): EngineMatchLabel =>
   money ? (paired ? 'blockPairs' : 'blocks') : paired ? 'pairs' : 'matches';
 
-const engineName = (id: string) =>
-  id === 'gnubg' ? 'GNUbg' : id === 'bgsage' ? 'NeonGammon' : id;
+const engineName = engineDisplayName;
 
 const active = (status: string) => status === 'queued' || status === 'running';
 const statusLabel = (status: string, text: Text) => {

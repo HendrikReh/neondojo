@@ -255,8 +255,9 @@ pub(crate) async fn update(
     revision(input.expected_revision, before.revision)?;
     if value(&config) != value(&before.current_configuration) {
         let old = &before.current_configuration;
-        let engine = value(&config)["analysis"]["engine"] != value(old)["analysis"]["engine"]
+        let engine = config.analysis.engine != old.analysis.engine
             || config.analysis.plies != old.analysis.plies
+            || config.play.engine != old.play.engine
             || config.play.plies != old.play.plies
             || config.play.top_two != old.play.top_two;
         let book = value(&config)["opening_book"] != value(old)["opening_book"];

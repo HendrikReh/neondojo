@@ -158,9 +158,7 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             "Threshold must be greater than zero and at most one",
         ));
     }
-    let options: Value =
-        serde_json::from_str(include_str!("../../../shared/configuration-options.json"))
-            .expect("valid embedded configuration options");
+    let options = &*super::OPTIONS;
     if !options["board_themes"].as_array().is_some_and(|values| {
         values
             .iter()

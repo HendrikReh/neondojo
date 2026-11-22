@@ -380,7 +380,11 @@ for (const [width, locale] of [
     });
     const a1 = game(id, a, 1, [3, 0], [3, 8], true);
     const a2 = game(other, a, 2, [3, 8], [3, 8], true);
-    const b1 = game(bReport, b, 1, [0, 1], [0, 1], false);
+    const b1 = {
+      ...game(bReport, b, 1, [0, 1], [0, 1], false),
+      engine_id: 'bgsage',
+      bot_name: 'NeonGammon',
+    };
     await page.route('**/api/study/reports*', (route) => {
       const after = new URL(route.request().url()).searchParams.get('after');
       return route.fulfill({
@@ -410,7 +414,7 @@ for (const [width, locale] of [
     await expect(heading).toContainText(
       locale === 'de' ? 'Gesamtpunktestand' : 'Total score',
     );
-    await expect(heading).toContainText(/3\s*:\s*8/);
+    await expect(heading).toContainText(/Hendrik 3\s*:\s*8 GNUbg/);
     await expect(heading).toContainText(locale === 'de' ? 'Beendet' : 'Ended');
     const rows = first.locator('tbody tr');
     await expect(rows).toHaveCount(2);
@@ -429,7 +433,7 @@ for (const [width, locale] of [
     await expect(page.locator('.study-money-session')).toHaveCount(2);
     const second = page.locator(`.study-money-session[data-session-id="${b}"]`);
     await expect(second.locator('.study-money-session-header')).toContainText(
-      /0\s*:\s*1/,
+      /Hendrik 0\s*:\s*1 NeonGammon/,
     );
     await expect(second.locator('.study-money-session-header')).toContainText(
       locale === 'de' ? 'Laufend' : 'Ongoing',

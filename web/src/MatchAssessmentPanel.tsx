@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { engineDisplayName } from './engine-version';
 import ActionButton from './ActionButton';
 import LearningDecisionPreview from './LearningDecisionPreview';
 import { humanReviewDecisions } from './learning-review-positions';
@@ -104,7 +105,7 @@ export default function MatchAssessmentPanel({
     setSelected(reference);
   };
   const output = state?.job?.result;
-  const bot = session.engine.id === 'bgsage' ? 'NeonGammon' : 'GNUbg';
+  const bot = engineDisplayName(session.engine.id);
   const failed = state?.job?.status === 'failed' ? state.job.error : undefined;
   const errorKey =
     failed === 'invalid_report'

@@ -253,11 +253,7 @@ impl PlaySession {
             .unwrap_or(&self.engine.version)
     }
     fn bot_name(&self) -> &str {
-        if self.engine.id == "bgsage" {
-            "NeonGammon"
-        } else {
-            "GNUbg"
-        }
+        crate::engines::display_name(&self.engine.id).unwrap_or("GNUbg")
     }
 }
 #[derive(Debug, Deserialize, ToSchema)]

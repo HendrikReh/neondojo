@@ -31,7 +31,14 @@ pub struct StudyReportSummary {
     pub money_session_ended: bool,
     pub library_match_id: Option<Uuid>,
     pub game_no: Option<i32>,
+    /// Library match name, or "<human> · <bot>" when the match has no name.
+    #[sqlx(default)]
     pub name: String,
+    /// Engine ID the session was played against (`gnubg` or `bgsage`).
+    pub engine_id: String,
+    /// User-facing name of that engine, for example "NeonGammon".
+    #[sqlx(default)]
+    pub bot_name: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub human_player: i32,
@@ -66,8 +73,21 @@ struct Cursor {
 struct ReportRow {
     #[sqlx(flatten)]
     report: StudyReportSummary,
+    library_name: Option<String>,
     page_id: Uuid,
     page_updated_at: DateTime<Utc>,
+}
+impl ReportRow {
+    fn into_summary(self) -> StudyReportSummary {
+        let mut report = self.report;
+        report.bot_name = crate::engines::display_name(&report.engine_id)
+            .unwrap_or("GNUbg")
+            .to_owned();
+        report.name = self
+            .library_name
+            .unwrap_or_else(|| format!("{} · {}", report.human_name, report.bot_name));
+        report
+    }
 }
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
@@ -135,7 +155,8 @@ async fn list_reports(
         ARRAY[(coalesce(live.state,s.state)->'scores'->>0)::int,(coalesce(live.state,s.state)->'scores'->>1)::int] AS session_scores,
         coalesce((live.state->>'money_session_ended')::bool,false) AS money_session_ended,
         s.library_match_id,nullif(s.game_no,0) AS game_no,
-        coalesce(nullif(m.display_name,''), (s.state->>'human_name') || ' · GNUbg') AS name,
+        nullif(m.display_name,'') AS library_name,
+        coalesce(s.state->'engine'->>'id','gnubg') AS engine_id,
         s.created_at,s.updated_at,(s.state->>'human_player')::int AS human_player,
         s.state->>'human_name' AS human_name,(s.state->>'match_length')::int AS match_length,
         ARRAY[(s.state->'scores'->>0)::int,(s.state->'scores'->>1)::int] AS scores,
@@ -184,7 +205,7 @@ async fn list_reports(
     } else {
         None
     };
-    let items = rows.into_iter().map(|row| row.report).collect();
+    let items = rows.into_iter().map(ReportRow::into_summary).collect();
     Ok(Json(StudyReportPage { items, next_cursor }))
 }
 #[utoipa::path(get,path="/api/study/reports/{id}", params(("id"=Uuid,Path)), responses((status=200,body=PlaySession),(status=404,body=ErrorBody)),tag="Study")]

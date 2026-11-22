@@ -151,6 +151,35 @@ async fn validates_archive_queries_and_handles_empty_missing_and_legacy_reports(
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn reports_name_the_engine_the_session_was_played_against(pool: PgPool) {
+    let gnubg = Uuid::new_v4();
+    insert(&pool, &snapshot(gnubg), 0).await;
+    let sage = Uuid::new_v4();
+    let mut state = snapshot(sage);
+    state["engine"] = json!({"id":"bgsage","version":"NeonGammon 3.1.0","plies":2});
+    insert(&pool, &state, 1).await;
+    let (status, page) = get(&app(pool), "/api/study/reports").await;
+    assert_eq!(status, 200, "{page}");
+    let item = |id: Uuid| {
+        page["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["id"] == json!(id))
+            .unwrap()
+            .clone()
+    };
+    let sage = item(sage);
+    assert_eq!(sage["engine_id"], "bgsage");
+    assert_eq!(sage["bot_name"], "NeonGammon");
+    assert_eq!(sage["name"], "Archive learner · NeonGammon");
+    let gnubg = item(gnubg);
+    assert_eq!(gnubg["engine_id"], "gnubg");
+    assert_eq!(gnubg["bot_name"], "GNUbg");
+    assert_eq!(gnubg["name"], "Archive learner · GNUbg");
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn reports_remain_accessible_after_their_library_match_is_deleted(pool: PgPool) {
     let id = Uuid::new_v4();
     let match_id = Uuid::new_v4();

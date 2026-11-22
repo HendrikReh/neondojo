@@ -397,7 +397,7 @@ async fn enqueue(
             .bind(Uuid::new_v4()).bind(SqlJson(&machine)).bind(&version).bind(&path).bind(plies)
             .bind(analysis.as_ref().map(SqlJson)).bind(analysis.as_ref().map(|reference| SqlJson(&reference.protocol)))
             .bind(analysis.as_ref().map(|_| REFERENCE_SGF)).bind(play.as_ref().map(SqlJson))
-            .bind(engine_id).bind(if engine_id == "bgsage" {"NeonGammon"} else {"GNUbg"}).bind(&saved_snapshot)
+            .bind(engine_id).bind(crate::engines::display_name(engine_id).unwrap_or("GNUbg")).bind(&saved_snapshot)
             .fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
         runs.push(run);
     }

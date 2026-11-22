@@ -26,7 +26,7 @@ macro_rules! string_enum {
 string_enum!(ConfigurationLocale { De=>"de", En=>"en", Es=>"es", Fr=>"fr", It=>"it", Pl=>"pl" });
 string_enum!(ConfigurationEngine { Gnubg=>"gnubg", OpenSage=>"bgsage" });
 
-static OPTIONS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
+pub(crate) static OPTIONS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
     serde_json::from_str(include_str!("../../shared/configuration-options.json"))
         .expect("valid embedded configuration options")
 });

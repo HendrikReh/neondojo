@@ -244,11 +244,11 @@ export default function StudyReports({
                       <strong>
                         {report.human_player === 0
                           ? report.human_name
-                          : 'GNUbg'}{' '}
+                          : report.bot_name}{' '}
                         {report.session_scores.join(' : ')}{' '}
                         {report.human_player === 1
                           ? report.human_name
-                          : 'GNUbg'}
+                          : report.bot_name}
                       </strong>
                       <span>
                         {t(report.money_session_ended ? 'ended' : 'ongoing')}

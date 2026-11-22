@@ -23544,6 +23544,8 @@
           "session_scores",
           "money_session_ended",
           "name",
+          "engine_id",
+          "bot_name",
           "created_at",
           "updated_at",
           "human_player",
@@ -23562,9 +23564,17 @@
           "assisted": {
             "type": "boolean"
           },
+          "bot_name": {
+            "type": "string",
+            "description": "User-facing name of that engine, for example \"NeonGammon\"."
+          },
           "created_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "engine_id": {
+            "type": "string",
+            "description": "Engine ID the session was played against (`gnubg` or `bgsage`)."
           },
           "first_attempt_rating": {
             "type": [
@@ -23606,7 +23616,8 @@
             "type": "boolean"
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Library match name, or \"<human> · <bot>\" when the match has no name."
           },
           "play_mode": {
             "type": "string"

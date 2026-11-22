@@ -62,7 +62,8 @@ pub(super) async fn run_one(pool: &PgPool) -> Result<bool> {
 
 async fn claim(pool: &PgPool, token: Uuid) -> Result<Option<Series>> {
     let mut tx = pool.begin().await?;
-    let owns: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(91432302)")
+    let owns: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
+        .bind(crate::advisory_locks::ENGINE_MATCH_CLAIM)
         .fetch_one(&mut *tx)
         .await?;
     if !owns {
@@ -219,10 +220,8 @@ fn stored_cost(side: SideCost) -> Result<(i64, i64, i32)> {
 }
 
 fn competitor_label(side: &Competitor) -> Result<String> {
-    let name = match side.engine_id.as_str() {
-        "gnubg" => "GNUbg",
-        "bgsage" => "NeonGammon",
-        _ => bail!("Unsupported saved duel engine {}", side.engine_id),
+    let Some(name) = crate::engines::display_name(&side.engine_id) else {
+        bail!("Unsupported saved duel engine {}", side.engine_id);
     };
     Ok(format!("{name} {}-ply", side.plies))
 }

@@ -6,6 +6,11 @@ const namedVersionPattern = new RegExp(
   'i',
 );
 
+/** User-facing short name for a stored engine ID; `bgsage` is NeonGammon. */
+export function engineDisplayName(id: string) {
+  return id === 'gnubg' ? 'GNUbg' : id === 'bgsage' ? 'NeonGammon' : id;
+}
+
 export function shortEngineVersion(
   engine: 'gnubg' | 'bgsage',
   details: string | null,

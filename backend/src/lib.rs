@@ -1,3 +1,4 @@
+mod advisory_locks;
 pub mod api;
 pub mod cube_context;
 pub mod engine;

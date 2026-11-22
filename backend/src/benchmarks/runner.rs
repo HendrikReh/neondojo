@@ -21,7 +21,8 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
     let mut tx = state.pool.begin().await?;
     // The transaction lock also makes concurrent workers observe the unique
     // running row before claiming another run. It is never held during analysis.
-    let owns: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock(91432301)")
+    let owns: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
+        .bind(crate::advisory_locks::BENCHMARK_CLAIM)
         .fetch_one(&mut *tx)
         .await?;
     if !owns {

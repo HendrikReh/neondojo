@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { engineDisplayName } from './engine-version';
 import type { Theme } from './themes';
 import {
   humanReviewDecisions,
@@ -47,8 +48,9 @@ export default function PlayLearningReview({
       .get(entries[next].key)
       ?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
-  const white = session.human_player === 0 ? session.human_name : 'GNUbg';
-  const black = session.human_player === 1 ? session.human_name : 'GNUbg';
+  const bot = engineDisplayName(session.engine.id);
+  const white = session.human_player === 0 ? session.human_name : bot;
+  const black = session.human_player === 1 ? session.human_name : bot;
   if (!result) return null;
   const number = (value: number) =>
     formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });

@@ -14,6 +14,8 @@ export const summary = (reportId = id, name = 'Hendrik · GNUbg') => ({
   first_attempt_rating: 4.5,
   assisted: true,
   analysis_plies: 3,
+  engine_id: 'gnubg',
+  bot_name: 'GNUbg',
 });
 export function detail(reportId = id) {
   return {

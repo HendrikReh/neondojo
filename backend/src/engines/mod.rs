@@ -18,6 +18,16 @@ use utoipa::ToSchema;
 /// `SUPPORTED_VERSIONS` of `tools/probe_open_sage.py`.
 pub const SUPPORTED_SAGE_PACKAGE_VERSIONS: [&str; 2] = ["3.0.0", "3.1.0"];
 
+/// User-facing short name for a stored engine ID. The internal NeonGammon ID
+/// remains `bgsage`; this is the one place that maps it to the display name.
+pub(crate) fn display_name(engine_id: &str) -> Option<&'static str> {
+    match engine_id {
+        "gnubg" => Some("GNUbg"),
+        "bgsage" => Some("NeonGammon"),
+        _ => None,
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct SageSnapshot {
     pub python: String,

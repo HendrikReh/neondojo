@@ -116,7 +116,8 @@ async fn claim(state: &AppState) -> Result<Option<Claimed>> {
     let token = Uuid::new_v4();
     let mut tx = state.pool.begin().await?;
     // Serialize claims so concurrent claimers observe each other's running rows.
-    sqlx::query("SELECT pg_advisory_xact_lock(91432302)")
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(crate::advisory_locks::ANALYSIS_JOB_CLAIM)
         .execute(&mut *tx)
         .await?;
     let expired: Vec<Uuid> = sqlx::query_scalar("UPDATE jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END, error=CASE WHEN attempts>=3 THEN 'Worker lease expired after 3 attempts' ELSE NULL END, lease_token=NULL, lease_until=NULL, progress=CASE WHEN kind='match' THEN progress ELSE 0 END, updated_at=now() WHERE status='running' AND lease_until<now() RETURNING id")

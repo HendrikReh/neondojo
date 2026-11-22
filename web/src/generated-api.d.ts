@@ -6135,8 +6135,12 @@ export interface components {
             /** Format: int32 */
             analysis_plies: number;
             assisted: boolean;
+            /** @description User-facing name of that engine, for example "NeonGammon". */
+            bot_name: string;
             /** Format: date-time */
             created_at: string;
+            /** @description Engine ID the session was played against (`gnubg` or `bgsage`). */
+            engine_id: string;
             /** Format: double */
             first_attempt_rating?: number | null;
             /** Format: int32 */
@@ -6151,6 +6155,7 @@ export interface components {
             /** Format: int32 */
             match_length: number;
             money_session_ended: boolean;
+            /** @description Library match name, or "<human> · <bot>" when the match has no name. */
             name: string;
             play_mode: string;
             scores: number[];
