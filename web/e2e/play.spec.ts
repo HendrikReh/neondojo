@@ -1,4 +1,4 @@
-import type { PlaySession } from '../src/play-api';
+import type { PlaySession } from '../src/workspaces/play/play-api';
 import { eitherOrder, joinedThirteenToEight } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { rollDice, doubleCube, passDice } from './play-board-actions';

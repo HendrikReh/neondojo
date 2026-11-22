@@ -1,4 +1,4 @@
-import type { PlayDecision } from '../src/play-api';
+import type { PlayDecision } from '../src/workspaces/play/play-api';
 import { eitherOrder } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { test, expect } from './test';

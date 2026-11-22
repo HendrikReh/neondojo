@@ -1,8 +1,11 @@
 import { eitherOrder } from './play-turn-fixtures';
 import { type Page, type Route } from '@playwright/test';
-import { applySteps } from '../src/play-state';
-import { nativeSteps } from '../src/play-sound-events';
-import type { PlaySession, PlayReviewHistory } from '../src/play-api';
+import { applySteps } from '../src/shared/board/play-state';
+import { nativeSteps } from '../src/shared/board/play-sound-events';
+import type {
+  PlaySession,
+  PlayReviewHistory,
+} from '../src/workspaces/play/play-api';
 export const historySessionId = '7c390ba7-76a1-44f0-a041-ae982f6d1363';
 const id = historySessionId;
 const initial = [

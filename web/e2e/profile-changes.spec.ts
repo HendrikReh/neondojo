@@ -1,7 +1,7 @@
 import { applyAndCloseSettings } from './settings-actions';
 import { backendTest as test, expect } from './test';
 import { profileBackend } from './profile-backend';
-import { defaultConfiguration } from '../src/configuration-model';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
 for (const { locale, width, labels } of [
   {

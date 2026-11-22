@@ -1,6 +1,6 @@
 import { backendTest as test, expect } from './test';
 import { profileBackend } from './profile-backend';
-import { configurationJournalKey } from '../src/configuration-store';
+import { configurationJournalKey } from '../src/settings/configuration/configuration-store';
 
 test('Apply changes the visible board despite an older pending configuration', async ({
   page,

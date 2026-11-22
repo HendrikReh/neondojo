@@ -4,7 +4,7 @@ import {
   joinedThirteenToEight,
 } from './play-turn-fixtures';
 import { test, expect } from './test';
-import type { PlaySession } from '../src/play-api';
+import type { PlaySession } from '../src/workspaces/play/play-api';
 const id = 'f23dfdc5-465c-4217-92d8-6c034296a32c';
 for (const config of [
   { human: 0, direction: 'right', theme: 'forest' },

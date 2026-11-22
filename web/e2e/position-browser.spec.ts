@@ -5,7 +5,7 @@ import {
   expectCompactPositionRow,
   showPositionColumns,
 } from './position-row-layout';
-import { POSITION_COLUMNS } from '../src/position-table-columns';
+import { POSITION_COLUMNS } from '../src/workspaces/positions/position-table-columns';
 test.use({ actionTimeout: 10000 });
 test('header omits import while the match database retains working file import', async ({
   page,

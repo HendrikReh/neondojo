@@ -5,8 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { PlaySession } from '../src/play-api';
-import type { LibraryMatch } from '../src/library-api';
+import type { PlaySession } from '../src/workspaces/play/play-api';
+import type { LibraryMatch } from '../src/workspaces/library/library-api';
 const archivedMatches = new Map<string, string>();
 async function archivedMatch(page: Page, session: PlaySession) {
   const response = await page.request.get(
@@ -23,7 +23,10 @@ async function archivedMatch(page: Page, session: PlaySession) {
   expect(entry.source_available).toBe(true);
   return entry;
 }
-import { relativePoint, type CheckerStep } from '../src/play-state';
+import {
+  relativePoint,
+  type CheckerStep,
+} from '../src/shared/board/play-state';
 
 /** GNUbg writes its own level (one below NeonDojo's 1-ply = raw net) into the SGF. */
 const gnubgLevel = (plies: number) => plies - 1;

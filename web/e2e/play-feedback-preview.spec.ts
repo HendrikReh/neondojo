@@ -4,7 +4,7 @@ import {
   historyFixture,
   historySessionId as id,
 } from './play-history-review-helpers';
-import { nativeSteps } from '../src/play-sound-events';
+import { nativeSteps } from '../src/shared/board/play-sound-events';
 const decisionId = '56e78413-1d0c-45ed-bcc9-43e48968cc09';
 async function fixture(page: Page, mode = 'coach', human = 0, revealed = true) {
   const base = await historyFixture(page, human);

@@ -1,5 +1,5 @@
 import type { components } from '../src/generated-api';
-import { nativeSteps } from '../src/play-sound-events';
+import { nativeSteps } from '../src/shared/board/play-sound-events';
 
 export function checkerPath(
   dice: number[],

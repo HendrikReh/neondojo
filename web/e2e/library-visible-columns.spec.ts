@@ -1,5 +1,5 @@
 import { expect, test, type Page } from './test';
-import { LIBRARY_COLUMNS } from '../src/library-columns';
+import { LIBRARY_COLUMNS } from '../src/workspaces/library/library-columns';
 test.use({ actionTimeout: 10000, viewport: { width: 1800, height: 1169 } });
 
 async function fixture(page: Page) {

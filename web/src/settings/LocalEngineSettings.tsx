@@ -1,0 +1,263 @@
+import configurationOptions from '../../../shared/configuration-options.json' with { type: 'json' };
+import EngineLabel from '../shared/engine/EngineLabel';
+import ActionButton from '../shared/ui/ActionButton';
+import OpenSageInstallation, {
+  type useOpenSageInstallation,
+} from './OpenSageInstallation';
+import type { AppSettings, EngineInfo } from './settings-api';
+import { useSettingsText } from './settings-messages';
+
+export type CheckState =
+  { path: string; version: string } | { path: string; error: unknown } | null;
+
+function ParallelJobsField({
+  id,
+  value,
+  onChange,
+  t,
+}: {
+  id: string;
+  value: number | null;
+  onChange: (value: number | null) => void;
+  t: ReturnType<typeof useSettingsText>;
+}) {
+  const { min, max } = configurationOptions.parallel_analysis_jobs;
+  const retained = value != null && (value < min || value > max);
+  const labelId = `${id}-parallel-jobs-label`;
+  const helpId = `${id}-parallel-jobs-help`;
+  return (
+    <>
+      <label className="settings-field settings-parallel-jobs">
+        <span className="settings-thread-label">
+          <span id={labelId}>{t('parallelAnalysisJobs')}</span>
+          <span className="settings-help">
+            {t('configurableThreadRange', { min, max })}
+            {retained && <> {t('retainedThreadCount', { count: value })}</>}
+          </span>
+        </span>
+        <select
+          value={value ?? ''}
+          aria-labelledby={labelId}
+          aria-describedby={helpId}
+          onChange={(event) =>
+            onChange(
+              event.target.value === '' ? null : Number(event.target.value),
+            )
+          }
+        >
+          <option value="">{t('defaultParallelJobs')}</option>
+          {retained && (
+            <option value={value} disabled>
+              {value}
+            </option>
+          )}
+          {Array.from({ length: max - min + 1 }, (_, index) => min + index).map(
+            (jobs) => (
+              <option key={jobs} value={jobs}>
+                {jobs}
+              </option>
+            ),
+          )}
+        </select>
+      </label>
+      <p className="settings-help" id={helpId}>
+        {t('parallelAnalysisJobsHelp')}
+      </p>
+    </>
+  );
+}
+
+/** Local engine installation: GNUbg path check, NeonGammon, threads and jobs. */
+export default function LocalEngineSettings({
+  id,
+  draft,
+  update,
+  engines,
+  check,
+  checking,
+  gnubgEdited,
+  onCheck,
+  onInstallationEdited,
+  diagnostic,
+  sage,
+  onVerified,
+}: {
+  id: string;
+  draft: AppSettings;
+  update: (values: Partial<AppSettings>) => void;
+  engines: EngineInfo[];
+  check: CheckState;
+  checking: boolean;
+  gnubgEdited: boolean;
+  onCheck: () => void;
+  onInstallationEdited: () => void;
+  diagnostic: (error: unknown) => string;
+  sage: ReturnType<typeof useOpenSageInstallation>;
+  onVerified: () => void;
+}) {
+  const t = useSettingsText();
+  const engine = engines.find(({ id }) => id === 'gnubg');
+  return (
+    <details className="settings-engine-setup">
+      <summary>
+        <span>{t('localEngines')}</span>
+        <span className="settings-engine-summary">
+          {(
+            [
+              ['gnubg', t('installation')],
+              ['bgsage', t('planned')],
+            ] as const
+          ).map(([provider, label]) => {
+            const available = engines.find(
+              ({ id }) => id === provider,
+            )?.available;
+            return (
+              <span
+                key={provider}
+                className={available ? 'settings-success' : undefined}
+              >
+                {label} · {t(available ? 'available' : 'unavailable')}
+              </span>
+            );
+          })}
+        </span>
+      </summary>
+      <div className="settings-engine-details">
+        <fieldset className="settings-section settings-engine">
+          <legend>{t('installation')}</legend>
+          <div className="settings-engine-path">
+            <label className="settings-field" htmlFor={`${id}-path`}>
+              <span>{t('path')}</span>
+              <input
+                id={`${id}-path`}
+                required
+                value={draft.gnubg_path}
+                spellCheck={false}
+                autoComplete="off"
+                aria-describedby={`${id}-path-help ${id}-check-status`}
+                aria-invalid={Boolean(check && 'error' in check)}
+                onChange={(event) => {
+                  onInstallationEdited();
+                  update({ gnubg_path: event.target.value });
+                }}
+              />
+            </label>
+            <ActionButton
+              icon="confirm"
+              label={t('check')}
+              type="button"
+              disabled={checking || !draft.gnubg_path.trim()}
+              onClick={onCheck}
+            />
+          </div>
+          <p id={`${id}-path-help`} className="settings-help">
+            {t('pathHelp')}
+          </p>
+          <div className="settings-engine-status" id={`${id}-check-status`}>
+            {engine?.version && !check && !gnubgEdited && (
+              <p>
+                <EngineLabel
+                  details={engine.version}
+                  format={(version) => t('engineVersion', { version })}
+                />
+              </p>
+            )}
+            {!engine?.available && <p>{t('unavailable')}</p>}
+            {check && 'version' in check && (
+              <p role="status" className="settings-success">
+                <EngineLabel
+                  details={check.version}
+                  format={(version) => t('checkSuccess', { version })}
+                />
+              </p>
+            )}
+            {check && 'error' in check && (
+              <p role="alert" className="settings-error">
+                {t('checkError')} {diagnostic(check.error)}
+              </p>
+            )}
+            {!check && gnubgEdited && <p>{t('checkNeeded')}</p>}
+            {checking && <p role="status">{t('checking')}</p>}
+          </div>
+          <p className="settings-help">{t('checkHelp')}</p>
+        </fieldset>
+        <OpenSageInstallation setup={sage} onVerified={onVerified} />
+        <p className="settings-help">{t('localEnginesHelp')}</p>
+        <div className="settings-field-pair">
+          {(
+            [
+              ['gnubg', 'gnubg_threads', 'gnubgAnalysisThreads'],
+              ['gnubg', 'gnubg_play_threads', 'gnubgPlayThreads'],
+              ['bgsage', 'open_sage_threads', 'sageAnalysisThreads'],
+              ['bgsage', 'open_sage_play_threads', 'sagePlayThreads'],
+            ] as const
+          ).map(([provider, field, label]) => {
+            const { min } = configurationOptions.engine_threads[provider];
+            const max = engines.find(
+              (engine) => engine.id === provider,
+            )?.max_parallel_threads;
+            const count = draft[field];
+            const validRange = max != null && max >= min;
+            const retained =
+              count != null && (!validRange || count < min || count > max);
+            const labelId = `${id}-${field}-label`;
+            const limitsId = `${id}-${field}-limits`;
+            return (
+              <label className="settings-field" key={field}>
+                <span className="settings-thread-label">
+                  <span id={labelId}>{t(label)}</span>
+                  <span className="settings-help" id={limitsId}>
+                    {validRange
+                      ? t('configurableThreadRange', { min, max })
+                      : t('threadRangeUnavailable')}
+                    {retained && <> {t('retainedThreadCount', { count })}</>}
+                  </span>
+                </span>
+                <select
+                  value={count ?? ''}
+                  disabled={!validRange && count == null}
+                  aria-labelledby={labelId}
+                  aria-describedby={`${limitsId} ${id}-threads-help`}
+                  onChange={(event) => {
+                    if (provider === 'gnubg') onInstallationEdited();
+                    const value = event.target.value;
+                    update({
+                      [field]: value === '' ? null : Number(value),
+                    });
+                  }}
+                >
+                  <option value="">{t('defaultThreads')}</option>
+                  {retained && (
+                    <option value={count} disabled>
+                      {count}
+                    </option>
+                  )}
+                  {validRange &&
+                    Array.from(
+                      { length: max - min + 1 },
+                      (_, index) => min + index,
+                    ).map((threads) => (
+                      <option key={threads} value={threads}>
+                        {threads}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            );
+          })}
+        </div>
+        <p className="settings-help" id={`${id}-threads-help`}>
+          {t('threadsHelp')}
+        </p>
+        <ParallelJobsField
+          id={id}
+          value={draft.parallel_analysis_jobs ?? null}
+          onChange={(parallel_analysis_jobs) =>
+            update({ parallel_analysis_jobs })
+          }
+          t={t}
+        />
+      </div>
+    </details>
+  );
+}

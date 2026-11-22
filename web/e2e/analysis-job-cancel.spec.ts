@@ -1,4 +1,4 @@
-import type { Job } from '../src/api';
+import type { Job } from '../src/shared/http/api';
 import { expect, test, type Page } from './test';
 
 const job = (id: string, overrides: Partial<Job> = {}): Job => ({
@@ -20,9 +20,9 @@ async function mount(page: Page, jobs: Job[]) {
   await page.goto('/');
   await page.evaluate(async (jobs) => {
     const { React, createRoot } = await import('/e2e/react-fixture.ts');
-    const { I18nProvider } = await import('/src/i18n.tsx');
+    const { I18nProvider } = await import('/src/shared/i18n/i18n.tsx');
     const { default: RunningJobs } =
-      await import('/src/AnalysisRunningJobs.tsx');
+      await import('/src/workspaces/analysis/AnalysisRunningJobs.tsx');
     const original = document.getElementById('root');
     if (original) original.hidden = true;
     const host = document.createElement('main');

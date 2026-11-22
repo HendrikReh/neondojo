@@ -1,5 +1,5 @@
 import { expect, test } from './test';
-import type { Database } from '../src/library-api';
+import type { Database } from '../src/workspaces/library/library-api';
 
 test('import target can differ from the active library collection', async ({
   page,

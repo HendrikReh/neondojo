@@ -1,5 +1,5 @@
 import { expect, test } from './test';
-import type { SeriesDetails } from '../src/engine-match-api';
+import type { SeriesDetails } from '../src/workspaces/extras/engine-match-api';
 
 test('plays a seeded pair with the default dice mode and exports the return leg', async ({
   page,

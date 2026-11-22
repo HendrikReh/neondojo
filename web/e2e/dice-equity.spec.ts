@@ -1,6 +1,6 @@
 import { openPositionCalculation } from './analysis-controls';
 import { profileBackend } from './profile-backend';
-import { defaultConfiguration } from '../src/configuration-model';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 import { expect, test, type Page } from './test';
 
 // A native distribution evaluates 21 rolls. Some cases run three distributions.

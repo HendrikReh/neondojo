@@ -4,7 +4,7 @@ import {
   historyFixture,
   historySessionId as id,
 } from './play-history-review-helpers';
-import { nativeSteps } from '../src/play-sound-events';
+import { nativeSteps } from '../src/shared/board/play-sound-events';
 const pendingId = 'e1146df1-d424-483b-9301-1327b492e5af';
 const hint = (alternatives: unknown[]) => ({
   id: pendingId,

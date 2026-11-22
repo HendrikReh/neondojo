@@ -4,8 +4,8 @@ import {
   historyFixture,
   historySessionId as id,
 } from './play-history-review-helpers';
-import { applySteps } from '../src/play-state';
-import { nativeSteps } from '../src/play-sound-events';
+import { applySteps } from '../src/shared/board/play-state';
+import { nativeSteps } from '../src/shared/board/play-sound-events';
 
 for (const { width, height, human, locale } of [
   { width: 1440, height: 900, human: 0, locale: 'en' },

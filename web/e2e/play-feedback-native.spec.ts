@@ -1,7 +1,10 @@
 import { watchOpening } from './play-opening-helpers';
 import { backendTest as test, expect } from './test';
-import type { PlaySession } from '../src/play-api';
-import { matchingCheckerTurns, nextCheckerSteps } from '../src/play-state';
+import type { PlaySession } from '../src/workspaces/play/play-api';
+import {
+  matchingCheckerTurns,
+  nextCheckerSteps,
+} from '../src/shared/board/play-state';
 test.skip(
   !process.env.NEONDOJO_FEEDBACK_NATIVE_TEST,
   'Requires isolated native feedback backend',

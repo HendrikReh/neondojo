@@ -4,7 +4,7 @@ import {
 } from './analysis-controls';
 import { expect, test, type Page } from './test';
 import { profileBackend } from './profile-backend';
-import { defaultConfiguration } from '../src/configuration-model';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 // Keep cleanup scoped to the exact imports owned by this test, including when
 // an assertion fails after import. APIRequestContext bypasses browser mocks.
 const importedMatchIds = new WeakMap<Page, Set<string>>();
@@ -377,14 +377,16 @@ async function mountEstimateHarness(page: Page) {
   await page.goto('/');
   await page.evaluate(async () => {
     const { React: react, createRoot } = await import('/e2e/react-fixture.ts');
-    const { ConfigurationStore } = await import('/src/configuration-store.ts');
+    const { ConfigurationStore } =
+      await import('/src/settings/configuration/configuration-store.ts');
     const { ConfigurationProvider, useConfirmedConfiguration } =
-      await import('/src/ConfigurationProvider.tsx');
+      await import('/src/settings/configuration/ConfigurationProvider.tsx');
     const { defaultConfiguration } =
-      await import('/src/configuration-model.ts');
-    const { default: MatchPanel } = await import('/src/MatchAnalysisPanel.tsx');
+      await import('/src/settings/configuration/configuration-model.ts');
+    const { default: MatchPanel } =
+      await import('/src/workspaces/analysis/match/MatchAnalysisPanel.tsx');
     const { catalogFixture } =
-      await import('/src/analysis-catalog-test-fixtures.ts');
+      await import('/src/workspaces/analysis/analysis-catalog-test-fixtures.ts');
     const config = structuredClone(defaultConfiguration);
     const profile = {
       id: 'fixture',

@@ -1,6 +1,6 @@
 import { backendTest as test, expect, type Page } from './test';
 import { profileBackend } from './profile-backend';
-import { defaultConfiguration } from '../src/configuration-model';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
 test('restores dice and range filters as explicit pairs without producing invalid intermediate values', async ({
   page,

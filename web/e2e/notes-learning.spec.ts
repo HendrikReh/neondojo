@@ -5,7 +5,7 @@ import {
   submitFullMatchAnalysis,
 } from './analysis-controls';
 import { test, expect } from './test';
-import type { Job } from '../src/api';
+import type { Job } from '../src/shared/http/api';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {

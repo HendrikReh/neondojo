@@ -1,6 +1,6 @@
 import { openMatchAnalysisOptions } from './analysis-controls';
 import { test, expect, type Page } from './test';
-import type { BookLookup } from '../src/source-analysis-api';
+import type { BookLookup } from '../src/workspaces/analysis/candidates/source-analysis-api';
 async function fixture(
   page: Page,
   locale = 'en',

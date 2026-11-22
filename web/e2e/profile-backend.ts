@@ -3,11 +3,11 @@ import {
   defaultConfiguration,
   configurationDifferences,
   type ProfileConfiguration,
-} from '../src/configuration-model';
+} from '../src/settings/configuration/configuration-model';
 import type {
   ConfigurationProfile,
   ConfigurationState,
-} from '../src/configuration-api';
+} from '../src/settings/configuration/configuration-api';
 
 export const secondProfileId = '00000000-0000-4000-8000-000000000002';
 export interface ProfileBackendOptions {

@@ -1,8 +1,8 @@
 import { checkerPath, eitherOrder } from './play-turn-fixtures';
 import { botDice, doubleCube, rollDice } from './play-board-actions';
 import { test, expect, type Page } from './test';
-import type { PlaySession } from '../src/play-api';
-import { applySteps } from '../src/play-state';
+import type { PlaySession } from '../src/workspaces/play/play-api';
+import { applySteps } from '../src/shared/board/play-state';
 declare global {
   interface Window {
     __animationSamples: {

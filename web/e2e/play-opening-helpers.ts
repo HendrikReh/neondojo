@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test';
-import type { PlaySession } from '../src/play-api';
+import type { PlaySession } from '../src/workspaces/play/play-api';
 
 export function watchOpening(page: Page) {
   const wait = (action: string) =>

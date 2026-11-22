@@ -1,8 +1,8 @@
 import { expect, test, type Page } from './test';
 import { profileBackend } from './profile-backend';
-import { defaultConfiguration } from '../src/configuration-model';
-import { ALL_CARDS } from '../src/card-search-api';
-import type { MistakeGroup } from '../src/recurring-mistakes-api';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
+import { ALL_CARDS } from '../src/workspaces/study/flashcards/card-search-api';
+import type { MistakeGroup } from '../src/workspaces/study/mistakes/recurring-mistakes-api';
 
 const players = ['Alice', 'Bob'];
 const cube: MistakeGroup = {

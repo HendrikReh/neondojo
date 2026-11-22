@@ -1,5 +1,5 @@
 import { test, expect, type Page } from './test';
-import type { Database } from '../src/library-api';
+import type { Database } from '../src/workspaces/library/library-api';
 
 const database: Database = {
   id: '00000000-0000-4000-8000-000000000003',

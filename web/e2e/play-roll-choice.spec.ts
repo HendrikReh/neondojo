@@ -1,7 +1,7 @@
 import { eitherOrder } from './play-turn-fixtures';
 import { test, expect } from './test';
 import { botDice } from './play-board-actions';
-import type { PlaySession } from '../src/play-api';
+import type { PlaySession } from '../src/workspaces/play/play-api';
 const id = 'e10e2afb-bde6-486e-a041-ae982f6d1363';
 for (const config of [
   {

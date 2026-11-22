@@ -1,4 +1,4 @@
-import type { PlaySession } from '../src/play-api';
+import type { PlaySession } from '../src/workspaces/play/play-api';
 import { watchOpening } from './play-opening-helpers';
 import { backendTest as test, expect } from './test';
 
