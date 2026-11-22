@@ -61,6 +61,14 @@ Move history shows all checker moves in the selected game by default, including 
 configured **Questionable** threshold. Turn it off to include all cube
 decisions, or use **Reset filters** to restore the default. Filter the review by
 player, severity and game. A match review can cover all games or one game.
+Opening **Cube** without a selected cube decision shows the next matching
+decision from the board position on, as **Next error** would. A decision that
+is already selected stays selected, and **Back to the checker move** keeps the
+board on the checker position until you open **Cube** again.
+
+When the displayed analysis has matching checker errors, **Checker** shows
+**Previous error** and **Next error** (**Shift+E** / **E**) above the board, so
+you can step through them without opening **Statistics** first.
 
 In **Statistics**, checker and cube metrics open the corresponding tab with the
 metric's player, severity and game scope. Metrics that combine both decision

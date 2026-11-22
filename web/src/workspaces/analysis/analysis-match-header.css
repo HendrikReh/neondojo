@@ -23,9 +23,11 @@
   font-size: var(--font-size-body);
 }
 
+/* Fields wrap rather than crush Event or overlap the analysis selector. */
 .analysis-match-metadata {
   display: flex;
   flex: 1 1 650px;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 6px 15px;
   min-width: 0;
@@ -56,6 +58,7 @@
 
 .analysis-match-event {
   flex: 0 1 auto;
+  min-width: 110px;
   max-width: 300px;
 }
 
@@ -89,12 +92,6 @@
 .analysis-match-error button {
   padding: 2px 7px;
   font-size: var(--font-size-control);
-}
-
-@media (max-width: 1599px) {
-  .analysis-match-metadata {
-    flex-wrap: wrap;
-  }
 }
 
 .analysis-match-report-action {

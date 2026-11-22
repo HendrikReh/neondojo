@@ -210,7 +210,10 @@ test('full match analysis, errors, board navigation and persisted results', asyn
   await expect(
     progress.getByText('Matchanalyse abgeschlossen', { exact: true }),
   ).toBeVisible();
-  await expect(page.locator('.board-error-count')).toContainText('Entscheidungen:');
+  // Opening Cube selects the first matching decision.
+  await expect(page.locator('.board-error-count')).toContainText(
+    /Entscheidung 1 von \d+/,
+  );
   await panel.scrollIntoViewIfNeeded();
   await page.screenshot({
     path: 'test-results/match-analysis-desktop.png',

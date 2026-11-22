@@ -176,8 +176,10 @@ export default function AnalysisWorkspace({
   const errors = detail === 'errors';
   const reviewingCheckers =
     overview && sourceAvailable && !!match && checkerReviewMatch === match.id;
+  // Checker offers error stepping directly; the panel shows the controls once
+  // the displayed analysis has matching checker decisions.
   const showErrorNavigation =
-    (errors || reviewingCheckers) && active && !notesSuspended;
+    (errors || (overview && sourceAvailable)) && active && !notesSuspended;
   const analysisGrid = useRef<HTMLDivElement>(null);
   const boardResize = useAnalysisBoardResize(
     analysisGrid,

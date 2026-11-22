@@ -276,10 +276,12 @@ test('changing Cube filters resets the decision count', async ({ page }) => {
   await completedFullJob(page, match.id);
   await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   await expect(page.locator('.workspace-analysis-command').getByText('Matchanalyse abgeschlossen', { exact: true })).toBeVisible();
+  // Opening Cube selects the first matching decision, which stays selected.
+  await expect(page.locator('.board-heading')).toContainText('Cube');
   const panel = page.getByRole('tabpanel', { name: 'Cube', exact: true });
   await panel.getByLabel('Nur Auffälligkeiten').uncheck();
   const count = page.locator('.board-error-count');
-  await expect(count).toHaveText(/^Entscheidungen: /);
+  await expect(count).toHaveText(/^Entscheidung \d+ von /);
   const total = await count.innerText();
   const player = panel.getByLabel('Analyse nach Spieler filtern');
   await player.selectOption('0');
@@ -353,7 +355,8 @@ test('a saved whole-match result stays identified while game navigation loads', 
     release();
   }
   await page.unrouteAll({ behavior: 'wait' });
-  await expect(page.locator('.board-heading')).toContainText('Spiel 1');
+  // Cube opens on the game's first matching cube decision.
+  await expect(page.locator('.board-heading')).toContainText(/Spiel 1|^1 · Cube/);
   await expect(page.getByRole('button', { name: 'Spiel analysieren', exact: true })).toBeEnabled();
 });
 

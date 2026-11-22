@@ -128,6 +128,18 @@ export function useAnalysisBoardResize(
         400;
       const max = Math.max(limits.min, Math.floor(Math.min(available, limits.max)));
       const viewportWidth = window.innerWidth;
+      // The footer and the page body's bottom padding sit below the grid, so
+      // the grid ends where they still fit in the window.
+      const body = grid.closest('.app-body');
+      const footer = body?.querySelector(':scope > .app-footer');
+      const footerStyle = footer && getComputedStyle(footer);
+      const below =
+        (body ? parseFloat(getComputedStyle(body).paddingBottom) || 0 : 0) +
+        (footer && footerStyle
+          ? footer.getBoundingClientRect().height +
+            (parseFloat(footerStyle.marginTop) || 0) +
+            (parseFloat(footerStyle.marginBottom) || 0)
+          : 0);
       // Page scrolling should not change the saved or automatic geometry.
       const viewportSpace = Math.max(
         0,
@@ -135,7 +147,8 @@ export function useAnalysisBoardResize(
           window.innerHeight -
             grid.getBoundingClientRect().top -
             window.scrollY -
-            gap,
+            gap -
+            below,
         ),
       );
       const extraWidth = Math.max(0, viewportWidth - 2560);
@@ -160,6 +173,8 @@ export function useAnalysisBoardResize(
     const shell = grid.closest('.app-shell');
     const header = shell?.querySelector('.app-header');
     if (header) observer.observe(header);
+    const footer = grid.closest('.app-body')?.querySelector(':scope > .app-footer');
+    if (footer) observer.observe(footer);
     if (shell) observer.observe(shell);
     window.addEventListener('resize', measure);
     return () => {

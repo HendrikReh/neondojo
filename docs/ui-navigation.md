@@ -146,7 +146,10 @@ when opened, so switching games paints the board without waiting for observed
 rolls; failed requests offer **Try again**. Move history defaults to
 **All moves**. Filter by **All errors** or by a specific grade without changing
 the board selection. Unrated moves remain visible under **All moves**.
-**Cube** reviews cube decisions on the board. Native match and
+**Previous error** and **Next error** sit above the board whenever the
+displayed analysis has matching checker errors.
+**Cube** reviews cube decisions on the board and opens on the next matching
+decision from the board position when none is selected. Native match and
 game statistics are available in **Statistics**. Matches imported with
 irregularities show their **Import notes** count in the analysis header and
 list the read-only **Import notes** above the match or game comment in **Notes**.
