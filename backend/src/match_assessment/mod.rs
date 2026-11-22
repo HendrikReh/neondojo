@@ -9,7 +9,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Path, State},
     http::StatusCode,
     routing::get,
 };
@@ -183,11 +183,11 @@ fn availability(session: &PlaySession) -> Availability {
 
 #[utoipa::path(get, path="/api/study/reports/{id}/assessment",
     params(("id"=Uuid, Path), AssessmentQuery),
-    responses((status=200,body=AssessmentState),(status=404,body=ErrorBody)), tag="Study")]
+    responses((status=200,body=AssessmentState),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Study")]
 async fn get_assessment(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(query): Query<AssessmentQuery>,
+    crate::json_errors::Query(query): crate::json_errors::Query<AssessmentQuery>,
 ) -> ApiResult<Json<AssessmentState>> {
     let (session, _) = crate::study::report_checkpoint(&state.pool, id).await?;
     let language = crate::configuration::validation::enum_string(&query.language);
@@ -202,8 +202,8 @@ async fn get_assessment(
 async fn start_assessment(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(query): Query<AssessmentQuery>,
-    Json(request): Json<StartAssessment>,
+    crate::json_errors::Query(query): crate::json_errors::Query<AssessmentQuery>,
+    crate::json_errors::Json(request): crate::json_errors::Json<StartAssessment>,
 ) -> ApiResult<Json<AssessmentState>> {
     let (session, _) = crate::study::report_checkpoint(&state.pool, id).await?;
     if session.version != request.report_version {

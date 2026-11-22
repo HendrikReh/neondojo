@@ -57,7 +57,7 @@ async fn card(state: &AppState, id: Uuid) -> ApiResult<CardRow> {
 #[utoipa::path(post,path="/api/study/card-pips",request_body=PipAnswer,responses((status=200,body=PipResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn pips(
     State(state): State<AppState>,
-    LearningJson(body): LearningJson<PipAnswer>,
+    crate::json_errors::Json(body): crate::json_errors::Json<PipAnswer>,
 ) -> ApiResult<Json<PipResult>> {
     if body.counts.iter().any(|count| !(0..=375).contains(count)) {
         return Err(ApiError::invalid("Pip counts must be between 0 and 375"));
@@ -187,7 +187,7 @@ pub(super) async fn score_questions(
 pub(super) async fn score_answer(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(body): LearningJson<ScoreAnswer>,
+    crate::json_errors::Json(body): crate::json_errors::Json<ScoreAnswer>,
 ) -> ApiResult<Json<PracticeEvaluation>> {
     let row = card(&state, id).await?;
     let (version, plies, sqlx::types::Json(engine)): (i64, i32, sqlx::types::Json<crate::settings::EngineSnapshot>) =

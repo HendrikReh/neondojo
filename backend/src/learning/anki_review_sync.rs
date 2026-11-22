@@ -179,7 +179,7 @@ struct LocalReview {
 pub(super) async fn sync(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(_body): LearningJson<SyncRequest>,
+    crate::json_errors::Json(_body): crate::json_errors::Json<SyncRequest>,
 ) -> ApiResult<Json<SyncResult>> {
     let _permit = anki_connect::reserve()?;
     let cards = deck_cards(&state.pool, id).await?;

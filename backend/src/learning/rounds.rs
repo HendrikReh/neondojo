@@ -306,7 +306,7 @@ pub(super) async fn read(
 pub(super) async fn answer(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(body): LearningJson<RoundAnswer>,
+    crate::json_errors::Json(body): crate::json_errors::Json<RoundAnswer>,
 ) -> ApiResult<Json<PracticeRound>> {
     let submitted = body
         .answer
@@ -403,7 +403,7 @@ pub(super) async fn answer(
 pub(super) async fn advance(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(body): LearningJson<RoundAdvance>,
+    crate::json_errors::Json(body): crate::json_errors::Json<RoundAdvance>,
 ) -> ApiResult<Json<PracticeRound>> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let round = lock(&mut tx, id).await?;
@@ -439,7 +439,7 @@ pub(super) async fn advance(
 pub(super) async fn mark(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(body): LearningJson<RoundAdvance>,
+    crate::json_errors::Json(body): crate::json_errors::Json<RoundAdvance>,
 ) -> ApiResult<Json<PracticeRound>> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let round = lock(&mut tx, id).await?;
@@ -467,7 +467,7 @@ pub(super) async fn mark(
 pub(super) async fn retry(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(body): LearningJson<RoundVersion>,
+    crate::json_errors::Json(body): crate::json_errors::Json<RoundVersion>,
 ) -> ApiResult<Json<PracticeRound>> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let round = lock(&mut tx, id).await?;

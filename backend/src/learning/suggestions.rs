@@ -301,7 +301,7 @@ pub(super) async fn preview(
 pub(super) async fn save(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(body): LearningJson<SaveSuggestions>,
+    crate::json_errors::Json(body): crate::json_errors::Json<SaveSuggestions>,
 ) -> ApiResult<Json<AddCardsResult>> {
     let mut requested: HashSet<_> = body.decisions.iter().copied().collect();
     if requested.is_empty()

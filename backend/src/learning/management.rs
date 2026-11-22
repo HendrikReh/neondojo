@@ -172,7 +172,7 @@ async fn insert_memberships(
 pub(super) async fn add_deck_cards(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(body): LearningJson<AddDeckCards>,
+    crate::json_errors::Json(body): crate::json_errors::Json<AddDeckCards>,
 ) -> ApiResult<Json<AddDeckCardsResult>> {
     validate_selection(&body.card_ids)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
@@ -203,7 +203,7 @@ pub(super) async fn add_deck_cards(
 pub(super) async fn move_cards(
     State(state): State<AppState>,
     Path(source_id): Path<Uuid>,
-    LearningJson(body): LearningJson<MoveCards>,
+    crate::json_errors::Json(body): crate::json_errors::Json<MoveCards>,
 ) -> ApiResult<Json<MoveCardsResult>> {
     validate_selection(&body.card_ids)?;
     if source_id == body.target_id {
@@ -237,7 +237,7 @@ pub(super) async fn move_cards(
 pub(super) async fn remove_cards(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(body): LearningJson<RemoveCards>,
+    crate::json_errors::Json(body): crate::json_errors::Json<RemoveCards>,
 ) -> ApiResult<StatusCode> {
     validate_selection(&body.card_ids)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
@@ -260,7 +260,7 @@ async fn lock_decks(tx: &mut Transaction<'_, Postgres>, ids: &[Uuid]) -> ApiResu
 #[utoipa::path(post,path="/api/cards/delete",request_body=DeleteCards,responses((status=204),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn delete_cards(
     State(state): State<AppState>,
-    LearningJson(body): LearningJson<DeleteCards>,
+    crate::json_errors::Json(body): crate::json_errors::Json<DeleteCards>,
 ) -> ApiResult<StatusCode> {
     let ids: Vec<_> = body.cards.iter().map(|card| card.id).collect();
     validate_selection(&ids)?;
@@ -453,7 +453,7 @@ async fn memberships(tx: &mut Transaction<'_, Postgres>, card_id: Uuid) -> ApiRe
 #[utoipa::path(post,path="/api/cards/duplicates/resolve",request_body=ResolveDuplicate,responses((status=204),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn resolve_duplicate(
     State(state): State<AppState>,
-    LearningJson(body): LearningJson<ResolveDuplicate>,
+    crate::json_errors::Json(body): crate::json_errors::Json<ResolveDuplicate>,
 ) -> ApiResult<StatusCode> {
     if body.keep_id == body.delete_id || body.keep_version < 0 || body.delete_version < 0 {
         return Err(ApiError::invalid(

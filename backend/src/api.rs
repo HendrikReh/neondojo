@@ -280,7 +280,7 @@ struct UploadForm {
 #[utoipa::path(post, path="/api/imports", params(ImportQuery), request_body(content=UploadForm, content_type="multipart/form-data"), responses((status=201, body=ImportResponse), (status=200, body=ImportResponse, description="Previously imported file"), (status=409, body=ErrorBody, description="Target is reserved for paused sessions"), (status=422, body=ErrorBody), (status=413, description="Upload too large"), (status=429, body=ErrorBody)), tag="Library")]
 async fn upload(
     State(state): State<AppState>,
-    Query(query): Query<ImportQuery>,
+    crate::json_errors::Query(query): crate::json_errors::Query<ImportQuery>,
     mut multipart: Multipart,
 ) -> ApiResult<(StatusCode, Json<ImportResponse>)> {
     let _permit = state.imports.try_acquire().map_err(|_| {
@@ -438,7 +438,7 @@ fn limit(value: Option<i64>) -> ApiResult<i64> {
 #[utoipa::path(get, path="/api/matches", params(MatchQuery), responses((status=200, body=MatchPage), (status=422, body=ErrorBody)), tag="Library")]
 async fn matches(
     State(state): State<AppState>,
-    Query(query): Query<MatchQuery>,
+    crate::json_errors::Query(query): crate::json_errors::Query<MatchQuery>,
 ) -> ApiResult<Json<MatchPage>> {
     let q = query.q.as_deref().unwrap_or("").trim();
     if !q.is_empty() && !(3..=200).contains(&q.chars().count()) {
@@ -558,7 +558,7 @@ struct PositionQuery {
 #[utoipa::path(get, path="/api/positions", params(PositionQuery), responses((status=200, body=PositionPage), (status=422, body=ErrorBody)), tag="Library")]
 async fn positions(
     State(state): State<AppState>,
-    Query(query): Query<PositionQuery>,
+    crate::json_errors::Query(query): crate::json_errors::Query<PositionQuery>,
 ) -> ApiResult<Json<PositionPage>> {
     if let Some(id) = query.match_id {
         crate::play::require_review_available(&state.pool, id).await?;
@@ -626,7 +626,7 @@ async fn positions(
 async fn dice(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(query): Query<GameScope>,
+    crate::json_errors::Query(query): crate::json_errors::Query<GameScope>,
 ) -> ApiResult<Json<DiceStats>> {
     crate::play::require_review_available(&state.pool, id).await?;
     validate_game(&state, id, query.game_no).await?;

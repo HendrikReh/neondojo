@@ -6,6 +6,7 @@ pub mod engines;
 pub mod game_plan;
 pub mod import;
 pub mod jobs;
+mod json_errors;
 pub mod match_analysis;
 pub mod model;
 pub mod store;

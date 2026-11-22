@@ -5,7 +5,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Path, Query, State},
+    extract::{Path, State},
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -101,7 +101,7 @@ pub(crate) fn routes() -> Router<AppState> {
 #[utoipa::path(get, path="/api/study/reports", params(ReportQuery), responses((status=200, body=StudyReportPage),(status=422,body=ErrorBody)), tag="Study")]
 async fn list_reports(
     State(state): State<AppState>,
-    Query(query): Query<ReportQuery>,
+    crate::json_errors::Query(query): crate::json_errors::Query<ReportQuery>,
 ) -> ApiResult<Json<StudyReportPage>> {
     let grouped = match query.group_by.as_deref() {
         None => false,
@@ -239,11 +239,11 @@ pub(crate) async fn report_checkpoint(
 struct ReportHistoryQuery {
     version: i64,
 }
-#[utoipa::path(get,path="/api/study/reports/{id}/history",params(("id"=Uuid,Path),("version"=i64,Query)),responses((status=200,body=crate::play::PlayHistorySnapshots),(status=404,body=ErrorBody),(status=409,body=ErrorBody)),tag="Study")]
+#[utoipa::path(get,path="/api/study/reports/{id}/history",params(("id"=Uuid,Path),("version"=i64,Query)),responses((status=200,body=crate::play::PlayHistorySnapshots),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Study")]
 async fn report_history(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(query): Query<ReportHistoryQuery>,
+    crate::json_errors::Query(query): crate::json_errors::Query<ReportHistoryQuery>,
 ) -> ApiResult<Json<crate::play::PlayHistorySnapshots>> {
     let (session, sgf) = report_checkpoint(&state.pool, id).await?;
     if session.version != query.version {

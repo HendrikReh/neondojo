@@ -316,7 +316,7 @@ async fn delete_analysis(
 async fn update_selection(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(request): Json<AnalysisSelectionUpdate>,
+    crate::json_errors::Json(request): crate::json_errors::Json<AnalysisSelectionUpdate>,
 ) -> ApiResult<Json<AnalysisSelection>> {
     crate::play::require_review_available(&state.pool, id).await?;
     if !crate::imported_analysis::ensure_catalog(&state.pool, id).await? {

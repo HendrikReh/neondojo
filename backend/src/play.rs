@@ -28,7 +28,7 @@ use crate::{
 use anyhow::{Context, ensure};
 use axum::{
     Json, Router,
-    extract::{Path, Query, State, rejection::JsonRejection},
+    extract::{Path, State, rejection::JsonRejection},
     http::{StatusCode, header},
     routing::{get, post},
 };
@@ -705,11 +705,11 @@ async fn get_session(
     open_sage::schedule_warmup(&session, &state.shutdown);
     Ok(Json(session))
 }
-#[utoipa::path(get,path="/api/play/sessions/{id}/history",params(("id"=Uuid,Path),("version"=i64,Query,description="Saved session revision")),responses((status=200,body=PlayHistorySnapshots),(status=404,body=ErrorBody),(status=409,body=ErrorBody)),tag="Playing")]
+#[utoipa::path(get,path="/api/play/sessions/{id}/history",params(("id"=Uuid,Path),("version"=i64,Query,description="Saved session revision")),responses((status=200,body=PlayHistorySnapshots),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Playing")]
 async fn history_snapshots(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(query): Query<HistoryQuery>,
+    crate::json_errors::Query(query): crate::json_errors::Query<HistoryQuery>,
 ) -> ApiResult<Json<PlayHistorySnapshots>> {
     // Fetch state and its exact raw checkpoint together. No archive lookup or
     // native replay: detached sessions and unavailable engines remain readable.
@@ -832,7 +832,7 @@ pub(crate) fn build_history_snapshots(
 #[utoipa::path(post,path="/api/play/sessions",request_body=CreatePlaySession,responses((status=201,body=PlaySession),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Playing")]
 async fn create_session(
     State(state): State<AppState>,
-    Json(request): Json<CreatePlaySession>,
+    crate::json_errors::Json(request): crate::json_errors::Json<CreatePlaySession>,
 ) -> ApiResult<(StatusCode, Json<PlaySession>)> {
     if !(0..=1).contains(&request.human_player) || !(0..=25).contains(&request.match_length) {
         return Err(ApiError::invalid(
@@ -1180,7 +1180,7 @@ fn validate_action<'a>(
 async fn change_mode(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(request): Json<PlayModeRequest>,
+    crate::json_errors::Json(request): crate::json_errors::Json<PlayModeRequest>,
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     let mut session = previous.state.0;
@@ -1239,7 +1239,7 @@ async fn change_mode(
 async fn act(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(request): Json<PlayActionRequest>,
+    crate::json_errors::Json(request): crate::json_errors::Json<PlayActionRequest>,
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     if request.version != previous.state.version {
@@ -1474,7 +1474,7 @@ async fn persist_session_with_report(
 async fn feedback(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(request): Json<PlayFeedbackRequest>,
+    crate::json_errors::Json(request): crate::json_errors::Json<PlayFeedbackRequest>,
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     let mut session = previous.state.0;
@@ -1561,7 +1561,7 @@ async fn feedback(
 async fn review(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(request): Json<PlayReviewRequest>,
+    crate::json_errors::Json(request): crate::json_errors::Json<PlayReviewRequest>,
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     let mut session = previous.state.0;

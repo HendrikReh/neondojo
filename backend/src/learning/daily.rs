@@ -2,7 +2,6 @@
 //!
 //! Reviews that are due are always offered. A new card counts against the
 //! allowance on the local day of its first review.
-use super::LearningJson;
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use axum::{Json, Router, extract::State, routing::get};
 use chrono::{DateTime, Local, NaiveTime, Utc};
@@ -81,7 +80,7 @@ async fn read(State(state): State<AppState>) -> ApiResult<Json<LearningPreferenc
     tag = "Learning")]
 async fn write(
     State(state): State<AppState>,
-    LearningJson(body): LearningJson<LearningPreferences>,
+    crate::json_errors::Json(body): crate::json_errors::Json<LearningPreferences>,
 ) -> ApiResult<Json<LearningPreferences>> {
     if !(0..=MAX_NEW_CARDS_PER_DAY).contains(&body.new_cards_per_day) {
         return Err(ApiError::invalid(

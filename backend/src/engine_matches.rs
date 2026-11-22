@@ -16,7 +16,7 @@ use crate::{
 };
 use axum::{
     Json, Router,
-    extract::{Path, Query, State, rejection::JsonRejection},
+    extract::{Path, State, rejection::JsonRejection},
     http::{StatusCode, header},
     response::IntoResponse,
     routing::{get, post},
@@ -275,10 +275,10 @@ pub(crate) fn routes() -> Router<AppState> {
         )
 }
 
-#[utoipa::path(get, path="/api/engine-matches", params(("before"=Option<Uuid>, Query)), responses((status=200, body=SeriesPage)), tag="Engine matches")]
+#[utoipa::path(get, path="/api/engine-matches", params(("before"=Option<Uuid>, Query)), responses((status=200, body=SeriesPage),(status=422, body=ErrorBody)), tag="Engine matches")]
 async fn list(
     State(state): State<AppState>,
-    Query(query): Query<HistoryQuery>,
+    crate::json_errors::Query(query): crate::json_errors::Query<HistoryQuery>,
 ) -> ApiResult<Json<SeriesPage>> {
     let mut runs: Vec<Series> = sqlx::query_as(
         "SELECT * FROM engine_match_runs
@@ -421,7 +421,7 @@ async fn create(
 async fn details(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Query(page): Query<ResultPage>,
+    crate::json_errors::Query(page): crate::json_errors::Query<ResultPage>,
 ) -> ApiResult<Json<SeriesDetails>> {
     if !(0..=2000).contains(&page.offset) {
         return Err(ApiError::invalid("Invalid result offset"));

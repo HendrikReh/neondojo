@@ -119,7 +119,7 @@ fn sanitize(error: &str, key: Option<&str>) -> String {
 pub(super) async fn send(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    LearningJson(query): LearningJson<ExportQuery>,
+    crate::json_errors::Json(query): crate::json_errors::Json<ExportQuery>,
 ) -> ApiResult<StatusCode> {
     let _transfer = reserve()?;
     let bytes = build_deck_package(&state, id, query).await?;

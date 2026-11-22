@@ -35,7 +35,7 @@ pub(super) fn routes() -> Router<AppState> {
 #[utoipa::path(post,path="/api/study/transfer-rounds",request_body=TransferRequest,responses((status=201,body=rounds::PracticeRound),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn start(
     State(state): State<AppState>,
-    LearningJson(mut body): LearningJson<TransferRequest>,
+    crate::json_errors::Json(mut body): crate::json_errors::Json<TransferRequest>,
 ) -> ApiResult<(StatusCode, Json<rounds::PracticeRound>)> {
     body.player = body.player.trim().to_owned();
     if body.player.is_empty()

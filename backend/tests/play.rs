@@ -4641,3 +4641,18 @@ async fn native_match_forfeit_archives_a_loss_and_fences_competing_actions(pool:
     .await;
     assert_eq!(status, 422);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn malformed_bodies_and_queries_return_the_json_error_body(pool: PgPool) {
+    let app = api::router(AppState::new(pool, Engine::new("/unavailable".into())));
+    // Rejected by the extractor before any handler or engine work runs.
+    for (method, uri, body) in [
+        ("POST", "/api/play/sessions", json!({"human_player": "x"})),
+        ("GET", "/api/study/reports?limit=abc", Value::Null),
+        ("GET", "/api/engine-matches?before=not-a-uuid", Value::Null),
+    ] {
+        let (status, error) = call(app.clone(), method, uri, body).await;
+        assert_eq!(status, 422, "{method} {uri}: {error}");
+        assert!(error["error"].is_string(), "{method} {uri}: {error}");
+    }
+}

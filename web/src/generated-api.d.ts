@@ -8946,6 +8946,14 @@ export interface operations {
                     "application/json": components["schemas"]["SeriesPage"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     create: {
@@ -11372,6 +11380,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     change_mode: {
@@ -13746,6 +13762,14 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
         };
     };
     start_assessment: {
@@ -13837,6 +13861,14 @@ export interface operations {
                 };
             };
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
