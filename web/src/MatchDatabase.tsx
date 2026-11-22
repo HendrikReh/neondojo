@@ -913,6 +913,7 @@ export default function MatchDatabase({
                       OCCURRENCE_COLUMNS.map((column) => (
                         <col
                           key={column.id}
+                          data-column={column.id}
                           className={column.className}
                           style={{
                             width:
@@ -922,7 +923,12 @@ export default function MatchDatabase({
                         />
                       ))}
                     {columns.tableColumns.map(({ id, className, width }) => (
-                      <col key={id} className={className} style={{ width }} />
+                      <col
+                        key={id}
+                        data-column={id}
+                        className={className}
+                        style={{ width }}
+                      />
                     ))}
                   </colgroup>
                   <thead>

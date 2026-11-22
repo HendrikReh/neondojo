@@ -25,7 +25,28 @@ type Drag<Id extends string> = {
   before?: ColumnWidths<Id>;
   pointer: number;
   target: HTMLElement;
+  frame?: number;
 };
+// A drag writes widths straight to the table's <col data-column> elements and
+// the separator once per frame. React state changes only when the drag starts
+// and ends, so pointer moves do not re-render the whole table.
+function showWidths<Id extends string>(
+  table: HTMLTableElement | null,
+  drag: Drag<Id>,
+  widths: ColumnWidths<Id>,
+  total: number | undefined,
+) {
+  for (const col of table?.querySelectorAll<HTMLElement>('col[data-column]') ??
+    []) {
+    const width = widths[col.dataset.column as Id];
+    if (width !== undefined) col.style.width = `${width}px`;
+  }
+  if (table && total !== undefined) {
+    table.style.width = `${total}px`;
+    table.style.minWidth = `${total}px`;
+  }
+  drag.target.setAttribute('aria-valuenow', String(widths[drag.column]));
+}
 export type ResizableColumnsOptions<Id extends string> = {
   visible: boolean;
   activeColumns?: readonly Id[];
@@ -115,15 +136,31 @@ export function useResizableColumns<Id extends string>(
     observer.observe(table);
     return () => observer.disconnect();
   }, [capture, options.visible, activeKey, layout.storageKey, custom]);
+  const show = useCallback(
+    (drag: Drag<Id>, widths: ColumnWidths<Id>) =>
+      showWidths(
+        tableRef.current,
+        drag,
+        widths,
+        current.current.layout.total(
+          widths,
+          current.current.options.activeColumns,
+        ),
+      ),
+    [tableRef],
+  );
   const cancel = useCallback(() => {
     const drag = active.current;
     if (!drag) return;
     active.current = undefined;
+    if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
+    // React last rendered the drag's base widths.
+    show(drag, drag.base);
     updateWidths(drag.before);
     setDragging(false);
     if (drag.target.hasPointerCapture(drag.pointer))
       drag.target.releasePointerCapture(drag.pointer);
-  }, [updateWidths]);
+  }, [show, updateWidths]);
   useEffect(() => {
     cancel();
   }, [options.visible, activeKey, layout.storageKey, cancel]);
@@ -131,6 +168,7 @@ export function useResizableColumns<Id extends string>(
     () => () => {
       const drag = active.current;
       active.current = undefined;
+      if (drag?.frame !== undefined) cancelAnimationFrame(drag.frame);
       if (drag?.target.hasPointerCapture(drag.pointer))
         drag.target.releasePointerCapture(drag.pointer);
     },
@@ -172,7 +210,10 @@ export function useResizableColumns<Id extends string>(
       drag.column,
       drag.base[drag.column] + event.clientX - drag.startX,
     );
-    updateWidths(drag.latest);
+    drag.frame ??= requestAnimationFrame(() => {
+      drag.frame = undefined;
+      if (active.current === drag) show(drag, drag.latest);
+    });
   }
   function finish(event: PointerEvent<HTMLElement>) {
     const drag = active.current;
@@ -180,6 +221,8 @@ export function useResizableColumns<Id extends string>(
     event.preventDefault();
     event.stopPropagation();
     active.current = undefined;
+    if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
+    show(drag, drag.latest);
     setDragging(false);
     if (drag.latest[drag.column] === drag.base[drag.column])
       updateWidths(drag.before);

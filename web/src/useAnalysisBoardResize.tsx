@@ -41,7 +41,23 @@ type Drag = {
   startX: number;
   startWidth: number;
   width: number;
+  frame?: number;
 };
+
+// A drag writes the width straight to the grid's CSS variable and the
+// separator's value once per frame. React state changes only when the drag
+// starts and ends, so pointer moves do not re-render the analysis workspace.
+function showWidth(grid: HTMLElement | null, drag: Drag, width: number) {
+  grid?.style.setProperty('--analysis-board-width', `${width}px`);
+  drag.target.setAttribute('aria-valuenow', String(width));
+}
+
+function stopDrag(grid: HTMLElement | null, drag: Drag, width: number) {
+  if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
+  showWidth(grid, drag, width);
+  if (drag.target.hasPointerCapture(drag.pointer))
+    drag.target.releasePointerCapture(drag.pointer);
+}
 
 export function useAnalysisBoardResize(
   gridRef: RefObject<HTMLDivElement | null>,
@@ -83,19 +99,15 @@ export function useAnalysisBoardResize(
     max: limits.max,
     defaultWidth: desktopDefaultWidth,
   });
-  const [preview, setPreview] = useState<number>();
+  const [dragging, setDragging] = useState(false);
   const drag = useRef<Drag | undefined>(undefined);
-  const width = clamp(
-    preview ?? preferred ?? geometry.defaultWidth,
-    geometry.max,
-  );
+  const width = clamp(preferred ?? geometry.defaultWidth, geometry.max);
   const cancel = useCallback(() => {
     const previous = drag.current;
     drag.current = undefined;
-    setPreview(undefined);
-    if (previous?.target.hasPointerCapture(previous.pointer))
-      previous.target.releasePointerCapture(previous.pointer);
-  }, []);
+    setDragging(false);
+    if (previous) stopDrag(gridRef.current, previous, previous.startWidth);
+  }, [gridRef]);
 
   useLayoutEffect(() => {
     cancel();
@@ -160,6 +172,7 @@ export function useAnalysisBoardResize(
     () => () => {
       const previous = drag.current;
       drag.current = undefined;
+      if (previous?.frame !== undefined) cancelAnimationFrame(previous.frame);
       if (previous?.target.hasPointerCapture(previous.pointer))
         previous.target.releasePointerCapture(previous.pointer);
     },
@@ -193,6 +206,7 @@ export function useAnalysisBoardResize(
           startWidth: width,
           width,
         };
+        setDragging(true);
       }}
       onPointerMove={(event) => {
         const current = drag.current;
@@ -201,16 +215,19 @@ export function useAnalysisBoardResize(
           current.startWidth + event.clientX - current.startX,
           geometry.max,
         );
-        setPreview(current.width);
+        current.frame ??= requestAnimationFrame(() => {
+          current.frame = undefined;
+          if (drag.current === current)
+            showWidth(gridRef.current, current, current.width);
+        });
       }}
       onPointerUp={(event) => {
         const current = drag.current;
         if (!current || current.pointer !== event.pointerId) return;
         drag.current = undefined;
-        setPreview(undefined);
+        stopDrag(gridRef.current, current, current.width);
+        setDragging(false);
         if (current.width !== current.startWidth) setPreferred(current.width);
-        if (event.currentTarget.hasPointerCapture(event.pointerId))
-          event.currentTarget.releasePointerCapture(event.pointerId);
       }}
       onPointerCancel={cancel}
       onLostPointerCapture={cancel}
@@ -256,7 +273,7 @@ export function useAnalysisBoardResize(
   return {
     width,
     viewportSpace: geometry.viewportSpace,
-    dragging: preview !== undefined,
+    dragging,
     handle,
   };
 }

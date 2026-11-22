@@ -284,6 +284,7 @@ export function PositionBrowserResults({
           {activeColumns.map((column) => (
             <col
               key={column.id}
+              data-column={column.id}
               className={column.className}
               style={{
                 width: columns.widths?.[column.id] ?? column.defaultWidth,
