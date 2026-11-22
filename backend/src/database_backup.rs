@@ -19,7 +19,7 @@ use sqlx::PgConnection;
 use std::{sync::Arc, time::Duration};
 use tokio::{
     fs::File,
-    sync::{OwnedSemaphorePermit, RwLock, Semaphore},
+    sync::{OwnedRwLockReadGuard, OwnedSemaphorePermit, RwLock, Semaphore},
 };
 use utoipa::{
     IntoParams, OpenApi, PartialSchema, ToSchema,
@@ -104,22 +104,161 @@ const TABLES: &[&str] = &[
     "engine_match_results",
 ];
 
-/// How long a restore waits for running work to release the database after
-/// stopping the analysis jobs. Benchmarks, engine duels and AI assessments are
-/// not stopped and must finish within it.
+/// How long a restore waits for background work it cannot stop (see
+/// [`BackgroundWork`]) to finish before it answers that the database is busy.
+/// It only covers work between two short polls; no API request waits for it.
+const RESTORE_PREFLIGHT: Duration = Duration::from_secs(2);
+/// How long a restore waits for running requests and the analysis jobs it
+/// stopped to release the database. New API requests get `503` meanwhile.
 const RESTORE_DRAIN: Duration = Duration::from_secs(30);
+
+/// Long-running background work that holds database access and that a restore
+/// does not stop. A restore refuses to start while any of it runs, instead of
+/// blocking every API request until it finishes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum BackgroundWork {
+    Benchmark,
+    EngineDuel,
+    AiAssessment,
+    AnkiSync,
+}
+
+impl BackgroundWork {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Benchmark => "benchmark",
+            Self::EngineDuel => "engine duel",
+            Self::AiAssessment => "AI assessment",
+            Self::AnkiSync => "Anki sync",
+        }
+    }
+}
 
 pub(crate) struct Access {
     /// Shared so background tasks can hold an owned read guard while they run.
     pub(crate) requests: Arc<RwLock<()>>,
     transfer: Arc<Semaphore>,
+    background: Arc<Background>,
+    preflight: Duration,
+    drain: Duration,
+}
+
+/// Admission of background work and analysis jobs. The same mutex closes it
+/// for a restore and registers new holders, so no holder starts unseen.
+#[derive(Default)]
+struct Background {
+    state: std::sync::Mutex<BackgroundState>,
+    released: tokio::sync::Notify,
+}
+
+#[derive(Default)]
+struct BackgroundState {
+    restoring: bool,
+    active: Vec<BackgroundWork>,
+}
+
+impl Background {
+    fn lock(&self) -> std::sync::MutexGuard<'_, BackgroundState> {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+}
+
+/// Database access of one piece of [`BackgroundWork`] while it runs.
+pub(crate) struct BackgroundAccess {
+    _access: OwnedRwLockReadGuard<()>,
+    work: BackgroundWork,
+    background: Arc<Background>,
+}
+
+impl Drop for BackgroundAccess {
+    fn drop(&mut self) {
+        let mut state = self.background.lock();
+        if let Some(index) = state.active.iter().position(|&work| work == self.work) {
+            state.active.swap_remove(index);
+        }
+        drop(state);
+        self.background.released.notify_waiters();
+    }
+}
+
+/// Keeps new background work and analysis jobs out until a restore finishes
+/// or fails.
+struct RestoreAdmission(Arc<Background>);
+
+impl Drop for RestoreAdmission {
+    fn drop(&mut self) {
+        self.0.lock().restoring = false;
+    }
 }
 
 impl Default for Access {
     fn default() -> Self {
+        Self::with_waits(RESTORE_PREFLIGHT, RESTORE_DRAIN)
+    }
+}
+
+impl Access {
+    pub(crate) fn with_waits(preflight: Duration, drain: Duration) -> Self {
         Self {
             requests: Arc::new(RwLock::new(())),
             transfer: Arc::new(Semaphore::new(1)),
+            background: Arc::default(),
+            preflight,
+            drain,
+        }
+    }
+
+    /// Database access for background work, or `None` while the database is
+    /// being restored or prepared for a restore.
+    pub(crate) fn try_background(&self, work: BackgroundWork) -> Option<BackgroundAccess> {
+        let mut state = self.background.lock();
+        if state.restoring {
+            return None;
+        }
+        let access = self.requests.clone().try_read_owned().ok()?;
+        state.active.push(work);
+        Some(BackgroundAccess {
+            _access: access,
+            work,
+            background: self.background.clone(),
+        })
+    }
+
+    /// Database access for an analysis job, which a restore stops, or `None`
+    /// while the database is being restored or prepared for a restore.
+    pub(crate) fn try_job(&self) -> Option<OwnedRwLockReadGuard<()>> {
+        let state = self.background.lock();
+        if state.restoring {
+            return None;
+        }
+        self.requests.clone().try_read_owned().ok()
+    }
+
+    /// Close admission for a restore once no background work runs. Work that
+    /// is still running after the preflight wait is returned as the blocker.
+    async fn close_for_restore(&self) -> Result<RestoreAdmission, Vec<BackgroundWork>> {
+        self.background.lock().restoring = true;
+        let admission = RestoreAdmission(self.background.clone());
+        let deadline = tokio::time::Instant::now() + self.preflight;
+        loop {
+            let released = self.background.released.notified();
+            let mut released = std::pin::pin!(released);
+            released.as_mut().enable();
+            let active = self.background.lock().active.clone();
+            if active.is_empty() {
+                return Ok(admission);
+            }
+            if tokio::time::timeout_at(deadline, released).await.is_err() {
+                let mut blockers = self.background.lock().active.clone();
+                if blockers.is_empty() {
+                    return Ok(admission);
+                }
+                blockers.sort_by_key(|work| work.label());
+                blockers.dedup();
+                return Err(blockers);
+            }
         }
     }
 }
@@ -437,32 +576,46 @@ async fn import(
     drop(connection);
     let input = archive::prepare(file, fingerprint, permit.clone()).await?;
 
+    // Benchmarks, engine duels, AI assessments and Anki syncs are not stopped.
+    // Refuse at once while one runs: waiting for the write lock below would
+    // turn every API request away with 503 until the work finished.
+    let _admission = state.backup.close_for_restore().await.map_err(|blockers| {
+        let running = blockers
+            .iter()
+            .map(|work| work.label())
+            .collect::<Vec<_>>()
+            .join(", ");
+        ApiError(
+            StatusCode::CONFLICT,
+            format!(
+                "Database is busy; retry the restore when current work finishes ({running} running)"
+            ),
+        )
+    })?;
+    // Analysis jobs can hold their read access for hours, and the restore
+    // replaces their data anyway: stop them instead of waiting. The drain also
+    // stops a job claimed just before admission closed once it registers.
+    let drain = state
+        .running_jobs
+        .drain(crate::jobs::RESTORE_INTERRUPTED_ERROR);
+    if drain.interrupted > 0 {
+        tracing::info!(
+            interrupted = drain.interrupted,
+            "Database restore stops running analysis jobs"
+        );
+    }
     // Drain requests already using the destination and reject new ones until
     // the transaction finishes. The table locks also cover other DB clients.
-    // Queueing for the write lock at once stops new readers, so no further job
-    // starts. Analysis jobs can hold their read access for hours, and the
-    // restore replaces their data anyway: stop them instead of waiting.
-    let mut maintenance = std::pin::pin!(state.backup.requests.write());
-    let _maintenance = match tokio::time::timeout(Duration::ZERO, &mut maintenance).await {
-        Ok(guard) => guard,
-        Err(_) => {
-            let interrupted = state
-                .running_jobs
-                .interrupt_all(crate::jobs::RESTORE_INTERRUPTED_ERROR);
-            if interrupted > 0 {
-                tracing::info!(interrupted, "Database restore stops running analysis jobs");
-            }
-            tokio::time::timeout(RESTORE_DRAIN, &mut maintenance)
-                .await
-                .map_err(|_| {
-                    ApiError(
-                        StatusCode::CONFLICT,
-                        "Database is busy; retry the restore when current work finishes".into(),
-                    )
-                })?
-        }
-    };
+    let _maintenance = tokio::time::timeout(state.backup.drain, state.backup.requests.write())
+        .await
+        .map_err(|_| {
+            ApiError(
+                StatusCode::CONFLICT,
+                "Database is busy; retry the restore when current work finishes".into(),
+            )
+        })?;
     restore::replace(&state, input).await?;
+    drop(drain);
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -486,6 +639,99 @@ mod tests {
         let before = super::schema(&mut tx).await.unwrap();
         tx.rollback().await.unwrap();
         assert_eq!(before, after);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn restore_refuses_at_once_while_unstoppable_work_runs(pool: sqlx::PgPool) {
+        use super::BackgroundWork;
+        use crate::api::AppState;
+        use axum::{
+            body::{Body, to_bytes},
+            http::{Request, StatusCode, header},
+        };
+        use std::time::{Duration, Instant};
+        use tower::ServiceExt;
+        let state = AppState::new(pool, crate::engine::Engine::new("/unused".into()))
+            .with_restore_waits(Duration::from_millis(300), Duration::from_secs(60));
+        let app = crate::api::router(state.clone());
+        let archive = app
+            .clone()
+            .oneshot(
+                Request::get("/api/database-backup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(archive.status(), StatusCode::OK);
+        let archive = to_bytes(archive.into_body(), 16 * 1024 * 1024)
+            .await
+            .unwrap();
+        let restore = |archive: axum::body::Bytes| {
+            app.clone().oneshot(
+                Request::post("/api/database-backup?replace=true")
+                    .header(header::CONTENT_TYPE, "application/vnd.neondojo.backup")
+                    .body(Body::from(archive))
+                    .unwrap(),
+            )
+        };
+        let duel = state
+            .backup
+            .try_background(BackgroundWork::EngineDuel)
+            .expect("database access");
+        // A polling worker that releases its access during the preflight wait
+        // does not block the restore's decision.
+        let poll = state
+            .backup
+            .try_background(BackgroundWork::AiAssessment)
+            .expect("database access");
+        let started = Instant::now();
+        let pending = tokio::spawn(restore(archive.clone()));
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !state.backup.background.lock().restoring {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .expect("the restore must close admission");
+        drop(poll);
+        // Neither new background work nor analysis jobs start meanwhile, but
+        // API requests are still served.
+        assert!(
+            state
+                .backup
+                .try_background(BackgroundWork::Benchmark)
+                .is_none()
+        );
+        assert!(state.backup.try_job().is_none());
+        let version = app
+            .clone()
+            .oneshot(Request::get("/api/version").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(version.status(), StatusCode::OK);
+        let response = tokio::time::timeout(Duration::from_secs(5), pending)
+            .await
+            .expect("the restore must not wait for the running duel")
+            .unwrap()
+            .unwrap();
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        let body: serde_json::Value =
+            serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap())
+                .unwrap();
+        assert_eq!(
+            body["error"],
+            "Database is busy; retry the restore when current work finishes (engine duel running)"
+        );
+        // The refused restore reopens admission and leaves the API available.
+        let benchmark = state
+            .backup
+            .try_background(BackgroundWork::Benchmark)
+            .expect("admission reopens after the refused restore");
+        drop((duel, benchmark));
+        let response = restore(archive).await.unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
     }
 
     #[test]

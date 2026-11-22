@@ -19,7 +19,10 @@ pub async fn worker(state: AppState) {
         tokio::select! {
             _ = state.shutdown.cancelled() => break,
             result = async {
-                let Ok(_access) = state.backup.requests.try_read() else {
+                let Some(_access) = state
+                    .backup
+                    .try_background(crate::database_backup::BackgroundWork::EngineDuel)
+                else {
                     return Ok(false);
                 };
                 run_one(&state.pool).await

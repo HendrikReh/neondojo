@@ -33,7 +33,16 @@ pub const RESTORE_INTERRUPTED_ERROR: &str = "Interrupted by database restore";
 /// renewal. The database state stays authoritative: once a job is cancelled,
 /// its lease token no longer matches and any later write is rejected.
 #[derive(Default)]
-pub(crate) struct RunningJobs(std::sync::Mutex<std::collections::HashMap<Uuid, Stop>>);
+pub(crate) struct RunningJobs(std::sync::Mutex<Running>);
+
+#[derive(Default)]
+struct Running {
+    jobs: std::collections::HashMap<Uuid, Stop>,
+    /// Set while a database restore drains running work. A job that a worker
+    /// claimed before the restore began but registers only now is stopped at
+    /// once with this reason instead of slipping past the drain.
+    draining: Option<&'static str>,
+}
 
 /// Stops one running job and records why; the first reason wins.
 #[derive(Clone, Default)]
@@ -49,45 +58,59 @@ impl Stop {
     }
 }
 
+/// Keeps [`RunningJobs`] draining until it is dropped, when the restore that
+/// created it has finished or failed.
+pub(crate) struct Drain<'a> {
+    jobs: &'a RunningJobs,
+    /// How many running jobs the drain stopped when it began.
+    pub(crate) interrupted: usize,
+}
+
+impl Drop for Drain<'_> {
+    fn drop(&mut self) {
+        self.jobs.lock().draining = None;
+    }
+}
+
 impl RunningJobs {
-    fn register(&self, id: Uuid) -> Stop {
-        let stop = Stop::default();
+    fn lock(&self) -> std::sync::MutexGuard<'_, Running> {
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(id, stop.clone());
+    }
+
+    fn register(&self, id: Uuid) -> Stop {
+        let stop = Stop::default();
+        let mut running = self.lock();
+        if let Some(reason) = running.draining {
+            stop.stop(reason);
+        }
+        running.jobs.insert(id, stop.clone());
         stop
     }
 
     fn remove(&self, id: Uuid) {
-        self.0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .remove(&id);
+        self.lock().jobs.remove(&id);
     }
 
     fn cancel(&self, id: Uuid) {
-        if let Some(token) = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .get(&id)
-        {
+        if let Some(token) = self.lock().jobs.get(&id) {
             token.stop(CANCELLED_ERROR);
         }
     }
 
     /// Stop every running job, for example before a database restore, and
-    /// return how many were running.
-    pub(crate) fn interrupt_all(&self, reason: &'static str) -> usize {
-        let running = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        for stop in running.values() {
+    /// keep stopping jobs that register until the returned guard is dropped.
+    pub(crate) fn drain(&self, reason: &'static str) -> Drain<'_> {
+        let mut running = self.lock();
+        running.draining = Some(reason);
+        for stop in running.jobs.values() {
             stop.stop(reason);
         }
-        running.len()
+        Drain {
+            jobs: self,
+            interrupted: running.jobs.len(),
+        }
     }
 }
 
@@ -171,7 +194,9 @@ async fn fill(
     let slots = crate::settings::load_analysis_job_slots(&state.pool).await?;
     if crate::benchmarks::has_queued(&state.pool).await? {
         if running.len() < slots
-            && let Ok(access) = state.backup.requests.clone().try_read_owned()
+            && let Some(access) = state
+                .backup
+                .try_background(crate::database_backup::BackgroundWork::Benchmark)
         {
             let state = state.clone();
             let task = running.spawn(async move {
@@ -183,7 +208,9 @@ async fn fill(
         return Ok(());
     }
     while running.len() < slots {
-        let Ok(access) = state.backup.requests.clone().try_read_owned() else {
+        // A restore drains these jobs: one claimed while it starts is stopped
+        // when it registers.
+        let Some(access) = state.backup.try_job() else {
             break;
         };
         let Some(claimed) = claim(state).await? else {
@@ -280,12 +307,14 @@ async fn execute_with_heartbeat(state: &AppState, job: &Job, token: Uuid) -> Res
         execute(state, job, token),
         state.job_heartbeat,
     ));
-    // Dropping the work on cancellation terminates its engine processes.
+    // Dropping the work on cancellation terminates its engine processes. A
+    // job stopped before it registered never starts its work.
     let result = tokio::select! {
-        result = work => result,
+        biased;
         () = cancelled.token.cancelled() => Err(anyhow::anyhow!(
             cancelled.reason.get().copied().unwrap_or(CANCELLED_ERROR)
         )),
+        result = work => result,
     };
     state.running_jobs.remove(job.id);
     result
@@ -504,7 +533,7 @@ mod tests {
         );
         // kill_on_drop terminates the engine process with the cancelled work.
         terminated(pid).await;
-        assert!(state.running_jobs.0.lock().unwrap().is_empty());
+        assert!(state.running_jobs.lock().jobs.is_empty());
     }
 
     #[sqlx::test(migrations = "./migrations")]
@@ -518,7 +547,10 @@ mod tests {
         });
         let pid = engine.pid().await;
         assert_eq!(
-            state.running_jobs.interrupt_all(RESTORE_INTERRUPTED_ERROR),
+            state
+                .running_jobs
+                .drain(RESTORE_INTERRUPTED_ERROR)
+                .interrupted,
             1
         );
         tokio::time::timeout(Duration::from_secs(5), worker)
@@ -537,9 +569,113 @@ mod tests {
         );
         terminated(pid).await;
         assert_eq!(
-            state.running_jobs.interrupt_all(RESTORE_INTERRUPTED_ERROR),
+            state
+                .running_jobs
+                .drain(RESTORE_INTERRUPTED_ERROR)
+                .interrupted,
             0
         );
+    }
+
+    #[test]
+    fn a_job_registering_during_a_drain_is_stopped_until_the_drain_ends() {
+        let jobs = RunningJobs::default();
+        let drain = jobs.drain(RESTORE_INTERRUPTED_ERROR);
+        assert_eq!(drain.interrupted, 0);
+        let late = jobs.register(Uuid::new_v4());
+        assert!(late.token.is_cancelled());
+        assert_eq!(late.reason.get(), Some(&RESTORE_INTERRUPTED_ERROR));
+        drop(drain);
+        let after = jobs.register(Uuid::new_v4());
+        assert!(!after.token.is_cancelled());
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn restore_stops_a_job_claimed_while_it_starts_draining(pool: PgPool) {
+        use axum::{
+            body::{Body, to_bytes},
+            http::{Request, StatusCode, header},
+        };
+        use tower::ServiceExt;
+        let engine = SleepingEngine::new();
+        let state = AppState::new(pool.clone(), engine.engine())
+            .with_restore_waits(Duration::from_millis(200), Duration::from_secs(10));
+        let app = crate::api::router(state.clone());
+        let id = queued_position_job(&pool).await;
+        let archive = app
+            .clone()
+            .oneshot(
+                Request::get("/api/database-backup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(archive.status(), StatusCode::OK);
+        let archive = to_bytes(archive.into_body(), 16 * 1024 * 1024)
+            .await
+            .unwrap();
+        // As in `fill`: the worker holds database access but has not claimed
+        // or registered its job when the restore stops the running jobs.
+        let access = state.backup.try_job().expect("database access");
+        let restore = tokio::spawn({
+            let app = app.clone();
+            async move {
+                app.oneshot(
+                    Request::post("/api/database-backup?replace=true")
+                        .header(header::CONTENT_TYPE, "application/vnd.neondojo.backup")
+                        .body(Body::from(archive))
+                        .unwrap(),
+                )
+                .await
+                .unwrap()
+                .status()
+            }
+        });
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while state.running_jobs.lock().draining.is_none() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("the restore must start draining");
+        let claimed = claim(&state).await.unwrap().expect("queued job");
+        assert_eq!(claimed.job.id, id);
+        let started = std::time::Instant::now();
+        let job = tokio::spawn({
+            let state = state.clone();
+            async move {
+                let _access = access;
+                run_claimed(&state, claimed).await
+            }
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_secs(5), job)
+                .await
+                .expect("a job registering during the drain must stop at once")
+                .unwrap()
+                .unwrap()
+        );
+        assert_eq!(
+            tokio::time::timeout(Duration::from_secs(10), restore)
+                .await
+                .expect("the restore must proceed once the job stopped")
+                .unwrap(),
+            StatusCode::NO_CONTENT
+        );
+        assert!(started.elapsed() < Duration::from_secs(5));
+        assert_eq!(
+            status(&pool, id).await,
+            (
+                "failed".into(),
+                Some(RESTORE_INTERRUPTED_ERROR.into()),
+                None
+            )
+        );
+        // The stopped job never started its engine.
+        assert!(!engine.directory.path().join("engine.pid").exists());
+        assert!(state.running_jobs.lock().draining.is_none());
+        assert!(state.backup.try_job().is_some());
     }
 
     #[sqlx::test(migrations = "./migrations")]
