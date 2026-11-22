@@ -1,6 +1,4 @@
 import { useWorkspaceDefaults } from '../../../settings/configuration/ConfigurationProvider';
-import { useDecimalInput } from '../../../shared/format/decimal-input';
-import { defaultConfiguration } from '../../../settings/configuration/configuration-model';
 import {
   sessionFields,
   sessionString,
@@ -11,26 +9,21 @@ import AnkiAutoSync from './AnkiAutoSync';
 import AnkiSyncOverview from './AnkiSyncOverview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { request } from '../../../shared/api/api';
-import type { components } from '../../../generated-api';
-import { useAnalysisCatalogText } from '../../analysis/analysis-catalog-messages';
 import { AppError } from '../../../shared/i18n/i18n-core';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
 import type { Theme } from '../../../shared/board/themes';
 import StudyCardExercise from './StudyCardExercise';
-import { useDetailsDismiss } from '../../../shared/hooks/useDetailsDismiss';
 import LearningCardBrowser from './LearningCardBrowser';
-import CardSuggestionsPanel from './CardSuggestionsPanel';
+// Analysis imports AddCardsPanel through this module. Keep the re-export at
+// this position: it keeps the stylesheets of the Study subtree ahead of the
+// Analysis stylesheets in the bundle, which the current cascade relies on.
+export { AddCardsPanel } from './AddCardsPanel';
 import CardSearchControls from './CardSearchControls';
-import {
-  SearchFilterInput,
-  SearchFilterSelect,
-} from '../../../shared/ui/SearchFilterForm';
-import { groupDecks } from './deck-groups';
+import { SearchFilterSelect } from '../../../shared/ui/SearchFilterForm';
 import { useSearchPages } from '../../../shared/hooks/useSearchPages';
 import {
   ALL_CARDS,
-  CARDS_WITHOUT_DECK,
   CARD_SELECTION_LIMIT,
   CARD_PAGE_SIZE,
   cardListPath,
@@ -48,6 +41,9 @@ import TransferPractice from './TransferPractice';
 import CardSpecialPractice from './CardSpecialPractice';
 import { usePositionText } from '../../positions/position-browser-messages';
 import './learning-workspace.css';
+import { savedDeck, useDecks } from './useDecks';
+import DeckSelector from './DeckSelector';
+import AnkiActionsMenu from './AnkiActionsMenu';
 import DeckManagementDialog from './DeckManagementDialog';
 import CreateDeckForm from './CreateDeckForm';
 import {
@@ -82,314 +78,6 @@ function storedPracticeRound() {
   } catch {
     return null;
   }
-}
-
-function savedDeck() {
-  try {
-    return localStorage.getItem('neondojo.deck') || ALL_CARDS;
-  } catch {
-    return ALL_CARDS;
-  }
-}
-export function useDecks(revision: number) {
-  const [decks, setDecks] = useState<VersionedDeck[]>([]);
-  const [ready, setReady] = useState(false);
-  const [settledRevision, setSettledRevision] = useState<number>();
-  const [error, setError] = useState<unknown>(null);
-  const requestId = useRef(0);
-  const live = useRef(true);
-  async function refresh(signal?: AbortSignal) {
-    const id = ++requestId.current;
-    try {
-      const data = await request<VersionedDeck[]>('/decks', { signal });
-      if (live.current && !signal?.aborted && id === requestId.current) {
-        setDecks(data);
-        setReady(true);
-        setSettledRevision(revision);
-        setError(null);
-      }
-      return data;
-    } catch (error) {
-      if (live.current && !signal?.aborted && id === requestId.current)
-        setError(error);
-      throw error;
-    }
-  }
-  useEffect(() => {
-    live.current = true;
-    const abort = new AbortController();
-    void refresh(abort.signal).catch(() => {});
-    return () => {
-      live.current = false;
-      abort.abort();
-      ++requestId.current;
-    };
-  }, [revision]);
-  const addDeck = (deck: Deck) => {
-    ++requestId.current;
-    setDecks((previous) =>
-      previous.some((item) => item.id === deck.id)
-        ? previous
-        : [...previous, deck],
-    );
-  };
-  const replaceDeck = (deck: VersionedDeck) => {
-    ++requestId.current;
-    setDecks((previous) =>
-      previous.map((item) => (item.id === deck.id ? deck : item)),
-    );
-  };
-  const removeDeck = (id: string) => {
-    ++requestId.current;
-    setDecks((previous) => previous.filter((item) => item.id !== id));
-  };
-  return {
-    decks,
-    error,
-    addDeck,
-    replaceDeck,
-    removeDeck,
-    refresh,
-    ready,
-    settled: ready && settledRevision === revision,
-  };
-}
-export function AddCardsPanel({
-  positionId,
-  matchId,
-  analysisId,
-  gameNo,
-  revision,
-  onChanged,
-  allowBatch = true,
-  white,
-  black,
-  theme,
-}: {
-  positionId: string | undefined;
-  matchId: string;
-  analysisId?: string;
-  gameNo?: number;
-  revision: number;
-  onChanged: () => void;
-  allowBatch?: boolean;
-  white: string;
-  black: string;
-  theme: Theme;
-}) {
-  const catalogText = useAnalysisCatalogText();
-  const legacy = useWorkspaceDefaults();
-  const t = useLearningText();
-  const practiceT = useCardPracticeText();
-  const [newTags, setNewTags] = useState('');
-  const { formatError, t: baseT } = useI18n();
-  const { decks, error: deckError, addDeck, settled } = useDecks(revision);
-  const [deckId, setDeckId] = useWorkspaceSession(
-    'analysis.card-deck',
-    legacy?.learning.deck_id,
-    savedDeck(),
-    sessionString,
-  );
-  const selectedDeckId = decks.some((deck) => deck.id === deckId) ? deckId : '';
-  const [minLoss, setMinLoss] = useWorkspaceSession(
-    'analysis.card-min-loss',
-    legacy ? String(legacy.learning.generation.min_loss) : undefined,
-    String(defaultConfiguration.learning.generation.min_loss),
-    sessionString,
-  );
-  const minLossInput = useDecimalInput({
-    value: minLoss,
-    onChange: setMinLoss,
-    step: 0.01,
-    min: 0,
-    max: 10,
-  });
-  const [player, setPlayer] = useWorkspaceSession(
-    'analysis.card-player',
-    legacy?.learning.generation.player,
-    '',
-    (value) =>
-      value === '' || value === '0' || value === '1' ? value : undefined,
-  );
-  const [busy, setBusy] = useState(false);
-  const [needsAnalysis, setNeedsAnalysis] = useState(false);
-  const [error, setError] = useState<unknown>(null);
-  const [processed, setProcessed] = useState<number | null>(null);
-  const generation = useRef(0);
-  useEffect(() => {
-    generation.current++;
-    setProcessed(null);
-    setNeedsAnalysis(false);
-    setError(null);
-    setBusy(false);
-  }, [positionId, matchId, gameNo, allowBatch, analysisId]);
-  useEffect(() => {
-    if (settled && deckId && !isCollectionScope(deckId) && !selectedDeckId)
-      setDeckId('');
-  }, [deckId, selectedDeckId, settled]);
-  const hasDeck = decks.some((deck) => deck.id === deckId);
-  const validLoss =
-    minLoss.trim() !== '' &&
-    Number.isFinite(Number(minLoss)) &&
-    Number(minLoss) >= 0;
-  async function add(kind: 'position' | 'match') {
-    if (!hasDeck || (kind === 'match' && !allowBatch)) return;
-    if (!analysisId) {
-      setNeedsAnalysis(true);
-      return;
-    }
-    const version = ++generation.current;
-    setBusy(true);
-    setError(null);
-    setProcessed(null);
-    try {
-      let body: components['schemas']['AddCards'];
-      if (kind === 'position') {
-        body = { position_id: positionId };
-      } else {
-        body = {
-          game_no: gameNo,
-          min_loss: Number(minLoss),
-          player: player === '' ? null : Number(player),
-        };
-      }
-      const result = await request<components['schemas']['AddCardsResult']>(
-        `/decks/${deckId}/cards`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            ...body,
-            analysis_id: analysisId,
-            match_id: matchId,
-            tags: newTags
-              .split(',')
-              .map((tag) => tag.trim())
-              .filter(Boolean),
-          } satisfies components['schemas']['AddCards']),
-        },
-      );
-      if (version === generation.current) {
-        setProcessed(result.added + result.updated);
-        onChanged();
-      }
-    } catch (error) {
-      if (version === generation.current) setError(error);
-    } finally {
-      if (version === generation.current) setBusy(false);
-    }
-  }
-  return (
-    <section className="add-cards" aria-label={t('addTitle')}>
-      <h3>{t('addTitle')}</h3>
-      <p>{t('addHint')}</p>
-      <div className="learning-controls">
-        <label>
-          {t('chooseDeck')}{' '}
-          <select
-            aria-label={t('chooseDeck')}
-            value={selectedDeckId}
-            onChange={(e) => setDeckId(e.target.value)}
-            disabled={busy}
-          >
-            {!selectedDeckId && (
-              <option value="" disabled>
-                {t('chooseDeck')}
-              </option>
-            )}
-            {decks.map((deck) => (
-              <option value={deck.id} key={deck.id}>
-                {deck.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <ActionButton
-          icon="add"
-          label={t('addPosition')}
-          disabled={!positionId || !hasDeck || busy}
-          onClick={() => void add('position')}
-        >
-          {t('addPosition')}
-        </ActionButton>
-      </div>
-      <CreateDeckForm
-        onCreated={(deck) => {
-          addDeck(deck);
-          setDeckId(deck.id);
-          onChanged();
-        }}
-      />
-      {allowBatch && (
-        <div className="learning-controls">
-          <label>
-            {t('minLoss')}{' '}
-            <input
-              aria-label={t('minLoss')}
-              {...minLossInput.inputProps}
-              onChange={(e) => minLossInput.change(e.target.value)}
-            />
-          </label>
-          <label>
-            {t('player')}{' '}
-            <select
-              aria-label={t('player')}
-              value={player}
-              onChange={(e) => setPlayer(e.target.value)}
-            >
-              <option value="">{t('both')}</option>
-              <option value="0">{baseT('common.white')}</option>
-              <option value="1">{baseT('common.black')}</option>
-            </select>
-          </label>
-          <ActionButton
-            icon="add"
-            label={
-              gameNo
-                ? baseT('games.addErrors', { game: gameNo })
-                : t('addErrors')
-            }
-            disabled={!hasDeck || gameNo === undefined || busy || !validLoss}
-            onClick={() => void add('match')}
-          >
-            {gameNo
-              ? baseT('games.addErrors', { game: gameNo })
-              : t('addErrors')}
-          </ActionButton>
-        </div>
-      )}
-      <label>
-        {practiceT('topicFilter')}{' '}
-        <input
-          value={newTags}
-          maxLength={650}
-          onChange={(event) => setNewTags(event.target.value)}
-        />
-      </label>
-      {allowBatch && (
-        <CardSuggestionsPanel
-          key={JSON.stringify([matchId, deckId, player, minLoss])}
-          deckId={deckId}
-          matchId={matchId}
-          player={player}
-          minLoss={Number(minLoss)}
-          white={white}
-          black={black}
-          theme={theme}
-          disabled={!hasDeck || !validLoss || busy}
-          onChanged={onChanged}
-        />
-      )}
-      {needsAnalysis && <p role="alert">{catalogText('chooseAnother')}</p>}
-      {busy && <p role="status">{t('adding')}</p>}
-      {processed !== null && (
-        <p role="status">{t('added', { count: processed })}</p>
-      )}
-      {!!(error || deckError) && (
-        <p role="alert">{formatError(error || deckError)}</p>
-      )}
-    </section>
-  );
 }
 
 export default function LearningWorkspace({
@@ -430,7 +118,6 @@ export default function LearningWorkspace({
   const [sendingAnki, setSendingAnki] = useState(false);
   const [syncingAnki, setSyncingAnki] = useState(false);
   const ankiBusy = !!ankiImportProgress || sendingAnki || syncingAnki;
-  const ankiInput = useRef<HTMLInputElement>(null);
   const externalAnkiInput = useRef<HTMLInputElement>(null);
   const practiceRequest = useRef<AbortController | null>(null);
   useEffect(() => () => practiceRequest.current?.abort(), []);
@@ -487,7 +174,6 @@ export default function LearningWorkspace({
   const [appliedDeckToken, setAppliedDeckToken] = useState<number>();
   const [missingDeckToken, setMissingDeckToken] = useState<number>();
   const [studying, setStudying] = useState(false);
-  const ankiMenu = useDetailsDismiss();
   function chooseDeck(id: string) {
     setMissingDeckToken(undefined);
     setCardNotice(undefined);
@@ -950,39 +636,14 @@ export default function LearningWorkspace({
         )}
       </section>
     );
-  const deckOption = (deck: (typeof decks)[number], label: string) => (
-    <option value={deck.id} key={deck.id}>
-      {label} · {t('cards', { count: deck.card_count })}
-    </option>
-  );
   const deckSelector = (
-    <>
-      {decks.length > 12 && (
-        <SearchFilterInput
-          label={t('filterDecks')}
-          type="search"
-          value={deckFilter}
-          onChange={setDeckFilter}
-        />
-      )}
-      <SearchFilterSelect
-        label={t('chooseDeck')}
-        value={deckId}
-        onChange={chooseDeck}
-      >
-        <option value={ALL_CARDS}>{searchT('allCards')}</option>
-        <option value={CARDS_WITHOUT_DECK}>{searchT('withoutDeck')}</option>
-        {groupDecks(decks, deckFilter, deckId).map((group) =>
-          group.path ? (
-            <optgroup key={group.path} label={group.path}>
-              {group.decks.map(({ deck, label }) => deckOption(deck, label))}
-            </optgroup>
-          ) : (
-            group.decks.map(({ deck, label }) => deckOption(deck, label))
-          ),
-        )}
-      </SearchFilterSelect>
-    </>
+    <DeckSelector
+      decks={decks}
+      deckId={deckId}
+      onChoose={chooseDeck}
+      filter={deckFilter}
+      onFilter={setDeckFilter}
+    />
   );
   const deckPanel = sourceDeck && !studying && (
     <div className="learning-deck-panel position-deck-panel">
@@ -1003,71 +664,15 @@ export default function LearningWorkspace({
         >
           {t('studyNow')}
         </ActionButton>
-        <details
-          className="learning-anki-menu"
-          ref={ankiMenu.ref}
-          onKeyDown={ankiMenu.onKeyDown}
-        >
-          <summary>Anki</summary>
-          <div
-            className="learning-anki-menu-items"
-            role="group"
-            aria-label="Anki"
-            onClick={(event) => {
-              if (
-                event.target instanceof Element &&
-                event.target.closest('button') &&
-                ankiMenu.ref.current
-              )
-                ankiMenu.ref.current.open = false;
-            }}
-          >
-            <ActionButton
-              icon="export"
-              label={exporting ? t('exporting') : t('export')}
-              disabled={!sourceDeck.card_count || exporting}
-              onClick={() => void download()}
-            >
-              {exporting ? t('exporting') : t('export')}
-            </ActionButton>
-            <ActionButton
-              icon="link"
-              label={practiceT('sendAnki')}
-              disabled={!sourceDeck.card_count || ankiBusy}
-              onClick={() => void sendToAnki(sourceDeck)}
-            >
-              {practiceT('sendAnki')}
-            </ActionButton>
-            <ActionButton
-              icon="refresh"
-              label={practiceT('syncAnkiReviews')}
-              disabled={!sourceDeck.card_count || ankiBusy}
-              onClick={() => void syncReviews(sourceDeck)}
-            >
-              {practiceT('syncAnkiReviews')}
-            </ActionButton>
-            <input
-              ref={ankiInput}
-              type="file"
-              hidden
-              accept=".apkg"
-              multiple
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? []);
-                event.target.value = '';
-                void importAnki(files);
-              }}
-            />
-            <ActionButton
-              icon="open"
-              label={practiceT('ankiImport')}
-              disabled={ankiBusy}
-              onClick={() => ankiInput.current?.click()}
-            >
-              {practiceT('ankiImport')}
-            </ActionButton>
-          </div>
-        </details>
+        <AnkiActionsMenu
+          deck={sourceDeck}
+          exporting={exporting}
+          busy={ankiBusy}
+          onExport={() => void download()}
+          onSend={() => void sendToAnki(sourceDeck)}
+          onSync={() => void syncReviews(sourceDeck)}
+          onImport={(files) => void importAnki(files)}
+        />
       </div>
       {visible && (
         <AnkiAutoSync

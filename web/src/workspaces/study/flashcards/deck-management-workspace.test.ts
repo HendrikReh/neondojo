@@ -47,9 +47,11 @@ vi.mock('react', async (original) => ({
     }
   },
 }));
-import LearningWorkspace, { useDecks } from './LearningPanel';
+import LearningWorkspace from './LearningPanel';
+import { useDecks } from './useDecks';
 import ActionButton from '../../../shared/ui/ActionButton';
-import { SearchFilterSelect } from '../../../shared/ui/SearchFilterForm';
+import DeckSelector from './DeckSelector';
+import AnkiActionsMenu from './AnkiActionsMenu';
 import StudyCardExercise from './StudyCardExercise';
 const decks = [
   { id: 'a', name: 'A', card_count: 1, version: 0 },
@@ -154,12 +156,12 @@ it('hides the old study card synchronously on an A–B–A deck round trip befor
     elements(view).some((element) => element.type === StudyCardExercise),
   ).toBe(true);
   elements(view)
-    .find((element) => element.type === SearchFilterSelect)!
-    .props.onChange('b');
+    .find((element) => element.type === DeckSelector)!
+    .props.onChoose('b');
   view = render();
   elements(view)
-    .find((element) => element.type === SearchFilterSelect)!
-    .props.onChange('a');
+    .find((element) => element.type === DeckSelector)!
+    .props.onChoose('a');
   view = render();
   elements(view)
     .find(
@@ -205,26 +207,23 @@ it('clears an in-flight export indicator when switching decks', async () => {
   let view = await loaded();
   fetch.mockReturnValueOnce(new Promise<Response>(() => {}));
   elements(view)
-    .find(
-      (element) =>
-        element.type === ActionButton &&
-        element.props.label === 'Download Anki deck',
-    )!
-    .props.onClick();
+    .find((element) => element.type === AnkiActionsMenu)!
+    .props.onExport();
   view = render();
+  expect(
+    elements(view).find((element) => element.type === AnkiActionsMenu)!.props
+      .exporting,
+  ).toBe(true);
   elements(view)
-    .find((element) => element.type === SearchFilterSelect)!
-    .props.onChange('b');
+    .find((element) => element.type === DeckSelector)!
+    .props.onChoose('b');
   render();
   commit();
   view = render();
   expect(
-    elements(view).some(
-      (element) =>
-        element.type === ActionButton &&
-        element.props.label === 'Download Anki deck',
-    ),
-  ).toBe(true);
+    elements(view).find((element) => element.type === AnkiActionsMenu)!.props
+      .exporting,
+  ).toBe(false);
 });
 
 it('waits for the current revision before consuming an external deck missing from an older ready list', async () => {
@@ -262,8 +261,8 @@ it('waits for the current revision before consuming an external deck missing fro
   await settle();
   view = render(requested, 1);
   expect(
-    elements(view).find((element) => element.type === SearchFilterSelect)!.props
-      .value,
+    elements(view).find((element) => element.type === DeckSelector)!.props
+      .deckId,
   ).toBe('new-deck');
   expect(
     elements(view).some((element) => element.type === StudyCardExercise),

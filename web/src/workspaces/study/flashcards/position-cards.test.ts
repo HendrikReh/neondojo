@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { AddCardsPanel } from './LearningPanel';
+import { AddCardsPanel } from './AddCardsPanel';
 import { I18nProvider } from '../../../shared/i18n/i18n';
 
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
