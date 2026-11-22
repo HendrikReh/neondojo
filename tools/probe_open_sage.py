@@ -24,6 +24,9 @@ import time
 # The worker and the Rust snapshot validation use this list as well.
 SUPPORTED_VERSIONS = ('3.0.0', '3.1.0',)
 NUMPY_VERSION = '2.5.4'
+# The requested thread budget is the engine's only parallelism, as in the
+# application worker (SINGLE_THREADED_MATH in backend/src/engines/process.rs).
+SINGLE_THREADED_MATH = {'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1', 'VECLIB_MAXIMUM_THREADS': '1'}
 
 
 class ProbeError(Exception):
@@ -509,7 +512,8 @@ def main():
         start = time.perf_counter()
         try:
             process = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--worker', '--levels', *args.levels],
-                                     capture_output=True, text=True, timeout=args.timeout)
+                                     capture_output=True, text=True, timeout=args.timeout,
+                                     env=os.environ | SINGLE_THREADED_MATH)
             # Native engine may print diagnostic lines; worker JSON is the last line.
             report = json.loads(process.stdout.splitlines()[-1])
             require(process.returncode == 0 or report['status'] == 'failed', 'Worker failed without a valid failure report')
