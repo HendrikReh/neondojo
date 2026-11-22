@@ -761,6 +761,7 @@ export default function LearningWorkspace({
           <ActionButton
             icon="delete"
             label={libraryText('removeCards')}
+            className="danger"
             disabled={actionDisabled}
             onClick={() => openCardAction('remove')}
           >
@@ -770,6 +771,7 @@ export default function LearningWorkspace({
         <ActionButton
           icon="delete"
           label={libraryText('deleteCards')}
+          className="danger"
           disabled={actionDisabled}
           onClick={() => openCardAction('delete')}
         >

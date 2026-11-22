@@ -1,4 +1,4 @@
-import Tooltip from '../../shared/ui/Tooltip';
+import { useClippedCellTooltip } from '../../shared/ui/useClippedCellTooltip';
 import { useWorkspaceDefaults } from '../../settings/configuration/ConfigurationProvider';
 import {
   sessionFields,
@@ -177,6 +177,7 @@ export default function MatchDatabase({
     (value) => sessionFields(value, defaultLibraryFilters),
   );
   const columns = useLibraryColumns(visible, !!filters.position_id);
+  const cellTooltip = useClippedCellTooltip();
   const [filterInput, setFilterInput] = useState<Filters>();
   const draftFilters = filterInput ?? filters;
   const filterDraft = useRef(draftFilters);
@@ -442,12 +443,20 @@ export default function MatchDatabase({
           openMatchRow(match);
         }}
       >
-        <span className="library-match-player">{match[player]}</span>
+        <span className="library-match-player" data-tooltip-overflow>
+          {match[player]}
+        </span>
         <span className="sr-only">
           {t('common.versus')} {match[player === 'white' ? 'black' : 'white']}
         </span>
         {match.display_name.trim() && match.display_name !== match.filename && (
-          <span className="library-match-title">· {match.display_name}</span>
+          <span
+            className="library-match-title"
+            data-tooltip-overflow
+            data-tooltip-text={match.display_name}
+          >
+            · {match.display_name}
+          </span>
         )}
       </button>
     );
@@ -524,6 +533,31 @@ export default function MatchDatabase({
       : undefined;
   const selectionIsCurrent = matchResultScope === matchScope;
   const analyzableMatches = selection.filter(canAnalyzeMatch);
+  function batchButton(action: 'copy' | 'move' | 'tags' | 'export' | 'delete') {
+    return (
+      <ActionButton
+        icon={action}
+        label={l(action)}
+        compact
+        key={action}
+        className={action === 'delete' ? 'danger' : undefined}
+        disabled={
+          !hasSelection ||
+          !selectionIsCurrent ||
+          (action === 'export' && selected.size > 50) ||
+          (pausedSelected && ['copy', 'move', 'delete'].includes(action))
+        }
+        onClick={() =>
+          setDialog({
+            kind: 'batch',
+            action,
+            ids: [...selected],
+            source: databaseId,
+          })
+        }
+      />
+    );
+  }
   const pr = (value: number | null) =>
     value == null ? '—' : formatNumber(value, prDigits);
   const date = (value: string | null) =>
@@ -558,7 +592,7 @@ export default function MatchDatabase({
     match_length: () => heading('match_length', l('length')),
     score: () => heading('score', l('result')),
     played_at: () => heading('played_at', l('played')),
-    created_at: () => heading('created_at', l('imported')),
+    created_at: () => heading('created_at', l('importedColumn'), l('imported')),
     tournament: () => heading('tournament', l('tournament')),
     position_count: () => heading('position_count', w('positions')),
     analysis_status: () => heading('analysis_status', l('analysis')),
@@ -577,7 +611,9 @@ export default function MatchDatabase({
     black: (m) => (
       <td>
         {showColumn('white') ? (
-          <span className="library-player-name">{m.black}</span>
+          <span className="library-player-name" data-tooltip-overflow>
+            {m.black}
+          </span>
         ) : (
           matchName(m, 'black')
         )}
@@ -592,7 +628,7 @@ export default function MatchDatabase({
     play_mode: (m) => (
       <td className="library-play-mode-cell" data-column="play_mode">
         {m.play_mode ? (
-          <span className="library-play-mode">
+          <span className="library-play-mode" data-tooltip-overflow>
             {modeText(m.play_mode)} ·{' '}
             {modeText(m.play_assisted ? 'assisted' : 'independent')}
           </span>
@@ -609,22 +645,26 @@ export default function MatchDatabase({
           : 'n/a'}
       </td>
     ),
-    played_at: (m) => <td>{date(m.played_on)}</td>,
-    created_at: (m) => <td>{date(m.created_at)}</td>,
-    tournament: (m) => <td>{m.tournament ?? '—'}</td>,
+    played_at: (m) => <td data-tooltip-overflow>{date(m.played_on)}</td>,
+    created_at: (m) => <td data-tooltip-overflow>{date(m.created_at)}</td>,
+    tournament: (m) => <td data-tooltip-overflow>{m.tournament ?? '—'}</td>,
     position_count: (m) => (
       <td className="library-match-positions">
         {formatNumber(m.position_count)}
       </td>
     ),
-    analysis_status: (m) => <td>{state(m)}</td>,
+    analysis_status: (m) => <td data-tooltip-overflow>{state(m)}</td>,
     tags: (m) => (
       <td className="library-tags-cell library-notes-cell">
         <div className="library-notes-summary">
           {m.tags.length > 0 && (
-            <span className="library-note-tags">
+            <span
+              className="library-note-tags"
+              data-tooltip-overflow
+              data-tooltip-text={m.tags.join(', ')}
+            >
               {m.tags.map((tag) => (
-                <span className="tag-chip" key={tag}>
+                <span className="tag-chip" key={tag} data-tooltip-overflow>
                   {tag}
                 </span>
               ))}
@@ -634,7 +674,11 @@ export default function MatchDatabase({
       </td>
     ),
     comment: (m) => (
-      <td className="library-comment-cell">
+      <td
+        className="library-comment-cell"
+        data-tooltip-overflow
+        data-tooltip-text={m.comment}
+      >
         <span className="library-note-comment">{m.comment}</span>
       </td>
     ),
@@ -853,96 +897,79 @@ export default function MatchDatabase({
             <strong role="status">
               {l('selectedMatches', { count: selected.size })}
             </strong>
-            <ActionButton
-              type="button"
-              icon="open"
-              label={w('openMatch')}
-              compact
-              disabled={
-                !singleSelected ||
-                !!resumeId ||
-                singleSelected.play_paused ||
-                rowOpeningDisabled(singleSelected)
-              }
-              onClick={() => {
-                if (singleSelected) openMatchRow(singleSelected);
-              }}
-            />
-            <ActionButton
-              type="button"
-              icon="resume"
-              label={l('resumePlay')}
-              compact
-              disabled={!selectionIsCurrent || !resumeId || !onOpenPlay}
-              onClick={() => {
-                if (resumeId) onOpenPlay?.(resumeId, true);
-              }}
-            />
-            <ActionButton
-              type="button"
-              icon="analysis"
-              label={`${l('analyzeSelection')} …`}
-              aria-haspopup="dialog"
-              compact
-              disabled={
-                !selectionIsCurrent ||
-                !onAnalyzeMatches ||
-                !analyzableMatches.length
-              }
-              onClick={(event) => {
-                event.currentTarget.focus();
-                onAnalyzeMatches?.(
-                  analyzableMatches,
-                  selection.length - analyzableMatches.length,
-                );
-              }}
-            />
-            <ActionButton
-              type="button"
-              icon="edit"
-              label={l('editMatch')}
-              aria-haspopup="dialog"
-              compact
-              disabled={!selectionIsCurrent || !singleSelected}
-              onClick={(event) => {
-                event.currentTarget.focus();
-                if (singleSelected)
-                  setDialog({ kind: 'metadata', match: singleSelected });
-              }}
-            />
-            {(['copy', 'move', 'tags', 'export', 'delete'] as const).map(
-              (action) => (
-                <ActionButton
-                  icon={action}
-                  label={l(action)}
-                  compact
-                  key={action}
-                  disabled={
-                    !hasSelection ||
-                    !selectionIsCurrent ||
-                    (action === 'export' && selected.size > 50) ||
-                    (pausedSelected &&
-                      ['copy', 'move', 'delete'].includes(action))
-                  }
-                  onClick={() =>
-                    setDialog({
-                      kind: 'batch',
-                      action,
-                      ids: [...selected],
-                      source: databaseId,
-                    })
-                  }
-                />
-              ),
-            )}
-            <ActionButton
-              icon="clear"
-              label={l('clearSelection')}
-              compact
-              disabled={!hasSelection}
-              onClick={() => setSelectedRows([])}
-              aria-label={l('clearSelection')}
-            />
+            <div className="library-batch-group" data-group="single">
+              <ActionButton
+                type="button"
+                icon="open"
+                label={w('openMatch')}
+                compact
+                disabled={
+                  !singleSelected ||
+                  !!resumeId ||
+                  singleSelected.play_paused ||
+                  rowOpeningDisabled(singleSelected)
+                }
+                onClick={() => {
+                  if (singleSelected) openMatchRow(singleSelected);
+                }}
+              />
+              <ActionButton
+                type="button"
+                icon="resume"
+                label={l('resumePlay')}
+                compact
+                disabled={!selectionIsCurrent || !resumeId || !onOpenPlay}
+                onClick={() => {
+                  if (resumeId) onOpenPlay?.(resumeId, true);
+                }}
+              />
+              <ActionButton
+                type="button"
+                icon="edit"
+                label={l('editMatch')}
+                aria-haspopup="dialog"
+                compact
+                disabled={!selectionIsCurrent || !singleSelected}
+                onClick={(event) => {
+                  event.currentTarget.focus();
+                  if (singleSelected)
+                    setDialog({ kind: 'metadata', match: singleSelected });
+                }}
+              />
+            </div>
+            <div className="library-batch-group" data-group="batch">
+              <ActionButton
+                type="button"
+                icon="analysis"
+                label={`${l('analyzeSelection')} …`}
+                aria-haspopup="dialog"
+                compact
+                disabled={
+                  !selectionIsCurrent ||
+                  !onAnalyzeMatches ||
+                  !analyzableMatches.length
+                }
+                onClick={(event) => {
+                  event.currentTarget.focus();
+                  onAnalyzeMatches?.(
+                    analyzableMatches,
+                    selection.length - analyzableMatches.length,
+                  );
+                }}
+              />
+              {(['copy', 'move', 'tags', 'export'] as const).map(batchButton)}
+            </div>
+            <div className="library-batch-group" data-group="destructive">
+              {batchButton('delete')}
+              <ActionButton
+                icon="clear"
+                label={l('clearSelection')}
+                compact
+                disabled={!hasSelection}
+                onClick={() => setSelectedRows([])}
+                aria-label={l('clearSelection')}
+              />
+            </div>
           </div>
           {hasSelection && <p className="fineprint">{l('batchLimit')}</p>}
           {result && (
@@ -1100,15 +1127,18 @@ export default function MatchDatabase({
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody
+                    onPointerOver={cellTooltip.onPointerOver}
+                    onPointerLeave={cellTooltip.onPointerLeave}
+                    onPointerDown={cellTooltip.onPointerDown}
+                  >
                     {matches.map((m, index) => (
-                      <Tooltip
-                        as="tr"
+                      <tr
                         key={libraryRowKey(m)}
                         id={`library-row-${libraryRowKey(m)}`}
                         data-match-id={m.id}
                         data-position-id={m.occurrence?.id}
-                        text={summaries.get(m.id)}
+                        aria-description={summaries.get(m.id)}
                         tabIndex={0}
                         className={isCurrentRow(m) ? 'selected' : undefined}
                         onClick={(event) => event.currentTarget.focus()}
@@ -1124,7 +1154,10 @@ export default function MatchDatabase({
                       >
                         {filters.position_id && (
                           <>
-                            <td data-column="occurrence_database">
+                            <td
+                              data-column="occurrence_database"
+                              data-tooltip-overflow
+                            >
                               {m.occurrence?.database_name ??
                                 databases.find((d) => d.id === m.database_id)
                                   ?.name ??
@@ -1177,10 +1210,11 @@ export default function MatchDatabase({
                         {dataColumns.map((id) => (
                           <Fragment key={id}>{bodyCells[id](m)}</Fragment>
                         ))}
-                      </Tooltip>
+                      </tr>
                     ))}
                   </tbody>
                 </table>
+                {cellTooltip.tooltip}
               </div>
               {!matches.length && !loading && !searchError && (
                 <div className="library-empty">

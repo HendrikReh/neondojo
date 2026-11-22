@@ -100,6 +100,7 @@ export default function DatabaseSidebar({
                 icon="delete"
                 label={l(active.is_system ? 'clearDatabase' : 'deleteDatabase')}
                 compact
+                className="danger"
                 disabled={active.is_system && active.match_count === 0}
                 onClick={() => onDelete(active)}
               />

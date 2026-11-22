@@ -17,12 +17,30 @@ import {
 } from './library-column-preferences';
 import { useResizableColumns } from '../../shared/hooks/useResizableColumns';
 
+// Without saved widths, these columns keep a width that fits their values and
+// headers in all six languages, and the flexible text columns share the rest.
+// The numbers of flexible columns only count towards the table's minimum
+// width; library.css keeps Tags narrow until the window is wide.
 const automaticWidths: Partial<Record<LibraryColumn, number>> = {
-  white: 160,
-  black: 160,
-  play_mode: 90,
+  white: 140,
+  black: 140,
+  white_pr: 76,
+  black_pr: 76,
+  play_mode: 176,
+  match_length: 80,
+  score: 96,
+  played_at: 128,
+  created_at: 128,
+  position_count: 100,
   tags: 124,
 };
+const flexibleColumns: ReadonlySet<LibraryColumn> = new Set([
+  'white',
+  'black',
+  'tags',
+  'tournament',
+  'comment',
+]);
 
 export function useLibraryColumns(visible: boolean, positionSearch = false) {
   const l = useLibraryText();
@@ -70,7 +88,7 @@ export function useLibraryColumns(visible: boolean, positionSearch = false) {
       className: column.className,
       width: resized.widths
         ? resized.widths[column.id]
-        : column.id === 'white' || column.id === 'black'
+        : flexibleColumns.has(column.id)
           ? undefined
           : (automaticWidths[column.id] ?? column.defaultWidth),
     })),

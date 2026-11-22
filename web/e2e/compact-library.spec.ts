@@ -189,9 +189,7 @@ test('tracks selected matches after closing the dialog and reloading the page', 
   await rows.nth(0).getByRole('checkbox').check();
   await rows.nth(1).getByRole('checkbox').check();
   for (const name of ['Open match', 'Resume match', 'Edit match details']) {
-    await expect(
-      batch.getByRole('button', { name, exact: true }),
-    ).toBeDisabled();
+    await expect(batch.getByRole('button', { name, exact: true })).toBeDisabled();
   }
   await expect(rows.locator('[data-action-icon]')).toHaveCount(0);
 
@@ -305,10 +303,11 @@ for (const [width, height] of [
       'Long tag 9',
     );
     await expect(long.locator('[title]')).toHaveCount(0);
+    // The row summary is the row's accessible description; hovering or
+    // focusing a row shows no overlay above the rows below it.
     await long.focus();
-    const tooltip = page.getByRole('tooltip');
-    await expect(tooltip).toBeVisible();
-    const summary = await tooltip.innerText();
+    await expect(page.getByRole('tooltip')).toHaveCount(0);
+    const summary = (await long.getAttribute('aria-description')) ?? '';
     expect(summary).toContain('ID: 2');
     expect(summary).toContain(entries[1].white);
     expect(summary).toContain(entries[1].display_name);
@@ -317,9 +316,8 @@ for (const [width, height] of [
     expect(summary).toContain('Analysis: Imported');
     expect(summary).toContain('Tags: Long tag 0');
     expect(summary).toContain('Comment: First line of a long note');
-    await first.focus();
-    await expect(tooltip).toContainText('ID: 1');
-    await expect(tooltip).not.toHaveText(summary);
+    await expect(first).toHaveAttribute('aria-description', /ID: 1/);
+    expect(await first.getAttribute('aria-description')).not.toBe(summary);
     await first.locator('td').nth(3).click();
     await expect(first).toBeFocused();
     await page.keyboard.press('ArrowDown');
