@@ -448,7 +448,7 @@ the NeonGammon Python path on the NeonDojo computer.
 
 ## Profiles in navigation
 
-The global header contains the profile switcher with the active name, change marker, and save status. **Manage profiles** opens the **Profiles** category directly in the Settings dialog.
+The global header contains the profile switcher with the active name, change marker, and save status. Warnings and a failed switch collapse into one warning badge beside it, which opens a popover with the details, so the header keeps a single row. Switching from a modified profile offers **Save and switch** as the primary choice. **Manage profiles** opens the **Profiles** category directly in the Settings dialog.
 
 Database selection, search filters, result sorting, the active Study deck, card creation, and analysis filters belong to the browser tab's session. The browser stores columns, column widths, and the analysis board layout locally. Profile switches and reloads preserve these views.
 

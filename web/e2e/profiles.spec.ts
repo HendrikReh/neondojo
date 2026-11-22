@@ -253,7 +253,7 @@ test('supports cancel, save and discard decisions when switching changed profile
   });
   await expect(
     switchDialog.getByRole('button', { name: 'Save and switch', exact: true }),
-  ).toHaveCount(0);
+  ).toHaveClass(/primary/);
   await switchDialog
     .getByRole('button', { name: 'Manage profiles', exact: true })
     .click();

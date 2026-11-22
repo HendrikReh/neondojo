@@ -43,7 +43,7 @@ New GNUbg 3- and 5-ply analysis jobs save a checker move filter that sends up to
 
 ## Configuration profiles
 
-The header shows the active profile and marks it **modified** when your current settings differ from its saved values. Select a profile to switch or choose **Manage profiles** to open **Settings → Profiles**.
+The header shows the active profile and marks it **modified** when your current settings differ from its saved values. Select a profile to switch or choose **Manage profiles** to open **Settings → Profiles**. Switching away from a modified profile asks first: **Save and switch** saves the current settings in the active profile before switching, **Manage profiles** opens **Settings → Profiles**, and **Discard and switch** drops the changes. Profile initialization warnings, unavailable resources and a failed switch appear as one warning badge with their count beside the profile; select it to read the details, and **Understood** dismisses the initialization warnings.
 
 Choose **Show changes** in the profile menu to see each changed setting with its category, saved value, and current value. The arrow next to a current value restores that field from the saved profile and saves the current configuration. Related values such as a dice pair or a numeric or date range are restored together. The dialog shows any errors. The **modified** marker disappears after the last change is reverted. **Close** or Escape dismisses the dialog.
 
@@ -53,7 +53,7 @@ Profiles capture engines, default depths and error thresholds, playing and train
 
 Each browser tab keeps its own database selection, search filters, sorting, Study deck, card-creation choices, and analysis filters. Table columns, column widths, and analysis board layouts are stored in the browser. Both sets of preferences survive reloads and profile switches. The browser uses legacy configuration values to seed these preferences once. Older profile files retain those values for compatibility. A removed database or deck is handled in the workspace that uses the selection.
 
-**Apply** saves the current settings. To update a named profile, open **Settings → Profiles** and choose **Save in profile**. **Save as new profile** asks for a name, then creates and activates a profile. The **Profile actions** menu contains **Rename** and **Delete**. Activate a different profile before deleting the active one. **Restore saved profile** reapplies the active profile's saved values after confirmation. To save changes while switching profiles, use **Save and switch** in **Settings → Profiles**.
+**Apply** saves the current settings. To update a named profile, open **Settings → Profiles** and choose **Save in profile**. **Save as new profile** asks for a name, then creates and activates a profile. The **Profile actions** menu contains **Rename** and **Delete**. Activate a different profile before deleting the active one. **Restore saved profile** reapplies the active profile's saved values after confirmation. To save changes while switching profiles, use **Save and switch** in the header or in **Settings → Profiles**.
 
 On the first launch after the profiles update, existing server and browser preferences are imported once into **Standard**. Profiles and current settings apply across the installation, including other browsers. On a version conflict, you can load the server version or save your local changes as a new profile. A recovery journal protects pending local changes.
 

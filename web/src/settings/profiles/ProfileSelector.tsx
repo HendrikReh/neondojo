@@ -8,6 +8,8 @@ import {
 import { useProfileText } from './profile-messages';
 import { clippedTooltipText } from '../../shared/format/overflow-title';
 import Tooltip from '../../shared/ui/Tooltip';
+import ActionIcon from '../../shared/ui/action-icons';
+import { useDetailsDismiss } from '../../shared/hooks/useDetailsDismiss';
 import ProfileActionDialog from './ProfileActionDialog';
 import ProfileChangesDialog from './ProfileChangesDialog';
 import './profiles.css';
@@ -25,7 +27,8 @@ export default function ProfileSelector({
     [actionError, setActionError] = useState<unknown>(),
     [warningsDismissed, setWarningsDismissed] = useState(false);
   const host = useRef<HTMLDivElement>(null),
-    button = useRef<HTMLButtonElement>(null);
+    button = useRef<HTMLButtonElement>(null),
+    notices = useDetailsDismiss();
   useEffect(() => {
     if (!open) return;
     host.current?.querySelector<HTMLElement>('[role=menuitemradio]')?.focus();
@@ -44,10 +47,13 @@ export default function ProfileSelector({
     // The native modal must leave the top layer before its trigger can focus.
     requestAnimationFrame(() => button.current?.focus());
   };
-  const perform = async (profile: ConfigurationProfile) => {
+  const perform = async (
+    profile: ConfigurationProfile,
+    mode: 'keep' | 'save_current' = 'keep',
+  ) => {
     setActionError(undefined);
     try {
-      await config.activateProfile(profile, 'keep');
+      await config.activateProfile(profile, mode);
       setPending(undefined);
     } catch (error) {
       setActionError(error);
@@ -83,6 +89,18 @@ export default function ProfileSelector({
       items[next]?.focus();
     }
   };
+  // Warnings and failed switches collapse into one badge beside the profile
+  // so the header keeps a single row.
+  const warnings = warningsDismissed ? [] : config.initializationWarnings;
+  const headerError = !pending ? actionError : undefined;
+  const noticeCount =
+    warnings.length +
+    config.availabilityIssues.length +
+    (headerError ? 1 : 0);
+  // A failed switch answers the user's action, so its notice opens.
+  useEffect(() => {
+    if (headerError && notices.ref.current) notices.ref.current.open = true;
+  }, [headerError]);
   if (!config.ready)
     return (
       <div className="profile-selector">
@@ -127,24 +145,65 @@ export default function ProfileSelector({
           {t('failed')}
         </button>
       )}
-      {!warningsDismissed && config.initializationWarnings.length > 0 && (
-        <div role="status">
-          {config.initializationWarnings.map((warning, index) => (
-            <p key={index}>{warning.message}</p>
-          ))}
-          <button type="button" onClick={() => setWarningsDismissed(true)}>
-            {t('acknowledge')}
-          </button>
-        </div>
-      )}
-      {config.availabilityIssues.length > 0 && (
-        <div role="status" className="profile-availability">
-          {config.availabilityIssues.map((issue, index) => (
-            <p key={index}>
-              {issue.path}: {issue.message}
-            </p>
-          ))}
-        </div>
+      {noticeCount > 0 && (
+        <details
+          className="profile-notices"
+          data-severity={headerError ? 'error' : 'warning'}
+          ref={notices.ref}
+          onKeyDown={notices.onKeyDown}
+        >
+          <Tooltip
+            as="summary"
+            text={t('notices', { count: noticeCount })}
+            aria-label={t('notices', { count: noticeCount })}
+          >
+            <ActionIcon name="warning" size={16} />
+            <span aria-hidden="true">{noticeCount}</span>
+          </Tooltip>
+          <div
+            className="profile-notices-panel"
+            role="group"
+            aria-label={t('notices', { count: noticeCount })}
+          >
+            {warnings.length > 0 && (
+              <div role="status">
+                {warnings.map((warning, index) => (
+                  <p key={index}>{warning.message}</p>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setWarningsDismissed(true)}
+                >
+                  {t('acknowledge')}
+                </button>
+              </div>
+            )}
+            {config.availabilityIssues.length > 0 && (
+              <div role="status" className="profile-availability">
+                {config.availabilityIssues.map((issue, index) => (
+                  <p key={index}>
+                    {issue.path}: {issue.message}
+                  </p>
+                ))}
+              </div>
+            )}
+            {!!headerError && (
+              <div role="alert">
+                <p>
+                  {headerError instanceof Error
+                    ? headerError.message
+                    : String(headerError)}
+                </p>
+                {headerError instanceof ConfigurationApiError &&
+                  headerError.issues.map((issue, index) => (
+                    <p key={index}>
+                      {issue.path}: {issue.message}
+                    </p>
+                  ))}
+              </div>
+            )}
+          </div>
+        </details>
       )}
       {open && (
         <div
@@ -195,21 +254,6 @@ export default function ProfileSelector({
           <ProfileChangesDialog onClose={closeChanges} />,
           document.body,
         )}
-      {!!actionError && !pending && (
-        <div role="alert">
-          <p>
-            {actionError instanceof Error
-              ? actionError.message
-              : String(actionError)}
-          </p>
-          {actionError instanceof ConfigurationApiError &&
-            actionError.issues.map((issue, index) => (
-              <p key={index}>
-                {issue.path}: {issue.message}
-              </p>
-            ))}
-        </div>
-      )}
       {pending && (
         <ProfileActionDialog
           title={t('switchTitle')}
@@ -218,6 +262,11 @@ export default function ProfileSelector({
           error={actionError}
           onCancel={() => setPending(undefined)}
           choices={[
+            {
+              label: t('saveSwitch'),
+              primary: true,
+              action: () => void perform(pending, 'save_current'),
+            },
             {
               label: t('manage'),
               action: () => {
