@@ -4,7 +4,7 @@ import Tooltip from '../../shared/ui/Tooltip';
 import EngineLabel from '../../shared/engine/EngineLabel';
 import ActionButton from '../../shared/ui/ActionButton';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
-import { useLibraryText } from '../../library-messages';
+import { useLibraryText } from '../library/library-messages';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {

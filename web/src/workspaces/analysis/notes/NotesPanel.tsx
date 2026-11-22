@@ -8,8 +8,11 @@ import {
   loadDecisions,
   loadImportWarnings,
   type GameDecisions,
-} from '../../../library-api';
-import { useLibraryText, type ImportWarning } from '../../../library-messages';
+} from '../../library/library-api';
+import {
+  useLibraryText,
+  type ImportWarning,
+} from '../../library/library-messages';
 interface NotesPanelProps {
   matchId: string;
   suspended?: boolean;

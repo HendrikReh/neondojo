@@ -1,6 +1,6 @@
 import ActionButton from './ActionButton';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
-import { useLibraryText } from '../../library-messages';
+import { useLibraryText } from '../../workspaces/library/library-messages';
 
 export default function LibraryDialog({
   title,

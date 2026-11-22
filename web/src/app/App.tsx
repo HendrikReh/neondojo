@@ -17,7 +17,7 @@ import ExtrasWorkspace, {
 import { useBenchmarkText } from '../benchmark-messages';
 import ActionButton from '../shared/ui/ActionButton';
 import PlayWorkspace from '../workspaces/play/PlayWorkspace';
-import MatchDropZone from '../MatchDropZone';
+import MatchDropZone from '../workspaces/library/import/MatchDropZone';
 import { usePlayText } from '../workspaces/play/play-messages';
 import {
   useCallback,
@@ -39,7 +39,9 @@ import AnalysisWorkspace, {
 } from '../workspaces/analysis/AnalysisWorkspace';
 import PlayerDirectory from '../PlayerDirectory';
 import { usePlayerText } from '../player-directory-messages';
-import MatchDatabase, { type PositionSearchRequest } from '../MatchDatabase';
+import MatchDatabase, {
+  type PositionSearchRequest,
+} from '../workspaces/library/MatchDatabase';
 import MatchAnalysisDialog from '../workspaces/analysis/match/MatchAnalysisDialog';
 import BulkMatchAnalysisDialog from '../workspaces/analysis/match/BulkMatchAnalysisDialog';
 import StudyWorkspace from '../workspaces/study/StudyWorkspace';
@@ -73,22 +75,25 @@ import {
   readDatabase,
   type StoredMove,
   type LibraryMatch,
-} from '../library-api';
-import { useLibraryText, type ImportWarning } from '../library-messages';
-import { ImportWarningList } from '../ImportWarningList';
+} from '../workspaces/library/library-api';
+import {
+  useLibraryText,
+  type ImportWarning,
+} from '../workspaces/library/library-messages';
+import { ImportWarningList } from '../workspaces/library/import/ImportWarningList';
 import ImportRunPanel, {
   type ImportResult,
   type ImportRun,
-} from '../ImportRunPanel';
+} from '../workspaces/library/import/ImportRunPanel';
 import {
   MATCH_FILE_ACCEPT,
   matchFileEntries,
   readDroppedMatchFiles,
   selectFolderMatchFiles,
   type MatchFileEntry,
-} from '../match-import';
+} from '../workspaces/library/import/match-import';
 
-import { isUnfinishedCompetition } from '../library-match-summary';
+import { isUnfinishedCompetition } from '../workspaces/library/library-match-summary';
 import type { PlaySession } from '../workspaces/play/play-api';
 import { DEFAULT_ANALYSIS_PLIES } from '../shared/engine/analysis-depth';
 import MoveNotesDialog, {

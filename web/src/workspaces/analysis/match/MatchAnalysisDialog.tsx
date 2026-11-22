@@ -15,8 +15,8 @@ import {
   type Job,
 } from '../../../shared/api/api';
 import { useI18n } from '../../../shared/i18n/i18n';
-import type { LibraryMatch } from '../../../library-api';
-import { useLibraryText } from '../../../library-messages';
+import type { LibraryMatch } from '../../library/library-api';
+import { useLibraryText } from '../../library/library-messages';
 import {
   matchAnalysisRunsPath,
   type MatchAnalysisRun,

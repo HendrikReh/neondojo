@@ -1,6 +1,6 @@
-import Tooltip from './shared/ui/Tooltip';
-import ActionButton from './shared/ui/ActionButton';
-import ActionIcon from './shared/ui/action-icons';
+import Tooltip from '../../shared/ui/Tooltip';
+import ActionButton from '../../shared/ui/ActionButton';
+import ActionIcon from '../../shared/ui/action-icons';
 import { databaseDisplayName, useLibraryText } from './library-messages';
 import {
   BOT_DATABASE_ID,

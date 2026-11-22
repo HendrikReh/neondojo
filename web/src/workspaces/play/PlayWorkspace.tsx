@@ -54,7 +54,7 @@ import type { Theme } from '../../shared/board/themes';
 import { useI18n } from '../../shared/i18n/i18n';
 import { AppError } from '../../shared/i18n/i18n-core';
 import { usePlayText } from './play-messages';
-import { useLibraryText } from '../../library-messages';
+import { useLibraryText } from '../library/library-messages';
 import {
   nextCheckerSteps,
   applySteps,

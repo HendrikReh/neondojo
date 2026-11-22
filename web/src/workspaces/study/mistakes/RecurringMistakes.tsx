@@ -9,7 +9,7 @@ import MistakeGroupTable from './MistakeGroupTable';
 import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';
 import { request } from '../../../shared/api/api';
-import type { Database } from '../../../library-api';
+import type { Database } from '../../library/library-api';
 import type { Theme } from '../../../shared/board/themes';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useGamePlanText } from '../../analysis/game-plans/game-plan-messages';

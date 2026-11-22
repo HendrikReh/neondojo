@@ -1,6 +1,9 @@
 import { useId } from 'react';
-import { ImportWarningList } from '../../../ImportWarningList';
-import { useLibraryText, type ImportWarning } from '../../../library-messages';
+import { ImportWarningList } from '../../library/import/ImportWarningList';
+import {
+  useLibraryText,
+  type ImportWarning,
+} from '../../library/library-messages';
 
 /** Read-only source irregularities shown above a match or game comment. */
 export function ImportNotes({

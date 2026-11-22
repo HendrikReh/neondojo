@@ -17,7 +17,7 @@ import {
 } from '../../workspaces/study/flashcards/card-search-api';
 import { useCardSearchText } from '../../workspaces/study/flashcards/card-search-messages';
 import { useSettingsText } from '../settings-messages';
-import { LIBRARY_COLUMNS } from '../../library-columns';
+import { LIBRARY_COLUMNS } from '../../workspaces/library/library-columns';
 import { useEffect, useId, useState } from 'react';
 import { request } from '../../shared/api/api';
 import ActionButton from '../../shared/ui/ActionButton';

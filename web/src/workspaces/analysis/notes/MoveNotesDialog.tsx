@@ -5,14 +5,14 @@ import {
   movePosition,
   type GameDecisions,
   type StoredMove,
-} from '../../../library-api';
+} from '../../library/library-api';
 import Board from '../../../shared/board/Board';
 import AnnotationPanel from './AnnotationPanel';
 import ImportedMoveAnalysis from '../candidates/ImportedMoveAnalysis';
 import AnalysisDecisionSummary from '../candidates/AnalysisDecisionSummary';
 import type { ReviewDecision } from '../review-decisions-api';
 import LibraryDialog from '../../../shared/ui/LibraryDialog';
-import { useLibraryText } from '../../../library-messages';
+import { useLibraryText } from '../../library/library-messages';
 import { useI18n } from '../../../shared/i18n/i18n';
 import type { Theme } from '../../../shared/board/themes';
 export interface MoveNotesTarget {

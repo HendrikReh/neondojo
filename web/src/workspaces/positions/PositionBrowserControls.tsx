@@ -11,7 +11,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { DeckDialog } from '../study/flashcards/DeckLibraryDialogs';
 import { usePopoverPlacement } from '../../shared/hooks/usePopoverPlacement';
 import { useI18n } from '../../shared/i18n/i18n';
-import type { Database } from '../../library-api';
+import type { Database } from '../library/library-api';
 import {
   deletePositionFilter,
   loadPositionFilters,

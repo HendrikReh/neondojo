@@ -7,8 +7,8 @@ import {
 } from './MatchAnalysisFields';
 import type { Job } from '../../../shared/api/api';
 import { useI18n } from '../../../shared/i18n/i18n';
-import { useLibraryText } from '../../../library-messages';
-import type { LibraryMatch } from '../../../library-api';
+import { useLibraryText } from '../../library/library-messages';
+import type { LibraryMatch } from '../../library/library-api';
 import { submitMatchAnalysis } from './match-analysis-api';
 
 type Failure = { match: LibraryMatch; error: unknown };

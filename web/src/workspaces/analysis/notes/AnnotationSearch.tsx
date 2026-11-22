@@ -17,7 +17,7 @@ import {
 } from './annotation-api';
 import SearchPagination from '../../../shared/ui/SearchPagination';
 import { useSearchPages } from '../../../shared/hooks/useSearchPages';
-import { useLibraryText } from '../../../library-messages';
+import { useLibraryText } from '../../library/library-messages';
 import { useAnnotationI18n } from './annotation-messages';
 
 export type { AnnotationHit } from './annotation-api';

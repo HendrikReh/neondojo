@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import ActionButton from './shared/ui/ActionButton';
-import { useI18n } from './shared/i18n/i18n';
-import { acceptsLibraryMatches, type Database } from './library-api';
-import { databaseDisplayName, useLibraryText } from './library-messages';
+import ActionButton from '../../../shared/ui/ActionButton';
+import { useI18n } from '../../../shared/i18n/i18n';
+import { acceptsLibraryMatches, type Database } from '../library-api';
+import { databaseDisplayName, useLibraryText } from '../library-messages';
 
 export default function LibraryImport({
   databases,

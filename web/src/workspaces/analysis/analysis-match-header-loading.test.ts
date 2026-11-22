@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Match } from '../../shared/api/api';
-import type { LibraryMatch } from '../../library-api';
+import type { LibraryMatch } from '../library/library-api';
 
 // Commit effects separately so navigation/revision changes can render before
 // React cleans up a request that has already received its response.

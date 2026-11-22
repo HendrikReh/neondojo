@@ -2,7 +2,7 @@ import {
   importWarningText,
   useLibraryText,
   type ImportWarning,
-} from './library-messages';
+} from '../library-messages';
 
 /** Source irregularities an import resolved, listed under its result. */
 export function ImportWarningList({

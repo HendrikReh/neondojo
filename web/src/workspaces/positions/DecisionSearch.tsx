@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { useDecimalInput } from '../../shared/format/decimal-input';
 import ActionButton from '../../shared/ui/ActionButton';
 import { request } from '../../shared/api/api';
-import type { Database } from '../../library-api';
+import type { Database } from '../library/library-api';
 import Board from '../../shared/board/Board';
 import { CubeContextLine } from '../../shared/review/CubeDecisionDetails';
 import { useDecisionSearchText } from './decision-search-messages';
@@ -15,7 +15,7 @@ import {
   DECISION_COLUMNS,
   type DecisionColumn,
 } from './decision-table-columns';
-import { useLibraryText } from '../../library-messages';
+import { useLibraryText } from '../library/library-messages';
 import { useResizableColumns } from '../../shared/hooks/useResizableColumns';
 import {
   layoutColumns,

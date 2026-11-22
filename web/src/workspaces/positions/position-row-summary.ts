@@ -2,7 +2,7 @@ import type { PositionBrowserHit } from './position-browser-api';
 import type { Locale } from '../../shared/i18n/i18n-core';
 import { localizeDecision } from '../../shared/i18n/i18n-core';
 import { positionText } from './position-browser-messages';
-import { libraryText } from '../../library-messages';
+import { libraryText } from '../library/library-messages';
 import { analysisCatalogText } from '../analysis/analysis-catalog-messages';
 
 export const positionPlayer = (hit: PositionBrowserHit) =>

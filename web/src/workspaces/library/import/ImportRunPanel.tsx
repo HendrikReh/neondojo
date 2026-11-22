@@ -1,7 +1,7 @@
-import ActionButton from './shared/ui/ActionButton';
-import { useI18n } from './shared/i18n/i18n';
+import ActionButton from '../../../shared/ui/ActionButton';
+import { useI18n } from '../../../shared/i18n/i18n';
 import { ImportWarningList } from './ImportWarningList';
-import { useLibraryText, type ImportWarning } from './library-messages';
+import { useLibraryText, type ImportWarning } from '../library-messages';
 
 export type ImportResult = {
   /** File name, or the path inside the chosen folder. */

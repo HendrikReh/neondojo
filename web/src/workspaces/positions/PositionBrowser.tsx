@@ -25,7 +25,7 @@ import {
   savePositionBookmark,
 } from './position-bookmark-api';
 import { useI18n } from '../../shared/i18n/i18n';
-import type { Database } from '../../library-api';
+import type { Database } from '../library/library-api';
 import type { Theme } from '../../shared/board/themes';
 import { readPositionPlayed } from './position-table-columns';
 import PositionBrowserControls from './PositionBrowserControls';

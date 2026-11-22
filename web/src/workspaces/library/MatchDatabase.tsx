@@ -1,12 +1,12 @@
-import Tooltip from './shared/ui/Tooltip';
-import { useWorkspaceDefaults } from './settings/configuration/ConfigurationProvider';
+import Tooltip from '../../shared/ui/Tooltip';
+import { useWorkspaceDefaults } from '../../settings/configuration/ConfigurationProvider';
 import { Children, type HTMLAttributes, type ReactNode } from 'react';
 import {
   sessionFields,
   useWorkspaceSession,
-} from './shared/hooks/useWorkspaceSession';
-import ActionButton from './shared/ui/ActionButton';
-import ActionIcon from './shared/ui/action-icons';
+} from '../../shared/hooks/useWorkspaceSession';
+import ActionButton from '../../shared/ui/ActionButton';
+import ActionIcon from '../../shared/ui/action-icons';
 import {
   useCallback,
   useEffect,
@@ -17,16 +17,16 @@ import {
   type KeyboardEvent,
   type SetStateAction,
 } from 'react';
-import { request, type Match, type Position } from './shared/api/api';
-import SearchPagination from './shared/ui/SearchPagination';
-import { useSearchPages } from './shared/hooks/useSearchPages';
+import { request, type Match, type Position } from '../../shared/api/api';
+import SearchPagination from '../../shared/ui/SearchPagination';
+import { useSearchPages } from '../../shared/hooks/useSearchPages';
 import { useLibraryMatchOpening } from './useLibraryMatchOpening';
 import AnnotationSearch, {
   type AnnotationHit,
-} from './workspaces/analysis/notes/AnnotationSearch';
-import { useI18n } from './shared/i18n/i18n';
-import { usePlayModeText } from './workspaces/play/play-mode-messages';
-import { useWorkspaceText } from './shared/i18n/workspace-messages';
+} from '../analysis/notes/AnnotationSearch';
+import { useI18n } from '../../shared/i18n/i18n';
+import { usePlayModeText } from '../play/play-mode-messages';
+import { useWorkspaceText } from '../../shared/i18n/workspace-messages';
 import {
   databaseDisplayName,
   useLibraryText,
@@ -46,7 +46,7 @@ import {
   type LibraryFilters as Filters,
 } from './library-api';
 import DatabaseSidebar from './DatabaseSidebar';
-import LibrarySortHeading from './shared/ui/LibrarySortHeading';
+import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';
 import { useLibraryColumns } from './useLibraryColumns';
 import {
   createMatchSummaryFormatter,
@@ -61,8 +61,8 @@ import {
   type LibraryColumn,
 } from './library-columns';
 import { type LibraryDataColumn } from './library-column-preferences';
-import LibraryColumnPicker from './shared/ui/LibraryColumnPicker';
-import LibraryImport from './LibraryImport';
+import LibraryColumnPicker from '../../shared/ui/LibraryColumnPicker';
+import LibraryImport from './import/LibraryImport';
 import LibraryFilters, {
   LibraryFilterChips,
   type LibraryFilterKey,
@@ -70,7 +70,7 @@ import LibraryFilters, {
 import LibraryDialogs, { type LibraryDialogState } from './LibraryDialogs';
 import DuplicateMatchFinder from './DuplicateMatchFinder';
 import './library.css';
-import { prDigits } from './shared/format/pr-format';
+import { prDigits } from '../../shared/format/pr-format';
 
 export interface PositionSearchRequest {
   positionId: string;

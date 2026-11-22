@@ -21,7 +21,7 @@ import {
 import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';
 import LibraryColumnPicker from '../../shared/ui/LibraryColumnPicker';
 import { useResizableColumns } from '../../shared/hooks/useResizableColumns';
-import { useLibraryText } from '../../library-messages';
+import { useLibraryText } from '../library/library-messages';
 import {
   POSITION_COLUMNS,
   POSITION_COLUMN_LAYOUT,

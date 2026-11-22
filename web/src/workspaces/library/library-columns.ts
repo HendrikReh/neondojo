@@ -1,9 +1,9 @@
 import {
   createColumnLayout,
   type ColumnWidths as SharedColumnWidths,
-} from './shared/hooks/column-widths';
+} from '../../shared/hooks/column-widths';
 
-export { MAX_COLUMN_WIDTH } from './shared/hooks/column-widths';
+export { MAX_COLUMN_WIDTH } from '../../shared/hooks/column-widths';
 
 export const LIBRARY_COLUMNS = [
   { id: 'select', className: 'library-col-select', min: 32, defaultWidth: 32 },

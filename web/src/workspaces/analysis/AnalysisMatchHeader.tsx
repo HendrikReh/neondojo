@@ -1,8 +1,8 @@
 import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { request, type Match } from '../../shared/api/api';
-import type { LibraryMatch } from '../../library-api';
-import { libraryText } from '../../library-messages';
+import type { LibraryMatch } from '../library/library-api';
+import { libraryText } from '../library/library-messages';
 import { useI18n } from '../../shared/i18n/i18n';
 import { AppError, type Locale } from '../../shared/i18n/i18n-core';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';

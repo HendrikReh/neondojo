@@ -4,7 +4,7 @@ import type { components } from './generated-api';
 import { useI18n } from './shared/i18n/i18n';
 import { AppError } from './shared/i18n/i18n-core';
 import LibraryDialog from './shared/ui/LibraryDialog';
-import { useLibraryText } from './library-messages';
+import { useLibraryText } from './workspaces/library/library-messages';
 import { usePlayerText } from './player-directory-messages';
 import { aliasLabel, PlayerResults } from './PlayerResults';
 

@@ -1,6 +1,6 @@
 import ActionButton from './ActionButton';
-import { useLibraryText } from '../../library-messages';
-import type { LibrarySort } from '../../library-api';
+import { useLibraryText } from '../../workspaces/library/library-messages';
+import type { LibrarySort } from '../../workspaces/library/library-api';
 import type { ReactNode } from 'react';
 
 export default function LibrarySortHeading<Sort extends string = LibrarySort>({

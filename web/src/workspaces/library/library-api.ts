@@ -1,12 +1,12 @@
-import { numberedSearchParams } from './shared/api/cursor-search';
+import { numberedSearchParams } from '../../shared/api/cursor-search';
 import {
   downloadResponse,
   request,
   requestResponse,
   type Position,
-} from './shared/api/api';
-import type { components } from './generated-api';
-import type { PlayMode } from './workspaces/play/play-mode-messages';
+} from '../../shared/api/api';
+import type { components } from '../../generated-api';
+import type { PlayMode } from '../play/play-mode-messages';
 type Schema = components['schemas'];
 
 export type Database = Schema['Database'];

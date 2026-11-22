@@ -13,9 +13,9 @@ import {
   saveUiAppearance,
 } from '../appearance/ui-appearance';
 import { readPlaySounds, savePlaySounds } from '../../shared/board/play-audio';
-import { readVisibleColumns } from '../../library-column-preferences';
+import { readVisibleColumns } from '../../workspaces/library/library-column-preferences';
 import { isCollectionScope } from '../../workspaces/study/flashcards/card-search-api';
-import { LIBRARY_RESIZABLE_LAYOUT as LIBRARY_COLUMN_LAYOUT } from '../../library-columns';
+import { LIBRARY_RESIZABLE_LAYOUT as LIBRARY_COLUMN_LAYOUT } from '../../workspaces/library/library-columns';
 import {
   POSITION_COLUMN_LAYOUT,
   POSITION_PLAYED_KEY,

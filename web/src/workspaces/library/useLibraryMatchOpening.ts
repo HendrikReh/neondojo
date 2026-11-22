@@ -4,9 +4,9 @@ import {
   type Match,
   type Page,
   type Position,
-} from './shared/api/api';
+} from '../../shared/api/api';
 import { libraryRowKey, type LibraryMatch } from './library-api';
-import { AppError } from './shared/i18n/i18n-core';
+import { AppError } from '../../shared/i18n/i18n-core';
 
 /** Filtered rows open their exact stored occurrence; newer user intent wins. */
 export function useLibraryMatchOpening({

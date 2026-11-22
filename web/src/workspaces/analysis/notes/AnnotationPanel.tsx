@@ -1,7 +1,7 @@
 import ActionButton from '../../../shared/ui/ActionButton';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { request } from '../../../shared/api/api';
-import { useLibraryText } from '../../../library-messages';
+import { useLibraryText } from '../../library/library-messages';
 import {
   annotationPath,
   annotationValidation,

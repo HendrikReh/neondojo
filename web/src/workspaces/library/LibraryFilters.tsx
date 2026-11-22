@@ -1,11 +1,11 @@
-import ActionButton from './shared/ui/ActionButton';
+import ActionButton from '../../shared/ui/ActionButton';
 import AppliedFilterChips, {
   type AppliedFilterChip,
-} from './shared/ui/AppliedFilterChips';
+} from '../../shared/ui/AppliedFilterChips';
 import type { LibraryFilters as Filters } from './library-api';
 import { useLibraryText, type LibraryMessageKey } from './library-messages';
-import { useI18n } from './shared/i18n/i18n';
-import { usePositionText } from './workspaces/positions/position-browser-messages';
+import { useI18n } from '../../shared/i18n/i18n';
+import { usePositionText } from '../positions/position-browser-messages';
 
 export type LibraryFilterKey = Exclude<keyof Filters, 'date_field'>;
 const labels = {

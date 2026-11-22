@@ -5,7 +5,7 @@ import AnalysisWorkspace from './AnalysisWorkspace';
 import { I18nProvider } from '../../shared/i18n/i18n';
 import type { Match, Position } from '../../shared/api/api';
 import { AnalysisMatchHeaderView } from './AnalysisMatchHeader';
-import type { LibraryMatch } from '../../library-api';
+import type { LibraryMatch } from '../library/library-api';
 import type { Locale } from '../../shared/i18n/i18n-core';
 
 const match: Match & { source_available: boolean } = {

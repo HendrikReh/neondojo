@@ -1,7 +1,7 @@
 import { useI18n } from '../i18n/i18n';
 import ActionButton from './ActionButton';
 import { useDetailsDismiss } from '../hooks/useDetailsDismiss';
-import { useLibraryText } from '../../library-messages';
+import { useLibraryText } from '../../workspaces/library/library-messages';
 
 export default function LibraryColumnPicker<Column extends string>({
   options,

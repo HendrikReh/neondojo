@@ -6,7 +6,7 @@ import type { AnalysisCatalog } from './useAnalysisCatalog';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
 import { useI18n } from '../../shared/i18n/i18n';
 import { shortEngineLabel } from '../../shared/engine/engine-version';
-import { useLibraryText } from '../../library-messages';
+import { useLibraryText } from '../library/library-messages';
 
 export function useAnalysisEntryLabel(includeEngine = true) {
   const text = useAnalysisCatalogText();

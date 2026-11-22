@@ -4,7 +4,7 @@ import {
   normalizeLibraryFilters,
   type LibraryFilters,
   type LibrarySort,
-} from '../../library-api';
+} from '../../workspaces/library/library-api';
 import {
   ALL_CARDS,
   isCollectionScope,
@@ -16,8 +16,8 @@ import {
   DEFAULT_LIBRARY_COLUMNS,
   LIBRARY_DATA_COLUMNS,
   type LibraryDataColumn,
-} from '../../library-column-preferences';
-import { LIBRARY_WIDTH_COLUMNS } from '../../library-columns';
+} from '../../workspaces/library/library-column-preferences';
+import { LIBRARY_WIDTH_COLUMNS } from '../../workspaces/library/library-columns';
 import {
   DEFAULT_POSITION_COLUMNS,
   POSITION_COLUMNS,
