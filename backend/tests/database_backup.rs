@@ -729,3 +729,262 @@ async fn restored_deck_requires_new_opt_in_for_automatic_anki_sync(pool: PgPool)
         ("Source profile".into(), 2, 3),
     );
 }
+
+/// Triggers a restore disables while it copies the table they belong to.
+const RESTORE_SUSPENDED_TRIGGERS: &[&str] = &[
+    "catalog_match_players",
+    "positions_played_record_insert",
+    "imported_analyses_revision_insert",
+    "job_events_notify",
+    "match_analysis_games_revision_insert",
+    "move_analyses_revision_insert",
+];
+
+async fn suspended_trigger_states(pool: &PgPool) -> Vec<(String, String)> {
+    sqlx::query_as(
+        "SELECT t.tgname::text, t.tgenabled::text FROM pg_trigger t
+         JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+         WHERE n.nspname='public' AND t.tgname::text=ANY($1) ORDER BY t.tgname",
+    )
+    .bind(RESTORE_SUSPENDED_TRIGGERS)
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+fn assert_triggers_armed(states: &[(String, String)]) {
+    assert_eq!(states.len(), RESTORE_SUSPENDED_TRIGGERS.len(), "{states:?}");
+    assert!(
+        states.iter().all(|(_, enabled)| enabled == "O"),
+        "every suspended trigger is enabled again: {states:?}"
+    );
+}
+
+#[derive(Debug, PartialEq)]
+struct DerivedState {
+    fingerprints: Vec<(uuid::Uuid, Option<Vec<u8>>)>,
+    native_revisions: Vec<uuid::Uuid>,
+    imported_revisions: Vec<uuid::Uuid>,
+}
+
+async fn derived_state(pool: &PgPool) -> DerivedState {
+    DerivedState {
+        fingerprints: sqlx::query_as(
+            "SELECT id,played_record_fingerprint FROM matches WHERE NOT collection_only ORDER BY id",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap(),
+        native_revisions: sqlx::query_scalar(
+            "SELECT job_id FROM native_analysis_revisions ORDER BY job_id",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap(),
+        imported_revisions: sqlx::query_scalar(
+            "SELECT match_id FROM imported_analysis_revisions ORDER BY match_id",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap(),
+    }
+}
+
+async fn revision_tokens(pool: &PgPool) -> Vec<String> {
+    sqlx::query_scalar(
+        "SELECT revision FROM native_analysis_revisions
+         UNION SELECT revision FROM imported_analysis_revisions ORDER BY 1",
+    )
+    .fetch_all(pool)
+    .await
+    .unwrap()
+}
+
+async fn drain_job_notifications(listener: &mut sqlx::postgres::PgListener) -> Vec<String> {
+    let mut payloads = Vec::new();
+    while let Ok(notification) =
+        tokio::time::timeout(std::time::Duration::from_millis(500), listener.recv()).await
+    {
+        payloads.push(notification.unwrap().payload().to_owned());
+    }
+    payloads.sort();
+    payloads
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn restore_copies_history_without_derived_triggers_or_notifications(pool: PgPool) {
+    let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    let mut running = None;
+    for index in 0..3_i32 {
+        let (match_id, _) = insert_match(&pool, &format!("library-{index}.sgf")).await;
+        sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford) VALUES($1,1,2,0,0,false)")
+            .bind(match_id).execute(&pool).await.unwrap();
+        let mut positions = Vec::new();
+        for ordinal in 1..=2_i32 {
+            positions.push(sqlx::query_scalar::<_, uuid::Uuid>(
+                "INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation)
+                 VALUES(gen_random_uuid(),$1,$2,1,$2,$2 % 2,ARRAY[$2 + 2,$3 + 1],array_fill(0,ARRAY[26]),$4,$4,'13/10 6/5')
+                 RETURNING id",
+            )
+            .bind(match_id)
+            .bind(ordinal)
+            .bind(index)
+            .bind(format!("position-{index}-{ordinal}"))
+            .fetch_one(&pool)
+            .await
+            .unwrap());
+        }
+        // Two analysed matches; the third has a running checkpointed job and a
+        // failed job without results.
+        let jobs: &[(&str, bool)] = if index < 2 {
+            &[("completed", true)]
+        } else {
+            &[("running", false), ("failed", false)]
+        };
+        for &(status, decisions) in jobs {
+            let job = uuid::Uuid::new_v4();
+            sqlx::query(
+                "INSERT INTO jobs(id,match_uuid,kind,plies,status,total_games,completed_games,lease_token,lease_until)
+                 VALUES($1,$2,'match',2,$3,1,$4,
+                     CASE WHEN $3='running' THEN gen_random_uuid() END,
+                     CASE WHEN $3='running' THEN now()+interval '1 hour' END)",
+            )
+            .bind(job)
+            .bind(match_id)
+            .bind(status)
+            .bind(i32::from(status == "completed"))
+            .execute(&pool)
+            .await
+            .unwrap();
+            for event in ["queued", status] {
+                sqlx::query("INSERT INTO job_events(job_id,event,data) VALUES($1,$2,'{}')")
+                    .bind(job)
+                    .bind(event)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+            }
+            if status == "failed" {
+                continue;
+            }
+            sqlx::query(
+                "INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,1,'{}')",
+            )
+            .bind(job)
+            .execute(&pool)
+            .await
+            .unwrap();
+            if status == "running" {
+                running = Some(job);
+            }
+            if decisions {
+                for (decision, position) in (1_i32..).zip(&positions) {
+                    sqlx::query(
+                        "INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data)
+                         VALUES($1,$2,1,$3,0,'checker',0.1,'{}')",
+                    )
+                    .bind(job)
+                    .bind(position)
+                    .bind(decision)
+                    .execute(&pool)
+                    .await
+                    .unwrap();
+                }
+            }
+        }
+        if index != 1 {
+            sqlx::query(
+                "INSERT INTO imported_analyses(id,match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data)
+                 VALUES(gen_random_uuid(),$1,$2,0,1,1,'checker','{}')",
+            )
+            .bind(match_id)
+            .bind(positions[0])
+            .execute(&pool)
+            .await
+            .unwrap();
+        }
+    }
+    let running = running.unwrap();
+    // The rows the triggers produce while the library is written normally.
+    let source = derived_state(&pool).await;
+    assert_eq!(source.fingerprints.len(), 3);
+    assert!(source.fingerprints.iter().all(|(_, value)| value.is_some()));
+    assert_eq!(source.native_revisions.len(), 3);
+    assert_eq!(source.imported_revisions.len(), 2);
+    let source_tokens = revision_tokens(&pool).await;
+
+    let response = app
+        .clone()
+        .oneshot(Request::get(BACKUP).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let archive = to_bytes(response.into_body(), 16 * 1024 * 1024)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM matches")
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let mut listener = sqlx::postgres::PgListener::connect_with(&pool)
+        .await
+        .unwrap();
+    listener.listen("neondojo_job_events").await.unwrap();
+    let response = app
+        .clone()
+        .oneshot(restore(archive.clone(), true))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    // Historical events are not announced; only the job the restore
+    // interrupts receives a new event.
+    assert_eq!(
+        drain_job_notifications(&mut listener).await,
+        vec![running.to_string()]
+    );
+    assert_triggers_armed(&suspended_trigger_states(&pool).await);
+    let restored = derived_state(&pool).await;
+    assert_eq!(restored, source);
+    assert_eq!(
+        sqlx::query_as::<_, (uuid::Uuid, Option<Vec<u8>>)>(
+            "SELECT match_uuid,fingerprint
+             FROM played_record_fingerprints(ARRAY(SELECT id FROM matches)) ORDER BY match_uuid",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap(),
+        source.fingerprints,
+    );
+    // Every revision carries the restore transaction's token, as the triggers
+    // write it.
+    let tokens = revision_tokens(&pool).await;
+    assert_eq!(tokens.len(), 1, "{tokens:?}");
+    assert!(!source_tokens.contains(&tokens[0]));
+    assert!(
+        sqlx::query_scalar::<_, bool>(
+            "SELECT bool_and(substr($1,4)::xid8::xid = m.xmin) FROM matches m",
+        )
+        .bind(&tokens[0])
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+    );
+
+    // A restore that fails after every table was copied leaves the triggers
+    // armed and the target unchanged.
+    let invalid = rewrite_entry(
+        &archive,
+        "tables/engine_match_results.copy",
+        b"invalid uuid\n",
+    );
+    let response = app.oneshot(restore(invalid, true)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        drain_job_notifications(&mut listener).await,
+        Vec::<String>::new()
+    );
+    assert_triggers_armed(&suspended_trigger_states(&pool).await);
+    assert_eq!(derived_state(&pool).await, source);
+    assert_eq!(revision_tokens(&pool).await, tokens);
+}
