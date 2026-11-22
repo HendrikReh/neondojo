@@ -7,6 +7,7 @@ import type { components } from '../../../generated-api';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useMistakeText } from './recurring-mistakes-messages';
 import type { MistakeKind } from './recurring-mistakes-api';
+import { dateTimeFormat } from '../../../shared/i18n/i18n-core';
 
 type History = components['schemas']['MistakePracticeHistory'];
 
@@ -28,7 +29,7 @@ export default function MistakePracticeHistory() {
     return () => abort.abort();
   }, []);
   if (!items?.length) return null;
-  const date = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' });
+  const date = dateTimeFormat(locale, { dateStyle: 'medium' });
   return (
     <section
       className="study-report-empty mistake-practice-history"

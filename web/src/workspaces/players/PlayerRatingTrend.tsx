@@ -3,6 +3,7 @@ import type { components } from '../../generated-api';
 import { usePlayerText } from './player-directory-messages';
 import { prDigits } from '../../shared/format/pr-format';
 import Tooltip from '../../shared/ui/Tooltip';
+import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 
 type Point = components['schemas']['PlayerRatingPoint'];
 export const RATING_WINDOW = 10;
@@ -53,7 +54,7 @@ export default function PlayerRatingTrend({ points }: { points: Point[] }) {
   const top = Math.ceil(max / 5) * 5;
   const x = (index: number) => (index / (points.length - 1)) * 100;
   const y = (value: number) => (1 - value / top) * 100;
-  const date = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' });
+  const date = dateTimeFormat(locale, { dateStyle: 'medium' });
   const day = (point: Point) => date.format(new Date(`${point.date}T12:00:00`));
   const pr = (value: number) => formatNumber(value, prDigits);
   const line = (values: (number | null)[]) =>

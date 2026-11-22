@@ -4,7 +4,11 @@ import { request, type Match } from '../../shared/http/api';
 import type { LibraryMatch } from '../library/library-api';
 import { libraryText } from '../library/library-messages';
 import { useI18n } from '../../shared/i18n/i18n';
-import { AppError, type Locale } from '../../shared/i18n/i18n-core';
+import {
+  AppError,
+  type Locale,
+  dateTimeFormat,
+} from '../../shared/i18n/i18n-core';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
 import { hasMatchSource } from './match-source';
 import './analysis-match-header.css';
@@ -122,7 +126,7 @@ function playedDate(value: string | null, locale: Locale) {
     date.toISOString().slice(0, 10) !== value
   )
     return 'n/a';
-  return new Intl.DateTimeFormat(locale, {
+  return dateTimeFormat(locale, {
     dateStyle: 'medium',
     timeZone: 'UTC',
   }).format(date);

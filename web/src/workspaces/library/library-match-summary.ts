@@ -4,6 +4,7 @@ import type { Locale } from '../../shared/i18n/i18n-core';
 import { libraryText, type LibraryMessageKey } from './library-messages';
 import { workspaceText } from '../../shared/i18n/workspace-messages';
 import { prDigits } from '../../shared/format/pr-format';
+import { dateTimeFormat, numberFormat } from '../../shared/i18n/i18n-core';
 
 export function libraryAnalysisStatus(status: string | null, locale: Locale) {
   const key: LibraryMessageKey =
@@ -63,12 +64,12 @@ function excerpt(value: string, limit = 160) {
 
 export function createMatchSummaryFormatter(locale: Locale) {
   const l = (key: LibraryMessageKey) => libraryText(locale, key);
-  const numbers = new Intl.NumberFormat(locale);
-  const dates = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' });
+  const numbers = numberFormat(locale);
+  const dates = dateTimeFormat(locale, { dateStyle: 'medium' });
   const number = (value: number) => numbers.format(value);
   const date = (value: string) =>
     dates.format(new Date(value.length === 10 ? `${value}T12:00:00` : value));
-  const ratings = new Intl.NumberFormat(locale, prDigits);
+  const ratings = numberFormat(locale, prDigits);
   const pr = (value: number | null) =>
     value == null ? '—' : ratings.format(value);
   return (match: LibraryMatch) => {

@@ -9,7 +9,7 @@ import {
 import { databaseBackupMessages } from './database-backup-messages';
 import type { paths } from '../../generated-api';
 import { useI18n } from '../../shared/i18n/i18n';
-import { AppError } from '../../shared/i18n/i18n-core';
+import { AppError, dateTimeFormat } from '../../shared/i18n/i18n-core';
 import './database-backup.css';
 
 const path = '/database-backup';
@@ -453,7 +453,7 @@ function BackupContentsSummary({
   const creationTime = createdAt ? (
     <>
       <time dateTime={createdAt}>
-        {new Intl.DateTimeFormat(locale, {
+        {dateTimeFormat(locale, {
           dateStyle: 'medium',
           timeStyle: 'short',
         }).format(new Date(createdAt))}

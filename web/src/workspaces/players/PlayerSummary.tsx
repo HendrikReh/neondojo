@@ -14,6 +14,7 @@ import { usePositionText } from '../positions/position-browser-messages';
 import { usePlayerPage } from './PlayerResults';
 import { prDigits } from '../../shared/format/pr-format';
 import PlayerRatingTrend from './PlayerRatingTrend';
+import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 
 type Schema = components['schemas'];
 
@@ -98,7 +99,7 @@ export function PlayerMatches({
       },
       revision,
     );
-  const dateFormat = new Intl.DateTimeFormat(locale, {
+  const dateFormat = dateTimeFormat(locale, {
     dateStyle: 'medium',
     timeZone: 'UTC',
   });

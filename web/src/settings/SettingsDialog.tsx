@@ -41,7 +41,7 @@ import {
 } from 'react';
 import { readPlaySounds, savePlaySounds } from '../shared/board/play-audio';
 import { useI18n, languages, type Locale } from '../shared/i18n/i18n';
-import { saveLocale } from '../shared/i18n/i18n-core';
+import { saveLocale, numberFormat } from '../shared/i18n/i18n-core';
 import type { Theme } from '../shared/board/themes';
 import {
   checkGnubg,
@@ -364,7 +364,7 @@ export default function SettingsDialog({
 
   function resetThresholds(values: ErrorThresholds, language: Locale) {
     initialThresholds.current = values;
-    const formatter = new Intl.NumberFormat(language, {
+    const formatter = numberFormat(language, {
       minimumFractionDigits: 3,
       maximumFractionDigits: 20,
       useGrouping: false,

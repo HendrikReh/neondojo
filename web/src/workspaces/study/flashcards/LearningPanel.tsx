@@ -9,7 +9,7 @@ import AnkiAutoSync from './AnkiAutoSync';
 import AnkiSyncOverview from './AnkiSyncOverview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { request } from '../../../shared/http/api';
-import { AppError } from '../../../shared/i18n/i18n-core';
+import { AppError, dateTimeFormat } from '../../../shared/i18n/i18n-core';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
 import type { Theme } from '../../../shared/board/themes';
@@ -912,7 +912,7 @@ export default function LearningWorkspace({
       {reviewResult && (
         <p className="learning-review-result" role="status">
           {t('nextDue', {
-            date: new Intl.DateTimeFormat(locale, {
+            date: dateTimeFormat(locale, {
               dateStyle: 'medium',
               timeStyle: 'short',
             }).format(new Date(reviewResult.due_at)),
