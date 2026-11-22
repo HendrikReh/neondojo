@@ -753,3 +753,6 @@ export function usePlayText() {
   const { locale } = useI18n();
   return (key: Key) => (locale === 'de' ? de : extra[locale])?.[key] ?? en[key];
 }
+
+/** Every language's play texts, for catalog completeness tests. */
+export const playTextCatalogs = { en, de, ...extra };

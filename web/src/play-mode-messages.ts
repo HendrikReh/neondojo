@@ -140,6 +140,12 @@ const de: Record<Key, string> = {
 };
 const extra: Record<string, Partial<Record<Key, string>>> = {
   es: {
+    // The mode names are product names in every language, as in German.
+    competition: 'Competition',
+    training: 'Training',
+    coach: 'Coach',
+    tutor: 'Tutor',
+    equity: 'Equidad',
     thresholdSaving: 'Guardando…',
     thresholdSaved: 'Guardado',
     liveThresholdHelp:
@@ -179,6 +185,11 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     probabilities: 'Victoria / gammon / backgammon',
   },
   fr: {
+    // The mode names are product names in every language, as in German.
+    competition: 'Competition',
+    training: 'Training',
+    coach: 'Coach',
+    tutor: 'Tutor',
     thresholdSaving: 'Enregistrement…',
     thresholdSaved: 'Enregistré',
     liveThresholdHelp:
@@ -219,6 +230,12 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     probabilities: 'Victoire / gammon / backgammon',
   },
   it: {
+    // The mode names are product names in every language, as in German.
+    competition: 'Competition',
+    training: 'Training',
+    coach: 'Coach',
+    tutor: 'Tutor',
+    equity: 'Equity',
     thresholdSaving: 'Salvataggio…',
     thresholdSaved: 'Salvato',
     liveThresholdHelp:
@@ -258,6 +275,12 @@ const extra: Record<string, Partial<Record<Key, string>>> = {
     probabilities: 'Vittoria / gammon / backgammon',
   },
   pl: {
+    // The mode names are product names in every language, as in German.
+    competition: 'Competition',
+    training: 'Training',
+    coach: 'Coach',
+    tutor: 'Tutor',
+    equity: 'Equity',
     thresholdSaving: 'Zapisywanie…',
     thresholdSaved: 'Zapisano',
     liveThresholdHelp:
@@ -399,3 +422,6 @@ export function usePlayModeText() {
   const { locale } = useI18n();
   return (key: Key) => playModeText(locale, key);
 }
+
+/** Every language's play texts, for catalog completeness tests. */
+export const playModeTextCatalogs = { en, de, ...extra };
