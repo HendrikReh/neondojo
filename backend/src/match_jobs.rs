@@ -102,18 +102,13 @@ pub(crate) async fn execute(
                 )
                 .await
             };
-            let samples = async {
-                loop {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    crate::analysis_timing::sample_game(
-                        &state.pool,
-                        job,
-                        token,
-                        started.elapsed().as_secs_f64() * 1000.0,
-                    )
-                    .await?;
-                }
-            };
+            let samples = crate::analysis_timing::sample_until_lease_lost(
+                &state.pool,
+                job,
+                token,
+                started,
+                std::time::Duration::from_secs(1),
+            );
             tokio::select! {
                 result = work => result,
                 result = samples => result,

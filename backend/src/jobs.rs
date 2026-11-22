@@ -331,17 +331,45 @@ async fn with_heartbeat(
     // can own that lock until its transaction commits; awaiting renewal inside
     // an execution-select branch would stop polling the commit and deadlock.
     let heartbeat = async {
+        // The claim granted the lease just before; each renewal extends it by
+        // LEASE from a time no earlier than when it was sent.
+        let mut renewed = std::time::Instant::now();
         loop {
             tokio::time::sleep(interval).await;
-            let updated = sqlx::query("UPDATE jobs SET lease_until=now()+interval '120 seconds' WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now()")
-                .bind(id).bind(token).execute(pool).await?;
-            ensure!(updated.rows_affected() == 1, "Job lease was lost");
+            let attempt = std::time::Instant::now();
+            match sqlx::query("UPDATE jobs SET lease_until=now()+interval '120 seconds' WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now()")
+                .bind(id).bind(token).execute(pool).await
+            {
+                Ok(updated) => {
+                    ensure!(updated.rows_affected() == 1, "Job lease was lost");
+                    renewed = attempt;
+                }
+                // A busy pool or a dropped connection says nothing about the
+                // lease. The database still fences every write by its token.
+                Err(error)
+                    if transient(&error) && may_retry_renewal(renewed.elapsed(), interval) =>
+                {
+                    tracing::warn!(job = %id, %error, "Retrying the job lease renewal");
+                }
+                Err(error) => return Err(error.into()),
+            }
         }
     };
     tokio::select! {
         result = execution => result,
         result = heartbeat => result,
     }
+}
+
+/// Database errors after which the same query may succeed again.
+fn transient(error: &sqlx::Error) -> bool {
+    matches!(error, sqlx::Error::PoolTimedOut | sqlx::Error::Io(_))
+}
+
+/// Whether a failed renewal may wait for another attempt: that attempt, one
+/// interval later, must still fall within the lease of the last renewal.
+fn may_retry_renewal(since_renewal: Duration, interval: Duration) -> bool {
+    since_renewal + interval < LEASE
 }
 
 async fn execute(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
@@ -880,5 +908,70 @@ mod tests {
         .expect("heartbeat must not stop polling the checkpoint while waiting for its row lock")
         .unwrap();
         assert_eq!(result["checkpoint"], "committed");
+    }
+
+    #[test]
+    fn renewals_are_retried_only_while_the_next_attempt_fits_into_the_lease() {
+        let interval = DEFAULT_HEARTBEAT;
+        assert!(may_retry_renewal(Duration::ZERO, interval));
+        assert!(may_retry_renewal(
+            LEASE - interval - Duration::from_millis(1),
+            interval
+        ));
+        assert!(!may_retry_renewal(LEASE - interval, interval));
+        assert!(!may_retry_renewal(LEASE, interval));
+        assert!(transient(&sqlx::Error::PoolTimedOut));
+        assert!(transient(&sqlx::Error::Io(
+            std::io::ErrorKind::BrokenPipe.into()
+        )));
+        assert!(!transient(&sqlx::Error::RowNotFound));
+        assert!(!transient(&sqlx::Error::PoolClosed));
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn heartbeat_retries_a_busy_pool_but_stops_after_lease_loss(pool: PgPool) {
+        let id = queued_position_job(&pool).await;
+        let token = Uuid::new_v4();
+        sqlx::query("UPDATE jobs SET status='running',lease_token=$2,lease_until=now()+interval '120 seconds' WHERE id=$1").bind(id).bind(token).execute(&pool).await.unwrap();
+        // Every renewal times out waiting for the only connection.
+        let busy = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(Duration::from_millis(250))
+            .test_before_acquire(false)
+            .connect_with((*pool.connect_options()).clone())
+            .await
+            .unwrap();
+        let held = busy.acquire().await.unwrap();
+        let execution = async {
+            tokio::time::sleep(Duration::from_millis(700)).await;
+            Ok(json!({"engine":"finished"}))
+        };
+        let result = with_heartbeat(&busy, id, token, execution, Duration::from_millis(10))
+            .await
+            .expect("a busy pool must not end healthy engine work");
+        assert_eq!(result["engine"], "finished");
+        drop(held);
+        // A replaced worker owns the job; the heartbeat stops this one.
+        sqlx::query("UPDATE jobs SET lease_token=$2 WHERE id=$1")
+            .bind(id)
+            .bind(Uuid::new_v4())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let error = tokio::time::timeout(
+            Duration::from_secs(5),
+            with_heartbeat(
+                &busy,
+                id,
+                token,
+                std::future::pending(),
+                Duration::from_millis(10),
+            ),
+        )
+        .await
+        .expect("lease loss must stop the job")
+        .unwrap_err();
+        assert_eq!(error.to_string(), "Job lease was lost");
+        busy.close().await;
     }
 }
