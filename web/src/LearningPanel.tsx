@@ -304,7 +304,6 @@ export function AddCardsPanel({
         <ActionButton
           icon="add"
           label={t('addPosition')}
-          compact
           disabled={!positionId || !hasDeck || busy}
           onClick={() => void add('position')}
         >
@@ -347,7 +346,6 @@ export function AddCardsPanel({
                 ? baseT('games.addErrors', { game: gameNo })
                 : t('addErrors')
             }
-            compact
             disabled={!hasDeck || gameNo === undefined || busy || !validLoss}
             onClick={() => void add('match')}
           >
