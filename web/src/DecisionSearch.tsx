@@ -7,7 +7,17 @@ import Board from './Board';
 import { CubeContextLine } from './CubeDecisionDetails';
 import { useDecisionSearchText } from './decision-search-messages';
 import EngineLabel from './EngineLabel';
+import LibraryColumnPicker from './LibraryColumnPicker';
 import LibrarySortHeading from './LibrarySortHeading';
+import {
+  DECISION_COLUMN_IDS,
+  DECISION_COLUMN_LAYOUT,
+  DECISION_COLUMNS,
+  type DecisionColumn,
+} from './decision-table-columns';
+import { useLibraryText } from './library-messages';
+import { useResizableColumns } from './useResizableColumns';
+import { layoutColumns, useWorkspaceLayout } from './useWorkspaceSession';
 import PositionBookmarkButton from './PositionBookmarkButton';
 import { usePositionText } from './position-browser-messages';
 import { SearchResultRow } from './SearchResultList';
@@ -132,6 +142,21 @@ export default function DecisionSearch({
 }) {
   const t = useDecisionSearchText();
   const p = usePositionText();
+  const l = useLibraryText();
+  const [shownColumns, setShownColumns] = useWorkspaceLayout<DecisionColumn[]>(
+    'decisions.visibleColumns',
+    undefined,
+    [...DECISION_COLUMN_IDS],
+    (value) => layoutColumns(value, DECISION_COLUMN_IDS),
+  );
+  const activeColumns = DECISION_COLUMNS.filter(({ id }) =>
+    shownColumns.includes(id),
+  );
+  const columns = useResizableColumns(DECISION_COLUMN_LAYOUT, {
+    visible,
+    activeColumns: activeColumns.map(({ id }) => id),
+    resizeLabel: (column) => l('resizeColumn', { column }),
+  });
   const hintId = useId();
   const rowPrefix = `${useId()}-`;
   const mistake = useMistakeText();
@@ -284,14 +309,63 @@ export default function DecisionSearch({
   const loss = (value: number) =>
     formatNumber(value, { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
+  // The result count and practice action lead the table toolbar, or stand
+  // alone above an empty result.
+  const summary = result.status === 'ready' && (
+    <>
+      <p role="status">{t('found', { count: result.page.total })}</p>
+      <ActionButton
+        ref={practiceButton}
+        icon="cards"
+        label={t('practice')}
+        tooltip={t('practiceHint')}
+        disabled={practicable.length === 0}
+        onClick={() => setPractice(practicable)}
+      >
+        {t('practice')}
+      </ActionButton>
+    </>
+  );
+
+  function cell(column: DecisionColumn, hit: DecisionHit) {
+    switch (column) {
+      case 'match':
+        return `${hit.players[0]} – ${hit.players[1]}`;
+      case 'move':
+        return `${hit.reference.game_no}.${hit.reference.decision_no}`;
+      case 'kind':
+        return mistake(hit.mistake_kind ?? hit.kind);
+      case 'score':
+        return `${score(hit)}${hit.crawford ? ' · Crawford' : ''}`;
+      case 'cube':
+        return cube(hit);
+      case 'played':
+        return formatDecision(hit.played);
+      case 'best':
+        return formatDecision(hit.best);
+      case 'loss':
+        return loss(hit.equity_loss);
+      case 'source':
+        return (
+          <>
+            <EngineLabel
+              details={hit.engine}
+              tooltip={mistakeProvenance(hit, mistake)}
+            />
+            {hit.depth && ` · ${hit.depth}`}
+          </>
+        );
+    }
+  }
+
   return (
     <section
       className="position-browser decision-search"
       aria-labelledby="decision-search-title"
     >
-      <h2 id="decision-search-title" className="visually-hidden">
-        {t('title')}
-      </h2>
+      <div className="position-browser-heading">
+        <h1 id="decision-search-title">{t('title')}</h1>
+      </div>
       <div className="position-controls position-controls--compact">
         <form
           className="position-filter-form"
@@ -475,59 +549,117 @@ export default function DecisionSearch({
       )}
       {result.status === 'ready' && (
         <>
-          <div className="decision-search-summary">
-            <p role="status">{t('found', { count: result.page.total })}</p>
-            <ActionButton
-              ref={practiceButton}
-              icon="cards"
-              label={t('practice')}
-              tooltip={t('practiceHint')}
-              disabled={practicable.length === 0}
-              onClick={() => setPractice(practicable)}
-            >
-              {t('practice')}
-            </ActionButton>
-          </div>
           {items.length === 0 ? (
-            <p className="position-empty">{t('empty')}</p>
+            <>
+              <div className="decision-search-summary">{summary}</div>
+              <p className="position-empty">{t('empty')}</p>
+            </>
           ) : (
             <div className="position-browser-layout">
               <div className="position-browser-main" aria-busy={loading}>
+                <div className="position-page-select decision-table-toolbar">
+                  <div className="decision-search-summary">{summary}</div>
+                  {!shownColumns.includes('loss') && (
+                    <span className="library-hidden-sort">
+                      {l('sortedBy', {
+                        column: t('loss'),
+                        direction: l(
+                          direction === 'asc' ? 'ascending' : 'descending',
+                        ),
+                      })}
+                    </span>
+                  )}
+                  <LibraryColumnPicker
+                    options={DECISION_COLUMN_IDS.map((id) => ({
+                      id,
+                      label: t(id),
+                    }))}
+                    shown={shownColumns}
+                    onToggle={(id, checked) =>
+                      setShownColumns((current) => {
+                        const next = DECISION_COLUMN_IDS.filter((column) =>
+                          column === id ? checked : current.includes(column),
+                        );
+                        return next.length ? next : current;
+                      })
+                    }
+                    onAll={() => setShownColumns([...DECISION_COLUMN_IDS])}
+                    onReset={() => setShownColumns([...DECISION_COLUMN_IDS])}
+                  />
+                  <ActionButton
+                    icon="reset"
+                    label={l('resetColumnWidths')}
+                    compact
+                    type="button"
+                    className="position-width-reset"
+                    onClick={columns.reset}
+                    disabled={!columns.custom}
+                  />
+                </div>
                 <div className="position-table-scroll">
                   <table
-                    className="similar-position-table decision-search-table"
+                    ref={columns.tableRef}
+                    className={`position-table saved-position-table decision-search-table${columns.dragging ? ' resizing-table' : ''}`}
+                    style={
+                      columns.tableStyle ?? {
+                        minWidth: activeColumns.reduce(
+                          (width, column) => width + column.defaultWidth,
+                          0,
+                        ),
+                      }
+                    }
                     aria-label={t('title')}
                   >
+                    <colgroup>
+                      {activeColumns.map((column) => (
+                        <col
+                          key={column.id}
+                          data-column={column.id}
+                          className={column.className}
+                          style={{
+                            width:
+                              columns.widths?.[column.id] ??
+                              column.defaultWidth,
+                          }}
+                        />
+                      ))}
+                    </colgroup>
                     <thead>
                       <tr>
-                        <th scope="col">{t('match')}</th>
-                        <th scope="col">{t('move')}</th>
-                        <th scope="col">{t('kind')}</th>
-                        <th scope="col">{t('score')}</th>
-                        <th scope="col">{t('cube')}</th>
-                        <th scope="col">{t('played')}</th>
-                        <th scope="col">{t('best')}</th>
-                        <LibrarySortHeading<'loss'>
-                          fields={[{ key: 'loss', label: t('loss') }]}
-                          sort="loss"
-                          direction={direction}
-                          disabled={loading}
-                          onSort={() =>
-                            setApplied(
-                              (current) =>
-                                current && {
-                                  ...current,
-                                  page: 1,
-                                  filters: {
-                                    ...current.filters,
-                                    direction:
-                                      direction === 'desc' ? 'asc' : undefined,
-                                  },
-                                },
-                            )
-                          }
-                        />
-                        <th scope="col">{t('source')}</th>
+                        {activeColumns.map(({ id }) =>
+                          id === 'loss' ? (
+                            <LibrarySortHeading<'loss'>
+                              key={id}
+                              fields={[{ key: 'loss', label: t('loss') }]}
+                              sort="loss"
+                              direction={direction}
+                              disabled={loading}
+                              column={id}
+                              resizeHandle={columns.handle(id, t(id))}
+                              onSort={() =>
+                                setApplied(
+                                  (current) =>
+                                    current && {
+                                      ...current,
+                                      page: 1,
+                                      filters: {
+                                        ...current.filters,
+                                        direction:
+                                          direction === 'desc'
+                                            ? 'asc'
+                                            : undefined,
+                                      },
+                                    },
+                                )
+                              }
+                            />
+                          ) : (
+                            <th scope="col" key={id} data-column={id}>
+                              {t(id)}
+                              {columns.handle(id, t(id))}
+                            </th>
+                          ),
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -546,31 +678,18 @@ export default function DecisionSearch({
                             onOpen={open}
                             jumpToEdges
                           >
-                            <td>
-                              {hit.players[0]} – {hit.players[1]}
-                            </td>
-                            <td>
-                              {hit.reference.game_no}.
-                              {hit.reference.decision_no}
-                            </td>
-                            <td>{mistake(hit.mistake_kind ?? hit.kind)}</td>
-                            <td>
-                              {score(hit)}
-                              {hit.crawford && ' · Crawford'}
-                            </td>
-                            <td>{cube(hit)}</td>
-                            <td>{formatDecision(hit.played)}</td>
-                            <td>{formatDecision(hit.best)}</td>
-                            <td className="decision-search-loss">
-                              {loss(hit.equity_loss)}
-                            </td>
-                            <td>
-                              <EngineLabel
-                                details={hit.engine}
-                                tooltip={mistakeProvenance(hit, mistake)}
-                              />
-                              {hit.depth && ` · ${hit.depth}`}
-                            </td>
+                            {activeColumns.map(({ id }) => (
+                              <td
+                                key={id}
+                                className={
+                                  id === 'loss'
+                                    ? 'decision-search-loss'
+                                    : undefined
+                                }
+                              >
+                                {cell(id, hit)}
+                              </td>
+                            ))}
                           </SearchResultRow>
                         );
                       })}

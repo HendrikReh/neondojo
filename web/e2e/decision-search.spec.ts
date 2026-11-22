@@ -236,3 +236,116 @@ test('Clear filters resets the decision filters but keeps the player and refresh
     .poll(() => searches.at(-1))
     .toEqual({ player: 'Alice', min_loss: '0.05', limit: '50', page: '1' });
 });
+
+test('decision search has a visible heading, a column picker and resizable columns', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  await page.route('**/api/study/mistakes?*', (route) =>
+    route.fulfill({
+      json: {
+        players: ['Alice', 'Bob'],
+        groups: [],
+        analyzed_decisions: 0,
+        analyzed_matches: 0,
+      },
+    }),
+  );
+  await page.route('**/api/study/decisions?*', (route) =>
+    route.fulfill({
+      json: {
+        items: [hit(3, 0.125), hit(9, 0.06)],
+        total: 2,
+        page: 1,
+        limit: 50,
+      },
+    }),
+  );
+  const search = page.getByRole('region', { name: 'Analyzed decisions' });
+  const run = async () => {
+    await page.getByRole('tab', { name: 'Positions', exact: true }).click();
+    await page
+      .getByRole('group', { name: 'Position source' })
+      .getByRole('button', { name: 'All analyzed decisions' })
+      .click();
+    await search
+      .getByRole('combobox', { name: 'Player', exact: true })
+      .selectOption('Alice');
+    await search.getByRole('button', { name: 'Search decisions' }).click();
+    await expect(search.getByRole('status')).toHaveText('2 decisions found');
+  };
+  await page.goto('/');
+  await run();
+  await expect(
+    search.getByRole('heading', { level: 1, name: 'Analyzed decisions' }),
+  ).toBeVisible();
+  const headers = search.locator('.decision-search-table th');
+  const visibleColumns = () =>
+    headers.evaluateAll((cells) =>
+      cells.map((cell) => cell.getAttribute('data-column')),
+    );
+  const all = [
+    'match',
+    'move',
+    'kind',
+    'score',
+    'cube',
+    'played',
+    'best',
+    'loss',
+    'source',
+  ];
+  await expect.poll(visibleColumns).toEqual(all);
+  const scroll = search.locator('.position-table-scroll');
+  expect(await scroll.evaluate((el) => el.scrollWidth)).toBe(
+    await scroll.evaluate((el) => el.clientWidth),
+  );
+
+  const picker = search.locator('.library-column-picker');
+  await picker.locator('summary').click();
+  await picker.getByRole('checkbox', { name: 'Cube', exact: true }).uncheck();
+  await picker.getByRole('checkbox', { name: 'Loss', exact: true }).uncheck();
+  await expect
+    .poll(visibleColumns)
+    .toEqual(all.filter((id) => id !== 'cube' && id !== 'loss'));
+  // The results stay sorted by loss and say so while the column is hidden.
+  await expect(search.locator('.library-hidden-sort')).toHaveText(
+    'Sort: Loss (Descending)',
+  );
+  await expect(
+    search.getByRole('table').getByRole('row').nth(1).locator('td'),
+  ).toHaveCount(7);
+
+  await page.reload();
+  await run();
+  await expect
+    .poll(visibleColumns)
+    .toEqual(all.filter((id) => id !== 'cube' && id !== 'loss'));
+  await picker.locator('summary').click();
+  await picker
+    .getByRole('button', { name: 'Default columns', exact: true })
+    .click();
+  await expect.poll(visibleColumns).toEqual(all);
+
+  const reset = search.getByRole('button', { name: 'Reset column widths' });
+  await expect(reset).toBeDisabled();
+  const match = search.locator('th[data-column="match"]');
+  const before = (await match.boundingBox())!.width;
+  const handle = match.getByRole('separator');
+  const box = (await handle.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2, {
+    steps: 5,
+  });
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await match.boundingBox())!.width)
+    .toBeGreaterThan(before + 40);
+  await expect(reset).toBeEnabled();
+  await reset.click();
+  await expect
+    .poll(async () => Math.round((await match.boundingBox())!.width))
+    .toBe(Math.round(before));
+});

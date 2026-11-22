@@ -4,7 +4,7 @@
   min-width: 0;
 }
 
-.decision-search > h2,
+.decision-search > .position-browser-heading,
 .decision-search > p {
   margin: 0;
 }
@@ -15,7 +15,7 @@
 .position-controls--compact .decision-search-row {
   grid-template-columns:
     repeat(4, minmax(0, 1fr)) minmax(0, 1.2fr)
-    auto;
+    auto auto;
 }
 .decision-search .position-filter-toolbar .position-filter-grid {
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -84,4 +84,13 @@
 }
 .decision-search-table th .action-button[aria-pressed='true'] {
   color: var(--ui-accent);
+}
+
+/* The result summary takes the place of Saved positions' selection actions. */
+.decision-search .decision-table-toolbar {
+  min-height: 0;
+}
+.decision-table-toolbar .decision-search-summary {
+  justify-content: flex-start;
+  margin-right: auto;
 }
