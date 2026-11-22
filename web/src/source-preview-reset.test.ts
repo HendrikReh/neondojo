@@ -39,7 +39,7 @@ vi.mock('react', async (original) => ({
     return slot.event;
   },
 }));
-vi.mock('./i18n', () => ({
+vi.mock('./shared/i18n/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
     t: String,

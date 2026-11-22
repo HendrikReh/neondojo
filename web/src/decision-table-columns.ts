@@ -1,4 +1,4 @@
-import { createColumnLayout } from './column-widths';
+import { createColumnLayout } from './shared/hooks/column-widths';
 
 /** Columns of the analyzed-decision table, in display order. */
 export const DECISION_COLUMNS = [

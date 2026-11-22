@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { DeckDialog } from './DeckLibraryDialogs';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useCardPracticeText } from './card-practice-messages';
-import { useI18n } from './i18n';
-import { AppError } from './i18n-core';
+import { useI18n } from './shared/i18n/i18n';
+import { AppError } from './shared/i18n/i18n-core';
 import {
   actOnAnkiSync,
   loadAnkiSyncHistory,

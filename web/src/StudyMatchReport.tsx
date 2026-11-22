@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import MatchAssessmentPanel from './MatchAssessmentPanel';
 import PlayLearningReview from './PlayLearningReview';
 import { loadStudyReport } from './study-api';
 import type { PlaySession } from './play-api';
 import { useMatchAssessmentText } from './match-assessment-messages';
 import { useStudyText } from './study-messages';
-import { useI18n } from './i18n';
-import type { Theme } from './themes';
+import { useI18n } from './shared/i18n/i18n';
+import type { Theme } from './shared/board/themes';
 import './learning-review-dialog.css';
 import './match-assessment.css';
 

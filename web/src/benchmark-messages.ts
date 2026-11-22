@@ -1,5 +1,5 @@
-import { useI18n, type Locale } from './i18n';
-import { formatMessage, type TranslationParams } from './i18n-core';
+import { useI18n, type Locale } from './shared/i18n/i18n';
+import { formatMessage, type TranslationParams } from './shared/i18n/i18n-core';
 const en = {
   globalBusy:
     'Benchmark running or waiting. Other engine actions wait until measurement finishes.',

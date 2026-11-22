@@ -1,4 +1,4 @@
-import { useI18n, type Locale } from './i18n';
+import { useI18n, type Locale } from './shared/i18n/i18n';
 
 const entries = {
   save: [

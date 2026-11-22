@@ -1,7 +1,7 @@
-import type { Job, MatchAnalysisSummary } from './api';
+import type { Job, MatchAnalysisSummary } from './shared/api/api';
 
 import type { components } from './generated-api';
-import { errorGrades } from './move-severity';
+import { errorGrades } from './shared/review/move-severity';
 
 type Schema = components['schemas'];
 export type DecisionKind = 'checker' | 'cube';

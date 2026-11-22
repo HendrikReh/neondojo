@@ -149,7 +149,7 @@ describe('first paint bootstrap', () => {
     });
     expect(root.style.colorScheme).toBe('dark');
     expect(html.indexOf('ui-appearance-bootstrap')).toBeLessThan(
-      html.indexOf('/src/ui-appearance.css'),
+      html.indexOf('/src/styles/ui-appearance.css'),
     );
   });
   it('uses safe defaults when storage access fails', () => {

@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import LearningReviewDialog from './LearningReviewDialog';
 import { loadStudyReport } from './study-api';
 import type { PlaySession } from './play-api';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 import { usePlayModeText } from './play-mode-messages';
-import { AppError } from './i18n-core';
+import { AppError } from './shared/i18n/i18n-core';
 
 /** A header-scoped, read-only report. Parent keys it by match and report identity. */
 export default function AnalysisStudyReportAction({

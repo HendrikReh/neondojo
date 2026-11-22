@@ -1,10 +1,10 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { Match, Position } from './api';
-import type { Locale } from './i18n-core';
+import type { Match, Position } from './shared/api/api';
+import type { Locale } from './shared/i18n/i18n-core';
 
-vi.mock('./Board', () => ({
+vi.mock('./shared/board/Board', () => ({
   default: () => createElement('div', { 'data-retained-board': true }),
 }));
 vi.mock('./AnalysisPanel', () => ({
@@ -26,7 +26,7 @@ vi.mock('./LearningPanel', () => ({
 vi.mock('./MatchAnalysisPanel', () => ({
   default: () => createElement('div', { 'data-full-match-analysis': true }),
 }));
-vi.mock('./useMoveAssessments', () => ({
+vi.mock('./shared/review/useMoveAssessments', () => ({
   useMoveAssessments: vi.fn(() => ({
     assessments: {},
     loading: false,
@@ -36,8 +36,8 @@ vi.mock('./useMoveAssessments', () => ({
 import AnalysisWorkspace from './AnalysisWorkspace';
 import AnalysisPanel from './AnalysisPanel';
 import { AddCardsPanel } from './LearningPanel';
-import { I18nProvider } from './i18n';
-import { useMoveAssessments } from './useMoveAssessments';
+import { I18nProvider } from './shared/i18n/i18n';
+import { useMoveAssessments } from './shared/review/useMoveAssessments';
 
 const match: Match & { source_available: boolean } = {
   id: 'collection-host',

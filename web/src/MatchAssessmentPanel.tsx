@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { engineDisplayName } from './engine-version';
-import ActionButton from './ActionButton';
+import { engineDisplayName } from './shared/engine/engine-version';
+import ActionButton from './shared/ui/ActionButton';
 import LearningDecisionPreview from './LearningDecisionPreview';
 import { humanReviewDecisions } from './learning-review-positions';
 import { useLearningReviewPositions } from './useLearningReviewPositions';
 import { studyAssessment, type AssessmentState } from './match-assessment-api';
 import { useMatchAssessmentText } from './match-assessment-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import type { PlaySession } from './play-api';
 import { useStudyText } from './study-messages';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 
 function active(state?: AssessmentState) {
   return state?.job?.status === 'queued' || state?.job?.status === 'running';

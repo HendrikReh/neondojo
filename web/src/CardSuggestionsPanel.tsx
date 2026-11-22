@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import ActionButton from './ActionButton';
-import Board from './Board';
+import ActionButton from './shared/ui/ActionButton';
+import Board from './shared/board/Board';
 import { useCardSuggestionText } from './card-suggestion-messages';
 import { useGamePlanText } from './game-plan-messages';
-import { useI18n } from './i18n';
-import { AppError, interpolate } from './i18n-core';
+import { useI18n } from './shared/i18n/i18n';
+import { AppError, interpolate } from './shared/i18n/i18n-core';
 import { useLearningText } from './learning-messages';
 import {
   loadCardSuggestions,
@@ -12,7 +12,7 @@ import {
   type CardSuggestions,
 } from './learning-api';
 import { useMistakeText } from './recurring-mistakes-messages';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 
 type Props = {
   deckId: string;

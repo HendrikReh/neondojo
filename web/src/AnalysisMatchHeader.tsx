@@ -1,18 +1,18 @@
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { request, type Match } from './api';
+import { request, type Match } from './shared/api/api';
 import type { LibraryMatch } from './library-api';
 import { libraryText } from './library-messages';
-import { useI18n } from './i18n';
-import { AppError, type Locale } from './i18n-core';
+import { useI18n } from './shared/i18n/i18n';
+import { AppError, type Locale } from './shared/i18n/i18n-core';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
 import { hasMatchSource } from './match-source';
 import './analysis-match-header.css';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 import AnalysisStudyReportAction from './AnalysisStudyReportAction';
 import type { AnalysisCatalogEntry } from './analysis-catalog-api';
 import { nativePerformanceRating } from './match-statistics-api';
-import { prDigits } from './pr-format';
+import { prDigits } from './shared/format/pr-format';
 
 interface HeaderState {
   identity: string;

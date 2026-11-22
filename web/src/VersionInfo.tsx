@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { shortEngineVersion } from './engine-version';
-import EngineLabel from './EngineLabel';
-import { useI18n } from './i18n';
+import { shortEngineVersion } from './shared/engine/engine-version';
+import EngineLabel from './shared/engine/EngineLabel';
+import { useI18n } from './shared/i18n/i18n';
 import {
   loadAppVersion,
   loadEngines,

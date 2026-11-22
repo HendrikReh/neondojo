@@ -1,4 +1,4 @@
-import { createColumnLayout } from './column-widths';
+import { createColumnLayout } from './shared/hooks/column-widths';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 
 export const POSITION_COLUMNS = [

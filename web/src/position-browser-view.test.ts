@@ -1,12 +1,12 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { I18nProvider } from './i18n';
+import { I18nProvider } from './shared/i18n/i18n';
 import {
   PositionBrowserResults,
   PositionBrowserPreview,
 } from './PositionBrowserResults';
-import { placeholders as args } from './i18n-core';
+import { placeholders as args } from './shared/i18n/i18n-core';
 import { positionMessages } from './position-browser-messages';
 import type { PositionBrowserHit } from './position-browser-api';
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));

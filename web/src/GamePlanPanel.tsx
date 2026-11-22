@@ -1,5 +1,5 @@
-import Tooltip from './Tooltip';
-import ActionButton from './ActionButton';
+import Tooltip from './shared/ui/Tooltip';
+import ActionButton from './shared/ui/ActionButton';
 import type { GamePlans } from './game-plan-api';
 import { useGamePlans } from './useGamePlans';
 import { useGamePlanText } from './game-plan-messages';

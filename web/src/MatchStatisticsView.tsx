@@ -1,5 +1,5 @@
-import ActionButton from './ActionButton';
-import EngineLabel from './EngineLabel';
+import ActionButton from './shared/ui/ActionButton';
+import EngineLabel from './shared/engine/EngineLabel';
 import { useId, type ReactNode } from 'react';
 import type { components } from './generated-api';
 import type {
@@ -8,7 +8,7 @@ import type {
 } from './analysis-catalog-api';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
 type MatchAnalysisSummary = components['schemas']['CatalogAnalysisSummary'];
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import {
   nativePerformanceRating,
   type DecisionKind,
@@ -16,13 +16,13 @@ import {
   type StatisticsAction,
   type StatisticsMetric,
 } from './match-statistics-api';
-import { errorGrades } from './move-severity';
+import { errorGrades } from './shared/review/move-severity';
 import {
   severityLabels,
   useStatisticsText,
-} from './review-statistics-messages';
+} from './shared/review/review-statistics-messages';
 import './match-statistics.css';
-import { prDigits } from './pr-format';
+import { prDigits } from './shared/format/pr-format';
 
 type PlayerStats = MatchAnalysisSummary['players'][number];
 type SelectMetric = (action: StatisticsAction) => void;

@@ -1,10 +1,10 @@
 import type { StudyReportSummary } from './study-api';
-import ActionButton from './ActionButton';
-import { useI18n } from './i18n';
+import ActionButton from './shared/ui/ActionButton';
+import { useI18n } from './shared/i18n/i18n';
 import { usePlayText } from './play-messages';
 import { useStudyText } from './study-messages';
 import { isPlayMode, usePlayModeText } from './play-mode-messages';
-import { prDigits } from './pr-format';
+import { prDigits } from './shared/format/pr-format';
 
 export default function StudyReportTable({
   reports,

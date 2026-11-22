@@ -1,6 +1,6 @@
 import type { Ref } from 'react';
 import { useMistakeText } from './recurring-mistakes-messages';
-import { SearchFilterSelect } from './SearchFilterForm';
+import { SearchFilterSelect } from './shared/ui/SearchFilterForm';
 
 export default function MistakePlayerSelect({
   players,

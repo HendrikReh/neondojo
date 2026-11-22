@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import ActionButton from './ActionButton';
-import LibraryDialog from './LibraryDialog';
+import ActionButton from './shared/ui/ActionButton';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import {
   MatchAnalysisFields,
   useMatchAnalysisOptions,
 } from './MatchAnalysisFields';
-import type { Job } from './api';
-import { useI18n } from './i18n';
+import type { Job } from './shared/api/api';
+import { useI18n } from './shared/i18n/i18n';
 import { useLibraryText } from './library-messages';
 import type { LibraryMatch } from './library-api';
 import { submitMatchAnalysis } from './match-analysis-api';

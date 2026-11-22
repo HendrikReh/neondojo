@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import ActionButton from './ActionButton';
-import { request, type Match } from './api';
-import { SearchResultList } from './SearchResultList';
-import { SearchResultPreview } from './SearchResultPreview';
-import { useI18n } from './i18n';
+import ActionButton from './shared/ui/ActionButton';
+import { request, type Match } from './shared/api/api';
+import { SearchResultList } from './shared/ui/SearchResultList';
+import { SearchResultPreview } from './shared/ui/SearchResultPreview';
+import { useI18n } from './shared/i18n/i18n';
 import type { Database } from './library-api';
 import { usePlayerText } from './player-directory-messages';
 import { aliasLabel, PlayerResults, type PlayerOrder } from './PlayerResults';

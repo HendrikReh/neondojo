@@ -1,11 +1,11 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { Position } from './api';
-import type { Locale } from './i18n-core';
-import { I18nProvider } from './i18n';
+import type { Position } from './shared/api/api';
+import type { Locale } from './shared/i18n/i18n-core';
+import { I18nProvider } from './shared/i18n/i18n';
 import MoveHistoryRow from './MoveHistoryRow';
-import type { MoveAssessment } from './useMoveAssessments';
+import type { MoveAssessment } from './shared/review/useMoveAssessments';
 
 afterEach(() => vi.unstubAllGlobals());
 const position: Position = {

@@ -1,25 +1,25 @@
 import { useCheckerTurns } from './useCheckerTurns';
-import { interpolate } from './i18n-core';
+import { interpolate } from './shared/i18n/i18n-core';
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import Board from './Board';
+import Board from './shared/board/Board';
 import CheckerPracticeBoard, {
   type CheckerDraft,
 } from './CheckerPracticeBoard';
 import CubePracticeChoices from './CubePracticeChoices';
 import PracticeResult from './PracticeResult';
-import { CubeContextLine } from './CubeDecisionDetails';
-import { matchContext } from './boardMath';
-import ActionButton from './ActionButton';
-import EngineLabel from './EngineLabel';
-import PlayBoardDialog from './PlayBoardDialog';
-import { useI18n } from './i18n';
-import type { Theme } from './themes';
+import { CubeContextLine } from './shared/review/CubeDecisionDetails';
+import { matchContext } from './shared/board/boardMath';
+import ActionButton from './shared/ui/ActionButton';
+import EngineLabel from './shared/engine/EngineLabel';
+import PlayBoardDialog from './shared/board/PlayBoardDialog';
+import { useI18n } from './shared/i18n/i18n';
+import type { Theme } from './shared/board/themes';
 import {
   projectMove,
   projectPracticeSteps,
   type BoardView,
-} from './move-preview';
-import { useBoardReviewText } from './board-review-messages';
+} from './shared/board/move-preview';
+import { useBoardReviewText } from './shared/board/board-review-messages';
 import { useLearningText } from './learning-messages';
 import { usePositionText } from './position-browser-messages';
 import type { PracticeAnswer } from './learning-api';

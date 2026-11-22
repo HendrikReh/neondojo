@@ -5,8 +5,8 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import ActionButton from './ActionButton';
-import PlayBoardDialog from './PlayBoardDialog';
+import ActionButton from './shared/ui/ActionButton';
+import PlayBoardDialog from './shared/board/PlayBoardDialog';
 import { DecisionEvaluation, useDecisionChoice } from './PlayFeedback';
 import PlayHintView from './PlayHintView';
 import {

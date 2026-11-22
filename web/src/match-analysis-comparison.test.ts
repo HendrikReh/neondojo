@@ -1,14 +1,14 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { I18nProvider } from './i18n';
+import { I18nProvider } from './shared/i18n/i18n';
 import { MatchAnalysisComparisonResults } from './MatchAnalysisComparison';
 import type {
   AnalysisCatalogEntry,
   MatchAnalysisStatistics,
 } from './analysis-catalog-api';
 import { entryForJob } from './analysis-catalog-test-fixtures';
-import type { Job } from './api';
+import type { Job } from './shared/api/api';
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());
 const native = entryForJob({

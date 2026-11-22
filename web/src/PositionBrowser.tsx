@@ -2,12 +2,15 @@ import {
   useConfirmedConfiguration,
   useWorkspaceDefaults,
 } from './ConfigurationProvider';
-import { useWorkspaceLayout, useWorkspaceSession } from './useWorkspaceSession';
-import ActionButton from './ActionButton';
-import SearchPagination from './SearchPagination';
-import { SearchResultList } from './SearchResultList';
-import { useSearchPages } from './useSearchPages';
-import { usePopoverPlacement } from './usePopoverPlacement';
+import {
+  useWorkspaceLayout,
+  useWorkspaceSession,
+} from './shared/hooks/useWorkspaceSession';
+import ActionButton from './shared/ui/ActionButton';
+import SearchPagination from './shared/ui/SearchPagination';
+import { SearchResultList } from './shared/ui/SearchResultList';
+import { useSearchPages } from './shared/hooks/useSearchPages';
+import { usePopoverPlacement } from './shared/hooks/usePopoverPlacement';
 import {
   useCallback,
   useEffect,
@@ -16,14 +19,14 @@ import {
   useRef,
   useState,
 } from 'react';
-import { request } from './api';
+import { request } from './shared/api/api';
 import {
   removePositionBookmark,
   savePositionBookmark,
 } from './position-bookmark-api';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import type { Database } from './library-api';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 import { readPositionPlayed } from './position-table-columns';
 import PositionBrowserControls from './PositionBrowserControls';
 import PositionBrowserDecks from './PositionBrowserDecks';

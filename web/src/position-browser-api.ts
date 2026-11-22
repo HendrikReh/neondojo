@@ -1,6 +1,6 @@
-import { cursorSearchParams } from './cursor-search';
-import { request } from './api';
-import { AppError } from './i18n-core';
+import { cursorSearchParams } from './shared/api/cursor-search';
+import { request } from './shared/api/api';
+import { AppError } from './shared/i18n/i18n-core';
 import type { GamePlan } from './game-plan-api';
 import { mistakeGamePlans } from './recurring-mistakes-api';
 

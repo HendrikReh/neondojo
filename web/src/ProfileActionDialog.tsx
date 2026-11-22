@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
-import LibraryDialog from './LibraryDialog';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import { useProfileText } from './profile-messages';
 import { ConfigurationApiError } from './configuration-api';
 import { profileFieldKey } from './profile-messages';

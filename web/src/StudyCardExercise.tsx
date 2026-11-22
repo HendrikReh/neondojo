@@ -1,17 +1,17 @@
 import { useCheckerTurns } from './useCheckerTurns';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import AnkiCardFace from './AnkiCardFace';
 import CardTagEditor from './CardTagEditor';
-import Board from './Board';
+import Board from './shared/board/Board';
 import CheckerPracticeBoard, {
   type CheckerDraft,
 } from './CheckerPracticeBoard';
-import { request } from './api';
-import { useBoardReviewText } from './board-review-messages';
-import { matchContext } from './boardMath';
-import { useI18n } from './i18n';
-import { AppError } from './i18n-core';
+import { request } from './shared/api/api';
+import { useBoardReviewText } from './shared/board/board-review-messages';
+import { matchContext } from './shared/board/boardMath';
+import { useI18n } from './shared/i18n/i18n';
+import { AppError } from './shared/i18n/i18n-core';
 import type {
   AttemptedCard,
   CardAnswer,
@@ -23,12 +23,12 @@ import type {
   RevealedCard,
 } from './learning-api';
 import { useLearningText } from './learning-messages';
-import { projectMove, projectPracticeSteps } from './move-preview';
+import { projectMove, projectPracticeSteps } from './shared/board/move-preview';
 import CubePracticeChoices from './CubePracticeChoices';
 import PracticeResult from './PracticeResult';
-import { CubeContextLine } from './CubeDecisionDetails';
+import { CubeContextLine } from './shared/review/CubeDecisionDetails';
 import { usePositionText } from './position-browser-messages';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 
 export default function StudyCardExercise({
   card,

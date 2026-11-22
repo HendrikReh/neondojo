@@ -1,10 +1,10 @@
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import {
   formatMessage,
   matchEventLabels,
   type Locale,
   type TranslationParams,
-} from './i18n-core';
+} from './shared/i18n/i18n-core';
 
 const translations = {
   similar: [

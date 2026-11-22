@@ -6,7 +6,7 @@ import {
 } from './analysis-controls';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import type { Job } from '../src/api';
+import type { Job } from '../src/shared/api/api';
 import { defaultConfiguration } from '../src/configuration-model';
 import { profileBackend } from './profile-backend';
 import { expect, test } from './test';

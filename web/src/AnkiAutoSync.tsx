@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCardPracticeText } from './card-practice-messages';
-import { useI18n } from './i18n';
-import { AppError } from './i18n-core';
+import { useI18n } from './shared/i18n/i18n';
+import { AppError } from './shared/i18n/i18n-core';
 import {
   loadAnkiAutoSync,
   setAnkiAutoSync,

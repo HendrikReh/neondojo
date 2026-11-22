@@ -1,10 +1,10 @@
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useEffect, useId, useRef, useState } from 'react';
-import { engineDisplayName } from './engine-version';
-import { depthLabel } from './analysis-depth';
-import type { Match } from './api';
+import { engineDisplayName } from './shared/engine/engine-version';
+import { depthLabel } from './shared/engine/analysis-depth';
+import type { Match } from './shared/api/api';
 import { formatBenchmarkDuration } from './benchmark-duration';
-import EngineLabel from './EngineLabel';
+import EngineLabel from './shared/engine/EngineLabel';
 import options from '../../shared/configuration-options.json' with { type: 'json' };
 import {
   cancelSeries,
@@ -23,8 +23,8 @@ import {
   engineMatchText,
   type EngineMatchLabel,
 } from './engine-match-messages';
-import { useI18n } from './i18n';
-import LibraryDialog from './LibraryDialog';
+import { useI18n } from './shared/i18n/i18n';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import { loadEngines, type EngineInfo } from './settings-api';
 import './engine-match.css';
 

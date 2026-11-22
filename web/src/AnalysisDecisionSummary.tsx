@@ -1,6 +1,6 @@
 import { useCandidateText } from './candidate-messages';
 import type { components } from './generated-api';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 
 export default function AnalysisDecisionSummary({
   decision,

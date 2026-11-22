@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, expect, it, vi } from 'vitest';
 import { GamePlanPanelView } from './GamePlanPanel';
 import { gamePlanMessages } from './game-plan-messages';
-import { I18nProvider, type Locale } from './i18n';
+import { I18nProvider, type Locale } from './shared/i18n/i18n';
 import type { GamePlans } from './game-plan-api';
 
 const plans: GamePlans = {

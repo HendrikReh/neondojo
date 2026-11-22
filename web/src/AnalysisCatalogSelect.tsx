@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import ActionButton from './ActionButton';
-import LibraryDialog from './LibraryDialog';
+import ActionButton from './shared/ui/ActionButton';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import type { AnalysisCatalogEntry } from './analysis-catalog-api';
 import type { AnalysisCatalog } from './useAnalysisCatalog';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
-import { useI18n } from './i18n';
-import { shortEngineLabel } from './engine-version';
+import { useI18n } from './shared/i18n/i18n';
+import { shortEngineLabel } from './shared/engine/engine-version';
 import { useLibraryText } from './library-messages';
 
 export function useAnalysisEntryLabel(includeEngine = true) {

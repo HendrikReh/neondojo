@@ -1,10 +1,12 @@
 import { useId } from 'react';
-import type { Match } from './api';
+import type { Match } from './shared/api/api';
 import { useSourceText } from './analysis-source-messages';
-import { useBoardReviewText } from './board-review-messages';
-import CubeDecisionDetails, { CubeContextLine } from './CubeDecisionDetails';
-import EngineLabel from './EngineLabel';
-import { useI18n } from './i18n';
+import { useBoardReviewText } from './shared/board/board-review-messages';
+import CubeDecisionDetails, {
+  CubeContextLine,
+} from './shared/review/CubeDecisionDetails';
+import EngineLabel from './shared/engine/EngineLabel';
+import { useI18n } from './shared/i18n/i18n';
 import type { ReviewDecision } from './review-decisions-api';
 
 export default function CubeReviewEvaluation({

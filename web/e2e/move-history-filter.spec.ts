@@ -1,4 +1,4 @@
-import type { GameMoveAssessments } from '../src/useMoveAssessments';
+import type { GameMoveAssessments } from '../src/shared/review/useMoveAssessments';
 import { expect, test } from './test';
 
 test('move history filters the selected game by the saved grade without moving the board', async ({

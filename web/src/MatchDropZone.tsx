@@ -1,7 +1,7 @@
-import ActionIcon from './action-icons';
+import ActionIcon from './shared/ui/action-icons';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 
 export default function MatchDropZone({
   disabled,

@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import LibraryFilters from './LibraryFilters';
 import { emptyFilters, libraryParams } from './library-api';
-import { I18nProvider, type Locale } from './i18n';
+import { I18nProvider, type Locale } from './shared/i18n/i18n';
 
 afterEach(() => vi.unstubAllGlobals());
 

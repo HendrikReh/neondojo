@@ -1,10 +1,10 @@
-import { request } from './api';
-import type { BearoffDirection } from './play-state';
+import { request } from './shared/api/api';
+import type { BearoffDirection } from './shared/board/play-state';
 import type { PlayMode } from './play-mode-messages';
 type Schema = import('./generated-api').components['schemas'];
 export type PlaySeverity = Schema['MoveSeverity'];
 export type SageDifficulty = Schema['SageDifficulty'];
-import { errorGrades } from './move-severity';
+import { errorGrades } from './shared/review/move-severity';
 
 export const playSeverity = (value: string | null | undefined): PlaySeverity =>
   errorGrades.find((grade) => grade === value) ?? 'none';

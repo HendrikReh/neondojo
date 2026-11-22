@@ -1,5 +1,5 @@
 import { useWorkspaceDefaults } from './ConfigurationProvider';
-import { layoutColumns, useWorkspaceLayout } from './useWorkspaceSession';
+import { layoutColumns, useWorkspaceLayout } from './shared/hooks/useWorkspaceSession';
 import { useLibraryText } from './library-messages';
 import { useMemo } from 'react';
 import {
@@ -15,7 +15,7 @@ import {
   toggleVisibleColumn,
   type LibraryDataColumn,
 } from './library-column-preferences';
-import { useResizableColumns } from './useResizableColumns';
+import { useResizableColumns } from './shared/hooks/useResizableColumns';
 
 const automaticWidths: Partial<Record<LibraryColumn, number>> = {
   white: 160,

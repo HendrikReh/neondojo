@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import type { PracticeAnswer } from './learning-api';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
 import { usePlayText } from './play-messages';
 

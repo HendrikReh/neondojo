@@ -1,4 +1,4 @@
-import { request } from './api';
+import { request } from './shared/api/api';
 import type { PlaySession } from './play-api';
 type Schema = import('./generated-api').components['schemas'];
 export type StudyReportSummary = Schema['StudyReportSummary'];

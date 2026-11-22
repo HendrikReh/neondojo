@@ -2,9 +2,9 @@ import { entryForJob } from './analysis-catalog-test-fixtures';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { I18nProvider } from './i18n';
-import { placeholders as args } from './i18n-core';
-import type { Job, MatchAnalysisSummary } from './api';
+import { I18nProvider } from './shared/i18n/i18n';
+import { placeholders as args } from './shared/i18n/i18n-core';
+import type { Job, MatchAnalysisSummary } from './shared/api/api';
 import {
   buildStatisticsFilter,
   decisionFilterQuery,
@@ -15,7 +15,7 @@ import MatchStatisticsView from './MatchStatisticsView';
 import {
   statisticsMessages,
   statisticsText,
-} from './review-statistics-messages';
+} from './shared/review/review-statistics-messages';
 
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());

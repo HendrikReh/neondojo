@@ -1,4 +1,4 @@
-import { cursorSearchParams } from './cursor-search';
+import { cursorSearchParams } from './shared/api/cursor-search';
 import type { components } from './generated-api';
 export const ALL_CARDS = '__all__';
 export const CARDS_WITHOUT_DECK = '__without_deck__';

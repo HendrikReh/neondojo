@@ -1,4 +1,4 @@
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import type { components } from './generated-api';
 import { PAUSED_MATCHES_DATABASE_ID, type Database } from './library-api';
 import {
@@ -6,7 +6,7 @@ import {
   matchEventLabels,
   type Locale,
   type TranslationParams,
-} from './i18n-core';
+} from './shared/i18n/i18n-core';
 
 // Each row is complete in English, German, Spanish, French, Polish and Italian.
 const rows = {

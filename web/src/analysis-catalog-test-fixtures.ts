@@ -1,4 +1,4 @@
-import type { Job } from './api';
+import type { Job } from './shared/api/api';
 import type { AnalysisCatalogEntry } from './analysis-catalog-api';
 import type { AnalysisCatalog } from './useAnalysisCatalog';
 export function entryForJob(job: Job, gameNo?: number): AnalysisCatalogEntry {

@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, expect, test, vi } from 'vitest';
-import { I18nProvider, type Locale } from './i18n';
+import { I18nProvider, type Locale } from './shared/i18n/i18n';
 import RecurringMistakes from './RecurringMistakes';
 import { mistakeMessages } from './recurring-mistakes-messages';
 afterEach(() => vi.unstubAllGlobals());

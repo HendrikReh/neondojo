@@ -1,6 +1,6 @@
 import { expect, test, type Page } from './test';
 import { closeSettings } from './settings-actions';
-import type { Locale } from '../src/i18n-core';
+import type { Locale } from '../src/shared/i18n/i18n-core';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {

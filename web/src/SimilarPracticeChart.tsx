@@ -1,6 +1,6 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
-import Tooltip from './Tooltip';
-import { useI18n } from './i18n';
+import Tooltip from './shared/ui/Tooltip';
+import { useI18n } from './shared/i18n/i18n';
 import { usePositionText } from './position-browser-messages';
 import type { PracticeHistoryPage } from './similar-practice-history-api';
 

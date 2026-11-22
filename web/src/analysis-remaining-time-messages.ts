@@ -1,5 +1,5 @@
-import type { Locale } from './i18n';
-import { interpolate, type TranslationParams } from './i18n-core';
+import type { Locale } from './shared/i18n/i18n';
+import { interpolate, type TranslationParams } from './shared/i18n/i18n-core';
 const en = {
   estimated: 'Estimated time remaining: approx. {duration}',
   loading: 'Calculating time remaining …',

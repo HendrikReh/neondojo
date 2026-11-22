@@ -1,9 +1,9 @@
 import type { LibraryMatch } from './library-api';
 import { playModeText } from './play-mode-messages';
-import type { Locale } from './i18n-core';
+import type { Locale } from './shared/i18n/i18n-core';
 import { libraryText, type LibraryMessageKey } from './library-messages';
-import { workspaceText } from './workspace-messages';
-import { prDigits } from './pr-format';
+import { workspaceText } from './shared/i18n/workspace-messages';
+import { prDigits } from './shared/format/pr-format';
 
 export function libraryAnalysisStatus(status: string | null, locale: Locale) {
   const key: LibraryMessageKey =

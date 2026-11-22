@@ -1,4 +1,4 @@
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import { gameResultText } from './game-result-messages';
 import './game-result.css';
 type Schema = import('./generated-api').components['schemas'];

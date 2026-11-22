@@ -1,21 +1,21 @@
-import { severityLabels } from './review-statistics-messages';
-import ActionButton from './ActionButton';
+import { severityLabels } from './shared/review/review-statistics-messages';
+import ActionButton from './shared/ui/ActionButton';
 import { useEffect, useRef } from 'react';
 import { playSeverity, type PlayDecision, type PlaySession } from './play-api';
 import { usePlayModeText } from './play-mode-messages';
 import { usePlayText } from './play-messages';
-import { CubeContextLine } from './CubeDecisionDetails';
-import MoveExplanation from './MoveExplanation';
-import { useI18n } from './i18n';
+import { CubeContextLine } from './shared/review/CubeDecisionDetails';
+import MoveExplanation from './shared/review/MoveExplanation';
+import { useI18n } from './shared/i18n/i18n';
 import PlayMovePreview, {
   hasPlayMovePreview,
   type PlayMovePreviewContext,
 } from './PlayMovePreview';
-import { useBoardReviewText } from './board-review-messages';
+import { useBoardReviewText } from './shared/board/board-review-messages';
 import {
   focusCandidateRow,
   navigateCandidatePreview,
-} from './candidate-preview';
+} from './shared/review/candidate-preview';
 
 export function useDecisionChoice(session: PlaySession) {
   const t = usePlayModeText();

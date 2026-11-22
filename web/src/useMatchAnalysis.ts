@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { jobEngine, mergeJob, request, terminal, type Job } from './api';
-import { watchJob } from './job-watch';
+import {
+  jobEngine,
+  mergeJob,
+  request,
+  terminal,
+  type Job,
+} from './shared/api/api';
+import { watchJob } from './shared/jobs/job-watch';
 import {
   submitMatchAnalysis,
   type MatchAnalysisEngine,

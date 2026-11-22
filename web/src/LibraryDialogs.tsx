@@ -1,7 +1,7 @@
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useState, type FormEvent } from 'react';
-import { request } from './api';
-import LibraryDialog from './LibraryDialog';
+import { request } from './shared/api/api';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import {
   databaseDisplayName,
   useLibraryText,
@@ -16,7 +16,7 @@ import {
   type BatchAction,
   type ActionResponse,
 } from './library-api';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 
 export type LibraryDialogState =
   | { kind: 'database'; database?: Database }

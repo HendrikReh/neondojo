@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { Match } from './api';
+import type { Match } from './shared/api/api';
 import type { LibraryMatch } from './library-api';
 
 // Commit effects separately so navigation/revision changes can render before

@@ -5,8 +5,8 @@ import {
   DEFAULT_ANALYSIS_PLIES,
   depthLabel,
   preferredDepth,
-} from './analysis-depth';
-import { useI18n } from './i18n';
+} from './shared/engine/analysis-depth';
+import { useI18n } from './shared/i18n/i18n';
 import { loadEngines, type EngineInfo } from './settings-api';
 import { useSettingsText } from './settings-messages';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';

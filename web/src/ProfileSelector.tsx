@@ -6,8 +6,8 @@ import {
   type ConfigurationProfile,
 } from './configuration-api';
 import { useProfileText } from './profile-messages';
-import { clippedTooltipText } from './overflow-title';
-import Tooltip from './Tooltip';
+import { clippedTooltipText } from './shared/format/overflow-title';
+import Tooltip from './shared/ui/Tooltip';
 import ProfileActionDialog from './ProfileActionDialog';
 import ProfileChangesDialog from './ProfileChangesDialog';
 import './profiles.css';

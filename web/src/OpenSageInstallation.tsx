@@ -5,7 +5,7 @@ import {
   SettingsApiError,
   type SageInstallation,
 } from './settings-api';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import { useSettingsText } from './settings-messages';
 
 const text = {

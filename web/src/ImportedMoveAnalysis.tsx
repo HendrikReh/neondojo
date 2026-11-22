@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { request, type Match } from './api';
+import { request, type Match } from './shared/api/api';
 import type { SourceAnalysis } from './source-analysis-api';
 import SourceAnalysisView from './SourceAnalysisView';
 import { useSourceText } from './analysis-source-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 export default function ImportedMoveAnalysis({
   moveId,
   players,

@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import ActionButton from './ActionButton';
-import type { Match } from './api';
-import { useI18n } from './i18n';
-import { AppError } from './i18n-core';
-import LibraryDialog from './LibraryDialog';
+import ActionButton from './shared/ui/ActionButton';
+import type { Match } from './shared/api/api';
+import { useI18n } from './shared/i18n/i18n';
+import { AppError } from './shared/i18n/i18n-core';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import type { Database } from './library-api';
 import { useLibraryText } from './library-messages';
 import { usePlayerText } from './player-directory-messages';

@@ -1,4 +1,4 @@
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 export const playModes = ['competition', 'training', 'coach', 'tutor'] as const;
 export type PlayMode = (typeof playModes)[number];
 export const isPlayMode = (value: unknown): value is PlayMode =>

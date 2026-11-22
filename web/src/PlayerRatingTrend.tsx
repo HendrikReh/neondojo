@@ -1,8 +1,8 @@
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import type { components } from './generated-api';
 import { usePlayerText } from './player-directory-messages';
-import { prDigits } from './pr-format';
-import Tooltip from './Tooltip';
+import { prDigits } from './shared/format/pr-format';
+import Tooltip from './shared/ui/Tooltip';
 
 type Point = components['schemas']['PlayerRatingPoint'];
 export const RATING_WINDOW = 10;

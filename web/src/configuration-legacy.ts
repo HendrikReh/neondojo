@@ -6,10 +6,10 @@ import {
 import { applySettingsDraft } from './configuration-settings';
 import type { AppSettings } from './settings-api';
 import type { BookConfig } from './source-analysis-api';
-import { readLocale, saveLocale } from './i18n-core';
+import { readLocale, saveLocale } from './shared/i18n/i18n-core';
 import { readTheme, saveTheme } from './ui-preferences';
 import { readUiAppearance, saveUiAppearance } from './ui-appearance';
-import { readPlaySounds, savePlaySounds } from './play-audio';
+import { readPlaySounds, savePlaySounds } from './shared/board/play-audio';
 import { readVisibleColumns } from './library-column-preferences';
 import { isCollectionScope } from './card-search-api';
 import { LIBRARY_RESIZABLE_LAYOUT as LIBRARY_COLUMN_LAYOUT } from './library-columns';

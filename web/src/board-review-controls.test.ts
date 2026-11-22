@@ -2,8 +2,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import BoardReviewControls from './BoardReviewControls';
-import { I18nProvider } from './i18n';
-import type { PreviewCandidate } from './candidate-preview';
+import { I18nProvider } from './shared/i18n/i18n';
+import type { PreviewCandidate } from './shared/review/candidate-preview';
 
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());

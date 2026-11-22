@@ -23,7 +23,10 @@ async function archivedMatch(page: Page, session: PlaySession) {
   expect(entry.source_available).toBe(true);
   return entry;
 }
-import { relativePoint, type CheckerStep } from '../src/play-state';
+import {
+  relativePoint,
+  type CheckerStep,
+} from '../src/shared/board/play-state';
 
 /** GNUbg writes its own level (one below NeonDojo's 1-ply = raw net) into the SGF. */
 const gnubgLevel = (plies: number) => plies - 1;

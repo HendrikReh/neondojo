@@ -1,6 +1,6 @@
 import type { PositionBrowserHit } from './position-browser-api';
-import type { Locale } from './i18n-core';
-import { localizeDecision } from './i18n-core';
+import type { Locale } from './shared/i18n/i18n-core';
+import { localizeDecision } from './shared/i18n/i18n-core';
 import { positionText } from './position-browser-messages';
 import { libraryText } from './library-messages';
 import { analysisCatalogText } from './analysis-catalog-messages';

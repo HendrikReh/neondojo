@@ -48,8 +48,8 @@ vi.mock('react', async (original) => ({
   },
 }));
 import LearningWorkspace, { useDecks } from './LearningPanel';
-import ActionButton from './ActionButton';
-import { SearchFilterSelect } from './SearchFilterForm';
+import ActionButton from './shared/ui/ActionButton';
+import { SearchFilterSelect } from './shared/ui/SearchFilterForm';
 import StudyCardExercise from './StudyCardExercise';
 const decks = [
   { id: 'a', name: 'A', card_count: 1, version: 0 },

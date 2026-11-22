@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { request, type Position } from './api';
-import type { CheckerTurn } from './play-state';
+import { request, type Position } from './shared/api/api';
+import type { CheckerTurn } from './shared/board/play-state';
 
 type CheckerContext = Pick<Position, 'board' | 'player' | 'dice'>;
 

@@ -1,23 +1,26 @@
 import { useWorkspaceDefaults } from './ConfigurationProvider';
-import { layoutColumns, useWorkspaceLayout } from './useWorkspaceSession';
-import ActionButton from './ActionButton';
-import EngineLabel from './EngineLabel';
+import {
+  layoutColumns,
+  useWorkspaceLayout,
+} from './shared/hooks/useWorkspaceSession';
+import ActionButton from './shared/ui/ActionButton';
+import EngineLabel from './shared/engine/EngineLabel';
 import { useMemo, type ReactNode, type Ref } from 'react';
 import {
   SearchResultNotes,
   SearchResultRow,
   SearchResultTable,
   SearchResultTags,
-} from './SearchResultList';
+} from './shared/ui/SearchResultList';
 import {
   SearchPreviewBoard,
   SearchPreviewDecks,
   SearchPreviewDetails,
   SearchResultPreview,
-} from './SearchResultPreview';
-import LibrarySortHeading from './LibrarySortHeading';
-import LibraryColumnPicker from './LibraryColumnPicker';
-import { useResizableColumns } from './useResizableColumns';
+} from './shared/ui/SearchResultPreview';
+import LibrarySortHeading from './shared/ui/LibrarySortHeading';
+import LibraryColumnPicker from './shared/ui/LibraryColumnPicker';
+import { useResizableColumns } from './shared/hooks/useResizableColumns';
 import { useLibraryText } from './library-messages';
 import {
   POSITION_COLUMNS,
@@ -34,7 +37,7 @@ import {
   positionAnalysisProvenance,
 } from './position-row-summary';
 export { positionPlayer } from './position-row-summary';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import type {
   PositionBrowserHit,
   PositionSort,
@@ -44,7 +47,7 @@ import {
   usePositionText,
   type PositionMessageKey,
 } from './position-browser-messages';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
 export interface PositionResultsProps {
   selectPageRef?: Ref<HTMLInputElement>;

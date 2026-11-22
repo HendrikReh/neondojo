@@ -1,5 +1,9 @@
-import { useI18n } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
+import { useI18n } from './shared/i18n/i18n';
+import {
+  interpolate,
+  type Locale,
+  type TranslationParams,
+} from './shared/i18n/i18n-core';
 
 const en = {
   appearance: 'Appearance',

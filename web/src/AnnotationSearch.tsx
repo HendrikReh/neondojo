@@ -1,7 +1,10 @@
-import Tooltip from './Tooltip';
-import { sessionFields, useWorkspaceSession } from './useWorkspaceSession';
+import Tooltip from './shared/ui/Tooltip';
+import {
+  sessionFields,
+  useWorkspaceSession,
+} from './shared/hooks/useWorkspaceSession';
 import { useWorkspaceDefaults } from './ConfigurationProvider';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useCallback, useId, useState, type FormEvent } from 'react';
 import {
   normalizeAnnotationTag,
@@ -12,8 +15,8 @@ import {
   type AnnotationKind,
   type SearchValidation,
 } from './annotation-api';
-import SearchPagination from './SearchPagination';
-import { useSearchPages } from './useSearchPages';
+import SearchPagination from './shared/ui/SearchPagination';
+import { useSearchPages } from './shared/hooks/useSearchPages';
 import { useLibraryText } from './library-messages';
 import { useAnnotationI18n } from './annotation-messages';
 

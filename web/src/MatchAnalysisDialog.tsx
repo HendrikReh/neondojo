@@ -1,14 +1,20 @@
 import { useEffect, useEffectEvent, useState } from 'react';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import AnalysisRemainingTime from './AnalysisRemainingTime';
 import AnalysisTimeEstimate from './AnalysisTimeEstimate';
-import LibraryDialog from './LibraryDialog';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import {
   MatchAnalysisFields,
   useMatchAnalysisOptions,
 } from './MatchAnalysisFields';
-import { cancelJob, isCancelledJob, request, terminal, type Job } from './api';
-import { useI18n } from './i18n';
+import {
+  cancelJob,
+  isCancelledJob,
+  request,
+  terminal,
+  type Job,
+} from './shared/api/api';
+import { useI18n } from './shared/i18n/i18n';
 import type { LibraryMatch } from './library-api';
 import { useLibraryText } from './library-messages';
 import {

@@ -2,11 +2,11 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import AnalysisWorkspace from './AnalysisWorkspace';
-import { I18nProvider } from './i18n';
-import type { Match, Position } from './api';
+import { I18nProvider } from './shared/i18n/i18n';
+import type { Match, Position } from './shared/api/api';
 import { AnalysisMatchHeaderView } from './AnalysisMatchHeader';
 import type { LibraryMatch } from './library-api';
-import type { Locale } from './i18n-core';
+import type { Locale } from './shared/i18n/i18n-core';
 
 const match: Match & { source_available: boolean } = {
   id: '00000000-0000-0000-0000-000000000007',

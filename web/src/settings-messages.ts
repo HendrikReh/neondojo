@@ -1,6 +1,10 @@
-import { useI18n } from './i18n';
-import { interpolate, type Locale, type TranslationParams } from './i18n-core';
-import { depthLabel } from './analysis-depth';
+import { useI18n } from './shared/i18n/i18n';
+import {
+  interpolate,
+  type Locale,
+  type TranslationParams,
+} from './shared/i18n/i18n-core';
+import { depthLabel } from './shared/engine/analysis-depth';
 
 const en = {
   title: 'Settings',

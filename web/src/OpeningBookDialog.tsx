@@ -3,13 +3,13 @@ import { openingBookConfigurationKey } from './configuration-model';
 import ProfileActionDialog from './ProfileActionDialog';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useProfileText } from './profile-messages';
-import ActionButton from './ActionButton';
-import EngineLabel from './EngineLabel';
+import ActionButton from './shared/ui/ActionButton';
+import EngineLabel from './shared/engine/EngineLabel';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import LibraryDialog from './LibraryDialog';
-import { request } from './api';
-import { AppError } from './i18n-core';
-import { useI18n } from './i18n';
+import LibraryDialog from './shared/ui/LibraryDialog';
+import { request } from './shared/api/api';
+import { AppError } from './shared/i18n/i18n-core';
+import { useI18n } from './shared/i18n/i18n';
 import {
   openingBookProviderLabel,
   openingBookProviders,

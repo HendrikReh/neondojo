@@ -6,8 +6,8 @@ import { ConfigurationApiError } from './configuration-api';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import OpeningBookDialog from './OpeningBookDialog';
 import ProfileSettingsPanel from './ProfileSettingsPanel';
-import EngineLabel from './EngineLabel';
-import LibraryDialog from './LibraryDialog';
+import EngineLabel from './shared/engine/EngineLabel';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import { useProfileText } from './profile-messages';
 import {
   applySettingsDraft,
@@ -24,14 +24,14 @@ import {
   type ProfileConfiguration,
 } from './configuration-model';
 import { useBenchmarkText } from './benchmark-messages';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import {
   ANALYSIS_PLIES,
   isAnalysisDepth,
   PLAY_PLIES,
   preferredDepth,
   TOP_TWO_PLAY_STRENGTH,
-} from './analysis-depth';
+} from './shared/engine/analysis-depth';
 import {
   useEffect,
   useId,
@@ -41,18 +41,18 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import Board from './Board';
-import { readPlaySounds, savePlaySounds } from './play-audio';
+import Board from './shared/board/Board';
+import { readPlaySounds, savePlaySounds } from './shared/board/play-audio';
 import { usePlayText } from './play-messages';
 import {
   playModes,
   usePlayModeText,
   type PlayMode,
 } from './play-mode-messages';
-import type { Position } from './api';
-import { useI18n, languages, type Locale } from './i18n';
-import { saveLocale } from './i18n-core';
-import { archiveThemes, themes, type Theme } from './themes';
+import type { Position } from './shared/api/api';
+import { useI18n, languages, type Locale } from './shared/i18n/i18n';
+import { saveLocale } from './shared/i18n/i18n-core';
+import { archiveThemes, themes, type Theme } from './shared/board/themes';
 import {
   checkGnubg,
   loadEngines,
@@ -68,7 +68,7 @@ import {
   useSettingsText,
   type SettingsMessageKey,
 } from './settings-messages';
-import { errorThresholdLabels } from './review-statistics-messages';
+import { errorThresholdLabels } from './shared/review/review-statistics-messages';
 import { saveTheme } from './ui-preferences';
 import './settings.css';
 import {

@@ -1,18 +1,18 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
-import { useDecimalInput } from './decimal-input';
-import { engineDisplayName } from './engine-version';
+import { useDecimalInput } from './shared/format/decimal-input';
+import { engineDisplayName } from './shared/engine/engine-version';
 import { playStrengthLabel, useSettingsText } from './settings-messages';
 import { loadEngines, type EngineInfo } from './settings-api';
 import {
   preferredDepth,
   TOP_TWO_PLAY_STRENGTH,
   type DepthEngine,
-} from './analysis-depth';
-import EngineLabel from './EngineLabel';
-import Tooltip from './Tooltip';
+} from './shared/engine/analysis-depth';
+import EngineLabel from './shared/engine/EngineLabel';
+import Tooltip from './shared/ui/Tooltip';
 import { useConfirmedConfiguration } from './ConfigurationProvider';
 import { defaultConfiguration } from './configuration-model';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import {
   useEffect,
   useId,
@@ -22,7 +22,7 @@ import {
   type CSSProperties,
   type FormEvent,
 } from 'react';
-import Board from './Board';
+import Board from './shared/board/Board';
 import PlayHistory from './PlayHistory';
 import PlayFeedback from './PlayFeedback';
 import PlayCoachFeedback from './PlayCoachFeedback';
@@ -41,11 +41,15 @@ import {
 } from './play-mode-messages';
 import type { AppSettings } from './settings-api';
 import { usePlayReview } from './usePlayReview';
-import { projectMove, type MovePreview, type BoardView } from './move-preview';
-import { useBoardReviewText } from './board-review-messages';
-import type { Theme } from './themes';
-import { useI18n } from './i18n';
-import { AppError } from './i18n-core';
+import {
+  projectMove,
+  type MovePreview,
+  type BoardView,
+} from './shared/board/move-preview';
+import { useBoardReviewText } from './shared/board/board-review-messages';
+import type { Theme } from './shared/board/themes';
+import { useI18n } from './shared/i18n/i18n';
+import { AppError } from './shared/i18n/i18n-core';
 import { usePlayText } from './play-messages';
 import { useLibraryText } from './library-messages';
 import {
@@ -55,7 +59,7 @@ import {
   matchingCheckerTurns,
   relativePoint,
   type CheckerStepWithDie,
-} from './play-state';
+} from './shared/board/play-state';
 import {
   actInPlaySession,
   createPlaySession,
@@ -67,15 +71,23 @@ import {
   type PlaySession,
   type SageDifficulty,
 } from './play-api';
-import { playSounds, stopPlaySounds, unlockPlayAudio } from './play-audio';
-import { isNewCubeOffer } from './play-sound-events';
-import { matchContext } from './boardMath';
+import {
+  playSounds,
+  stopPlaySounds,
+  unlockPlayAudio,
+} from './shared/board/play-audio';
+import { isNewCubeOffer } from './shared/board/play-sound-events';
+import { matchContext } from './shared/board/boardMath';
 import PlayCubeDecision from './PlayCubeDecision';
-import PlayBoardDialog from './PlayBoardDialog';
+import PlayBoardDialog from './shared/board/PlayBoardDialog';
 import PlayResignDialog, { type ResignLevel } from './PlayResignDialog';
 import { usePlayResignText } from './play-resign-messages';
 import GameResultSummary from './GameResultSummary';
-import { actionFrames, checkerFrame, reverseFrame } from './play-animation';
+import {
+  actionFrames,
+  checkerFrame,
+  reverseFrame,
+} from './shared/board/play-animation';
 import { usePlayAnimation, useRollingFaces } from './usePlayAnimation';
 import './play.css';
 const storageKey = 'neondojo.play-session';

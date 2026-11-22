@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { deckManagementMessages } from './deck-management-messages';
-import { placeholders } from './i18n-core';
+import { placeholders } from './shared/i18n/i18n-core';
 it('provides the same deck dialog messages and interpolation values in all six languages', () => {
   const source = deckManagementMessages.en;
   expect(Object.keys(deckManagementMessages)).toHaveLength(6);

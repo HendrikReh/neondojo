@@ -1,12 +1,12 @@
 import AnkiCardFace from './AnkiCardFace';
 import { useEffect, useState, type RefObject } from 'react';
-import ActionButton from './ActionButton';
-import { request } from './api';
-import Board from './Board';
-import { matchContext } from './boardMath';
+import ActionButton from './shared/ui/ActionButton';
+import { request } from './shared/api/api';
+import Board from './shared/board/Board';
+import { matchContext } from './shared/board/boardMath';
 import { useCardPracticeText } from './card-practice-messages';
 import CubePracticeChoices from './CubePracticeChoices';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
 import type {
   CardAnswer,
@@ -18,10 +18,10 @@ import type {
   ScoreQuestion,
   ScorePractice as ScorePracticeSession,
 } from './learning-api';
-import PlayBoardDialog from './PlayBoardDialog';
+import PlayBoardDialog from './shared/board/PlayBoardDialog';
 import PracticeResult from './PracticeResult';
-import { SearchFilterInput } from './SearchFilterForm';
-import type { Theme } from './themes';
+import { SearchFilterInput } from './shared/ui/SearchFilterForm';
+import type { Theme } from './shared/board/themes';
 
 type Mode = 'pips' | 'score' | 'preview';
 

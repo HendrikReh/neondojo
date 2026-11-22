@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { I18nProvider } from './i18n';
+import { I18nProvider } from './shared/i18n/i18n';
 import CandidateTable from './CandidateTable';
 
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));

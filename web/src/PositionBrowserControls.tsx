@@ -1,16 +1,16 @@
-import ActionButton from './ActionButton';
-import AppliedFilterChips from './AppliedFilterChips';
+import ActionButton from './shared/ui/ActionButton';
+import AppliedFilterChips from './shared/ui/AppliedFilterChips';
 import SearchFilterForm, {
   SearchFilterInput,
   SearchFilterSelect,
   searchTextFields,
-} from './SearchFilterForm';
+} from './shared/ui/SearchFilterForm';
 import { useGamePlanText } from './game-plan-messages';
 import { mistakeGamePlans } from './recurring-mistakes-api';
 import { useEffect, useId, useRef, useState } from 'react';
 import { DeckDialog } from './DeckLibraryDialogs';
-import { usePopoverPlacement } from './usePopoverPlacement';
-import { useI18n } from './i18n';
+import { usePopoverPlacement } from './shared/hooks/usePopoverPlacement';
+import { useI18n } from './shared/i18n/i18n';
 import type { Database } from './library-api';
 import {
   deletePositionFilter,

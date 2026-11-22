@@ -1,6 +1,6 @@
-import { request } from './api';
+import { request } from './shared/api/api';
 import type { components } from './generated-api';
-import { AppError } from './i18n-core';
+import { AppError } from './shared/i18n/i18n-core';
 import type { Deck } from './learning-api';
 
 export type VersionedDeck = Deck;

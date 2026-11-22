@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { request } from './api';
+import { request } from './shared/api/api';
 import {
   analysisCatalogPath,
   analysisResultPath,

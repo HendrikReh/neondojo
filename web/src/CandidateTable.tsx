@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import EngineLabel from './EngineLabel';
-import { useI18n } from './i18n';
+import EngineLabel from './shared/engine/EngineLabel';
+import { useI18n } from './shared/i18n/i18n';
 import { useSourceText } from './analysis-source-messages';
-import { useBoardReviewText } from './board-review-messages';
+import { useBoardReviewText } from './shared/board/board-review-messages';
 import {
   useCandidateEquityText,
   useCandidateLossText,
@@ -13,7 +13,7 @@ import {
   focusCandidateRow,
   navigateCandidatePreview,
   type PreviewCandidate,
-} from './candidate-preview';
+} from './shared/review/candidate-preview';
 import {
   candidateLoss,
   candidateOutcomes,
@@ -22,8 +22,8 @@ import {
   type CandidatePosition,
   type ComparisonCandidate,
 } from './candidate-comparison';
-import MoveExplanation from './MoveExplanation';
-import { useMoveExplanationText } from './move-explanation-messages';
+import MoveExplanation from './shared/review/MoveExplanation';
+import { useMoveExplanationText } from './shared/review/move-explanation-messages';
 import './candidate-table.css';
 
 // Each side lists its total, then gammons and backgammons as separate outcomes.

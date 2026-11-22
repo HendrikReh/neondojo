@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { engineDisplayName } from './engine-version';
-import type { Theme } from './themes';
+import { engineDisplayName } from './shared/engine/engine-version';
+import type { Theme } from './shared/board/themes';
 import {
   humanReviewDecisions,
   type ReviewDecisionEntry,
@@ -10,8 +10,8 @@ import LearningDecisionPreview from './LearningDecisionPreview';
 import { useStudyText } from './study-messages';
 import type { PlaySession } from './play-api';
 import { usePlayModeText } from './play-mode-messages';
-import { useI18n } from './i18n';
-import { prDigits } from './pr-format';
+import { useI18n } from './shared/i18n/i18n';
+import { prDigits } from './shared/format/pr-format';
 export default function PlayLearningReview({
   session,
   theme,

@@ -1,7 +1,7 @@
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useEffect, useRef, useState, useId, type ReactNode } from 'react';
-import { request } from './api';
-import { useI18n } from './i18n';
+import { request } from './shared/api/api';
+import { useI18n } from './shared/i18n/i18n';
 import { DeckDialog } from './DeckLibraryDialogs';
 import type { Deck } from './learning-api';
 import {

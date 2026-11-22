@@ -1,5 +1,5 @@
-import ActionButton from './ActionButton';
-import { useI18n } from './i18n';
+import ActionButton from './shared/ui/ActionButton';
+import { useI18n } from './shared/i18n/i18n';
 import { useGamePlanText } from './game-plan-messages';
 import { useMistakeText } from './recurring-mistakes-messages';
 import type { MistakeGroup } from './recurring-mistakes-api';

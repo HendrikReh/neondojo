@@ -4,9 +4,9 @@ import {
   type PlayReviewHistory,
   type PlaySession,
 } from './play-api';
-import { AppError } from './i18n-core';
-import type { BoardView } from './move-preview';
-import { useBoardReviewShortcuts } from './useBoardReviewShortcuts';
+import { AppError } from './shared/i18n/i18n-core';
+import type { BoardView } from './shared/board/move-preview';
+import { useBoardReviewShortcuts } from './shared/review/useBoardReviewShortcuts';
 
 /** History snapshots never replace the live checkpoint or unconfirmed steps. */
 export function usePlayReview(session: PlaySession | null, enabled: boolean) {

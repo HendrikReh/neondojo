@@ -1,7 +1,7 @@
 import type { ReactNode, RefObject } from 'react';
 import { usePlayText } from './play-messages';
-import { useI18n } from './i18n';
-import PlayBoardDialog from './PlayBoardDialog';
+import { useI18n } from './shared/i18n/i18n';
+import PlayBoardDialog from './shared/board/PlayBoardDialog';
 
 export default function PlayCubeDecision({
   anchor,

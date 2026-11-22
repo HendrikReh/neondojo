@@ -1,4 +1,4 @@
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import type { components } from './generated-api';
 import { useStudyOverviewText } from './study-messages';
 

@@ -1,16 +1,19 @@
 import { useEffect, useId, useState } from 'react';
-import ActionButton from './ActionButton';
-import { request } from './api';
+import ActionButton from './shared/ui/ActionButton';
+import { request } from './shared/api/api';
 import { useCardPracticeText } from './card-practice-messages';
 import { useCardSearchText } from './card-search-messages';
 import { useGamePlanText } from './game-plan-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import type {
   PracticeRound,
   TransferRequest,
   TransferSummary,
 } from './learning-api';
-import { SearchFilterInput, SearchFilterSelect } from './SearchFilterForm';
+import {
+  SearchFilterInput,
+  SearchFilterSelect,
+} from './shared/ui/SearchFilterForm';
 
 const plans = [
   'opening',

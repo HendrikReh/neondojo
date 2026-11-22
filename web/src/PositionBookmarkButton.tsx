@@ -1,4 +1,4 @@
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useEffect, useRef, useState } from 'react';
 import {
   loadPositionBookmark,
@@ -6,7 +6,7 @@ import {
   savePositionBookmark,
 } from './position-bookmark-api';
 import { usePositionBookmarkText } from './position-bookmark-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import './position-bookmark.css';
 
 type Operation = 'load' | 'save' | 'remove';

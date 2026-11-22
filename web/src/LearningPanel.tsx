@@ -1,30 +1,33 @@
 import { useWorkspaceDefaults } from './ConfigurationProvider';
-import { useDecimalInput } from './decimal-input';
+import { useDecimalInput } from './shared/format/decimal-input';
 import { defaultConfiguration } from './configuration-model';
 import {
   sessionFields,
   sessionString,
   useWorkspaceSession,
-} from './useWorkspaceSession';
-import ActionButton from './ActionButton';
+} from './shared/hooks/useWorkspaceSession';
+import ActionButton from './shared/ui/ActionButton';
 import AnkiAutoSync from './AnkiAutoSync';
 import AnkiSyncOverview from './AnkiSyncOverview';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { request } from './api';
+import { request } from './shared/api/api';
 import type { components } from './generated-api';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
-import { AppError } from './i18n-core';
-import { useI18n } from './i18n';
+import { AppError } from './shared/i18n/i18n-core';
+import { useI18n } from './shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 import StudyCardExercise from './StudyCardExercise';
-import { useDetailsDismiss } from './useDetailsDismiss';
+import { useDetailsDismiss } from './shared/hooks/useDetailsDismiss';
 import LearningCardBrowser from './LearningCardBrowser';
 import CardSuggestionsPanel from './CardSuggestionsPanel';
 import CardSearchControls from './CardSearchControls';
-import { SearchFilterInput, SearchFilterSelect } from './SearchFilterForm';
+import {
+  SearchFilterInput,
+  SearchFilterSelect,
+} from './shared/ui/SearchFilterForm';
 import { groupDecks } from './deck-groups';
-import { useSearchPages } from './useSearchPages';
+import { useSearchPages } from './shared/hooks/useSearchPages';
 import {
   ALL_CARDS,
   CARDS_WITHOUT_DECK,

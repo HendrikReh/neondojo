@@ -2,15 +2,15 @@ import type {
   AnalysisCatalogEntry,
   PositionAnalysisResult,
 } from './analysis-catalog-api';
-import type { Position } from './api';
-import { candidatePreviewNotation } from './candidate-preview';
+import type { Position } from './shared/api/api';
+import { candidatePreviewNotation } from './shared/review/candidate-preview';
 import {
   candidateEquityDifference,
   candidateEquityRanks,
   type CandidatePosition,
   type ComparisonCandidate,
 } from './candidate-comparison';
-import { projectMove } from './move-preview';
+import { projectMove } from './shared/board/move-preview';
 
 export const comparisonEngines = ['xg', 'gnubg', 'bgsage'] as const;
 export type ComparisonEngine = (typeof comparisonEngines)[number];

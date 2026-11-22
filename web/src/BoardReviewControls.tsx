@@ -1,9 +1,13 @@
-import ActionButton from './ActionButton';
-import EngineLabel from './EngineLabel';
-import type { BoardView, CheckerPosition, MovePreview } from './move-preview';
-import type { PreviewCandidate } from './candidate-preview';
-import { useBoardReviewText } from './board-review-messages';
-import { useI18n } from './i18n';
+import ActionButton from './shared/ui/ActionButton';
+import EngineLabel from './shared/engine/EngineLabel';
+import type {
+  BoardView,
+  CheckerPosition,
+  MovePreview,
+} from './shared/board/move-preview';
+import type { PreviewCandidate } from './shared/review/candidate-preview';
+import { useBoardReviewText } from './shared/board/board-review-messages';
+import { useI18n } from './shared/i18n/i18n';
 import './board-review.css';
 
 export default function BoardReviewControls({

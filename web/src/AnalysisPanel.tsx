@@ -1,9 +1,9 @@
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
-import Tooltip from './Tooltip';
-import EngineLabel from './EngineLabel';
-import ActionButton from './ActionButton';
-import LibraryDialog from './LibraryDialog';
+import Tooltip from './shared/ui/Tooltip';
+import EngineLabel from './shared/engine/EngineLabel';
+import ActionButton from './shared/ui/ActionButton';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import { useLibraryText } from './library-messages';
 import { useEffect, useEffectEvent, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -13,17 +13,17 @@ import {
   type DiceStats,
   type Match,
   type Position,
-} from './api';
-import type { useJobs } from './useJobs';
-import { useI18n } from './i18n';
+} from './shared/api/api';
+import type { useJobs } from './shared/jobs/useJobs';
+import { useI18n } from './shared/i18n/i18n';
 import { useOpeningBook } from './useOpeningBook';
 import { useSourceText } from './analysis-source-messages';
 import SourceAnalysisView from './SourceAnalysisView';
 import {
   candidatePreviewNotation,
   type PreviewCandidate,
-} from './candidate-preview';
-import type { BoardView } from './move-preview';
+} from './shared/review/candidate-preview';
+import type { BoardView } from './shared/board/move-preview';
 import CandidateTable from './CandidateTable';
 import PositionComparison from './PositionComparison';
 import { nativeCheckerCandidates } from './candidate-comparison';
@@ -37,7 +37,7 @@ import {
   ANALYSIS_PLIES,
   DEFAULT_ANALYSIS_PLIES,
   depthLabel,
-} from './analysis-depth';
+} from './shared/engine/analysis-depth';
 import type { SourceAnalysis } from './source-analysis-api';
 
 const noImportedRecords: SourceAnalysis[] = [];

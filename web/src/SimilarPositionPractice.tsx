@@ -6,26 +6,26 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import ActionButton from './ActionButton';
-import EngineLabel from './EngineLabel';
-import Board from './Board';
+import ActionButton from './shared/ui/ActionButton';
+import EngineLabel from './shared/engine/EngineLabel';
+import Board from './shared/board/Board';
 import CheckerPracticeBoard, {
   type CheckerDraft,
 } from './CheckerPracticeBoard';
-import PlayBoardDialog from './PlayBoardDialog';
-import { request } from './api';
-import { useBoardReviewText } from './board-review-messages';
-import { matchContext } from './boardMath';
+import PlayBoardDialog from './shared/board/PlayBoardDialog';
+import { request } from './shared/api/api';
+import { useBoardReviewText } from './shared/board/board-review-messages';
+import { matchContext } from './shared/board/boardMath';
 import type { components } from './generated-api';
-import { useI18n } from './i18n';
-import { projectMove, projectPracticeSteps } from './move-preview';
+import { useI18n } from './shared/i18n/i18n';
+import { projectMove, projectPracticeSteps } from './shared/board/move-preview';
 import { usePositionText } from './position-browser-messages';
 import { useMistakeText } from './recurring-mistakes-messages';
 import {
   savePracticeSummary,
   type PracticeSummaryInput,
 } from './similar-practice-history-api';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 
 type Hit = components['schemas']['SimilarHit'];
 type Answer = components['schemas']['CheckerPracticeAnswer'];

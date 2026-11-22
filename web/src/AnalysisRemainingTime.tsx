@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import type { Job } from './api';
-import { useI18n } from './i18n';
+import type { Job } from './shared/api/api';
+import { useI18n } from './shared/i18n/i18n';
 import { formatAnalysisDuration } from './analysis-time-estimate-messages';
 import {
   loadRemainingTime,

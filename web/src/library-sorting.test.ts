@@ -2,7 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, expect, it, vi } from 'vitest';
 import MatchDatabase from './MatchDatabase';
-import { I18nProvider } from './i18n';
+import { I18nProvider } from './shared/i18n/i18n';
 import {
   LIBRARY_DATA_COLUMNS,
   VISIBLE_COLUMNS_KEY,

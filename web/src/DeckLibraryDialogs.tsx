@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import ActionButton from './ActionButton';
-import SearchPagination from './SearchPagination';
-import { lastSearchPage, useSearchPages } from './useSearchPages';
+import ActionButton from './shared/ui/ActionButton';
+import SearchPagination from './shared/ui/SearchPagination';
+import { lastSearchPage, useSearchPages } from './shared/hooks/useSearchPages';
 import {
   addDeckCards,
   deleteCards,
@@ -18,7 +18,7 @@ import {
 import type { components } from './generated-api';
 import { useDeckLibraryText } from './deck-library-messages';
 import { useDeckManagementText } from './deck-management-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
 import './deck-management.css';
 

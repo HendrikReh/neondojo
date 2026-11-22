@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
-import ActionButton from './ActionButton';
-import { request } from './api';
+import ActionButton from './shared/ui/ActionButton';
+import { request } from './shared/api/api';
 import { useCardPracticeText } from './card-practice-messages';
 import {
   ALL_CARDS,
@@ -9,9 +9,12 @@ import {
   isCollectionScope,
   type CardFilters,
 } from './card-search-api';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import type { CardQuery, CardTopic } from './learning-api';
-import { SearchFilterInput, SearchFilterSelect } from './SearchFilterForm';
+import {
+  SearchFilterInput,
+  SearchFilterSelect,
+} from './shared/ui/SearchFilterForm';
 
 export default function CardTopics({
   filters,

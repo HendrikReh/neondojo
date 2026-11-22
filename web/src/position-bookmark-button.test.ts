@@ -50,7 +50,7 @@ vi.mock('react', async (original) => ({
     }
   },
 }));
-vi.mock('./i18n', () => ({
+vi.mock('./shared/i18n/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
     t: (key: string) => key,
@@ -60,12 +60,12 @@ vi.mock('./i18n', () => ({
   }),
 }));
 import PositionBookmarkButton from './PositionBookmarkButton';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { positionBookmarkMessages } from './position-bookmark-messages';
 import AnalysisWorkspace from './AnalysisWorkspace';
 import AnalysisPanel from './AnalysisPanel';
 import BoardReviewControls from './BoardReviewControls';
-import type { Position } from './api';
+import type { Position } from './shared/api/api';
 
 type Props = Parameters<typeof PositionBookmarkButton>[0];
 type Element = ReactElement<Record<string, unknown>>;

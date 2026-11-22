@@ -1,6 +1,6 @@
 import { test, expect, type Page } from './test';
-import { applySteps } from '../src/play-state';
-import { nativeSteps } from '../src/play-sound-events';
+import { applySteps } from '../src/shared/board/play-state';
+import { nativeSteps } from '../src/shared/board/play-sound-events';
 import { moneySummary, id } from './study-report-fixture';
 const initial = [
   0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2,

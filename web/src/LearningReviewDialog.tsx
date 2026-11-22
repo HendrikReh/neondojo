@@ -1,12 +1,12 @@
 import type { RefObject } from 'react';
-import type { Theme } from './themes';
-import PlayBoardDialog from './PlayBoardDialog';
+import type { Theme } from './shared/board/themes';
+import PlayBoardDialog from './shared/board/PlayBoardDialog';
 import PlayLearningReview from './PlayLearningReview';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import type { PlaySession } from './play-api';
 import { usePlayModeText } from './play-mode-messages';
 import { useStudyText } from './study-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import './learning-review-dialog.css';
 export default function LearningReviewDialog({
   anchor,

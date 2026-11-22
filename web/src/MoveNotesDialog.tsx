@@ -1,20 +1,20 @@
 import { useEffect, useState } from 'react';
-import type { Match } from './api';
+import type { Match } from './shared/api/api';
 import {
   loadDecisions,
   movePosition,
   type GameDecisions,
   type StoredMove,
 } from './library-api';
-import Board from './Board';
+import Board from './shared/board/Board';
 import AnnotationPanel from './AnnotationPanel';
 import ImportedMoveAnalysis from './ImportedMoveAnalysis';
 import AnalysisDecisionSummary from './AnalysisDecisionSummary';
 import type { ReviewDecision } from './review-decisions-api';
-import LibraryDialog from './LibraryDialog';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import { useLibraryText } from './library-messages';
-import { useI18n } from './i18n';
-import type { Theme } from './themes';
+import { useI18n } from './shared/i18n/i18n';
+import type { Theme } from './shared/board/themes';
 export interface MoveNotesTarget {
   match: Match;
   gameNo: number;

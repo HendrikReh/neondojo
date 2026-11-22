@@ -1,9 +1,12 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import AnalysisRemainingTime from './AnalysisRemainingTime';
 import AnalysisTimeEstimate from './AnalysisTimeEstimate';
-import { sessionFields, useWorkspaceSession } from './useWorkspaceSession';
+import {
+  sessionFields,
+  useWorkspaceSession,
+} from './shared/hooks/useWorkspaceSession';
 import { useConfirmedConfiguration } from './ConfigurationProvider';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -14,7 +17,7 @@ import {
   type Job,
   type Match,
   type MatchGame,
-} from './api';
+} from './shared/api/api';
 import {
   canOpenReviewDecision,
   findReviewNeighbor,
@@ -26,10 +29,10 @@ import {
   type ReviewNavigationOrigin,
 } from './review-decisions-api';
 import { BoardErrorNavigation } from './BoardDecisionReview';
-import { useSearchPages } from './useSearchPages';
+import { useSearchPages } from './shared/hooks/useSearchPages';
 import { useSourceText } from './analysis-source-messages';
 import { useMatchAnalysis, type MatchAnalysisEngine } from './useMatchAnalysis';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import {
   MatchAnalysisFields,
   useMatchAnalysisOptions,
@@ -46,8 +49,8 @@ import {
 import {
   severityLabels,
   useStatisticsText,
-} from './review-statistics-messages';
-import { DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
+} from './shared/review/review-statistics-messages';
+import { DEFAULT_ANALYSIS_PLIES } from './shared/engine/analysis-depth';
 import type { AnalysisCatalog } from './useAnalysisCatalog';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
 import {

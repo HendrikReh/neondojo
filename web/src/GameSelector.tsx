@@ -1,6 +1,6 @@
-import ActionButton from './ActionButton';
-import type { MatchGame } from './api';
-import { useI18n } from './i18n';
+import ActionButton from './shared/ui/ActionButton';
+import type { MatchGame } from './shared/api/api';
+import { useI18n } from './shared/i18n/i18n';
 
 export default function GameSelector({
   games,

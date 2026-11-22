@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Theme } from './themes';
-import ActionButton from './ActionButton';
+import type { Theme } from './shared/board/themes';
+import ActionButton from './shared/ui/ActionButton';
 import StudyMatchReport from './StudyMatchReport';
 import LearningReviewDialog from './LearningReviewDialog';
 import type { AssessmentEntry } from './match-assessment-api';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import StudyReportTable from './StudyReportTable';
 import { groupStudyReports } from './study-report-groups';
 import {

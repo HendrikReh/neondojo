@@ -1,8 +1,8 @@
 import { Fragment, useMemo, useState } from 'react';
-import type { Position } from './api';
+import type { Position } from './shared/api/api';
 import { useAnalysisEntryLabel } from './AnalysisCatalogSelect';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
-import { useBoardReviewText } from './board-review-messages';
+import { useBoardReviewText } from './shared/board/board-review-messages';
 import {
   candidateEquityDifference,
   nativeCheckerCandidates,
@@ -12,9 +12,9 @@ import {
   focusCandidateRow,
   navigateCandidatePreview,
   type PreviewCandidate,
-} from './candidate-preview';
+} from './shared/review/candidate-preview';
 import { useCandidateEquityText, useCandidateText } from './candidate-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import {
   comparisonEngines,
   positionComparisonOptions,

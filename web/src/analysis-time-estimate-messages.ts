@@ -1,5 +1,5 @@
-import type { Locale } from './i18n';
-import { formatMessage, type TranslationParams } from './i18n-core';
+import type { Locale } from './shared/i18n/i18n';
+import { formatMessage, type TranslationParams } from './shared/i18n/i18n-core';
 
 const en = {
   label: 'Analysis time estimate',

@@ -1,10 +1,10 @@
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import AppliedFilterChips, {
   type AppliedFilterChip,
-} from './AppliedFilterChips';
+} from './shared/ui/AppliedFilterChips';
 import type { LibraryFilters as Filters } from './library-api';
 import { useLibraryText, type LibraryMessageKey } from './library-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import { usePositionText } from './position-browser-messages';
 
 export type LibraryFilterKey = Exclude<keyof Filters, 'date_field'>;

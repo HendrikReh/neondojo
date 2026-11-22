@@ -1,12 +1,12 @@
 import { useRef, type KeyboardEvent } from 'react';
-import type { Match } from './api';
+import type { Match } from './shared/api/api';
 import BenchmarkWorkspace from './BenchmarkWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
 import DatabaseBackupWorkspace from './DatabaseBackupWorkspace';
 import { databaseBackupMessages } from './database-backup-messages';
 import EngineMatchWorkspace from './EngineMatchWorkspace';
 import { engineMatchText } from './engine-match-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import VersionInfo from './VersionInfo';
 
 const tools = ['benchmark', 'matches', 'backup', 'versions'] as const;

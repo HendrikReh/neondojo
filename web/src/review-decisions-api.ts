@@ -1,4 +1,4 @@
-import { request } from './api';
+import { request } from './shared/api/api';
 import type { components } from './generated-api';
 import {
   decisionFilterQuery,

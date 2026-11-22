@@ -1,4 +1,4 @@
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import AnnotationPanel from './AnnotationPanel';
 import type { AnnotationKind } from './annotation-api';

@@ -1,9 +1,9 @@
 import type { components } from './generated-api';
-import CubeDecisionDetails from './CubeDecisionDetails';
-import MoveExplanation from './MoveExplanation';
-import type { ExplainedPosition } from './move-explanation';
-import EngineLabel from './EngineLabel';
-import { useI18n } from './i18n';
+import CubeDecisionDetails from './shared/review/CubeDecisionDetails';
+import MoveExplanation from './shared/review/MoveExplanation';
+import type { ExplainedPosition } from './shared/review/move-explanation';
+import EngineLabel from './shared/engine/EngineLabel';
+import { useI18n } from './shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
 
 const verdictKeys = {

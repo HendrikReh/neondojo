@@ -1,5 +1,5 @@
 import { useWorkspaceDefaults } from './ConfigurationProvider';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import {
   Fragment,
   useCallback,
@@ -12,17 +12,17 @@ import {
   type CSSProperties,
 } from 'react';
 import { useGameCubeActions, type CubeAction } from './useGameCubeActions';
-import Board, { type Theme } from './Board';
+import Board, { type Theme } from './shared/board/Board';
 import BoardReviewControls from './BoardReviewControls';
-import { useBoardReviewShortcuts } from './useBoardReviewShortcuts';
+import { useBoardReviewShortcuts } from './shared/review/useBoardReviewShortcuts';
 import PositionBookmarkButton from './PositionBookmarkButton';
-import { projectMove, type BoardView } from './move-preview';
-import { useBoardReviewText } from './board-review-messages';
-import type { PreviewCandidate } from './candidate-preview';
+import { projectMove, type BoardView } from './shared/board/move-preview';
+import { useBoardReviewText } from './shared/board/board-review-messages';
+import type { PreviewCandidate } from './shared/review/candidate-preview';
 import {
   severityLabels,
   useStatisticsText,
-} from './review-statistics-messages';
+} from './shared/review/review-statistics-messages';
 import { useSourceText } from './analysis-source-messages';
 import { BoardDecisionComparison } from './BoardDecisionReview';
 import AnalysisPanel from './AnalysisPanel';
@@ -34,7 +34,7 @@ import MatchAnalysisPanel, {
 import NotesPanel from './NotesPanel';
 import GameSelector from './GameSelector';
 import { AddCardsPanel } from './LearningPanel';
-import { type Job, type Match } from './api';
+import { type Job, type Match } from './shared/api/api';
 import {
   canOpenReviewDecision,
   findCubeDecisionByNumber,
@@ -42,13 +42,13 @@ import {
   type ReviewDecision,
 } from './review-decisions-api';
 import { type DecisionKind } from './match-statistics-api';
-import { useGameNavigation } from './useGameNavigation';
-import { useJobs } from './useJobs';
-import { useI18n } from './i18n';
-import { useWorkspaceText } from './workspace-messages';
+import { useGameNavigation } from './app/useGameNavigation';
+import { useJobs } from './shared/jobs/useJobs';
+import { useI18n } from './shared/i18n/i18n';
+import { useWorkspaceText } from './shared/i18n/workspace-messages';
 import type { AnnotationKind } from './annotation-api';
-import { useMoveAssessments } from './useMoveAssessments';
-import { errorGrades } from './move-severity';
+import { useMoveAssessments } from './shared/review/useMoveAssessments';
+import { errorGrades } from './shared/review/move-severity';
 import MoveHistoryRow from './MoveHistoryRow';
 import GameResultSummary from './GameResultSummary';
 import AnalysisMatchHeader from './AnalysisMatchHeader';
@@ -56,11 +56,11 @@ import { hasMatchSource } from './match-source';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
 import './retained-position.css';
 import GamePlanPanel from './GamePlanPanel';
-import { displayedBoardPosition } from './displayed-board';
+import { displayedBoardPosition } from './shared/board/displayed-board';
 import type { MoveNotesTarget } from './MoveNotesDialog';
 import { useAnalysisBoardResize } from './useAnalysisBoardResize';
 import type { MatchAnalysisEngine } from './useMatchAnalysis';
-import { useWorkspaceLayout, useWorkspaceSession } from './useWorkspaceSession';
+import { useWorkspaceLayout, useWorkspaceSession } from './shared/hooks/useWorkspaceSession';
 import { useAnalysisCatalog, type AnalysisCatalog } from './useAnalysisCatalog';
 import AnalysisCatalogSelect from './AnalysisCatalogSelect';
 

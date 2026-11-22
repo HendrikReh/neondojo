@@ -3,8 +3,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import MatchAnalysisPanel from './MatchAnalysisPanel';
-import { I18nProvider } from './i18n';
-import type { Job, Match } from './api';
+import { I18nProvider } from './shared/i18n/i18n';
+import type { Job, Match } from './shared/api/api';
 
 vi.mock('./useMatchAnalysis', () => ({
   useMatchAnalysis: () => ({

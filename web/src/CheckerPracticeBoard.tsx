@@ -1,8 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import ActionButton from './ActionButton';
-import Board from './Board';
-import type { Position } from './api';
-import { useI18n } from './i18n';
+import ActionButton from './shared/ui/ActionButton';
+import Board from './shared/board/Board';
+import type { Position } from './shared/api/api';
+import { useI18n } from './shared/i18n/i18n';
 import { usePlayText } from './play-messages';
 import { usePlayModeText } from './play-mode-messages';
 import {
@@ -11,8 +11,8 @@ import {
   nextPoints,
   relativePoint,
   type CheckerStep,
-} from './play-state';
-import type { Theme } from './themes';
+} from './shared/board/play-state';
+import type { Theme } from './shared/board/themes';
 import type { useCheckerTurns } from './useCheckerTurns';
 
 export interface CheckerDraft {

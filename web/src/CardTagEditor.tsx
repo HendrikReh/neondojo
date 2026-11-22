@@ -1,10 +1,10 @@
 import { useEffect, useId, useState } from 'react';
-import ActionButton from './ActionButton';
-import { request } from './api';
+import ActionButton from './shared/ui/ActionButton';
+import { request } from './shared/api/api';
 import { useCardPracticeText } from './card-practice-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import type { CardTags, EditCardTags } from './learning-api';
-import { SearchFilterInput } from './SearchFilterForm';
+import { SearchFilterInput } from './shared/ui/SearchFilterForm';
 
 export default function CardTagEditor({
   cards,

@@ -1,8 +1,8 @@
 import AnkiCardFace from './AnkiCardFace';
 import { useState, type CSSProperties, type ReactNode } from 'react';
-import type { Theme } from './themes';
-import SearchPagination from './SearchPagination';
-import { lastSearchPage } from './useSearchPages';
+import type { Theme } from './shared/board/themes';
+import SearchPagination from './shared/ui/SearchPagination';
+import { lastSearchPage } from './shared/hooks/useSearchPages';
 import {
   SearchResultList,
   SearchResultNotes,
@@ -10,14 +10,14 @@ import {
   SearchResultRow,
   SearchResultTable,
   SearchResultTags,
-} from './SearchResultList';
+} from './shared/ui/SearchResultList';
 import {
   SearchPreviewBoard,
   SearchPreviewDetails,
   SearchResultPreview,
-} from './SearchResultPreview';
-import { matchContext } from './boardMath';
-import { useI18n } from './i18n';
+} from './shared/ui/SearchResultPreview';
+import { matchContext } from './shared/board/boardMath';
+import { useI18n } from './shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
 import type { CardQuestion, Deck } from './learning-api';
 import {

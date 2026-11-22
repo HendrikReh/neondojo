@@ -1,10 +1,10 @@
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useMemo, useState, type ReactNode } from 'react';
-import Board from './Board';
+import Board from './shared/board/Board';
 import type { PlaySession } from './play-api';
-import type { Theme } from './themes';
-import { projectMove, type BoardView } from './move-preview';
-import { useBoardReviewText } from './board-review-messages';
+import type { Theme } from './shared/board/themes';
+import { projectMove, type BoardView } from './shared/board/move-preview';
+import { useBoardReviewText } from './shared/board/board-review-messages';
 import { usePlayText } from './play-messages';
 
 export interface PlayMovePreviewContext {

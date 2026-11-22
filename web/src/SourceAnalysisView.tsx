@@ -1,11 +1,11 @@
 import { useEffect, useEffectEvent, useState } from 'react';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import XgPositionView from './XgPositionView';
-import EngineLabel from './EngineLabel';
-import type { PreviewCandidate } from './candidate-preview';
+import EngineLabel from './shared/engine/EngineLabel';
+import type { PreviewCandidate } from './shared/review/candidate-preview';
 import CandidateTable from './CandidateTable';
 import { candidateEquityRanks } from './candidate-comparison';
-import type { Match, Position } from './api';
+import type { Match, Position } from './shared/api/api';
 import { useSourceText } from './analysis-source-messages';
 import { useCandidateText } from './candidate-messages';
 import type { SourceAnalysis, BookLookup } from './source-analysis-api';

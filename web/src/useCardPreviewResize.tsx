@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
-import Tooltip from './Tooltip';
+import Tooltip from './shared/ui/Tooltip';
 import { useCardSearchText } from './card-search-messages';
 
 const storageKey = 'neondojo.cardPreviewWidth';

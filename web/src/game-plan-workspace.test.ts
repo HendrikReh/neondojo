@@ -1,6 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import type { Position } from './api';
+import type { Position } from './shared/api/api';
 
 const hooks = vi.hoisted(() => ({ slots: [] as unknown[], index: 0 }));
 vi.mock('react', async (original) => ({
@@ -32,7 +32,7 @@ vi.mock('react', async (original) => ({
   useEffect() {},
   useLayoutEffect() {},
 }));
-vi.mock('./i18n', () => ({
+vi.mock('./shared/i18n/i18n', () => ({
   useI18n: () => ({
     locale: 'en',
     t: String,
@@ -42,12 +42,12 @@ vi.mock('./i18n', () => ({
   }),
 }));
 import AnalysisWorkspace from './AnalysisWorkspace';
-import Board from './Board';
+import Board from './shared/board/Board';
 import BoardReviewControls from './BoardReviewControls';
 import AnalysisPanel from './AnalysisPanel';
 import GamePlanPanel from './GamePlanPanel';
-import { displayedBoardPosition } from './displayed-board';
-import { projectMove, type BoardView } from './move-preview';
+import { displayedBoardPosition } from './shared/board/displayed-board';
+import { projectMove, type BoardView } from './shared/board/move-preview';
 
 type Element = ReactElement<Record<string, unknown>>;
 function elements(node: ReactNode): Element[] {

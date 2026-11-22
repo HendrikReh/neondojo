@@ -1,14 +1,14 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { useDecimalInput } from './decimal-input';
-import ActionButton from './ActionButton';
-import { request } from './api';
+import { useDecimalInput } from './shared/format/decimal-input';
+import ActionButton from './shared/ui/ActionButton';
+import { request } from './shared/api/api';
 import type { Database } from './library-api';
-import Board from './Board';
-import { CubeContextLine } from './CubeDecisionDetails';
+import Board from './shared/board/Board';
+import { CubeContextLine } from './shared/review/CubeDecisionDetails';
 import { useDecisionSearchText } from './decision-search-messages';
-import EngineLabel from './EngineLabel';
-import LibraryColumnPicker from './LibraryColumnPicker';
-import LibrarySortHeading from './LibrarySortHeading';
+import EngineLabel from './shared/engine/EngineLabel';
+import LibraryColumnPicker from './shared/ui/LibraryColumnPicker';
+import LibrarySortHeading from './shared/ui/LibrarySortHeading';
 import {
   DECISION_COLUMN_IDS,
   DECISION_COLUMN_LAYOUT,
@@ -16,14 +16,17 @@ import {
   type DecisionColumn,
 } from './decision-table-columns';
 import { useLibraryText } from './library-messages';
-import { useResizableColumns } from './useResizableColumns';
-import { layoutColumns, useWorkspaceLayout } from './useWorkspaceSession';
+import { useResizableColumns } from './shared/hooks/useResizableColumns';
+import {
+  layoutColumns,
+  useWorkspaceLayout,
+} from './shared/hooks/useWorkspaceSession';
 import PositionBookmarkButton from './PositionBookmarkButton';
 import { usePositionText } from './position-browser-messages';
-import { SearchResultRow } from './SearchResultList';
+import { SearchResultRow } from './shared/ui/SearchResultList';
 import { useGamePlanText } from './game-plan-messages';
 import type { GamePlan } from './game-plan-api';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';
 import {
@@ -41,9 +44,12 @@ import {
   mistakeProvenance,
   mistakeReferenceKey,
 } from './recurring-mistakes-provenance';
-import { SearchFilterInput, SearchFilterSelect } from './SearchFilterForm';
-import { NumberedSearchPagination } from './SearchPagination';
-import type { Theme } from './themes';
+import {
+  SearchFilterInput,
+  SearchFilterSelect,
+} from './shared/ui/SearchFilterForm';
+import { NumberedSearchPagination } from './shared/ui/SearchPagination';
+import type { Theme } from './shared/board/themes';
 import './decision-search.css';
 
 const PAGE_SIZE = 50;

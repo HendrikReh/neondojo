@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import SearchFilterForm, {
   SearchFilterInput,
   SearchFilterSelect,
-} from './SearchFilterForm';
+} from './shared/ui/SearchFilterForm';
 import { useCardPracticeText } from './card-practice-messages';
 import { useGamePlanText } from './game-plan-messages';
 import type { CardFilters } from './card-search-api';

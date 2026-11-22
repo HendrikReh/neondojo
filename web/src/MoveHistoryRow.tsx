@@ -1,8 +1,10 @@
 import type { Ref } from 'react';
-import type { Position } from './api';
-import type { MoveAssessment } from './useMoveAssessments';
-import MoveHistoryContent, { moveHistoryTooltip } from './MoveHistoryContent';
-import Tooltip from './Tooltip';
+import type { Position } from './shared/api/api';
+import type { MoveAssessment } from './shared/review/useMoveAssessments';
+import MoveHistoryContent, {
+  moveHistoryTooltip,
+} from './shared/review/MoveHistoryContent';
+import Tooltip from './shared/ui/Tooltip';
 
 export default function MoveHistoryRow({
   position,

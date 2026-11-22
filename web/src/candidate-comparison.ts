@@ -1,7 +1,7 @@
-import type { Candidate, Position } from './api';
+import type { Candidate, Position } from './shared/api/api';
 import type { PositionAnalysisResult } from './analysis-catalog-api';
 import type { SourceCandidate } from './source-analysis-api';
-import { projectMove } from './move-preview';
+import { projectMove } from './shared/board/move-preview';
 
 export type CandidatePosition = Pick<
   Position,

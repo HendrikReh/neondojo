@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import ActionButton from './ActionButton';
-import { request, type Match } from './api';
-import { NumberedSearchPagination } from './SearchPagination';
-import { SearchResultTable } from './SearchResultList';
-import { useI18n } from './i18n';
-import { cursorSearchParams } from './cursor-search';
+import ActionButton from './shared/ui/ActionButton';
+import { request, type Match } from './shared/api/api';
+import { NumberedSearchPagination } from './shared/ui/SearchPagination';
+import { SearchResultTable } from './shared/ui/SearchResultList';
+import { useI18n } from './shared/i18n/i18n';
+import { cursorSearchParams } from './shared/api/cursor-search';
 import type { components } from './generated-api';
 import type { Database, LibraryMatch } from './library-api';
 import { canAnalyzeMatch } from './library-match-summary';
@@ -12,7 +12,7 @@ import { usePlayerText } from './player-directory-messages';
 import { useLibraryText } from './library-messages';
 import { usePositionText } from './position-browser-messages';
 import { usePlayerPage } from './PlayerResults';
-import { prDigits } from './pr-format';
+import { prDigits } from './shared/format/pr-format';
 import PlayerRatingTrend from './PlayerRatingTrend';
 
 type Schema = components['schemas'];

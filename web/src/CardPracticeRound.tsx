@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import CardTagEditor from './CardTagEditor';
-import { request } from './api';
+import { request } from './shared/api/api';
 import { useCardPracticeText } from './card-practice-messages';
-import { useI18n } from './i18n';
-import { AppError } from './i18n-core';
+import { useI18n } from './shared/i18n/i18n';
+import { AppError } from './shared/i18n/i18n-core';
 import { useLearningText } from './learning-messages';
 import type {
   CardQuestion,
@@ -14,8 +14,11 @@ import type {
   RoundVersion,
 } from './learning-api';
 import { CardExercise } from './StudyCardExercise';
-import { SearchFilterInput, SearchFilterSelect } from './SearchFilterForm';
-import type { Theme } from './themes';
+import {
+  SearchFilterInput,
+  SearchFilterSelect,
+} from './shared/ui/SearchFilterForm';
+import type { Theme } from './shared/board/themes';
 
 export const roundPath = (id: string) => `/study/card-rounds/${id}`;
 

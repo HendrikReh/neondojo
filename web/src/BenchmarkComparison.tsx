@@ -1,6 +1,6 @@
 import { useId } from 'react';
-import EngineLabel from './EngineLabel';
-import { useI18n } from './i18n';
+import EngineLabel from './shared/engine/EngineLabel';
+import { useI18n } from './shared/i18n/i18n';
 import {
   benchmarkComparisons,
   benchmarkThreadCount,

@@ -1,7 +1,7 @@
 import { eitherOrder } from './play-turn-fixtures';
 import { rollDice, playMenuItem } from './play-board-actions';
 import { test, expect } from './test';
-import { nativeSteps } from '../src/play-sound-events';
+import { nativeSteps } from '../src/shared/board/play-sound-events';
 import { historyFixture } from './play-history-review-helpers';
 import { profileBackend } from './profile-backend';
 const id = '994b5330-bf4c-4d57-88c0-111111111111';

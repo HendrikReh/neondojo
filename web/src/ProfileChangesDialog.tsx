@@ -4,8 +4,8 @@ import {
   ConfigurationApiError,
   type ConfigurationProfile,
 } from './configuration-api';
-import ActionButton from './ActionButton';
-import LibraryDialog from './LibraryDialog';
+import ActionButton from './shared/ui/ActionButton';
+import LibraryDialog from './shared/ui/LibraryDialog';
 import ProfileSummary from './ProfileSummary';
 import { profileFieldKey, useProfileText } from './profile-messages';
 

@@ -1,4 +1,4 @@
-import type { Locale } from './i18n';
+import type { Locale } from './shared/i18n/i18n';
 
 const en = {
   available: 'Available',

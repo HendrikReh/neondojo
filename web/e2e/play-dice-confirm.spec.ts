@@ -2,7 +2,7 @@ import { checkerPath, joinedThirteenToEight } from './play-turn-fixtures';
 import { rollDice } from './play-board-actions';
 import { test, expect } from './test';
 import type { PlaySession } from '../src/play-api';
-import { applySteps } from '../src/play-state';
+import { applySteps } from '../src/shared/board/play-state';
 const id = 'f13dbce7-dae6-42c9-a63b-4967f82db47b';
 for (const config of [
   {

@@ -1,13 +1,13 @@
 import IndependentOnlyToggle from './IndependentOnlyToggle';
 import UnanalyzedMatches from './UnanalyzedMatches';
 import { useEffect, useId, useRef, useState } from 'react';
-import ActionButton from './ActionButton';
+import ActionButton from './shared/ui/ActionButton';
 import { useConfirmedConfiguration } from './ConfigurationProvider';
 import MistakeGroupTable from './MistakeGroupTable';
 import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';
 import { useGamePlanText } from './game-plan-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import {
   loadLearningSummary,
   saveLearningPreferences,
@@ -27,7 +27,7 @@ import {
   rankMistakeGroups,
   recommendStudyAction,
 } from './study-overview';
-import type { Theme } from './themes';
+import type { Theme } from './shared/board/themes';
 
 type Props = {
   visible: boolean;

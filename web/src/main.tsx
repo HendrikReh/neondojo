@@ -1,12 +1,12 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import App from './app/App';
 import { ConfigurationProvider } from './ConfigurationProvider';
-import { I18nProvider } from './i18n';
-import './style.css';
-import './desktop-analysis.css';
-import './typography.css';
-import './text-navigation.css';
+import { I18nProvider } from './shared/i18n/i18n';
+import './styles/style.css';
+import './styles/desktop-analysis.css';
+import './styles/typography.css';
+import './styles/text-navigation.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

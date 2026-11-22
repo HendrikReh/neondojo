@@ -1,5 +1,5 @@
 import { useMistakeText } from './recurring-mistakes-messages';
-import Tooltip from './Tooltip';
+import Tooltip from './shared/ui/Tooltip';
 
 /**
  * Limits mistake statistics to matches played without learning aids, so the

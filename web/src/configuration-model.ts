@@ -30,7 +30,7 @@ import {
   type PositionFilterDefinition,
 } from './position-browser-api';
 import type { AnnotationFilters } from './annotation-api';
-import { isLocale, type Locale } from './i18n-core';
+import { isLocale, type Locale } from './shared/i18n/i18n-core';
 import { isPlayMode, type PlayMode } from './play-mode-messages';
 import { uiThemes, type UiTheme, type UiMode } from './ui-appearance';
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };

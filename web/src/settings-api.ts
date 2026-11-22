@@ -1,6 +1,6 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
 import type { components } from './generated-api';
-import type { DepthEngine } from './analysis-depth';
+import type { DepthEngine } from './shared/engine/analysis-depth';
 import { isPlayMode, type PlayMode } from './play-mode-messages';
 
 type Schema = components['schemas'];

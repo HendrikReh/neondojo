@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { request } from './api';
-import { useI18n } from './i18n';
+import { request } from './shared/api/api';
+import { useI18n } from './shared/i18n/i18n';
 import { nativePerformanceRating } from './match-statistics-api';
-import { useStatisticsText } from './review-statistics-messages';
+import { useStatisticsText } from './shared/review/review-statistics-messages';
 import {
   analysisStatisticsPath,
   type AnalysisCatalogEntry,
@@ -11,7 +11,7 @@ import {
 import type { AnalysisCatalog } from './useAnalysisCatalog';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
 import { useAnalysisEntryLabel } from './AnalysisCatalogSelect';
-import { prDigits } from './pr-format';
+import { prDigits } from './shared/format/pr-format';
 
 export function comparisonEntries(
   entries: AnalysisCatalogEntry[],

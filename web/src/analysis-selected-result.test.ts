@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, afterEach, expect, it, vi } from 'vitest';
-import { I18nProvider } from './i18n';
+import { I18nProvider } from './shared/i18n/i18n';
 import { SelectedAnalysisResult } from './AnalysisPanel';
 import type { PositionAnalysisResult } from './analysis-catalog-api';
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
@@ -97,7 +97,7 @@ it('offers an explicit action for a completed calculation while keeping the sele
               status: 'completed',
               kind: 'analysis',
               result: null,
-            } as import('./api').Job,
+            } as import('./shared/api/api').Job,
           },
           run: async () => {},
           refresh: () => {},

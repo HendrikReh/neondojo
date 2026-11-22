@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Board from './Board';
-import type { Position } from './api';
-import type { Theme } from './themes';
-import { projectMove, type BoardView } from './move-preview';
-import { useBoardReviewText } from './board-review-messages';
+import Board from './shared/board/Board';
+import type { Position } from './shared/api/api';
+import type { Theme } from './shared/board/themes';
+import { projectMove, type BoardView } from './shared/board/move-preview';
+import { useBoardReviewText } from './shared/board/board-review-messages';
 import { useStudyText } from './study-messages';
-import { useI18n } from './i18n';
-import ActionButton from './ActionButton';
+import { useI18n } from './shared/i18n/i18n';
+import ActionButton from './shared/ui/ActionButton';
 import type { ReviewDecisionEntry } from './learning-review-positions';
 export default function LearningDecisionPreview({
   entry,

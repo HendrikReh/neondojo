@@ -1,14 +1,14 @@
 import type { ReactNode } from 'react';
-import ActionButton from './ActionButton';
-import EngineLabel from './EngineLabel';
-import { useBoardReviewText } from './board-review-messages';
-import { useWorkspaceText } from './workspace-messages';
+import ActionButton from './shared/ui/ActionButton';
+import EngineLabel from './shared/engine/EngineLabel';
+import { useBoardReviewText } from './shared/board/board-review-messages';
+import { useWorkspaceText } from './shared/i18n/workspace-messages';
 import {
   severityLabels,
   useStatisticsText,
-} from './review-statistics-messages';
+} from './shared/review/review-statistics-messages';
 import { useCandidateLossText } from './candidate-messages';
-import { useI18n } from './i18n';
+import { useI18n } from './shared/i18n/i18n';
 import type { DecisionKind } from './match-statistics-api';
 
 export function BoardErrorNavigation({

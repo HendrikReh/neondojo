@@ -1,4 +1,4 @@
-import type { Position } from '../src/api';
+import type { Position } from '../src/shared/api/api';
 import type { CardPage } from '../src/learning-api';
 import { expect, test } from './test';
 

@@ -1,4 +1,4 @@
-import { useWorkspaceSession } from './useWorkspaceSession';
+import { useWorkspaceSession } from './shared/hooks/useWorkspaceSession';
 import {
   useEffect,
   useRef,
