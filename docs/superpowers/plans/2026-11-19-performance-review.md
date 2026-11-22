@@ -153,11 +153,22 @@ Der Browser-Test lädt Spiel 1 aus `WC2014.xg`, öffnet **Spielwürfe** und prü
 | Spielwürfe | 10 | 0 |
 | Analysekatalog | 10 | 0 |
 
-Zur Wiederholung in einem separaten Checkout von `319bf1c` nur `web/e2e/observed-rolls-navigation.spec.ts` übernehmen. Dieselbe Messung mit isolierter Datenbank auf beiden Ständen ausführen. Der Ausgangsstand protokolliert die Anfragen und meldet die erwarteten Abnahmefehler. [Browser-Testanleitung](../../development/testing.md#browser-tests)
+Zur Wiederholung der ursprünglichen Messung `web/e2e/observed-rolls-navigation.spec.ts` aus `235ca52` in einen separaten Checkout von `319bf1c` übernehmen. Dieselbe Messung mit isolierter Datenbank auf beiden Ständen ausführen. Der Ausgangsstand protokolliert die Anfragen und meldet die erwarteten Abnahmefehler. [Browser-Testanleitung](../../development/testing.md#browser-tests)
 
 ```bash
 npm run test:e2e --prefix web -- e2e/observed-rolls-navigation.spec.ts \
   --grep 'saving opening-book settings' --workers=1 --reporter=line
+```
+
+**Doppelte Buchabrufe beim Speichern.** Auf `main` (`235ca52`) lösten sowohl die bestätigte Änderung der Buchkonfiguration als auch der Dialog einen Buchabruf aus. Geänderte Werte lösen jetzt über die bestätigte Konfiguration einen Abruf aus. Erneutes Anwenden derselben Werte aktualisiert weiterhin das Buch, etwa nach dem Austausch einer Datei am selben Pfad.
+
+Der erweiterte Test wartet beim Zugwechsel auf Buch und Katalog für die Zielstellung. In allen drei Läufen pro Stand sanken die Buchabrufe nach fünf Änderungen der Buchquelle von **10 auf 5**. Abrufe von Spielwürfen und Katalog blieben dabei bei **0**. Erneutes Anwenden derselben Werte und ein aus einem anderen Fenster übernommener XG-Buchpfad lösten in beiden Ständen jeweils einen Buchabruf aus. Die Umgebung entsprach der ursprünglichen Messung.
+
+Zur Wiederholung nur die aktuelle Testdatei in einen separaten Checkout von `235ca52` übernehmen und den Befehl auf beiden Ständen ausführen. Der Ausgangsstand meldet erwartungsgemäß zehn statt fünf Buchabrufe.
+
+```bash
+npm run test:e2e --prefix web -- e2e/observed-rolls-navigation.spec.ts \
+  --grep 'saving opening-book settings' --repeat-each=3 --workers=1 --reporter=line
 ```
 
 ## P2 · Nummerierte Fehlerliste
