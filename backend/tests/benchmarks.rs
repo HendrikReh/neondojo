@@ -92,7 +92,7 @@ fn reference_and_openapi_describe_the_fixed_workload() {
     assert_eq!(reference["total_moves"], 460);
     assert_eq!(reference["sha256"].as_str().unwrap().len(), 64);
     assert!(reference["protocol"]["game_timeout_seconds"].is_null());
-    assert_eq!(reference["protocol"]["id"], "gnubg-match-v2-unlimited");
+    assert_eq!(reference["protocol"]["id"], "gnubg-match-v4-unlimited");
     let schema = serde_json::to_value(api::ApiDoc::openapi()).unwrap();
     for path in [
         "/api/benchmarks",

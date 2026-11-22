@@ -7,7 +7,7 @@ const reference = {
   match_length: 11,
   total_games: 10,
   total_moves: 460,
-  protocol: { id: 'gnubg-match-v2-unlimited', game_timeout_seconds: null },
+  protocol: { id: 'gnubg-match-v4-unlimited', game_timeout_seconds: null },
 };
 const settings = {
   version: 1,

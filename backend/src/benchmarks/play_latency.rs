@@ -35,7 +35,7 @@ pub(super) fn reference() -> Result<PlayBenchmarkReference> {
         id: "wc2014-checker-turns-v1".into(),
         sha256: format!("{:x}", Sha256::digest(TURNS.as_bytes())),
         total_turns: i32::try_from(serde_json::from_str::<Vec<Turn>>(TURNS)?.len())?,
-        protocol_id: "gnubg-checker-turn-v1".into(),
+        protocol_id: "gnubg-checker-turn-v2".into(),
     })
 }
 

@@ -98,15 +98,12 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
     );
     ensure!(
         source == REFERENCE_SGF
-            // Queued GNUbg runs from before the move filter keep their protocol.
-            && [
+            && super::known_protocol_id(
+                &run.engine_id,
+                run.plies,
                 crate::engine::GnubgMoveFilter::for_analysis(&run.engine_id, run.plies),
-                None,
-            ]
-            .into_iter()
-            .any(|filter| {
-                super::known_protocol_id(&run.engine_id, run.plies, filter, &protocol.id)
-            }),
+                &protocol.id,
+            ),
         "Unsupported benchmark protocol or reference version"
     );
     let imported = crate::import::parse_sgf(&source)?;
