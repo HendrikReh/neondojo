@@ -536,10 +536,11 @@ pub(crate) async fn copy_records(
     target: Uuid,
     positions: &HashMap<Uuid, Uuid>,
 ) -> Result<()> {
-    let rows:Vec<(Option<Uuid>,i32,i32,i32,String,Value)>=sqlx::query_as("SELECT position_uuid,source_ordinal,game_no,source_move_no,kind,data FROM imported_analyses WHERE match_uuid=$1 ORDER BY source_ordinal").bind(source).fetch_all(&mut **tx).await?;
-    for (position, ordinal, game, mov, kind, data) in rows {
-        sqlx::query("INSERT INTO imported_analyses(id,match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) VALUES($1,$2,$3,$4,$5,$6,$7,$8)").bind(Uuid::new_v4()).bind(target).bind(position.and_then(|p|positions.get(&p).copied())).bind(ordinal).bind(game).bind(mov).bind(kind).bind(data).execute(&mut **tx).await?;
-    }
+    // One statement, so the revision trigger runs once for the copy.
+    let (old, new): (Vec<Uuid>, Vec<Uuid>) = positions.iter().map(|(o, n)| (*o, *n)).unzip();
+    sqlx::query("INSERT INTO imported_analyses(id,match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) SELECT gen_random_uuid(),$2,pm.new,a.source_ordinal,a.game_no,a.source_move_no,a.kind,a.data FROM imported_analyses a LEFT JOIN unnest($3::uuid[],$4::uuid[]) AS pm(old,new) ON pm.old=a.position_uuid WHERE a.match_uuid=$1 ORDER BY a.source_ordinal")
+        .bind(source).bind(target).bind(&old).bind(&new)
+        .execute(&mut **tx).await?;
     sqlx::query("UPDATE matches SET imported_analysis_loaded=(SELECT imported_analysis_loaded FROM matches WHERE id=$1) WHERE id=$2").bind(source).bind(target).execute(&mut **tx).await?;
     Ok(())
 }

@@ -320,6 +320,18 @@ async fn copy_is_independent_and_move_skips_target_duplicate(pool: PgPool) {
     assert_eq!(v["results"][0]["status"], "copied");
     let copied = Uuid::parse_str(v["results"][0]["created_id"].as_str().unwrap()).unwrap();
     assert_ne!(id, copied);
+    // Positions are copied in one statement; the stored played record must
+    // still equal a fresh computation over the copied positions.
+    let (positions, stored, computed): (i64, Option<Vec<u8>>, Option<Vec<u8>>) = sqlx::query_as(
+        "SELECT (SELECT count(*) FROM positions WHERE match_uuid=$1),played_record_fingerprint,played_record_fingerprint(id) FROM matches WHERE id=$1",
+    )
+    .bind(copied)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(positions > 0);
+    assert!(stored.is_some());
+    assert_eq!(stored, computed);
     let notes: (String, Vec<String>) =
         sqlx::query_as("SELECT comment,tags FROM annotations WHERE match_uuid=$1")
             .bind(copied)

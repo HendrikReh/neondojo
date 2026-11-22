@@ -1380,49 +1380,29 @@ async fn copy_children(
     source: Uuid,
     target: Uuid,
 ) -> ApiResult<()> {
-    let position_ids: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1 ORDER BY ordinal")
-            .bind(source)
-            .fetch_all(&mut **tx)
-            .await
-            .map_err(anyhow::Error::from)?;
-    let mut positions = HashMap::new();
-    for old in position_ids {
-        let id = Uuid::new_v4();
-        positions.insert(old, id);
-        sqlx::query("INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) SELECT $2,$3,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation FROM positions WHERE id=$1").bind(old).bind(id).bind(target).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
-    }
-    let mut games = HashMap::new();
-    let rows: Vec<(Uuid, i32)> =
-        sqlx::query_as("SELECT id,game_no FROM match_games WHERE match_uuid=$1")
-            .bind(source)
-            .fetch_all(&mut **tx)
-            .await
-            .map_err(anyhow::Error::from)?;
-    for (old, _) in rows {
-        let id = Uuid::new_v4();
-        games.insert(old, id);
-        sqlx::query("INSERT INTO match_games(id,match_uuid,game_no,position_count,white_score,black_score,crawford) SELECT $2,$3,game_no,position_count,white_score,black_score,crawford FROM match_games WHERE id=$1").bind(old).bind(id).bind(target).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
-    }
+    // Each table is copied in one statement. Statement triggers on these
+    // tables (played-record fingerprint, analysis revisions) then run once
+    // per table instead of once per copied row.
+    let positions = new_ids(tx, "SELECT id FROM positions WHERE match_uuid=$1", source).await?;
+    let (old_positions, new_positions) = id_arrays(&positions);
+    sqlx::query("INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) SELECT m.new,$3,p.ordinal,p.game_no,p.ply,p.player,p.dice,p.board,p.position_id,p.gnubg_match_id,p.notation FROM unnest($1::uuid[],$2::uuid[]) AS m(old,new) JOIN positions p ON p.id=m.old ORDER BY p.ordinal")
+        .bind(&old_positions).bind(&new_positions).bind(target)
+        .execute(&mut **tx).await.map_err(anyhow::Error::from)?;
+    let games = new_ids(tx, "SELECT id FROM match_games WHERE match_uuid=$1", source).await?;
+    let (old_games, new_games) = id_arrays(&games);
+    sqlx::query("INSERT INTO match_games(id,match_uuid,game_no,position_count,white_score,black_score,crawford) SELECT m.new,$3,g.game_no,g.position_count,g.white_score,g.black_score,g.crawford FROM unnest($1::uuid[],$2::uuid[]) AS m(old,new) JOIN match_games g ON g.id=m.old")
+        .bind(&old_games).bind(&new_games).bind(target)
+        .execute(&mut **tx).await.map_err(anyhow::Error::from)?;
     crate::imported_analysis::copy_records(tx, source, target, &positions).await?;
-    let mut moves = HashMap::new();
-    let rows: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as(
-        "SELECT id,position_uuid FROM match_moves WHERE match_uuid=$1 ORDER BY game_no,move_no",
-    )
-    .bind(source)
-    .fetch_all(&mut **tx)
-    .await
-    .map_err(anyhow::Error::from)?;
-    for (old, position) in rows {
-        let id = Uuid::new_v4();
-        moves.insert(old, id);
-        sqlx::query("INSERT INTO match_moves(id,match_uuid,game_no,move_no,kind,player,notation,position_uuid,board,dice,position_id,gnubg_match_id) SELECT $2,$3,game_no,move_no,kind,player,notation,$4,board,dice,position_id,gnubg_match_id FROM match_moves WHERE id=$1").bind(old).bind(id).bind(target).bind(position.and_then(|id|positions.get(&id).copied())).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
-    }
-    type AnnotationTargets = (Uuid, Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<Uuid>);
-    let annotations:Vec<AnnotationTargets>=sqlx::query_as("SELECT a.id,a.match_uuid,a.position_uuid,a.game_uuid,a.move_uuid FROM annotations a LEFT JOIN positions p ON p.id=a.position_uuid LEFT JOIN match_games g ON g.id=a.game_uuid LEFT JOIN match_moves m ON m.id=a.move_uuid WHERE coalesce(a.match_uuid,p.match_uuid,g.match_uuid,m.match_uuid)=$1").bind(source).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
-    for (old, mat, pos, game, mov) in annotations {
-        sqlx::query("INSERT INTO annotations(id,match_uuid,position_uuid,game_uuid,move_uuid,tags,comment,version,updated_at) SELECT $2,$3,$4,$5,$6,tags,comment,version,updated_at FROM annotations WHERE id=$1").bind(old).bind(Uuid::new_v4()).bind(mat.map(|_|target)).bind(pos.and_then(|id|positions.get(&id).copied())).bind(game.and_then(|id|games.get(&id).copied())).bind(mov.and_then(|id|moves.get(&id).copied())).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
-    }
+    let moves = new_ids(tx, "SELECT id FROM match_moves WHERE match_uuid=$1", source).await?;
+    let (old_moves, new_moves) = id_arrays(&moves);
+    sqlx::query("INSERT INTO match_moves(id,match_uuid,game_no,move_no,kind,player,notation,position_uuid,board,dice,position_id,gnubg_match_id) SELECT m.new,$3,mv.game_no,mv.move_no,mv.kind,mv.player,mv.notation,pm.new,mv.board,mv.dice,mv.position_id,mv.gnubg_match_id FROM unnest($1::uuid[],$2::uuid[]) AS m(old,new) JOIN match_moves mv ON mv.id=m.old LEFT JOIN unnest($4::uuid[],$5::uuid[]) AS pm(old,new) ON pm.old=mv.position_uuid ORDER BY mv.game_no,mv.move_no")
+        .bind(&old_moves).bind(&new_moves).bind(target).bind(&old_positions).bind(&new_positions)
+        .execute(&mut **tx).await.map_err(anyhow::Error::from)?;
+    sqlx::query("INSERT INTO annotations(id,match_uuid,position_uuid,game_uuid,move_uuid,tags,comment,version,updated_at) SELECT gen_random_uuid(),CASE WHEN a.match_uuid IS NULL THEN NULL ELSE $1::uuid END,pm.new,gm.new,mm.new,a.tags,a.comment,a.version,a.updated_at FROM annotations a LEFT JOIN positions p ON p.id=a.position_uuid LEFT JOIN match_games g ON g.id=a.game_uuid LEFT JOIN match_moves mv ON mv.id=a.move_uuid LEFT JOIN unnest($3::uuid[],$4::uuid[]) AS pm(old,new) ON pm.old=a.position_uuid LEFT JOIN unnest($5::uuid[],$6::uuid[]) AS gm(old,new) ON gm.old=a.game_uuid LEFT JOIN unnest($7::uuid[],$8::uuid[]) AS mm(old,new) ON mm.old=a.move_uuid WHERE coalesce(a.match_uuid,p.match_uuid,g.match_uuid,mv.match_uuid)=$2")
+        .bind(target).bind(source)
+        .bind(&old_positions).bind(&new_positions).bind(&old_games).bind(&new_games).bind(&old_moves).bind(&new_moves)
+        .execute(&mut **tx).await.map_err(anyhow::Error::from)?;
     // Completed snapshots only: queued/running/failed work and learning state stay with the source.
     let jobs:Vec<(Uuid,Option<Uuid>,Option<Uuid>)>=sqlx::query_as("SELECT j.id,j.match_uuid,j.position_uuid FROM jobs j LEFT JOIN positions p ON p.id=j.position_uuid WHERE coalesce(j.match_uuid,p.match_uuid)=$1 AND j.status='completed' ORDER BY j.created_at,j.id").bind(source).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     let mut copied_jobs = HashMap::new();
@@ -1433,11 +1413,10 @@ async fn copy_children(
         sqlx::query("INSERT INTO job_events(job_id,event,data) SELECT id,'completed',jsonb_build_object('status','completed','progress',progress,'error',NULL,'completed_games',completed_games,'total_games',total_games) FROM jobs WHERE id=$1")
             .bind(new_id).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
         sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) SELECT $2,game_no,summary FROM match_analysis_games WHERE job_id=$1").bind(old).bind(new_id).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
-        type CopiedDecision = (Option<Uuid>, i32, i32, i32, String, f64, serde_json::Value);
-        let decisions:Vec<CopiedDecision>=sqlx::query_as("SELECT position_uuid,game_no,decision_no,player,kind,equity_loss,data FROM move_analyses WHERE job_id=$1 ORDER BY id").bind(old).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
-        for (pos, game, decision, player, kind, loss, data) in decisions {
-            sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,$3,$4,$5,$6,$7,$8)").bind(new_id).bind(pos.and_then(|id|positions.get(&id).copied())).bind(game).bind(decision).bind(player).bind(kind).bind(loss).bind(data).execute(&mut **tx).await.map_err(anyhow::Error::from)?;
-        }
+        // Source order is kept: the new serial IDs follow the original IDs.
+        sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) SELECT $2,pm.new,a.game_no,a.decision_no,a.player,a.kind,a.equity_loss,a.data FROM move_analyses a LEFT JOIN unnest($3::uuid[],$4::uuid[]) AS pm(old,new) ON pm.old=a.position_uuid WHERE a.job_id=$1 ORDER BY a.id")
+            .bind(old).bind(new_id).bind(&old_positions).bind(&new_positions)
+            .execute(&mut **tx).await.map_err(anyhow::Error::from)?;
     }
     let selected: Option<(String, i64)> = sqlx::query_as(
         "SELECT analysis_id,source_revision FROM analysis_selections WHERE match_id=$1",
@@ -1464,6 +1443,24 @@ async fn copy_children(
             .execute(&mut **tx).await.map_err(anyhow::Error::from)?;
     }
     Ok(())
+}
+/// A fresh ID for each row the query returns, keyed by the source row's ID.
+async fn new_ids(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    query: &'static str,
+    source: Uuid,
+) -> ApiResult<HashMap<Uuid, Uuid>> {
+    let ids: Vec<Uuid> = sqlx::query_scalar(query)
+        .bind(source)
+        .fetch_all(&mut **tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    Ok(ids.into_iter().map(|old| (old, Uuid::new_v4())).collect())
+}
+
+/// Parallel source and copy ID arrays for `unnest($old, $new)`.
+fn id_arrays(ids: &HashMap<Uuid, Uuid>) -> (Vec<Uuid>, Vec<Uuid>) {
+    ids.iter().map(|(old, new)| (*old, *new)).unzip()
 }
 #[utoipa::path(post,path="/api/library/export",request_body=ExportRequest,responses((status=200,description="Original, SGF or XG file, or a ZIP for multiple matches",content_type="application/octet-stream"),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Databases")]
 async fn export(
