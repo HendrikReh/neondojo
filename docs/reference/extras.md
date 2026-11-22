@@ -26,7 +26,7 @@ History shows date, engine, depth, timing, and status, newest first. Select a co
 | GET    | `/api/benchmarks/status`      | Read the active status shown in the global notice.                                  |
 | GET    | `/api/benchmarks`             | List the latest 1,000 attempts, newest first.                                       |
 | POST   | `/api/benchmarks`             | Queue attempts with a request such as `{ "engine_id": "gnubg", "plies": [1, 3] }`.  |
-| POST   | `/api/benchmarks/play`        | Queue a play-turn run with `{ "engine_id": "bgsage", "plies": 2 }`. Without a body, the run uses the playing engine and depth from Settings. |
+| POST   | `/api/benchmarks/play`        | Queue a play-turn run with `{ "engine_id": "bgsage", "plies": 2 }`. Without a body (or with `null`), the run uses the playing engine and depth from Settings; `Content-Type: application/json` is required either way. |
 | POST   | `/api/benchmarks/{id}/cancel` | Cancel a queued or running attempt. Finished results are retained.                  |
 | DELETE | `/api/benchmarks/{id}`        | Delete a finished attempt. Returns 409 for queued and running attempts.             |
 

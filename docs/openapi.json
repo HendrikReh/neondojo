@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "NeonDojo API",
-    "description": "Local headless backgammon library with GNUbg and NeonGammon analysis. No authentication; bind to loopback.",
+    "description": "Local headless backgammon library with GNUbg and NeonGammon analysis. No authentication; bind to loopback. Requests whose Host is not a loopback name, and unsafe requests from a foreign Origin, receive HTTP 403.",
     "license": {
       "name": ""
     },

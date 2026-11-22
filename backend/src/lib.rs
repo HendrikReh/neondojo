@@ -7,6 +7,7 @@ pub mod game_plan;
 pub mod import;
 pub mod jobs;
 mod json_errors;
+mod local_origin;
 pub mod match_analysis;
 pub mod model;
 pub mod store;

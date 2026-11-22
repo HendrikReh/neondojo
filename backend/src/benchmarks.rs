@@ -294,18 +294,15 @@ async fn create(
 #[utoipa::path(post, path="/api/benchmarks/play", request_body=Option<PlayBenchmarkRequest>, responses((status=202,body=BenchmarkRun),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
 async fn create_play(
     State(state): State<AppState>,
-    body: axum::body::Bytes,
+    payload: Option<crate::json_errors::Json<PlayBenchmarkRequest>>,
 ) -> ApiResult<(StatusCode, Json<BenchmarkRun>)> {
     let settings = crate::settings::load(&state).await?;
-    let payload: Option<PlayBenchmarkRequest> = if body.is_empty() {
-        None
-    } else {
-        serde_json::from_slice(&body).map_err(|e| ApiError::invalid(e.to_string()))?
-    };
-    let request = payload.unwrap_or(PlayBenchmarkRequest {
-        engine_id: settings.play_engine,
-        plies: settings.play_plies,
-    });
+    let request = payload
+        .map(|payload| payload.0)
+        .unwrap_or(PlayBenchmarkRequest {
+            engine_id: settings.play_engine,
+            plies: settings.play_plies,
+        });
     if !crate::configuration::engine_depths(&request.engine_id, "play").contains(&request.plies) {
         return Err(ApiError::invalid("Unsupported play benchmark profile"));
     }

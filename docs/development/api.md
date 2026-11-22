@@ -6,6 +6,16 @@ These endpoints cover common library and analysis operations. The complete contr
 npm run api:types --prefix web
 ```
 
+### Local access
+
+The API has no authentication and is meant to be reached from the same machine only. Besides binding to loopback (`NEONDOJO_BIND`), every request passes one guard (`backend/src/local_origin.rs`) that answers HTTP 403 with the usual `{ "error": ... }` body when:
+
+- `Host` (or the HTTP/2 authority) is not `localhost`, `127.0.0.1` or `[::1]`, with any port. This blocks DNS rebinding, so the API cannot be reached through another host name, including a LAN address.
+- A `POST`, `PUT`, `PATCH` or `DELETE` carries an `Origin` other than `http://localhost`, `http://127.0.0.1` or `http://[::1]` (any port), `tauri://localhost` or `http(s)://tauri.localhost`. `Origin: null` is refused.
+- Such a request has no `Origin` but `Sec-Fetch-Site: cross-site`.
+
+Clients that send neither `Origin` nor `Sec-Fetch-Site`, such as `curl` or scripts, are not affected. The Vite dev server and the Playwright harness forward the browser's loopback `Host` and `Origin` unchanged.
+
 ### Library and position search
 
 The library match (`/api/library/matches`), player, saved position, annotation, flashcard, duplicate-flashcard (`/api/cards/duplicates`), match review-decision (`/api/matches/{id}/review-decisions`), and Study decision search endpoints accept a one-based `page` and return the filtered `total` (`page` and `after` are mutually exclusive). Existing cursor clients can continue to use `after` on its own. `GET /api/library/duplicates` uses keyset pagination (`after` and `limit`) and returns `total_groups` and `total_matches`.

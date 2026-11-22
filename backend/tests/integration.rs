@@ -30,6 +30,7 @@ mod imported_analysis;
 mod learning;
 mod library_occurrences;
 mod library_sorting;
+mod local_origin;
 mod mat_corpus;
 mod match_analysis;
 mod match_metadata;
