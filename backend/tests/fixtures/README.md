@@ -245,3 +245,7 @@ https://www.hardyhuebener.de/downloads/1988world_cup_final_sylvester-glaeser.txt
 It is a MAT transcript with a boxed title instead of `;` metadata lines and
 covers `.txt` uploads. Its 45 game-start score rows are the reference for the
 imported scores.
+
+`decision_search_library.sql` is generated synthetic data, not a real match
+library: 10,000 matches with native, imported or no analysis and 399,000
+decision-index rows for the ignored decision search performance test.

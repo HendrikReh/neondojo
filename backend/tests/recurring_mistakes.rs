@@ -1573,3 +1573,146 @@ async fn independent_only_leaves_out_matches_played_with_learning_aids(pool: PgP
         jobs[1].1.to_string()
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn decision_search_follows_new_imports_reanalyses_legacy_catalogs_and_databases(
+    pool: PgPool,
+) {
+    let first = source(&pool).await;
+    job(&pool, first, 3, Some(1), &game1(0.1)).await;
+    let router = app(&pool);
+    let search = |query: String| {
+        let router = router.clone();
+        async move {
+            let uri = format!("/api/study/decisions?player=alice{query}");
+            let (status, page) = call(&router, "GET", &uri, Value::Null).await;
+            assert_eq!(status, 200, "{page}");
+            page
+        }
+    };
+    let warm = search(String::new()).await;
+    assert_eq!(warm["total"], 2);
+    assert_eq!(search(String::new()).await, warm);
+
+    // A match imported and analyzed after the index was built.
+    let sgf = "(;GM[6]PW[Alice]PB[Carol]MI[length:5];W[31hefe])";
+    let second = store::import_match(
+        &pool,
+        "later.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    assert_eq!(search(String::new()).await["total"], 2);
+    job(&pool, second, 2, None, &game1(0.2)[..1]).await;
+    let added = search(String::new()).await;
+    assert_eq!(added["total"], 3);
+    assert_eq!(added["items"][0]["equity_loss"], 0.2);
+
+    // A complete analysis of the whole match replaces the game analysis.
+    let reanalysis = job(&pool, first, 2, None, &game1(0.3)).await;
+    let page = search(String::new()).await;
+    assert_eq!(page["total"], 3);
+    assert_eq!(page["items"][0]["equity_loss"], 0.3);
+    assert_eq!(page["items"][0]["reference"]["job_id"], json!(reanalysis));
+
+    // An older import whose catalogs are missing is cataloged again first.
+    sqlx::query("UPDATE matches SET moves_cataloged=false WHERE id=$1")
+        .bind(first)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(search(String::new()).await, page);
+    let cataloged: bool = sqlx::query_scalar("SELECT moves_cataloged FROM matches WHERE id=$1")
+        .bind(first)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert!(cataloged);
+
+    // The database filter keeps the order; another database has no results.
+    let database: Uuid = sqlx::query_scalar("SELECT database_id FROM matches WHERE id=$1")
+        .bind(first)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let scoped = search(format!("&database_id={database}")).await;
+    assert_eq!(scoped["items"], page["items"]);
+    assert_eq!(scoped["total"], 3);
+    let other = Uuid::new_v4();
+    sqlx::query("INSERT INTO databases(id,name) VALUES($1,'Other')")
+        .bind(other)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(search(format!("&database_id={other}")).await["total"], 0);
+    sqlx::query("UPDATE matches SET database_id=$2 WHERE id=$1")
+        .bind(second)
+        .bind(other)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let moved = search(format!("&database_id={other}")).await;
+    assert_eq!(moved["total"], 1);
+    assert_eq!(moved["items"][0]["equity_loss"], 0.2);
+    assert_eq!(search(format!("&database_id={database}")).await["total"], 2);
+    assert_eq!(search(String::new()).await["total"], 3);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn decision_search_pages_cover_the_total_once_and_bound_the_offset(pool: PgPool) {
+    let id = source(&pool).await;
+    // Equal losses leave only the decision position to order the results.
+    job(&pool, id, 3, Some(1), &game1(0.1)).await;
+    let router = app(&pool);
+    let search = |query: String| {
+        let router = router.clone();
+        let uri = format!("/api/study/decisions?{query}");
+        async move { call(&router, "GET", &uri, Value::Null).await }
+    };
+    for direction in ["desc", "asc"] {
+        let (_, all) = search(format!("player=Bob&direction={direction}")).await;
+        let total = all["total"].as_u64().unwrap();
+        assert_eq!(total, 2);
+        let mut paged = Vec::new();
+        for page in 1..=total {
+            let (status, one) = search(format!(
+                "player=Bob&direction={direction}&limit=1&page={page}"
+            ))
+            .await;
+            assert_eq!(status, 200, "{one}");
+            assert_eq!(one["total"], total);
+            paged.extend(one["items"].as_array().unwrap().iter().cloned());
+        }
+        assert_eq!(Value::Array(paged), all["items"], "{direction}");
+    }
+
+    // Pages after the last result are empty and keep the total.
+    let (status, after) = search("player=Bob&limit=1&page=3".into()).await;
+    assert_eq!(status, 200, "{after}");
+    assert_eq!(after["items"], json!([]));
+    assert_eq!(after["total"], 2);
+    for (query, expected) in [
+        ("player=Bob&limit=100&page=10001", 200),
+        ("player=Bob&limit=100&page=10002", 422),
+        ("player=Bob&limit=1&page=1000001", 200),
+        ("player=Bob&limit=1&page=1000002", 422),
+        ("player=Bob&limit=100&page=18446744073709551615", 422),
+    ] {
+        let (status, body) = search(query.into()).await;
+        assert_eq!(status, expected, "{query}: {body}");
+        if expected == 422 {
+            assert!(
+                body["error"]
+                    .as_str()
+                    .is_some_and(|error| error.contains("first 1000000 decisions")),
+                "{body}"
+            );
+        }
+    }
+}
