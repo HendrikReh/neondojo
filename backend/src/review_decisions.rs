@@ -15,7 +15,7 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Postgres, postgres::PgArguments, query::QueryAs};
+use sqlx::{FromRow, PgConnection, Postgres, postgres::PgArguments, query::QueryAs};
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -176,23 +176,54 @@ pub(crate) async fn load_all_review(
     game_no: Option<i32>,
     kind: Option<String>,
 ) -> ApiResult<Vec<ReviewDecision>> {
-    const MAX: i64 = 200_000;
-    let page = load_review_bounded(
-        state,
+    let query = all_review_query(analysis_id, game_no, kind);
+    review_bounds(&query, ALL_REVIEW_MAX)?;
+    prepare_review(&state.pool, id).await?;
+    let mut tx = begin_review_snapshot(&state.pool).await?;
+    let items = read_all_review(&mut tx, id, &query).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(items)
+}
+
+/// Batch consumers reuse the same projection inside the caller's read-only
+/// snapshot. Call [`prepare_review`] before opening that snapshot.
+pub(crate) async fn load_all_review_on(
+    connection: &mut PgConnection,
+    id: Uuid,
+    analysis_id: &str,
+    game_no: Option<i32>,
+    kind: Option<String>,
+) -> ApiResult<Vec<ReviewDecision>> {
+    read_all_review(
+        connection,
         id,
-        ReviewQuery {
-            analysis_id: Some(analysis_id.into()),
-            game_no,
-            kind,
-            page: Some(1),
-            limit: Some(MAX),
-            ..Default::default()
-        },
-        MAX,
-        false,
+        &all_review_query(analysis_id, game_no, kind),
     )
-    .await?;
-    if page.total.is_some_and(|total| total > MAX) {
+    .await
+}
+
+const ALL_REVIEW_MAX: i64 = 200_000;
+fn all_review_query(analysis_id: &str, game_no: Option<i32>, kind: Option<String>) -> ReviewQuery {
+    ReviewQuery {
+        analysis_id: Some(analysis_id.into()),
+        game_no,
+        kind,
+        page: Some(1),
+        limit: Some(ALL_REVIEW_MAX),
+        ..Default::default()
+    }
+}
+async fn read_all_review(
+    connection: &mut PgConnection,
+    id: Uuid,
+    query: &ReviewQuery,
+) -> ApiResult<Vec<ReviewDecision>> {
+    let (limit, offset) = review_bounds(query, ALL_REVIEW_MAX)?;
+    let page = match read_review(connection, id, query, limit, offset, false).await? {
+        ReviewRead::Page(page) => page,
+        ReviewRead::StaleHits(_) => unreachable!("hit sets are only rebuilt on request"),
+    };
+    if page.total.is_some_and(|total| total > ALL_REVIEW_MAX) {
         return Err(ApiError::invalid(
             "Analysis exceeds supported decision count",
         ));
@@ -200,13 +231,28 @@ pub(crate) async fn load_all_review(
     Ok(page.items)
 }
 
-async fn load_review_bounded(
-    state: &AppState,
-    id: Uuid,
-    query: ReviewQuery,
-    max_limit: i64,
-    rebuild: bool,
-) -> ApiResult<ReviewDecisionPage> {
+/// Writes the lazily built catalogs a review reads. They cannot be built inside
+/// the read-only snapshot that serves the review itself.
+pub(crate) async fn prepare_review(pool: &sqlx::PgPool, id: Uuid) -> ApiResult<()> {
+    crate::play::require_review_available(pool, id).await?;
+    if !crate::move_catalog::ensure_catalog(pool, id).await?
+        || !crate::imported_analysis::ensure_catalog(pool, id).await?
+    {
+        return Err(ApiError::missing());
+    }
+    Ok(())
+}
+
+pub(crate) async fn begin_review_snapshot(
+    pool: &sqlx::PgPool,
+) -> ApiResult<sqlx::Transaction<'static, Postgres>> {
+    Ok(pool
+        .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .await
+        .map_err(anyhow::Error::from)?)
+}
+
+fn review_bounds(query: &ReviewQuery, max_limit: i64) -> ApiResult<(i64, Option<i64>)> {
     let limit = query.limit.unwrap_or(50);
     if !(1..=max_limit).contains(&limit)
         || query.game_no.is_some_and(|g| g <= 0)
@@ -221,17 +267,62 @@ async fn load_review_bounded(
         ));
     }
     let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
-    crate::play::require_review_available(&state.pool, id).await?;
-    if !crate::move_catalog::ensure_catalog(&state.pool, id).await?
-        || !crate::imported_analysis::ensure_catalog(&state.pool, id).await?
-    {
-        return Err(ApiError::missing());
+    Ok((limit, offset))
+}
+
+async fn load_review_bounded(
+    state: &AppState,
+    id: Uuid,
+    query: ReviewQuery,
+    max_limit: i64,
+    rebuild: bool,
+) -> ApiResult<ReviewDecisionPage> {
+    let (limit, offset) = review_bounds(&query, max_limit)?;
+    prepare_review(&state.pool, id).await?;
+    let mut tx = begin_review_snapshot(&state.pool).await?;
+    match read_review(&mut tx, id, &query, limit, offset, rebuild).await? {
+        ReviewRead::Page(page) => {
+            tx.commit().await.map_err(anyhow::Error::from)?;
+            Ok(page)
+        }
+        ReviewRead::StaleHits(stale) => {
+            // Build outside this read-only snapshot, then answer from a new one.
+            tx.rollback().await.map_err(anyhow::Error::from)?;
+            build_hits(
+                &state.pool,
+                id,
+                &stale.analysis_id,
+                stale.job.as_deref(),
+                stale.imported,
+                &stale.format,
+            )
+            .await?;
+            Box::pin(load_review_bounded(state, id, query, max_limit, false)).await
+        }
     }
-    let mut tx = state
-        .pool
-        .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(anyhow::Error::from)?;
+}
+
+enum ReviewRead {
+    Page(ReviewDecisionPage),
+    StaleHits(StaleHits),
+}
+
+/// The stored hit set no longer matches this analysis; rebuild it first.
+struct StaleHits {
+    analysis_id: String,
+    job: Option<Box<Job>>,
+    imported: bool,
+    format: String,
+}
+
+async fn read_review(
+    tx: &mut PgConnection,
+    id: Uuid,
+    query: &ReviewQuery,
+    limit: i64,
+    offset: Option<i64>,
+    rebuild: bool,
+) -> ApiResult<ReviewRead> {
     let (format, revision): (String, i64) =
         sqlx::query_as("SELECT format,source_revision FROM matches WHERE id=$1")
             .bind(id)
@@ -249,7 +340,7 @@ async fn load_review_bounded(
         ));
     }
     let selected = crate::analysis_catalog::resolve_selection_on(
-        &mut tx,
+        &mut *tx,
         id,
         query.analysis_id.as_deref().or(legacy.as_deref()),
     )
@@ -377,12 +468,11 @@ async fn load_review_bounded(
         if offset.is_some_and(|offset| offset > 0) || query.after.is_some() {
             items.clear();
         }
-        tx.commit().await.map_err(anyhow::Error::from)?;
-        return Ok(ReviewDecisionPage {
+        return Ok(ReviewRead::Page(ReviewDecisionPage {
             items,
             next_cursor: None,
             total: query.page.map(|_| total),
-        });
+        }));
     }
     // Numbered pages count and select in the narrow hit set under this read
     // snapshot and project only their own decisions. Cursor pages and batch
@@ -390,7 +480,7 @@ async fn load_review_bounded(
     if let (Some(offset), Some(analysis_id)) = (offset, analysis_id.as_deref())
         && limit <= HIT_PAGE_LIMIT
     {
-        let current = hits_fingerprint(&mut tx, id, analysis_id, job_id).await?;
+        let current = hits_fingerprint(&mut *tx, id, analysis_id, job_id).await?;
         let stored: Option<String> = sqlx::query_scalar(
             "SELECT fingerprint FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
         )
@@ -408,28 +498,21 @@ async fn load_review_bounded(
                 format: &format,
                 job: job.as_deref(),
                 game,
-                query: &query,
+                query,
                 thresholds,
                 offset,
                 limit,
             };
-            if let Some(page) = page.load(&mut tx).await? {
-                tx.commit().await.map_err(anyhow::Error::from)?;
-                return Ok(page);
+            if let Some(page) = page.load(&mut *tx).await? {
+                return Ok(ReviewRead::Page(page));
             }
         } else if rebuild {
-            // Build outside this read-only snapshot, then answer from a new one.
-            tx.rollback().await.map_err(anyhow::Error::from)?;
-            build_hits(
-                &state.pool,
-                id,
-                analysis_id,
-                job.as_deref(),
+            return Ok(ReviewRead::StaleHits(StaleHits {
+                analysis_id: analysis_id.to_owned(),
+                job,
                 imported,
-                &format,
-            )
-            .await?;
-            return Box::pin(load_review_bounded(state, id, query, max_limit, false)).await;
+                format,
+            }));
         }
     }
     let mut cursor = cursor;
@@ -503,12 +586,11 @@ async fn load_review_bounded(
                 .map(|c| serde_json::to_vec(&c).map(|bytes| URL_SAFE_NO_PAD.encode(bytes)))
                 .transpose()
                 .map_err(anyhow::Error::from)?;
-            tx.commit().await.map_err(anyhow::Error::from)?;
-            return Ok(ReviewDecisionPage {
+            return Ok(ReviewRead::Page(ReviewDecisionPage {
                 items,
                 next_cursor,
                 total: offset.map(|_| matched),
-            });
+            }));
         }
         cursor = continuation;
     }
