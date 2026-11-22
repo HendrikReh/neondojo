@@ -349,3 +349,110 @@ test('decision search has a visible heading, a column picker and resizable colum
     .poll(async () => Math.round((await match.boundingBox())!.width))
     .toBe(Math.round(before));
 });
+
+test('a pre-filled player names the next step and a checker hit can join a deck', async ({
+  page,
+}, testInfo) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  await page.route('**/api/study/mistakes?*', (route) =>
+    route.fulfill({
+      json: {
+        players: ['Alice', 'Bob'],
+        resolved_player: 'Alice',
+        groups: [],
+        analyzed_decisions: 0,
+        analyzed_matches: 0,
+      },
+    }),
+  );
+  const searches: URLSearchParams[] = [];
+  const jobId = '33333333-3333-4333-8333-333333333333';
+  await page.route('**/api/study/decisions?*', (route) => {
+    searches.push(new URL(route.request().url()).searchParams);
+    return route.fulfill({
+      json: {
+        items: [
+          {
+            ...hit(4, 0.091),
+            reference: { job_id: jobId, game_no: 1, decision_no: 4 },
+            kind: 'checker',
+            position: { ...position, dice: [3, 1] },
+            mistake_kind: 'checker',
+            played: '24/23 13/10',
+            best: '8/5 6/5',
+          },
+        ],
+        total: 1,
+        page: 1,
+        limit: 50,
+      },
+    });
+  });
+  await page.route(`**/api/positions/${position.id}/bookmark`, (route) =>
+    route.fulfill({ json: { saved: false } }),
+  );
+  const deck = {
+    id: '44444444-4444-4444-8444-444444444444',
+    name: 'Openings',
+    card_count: 3,
+    due_count: 0,
+    created_at: '2026-11-20T10:00:00Z',
+    version: 1,
+  };
+  await page.route('**/api/decks', (route) =>
+    route.request().method() === 'GET'
+      ? route.fulfill({ json: [deck] })
+      : route.fallback(),
+  );
+  const added: unknown[] = [];
+  await page.route(`**/api/decks/${deck.id}/cards`, (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    added.push(route.request().postDataJSON());
+    return route.fulfill({ json: { added: 1, updated: 0, total: 4 } });
+  });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Positions', exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Position source' })
+    .getByRole('button', { name: 'All analyzed decisions' })
+    .click();
+  const search = page.getByRole('region', { name: 'Analyzed decisions' });
+  await expect(
+    search.getByRole('combobox', { name: 'Player', exact: true }),
+  ).toHaveValue('Alice');
+  // The workspace names the next step and does not search on its own.
+  await expect(search.getByRole('status')).toHaveText(
+    'Select “Search decisions” to list the analyzed decisions of Alice that match the filters above.',
+  );
+  expect(searches).toHaveLength(0);
+  await page.screenshot({ path: testInfo.outputPath('decision-idle.png') });
+  await search.getByRole('button', { name: 'Search decisions' }).click();
+  await expect(search).toContainText('1 decision found');
+  await expect(search).not.toContainText('Select “Search decisions”');
+  const preview = search.getByRole('complementary', {
+    name: 'Decision preview',
+  });
+  const addToDeck = preview.getByRole('button', {
+    name: 'Add to deck',
+    exact: true,
+  });
+  await addToDeck.click();
+  const dialog = page.getByRole('dialog', { name: 'Add to deck', exact: true });
+  await expect(
+    dialog.getByRole('combobox', { name: 'Choose deck', exact: true }),
+  ).toHaveValue(deck.id);
+  await expect(dialog).toContainText('3 cards in deck');
+  await dialog
+    .getByRole('button', { name: 'Add 1 position', exact: true })
+    .click();
+  await expect(dialog).toBeHidden();
+  expect(added).toEqual([
+    { position_id: position.id, analysis_id: `job:${jobId}` },
+  ]);
+  await expect(preview.getByRole('status')).toHaveText(
+    'Added · Openings · 4 cards in deck',
+  );
+  await expect(addToDeck).toBeFocused();
+  await page.screenshot({ path: testInfo.outputPath('decision-added.png') });
+});

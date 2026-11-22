@@ -1227,14 +1227,18 @@ export default function App() {
             className="text-navigation position-scope"
             role="group"
             aria-label={decisionText('scope')}
-            hidden={!!similarTarget}
           >
+            {/* The scopes stay available beside a similar-position search;
+                choosing one closes that search. */}
             {(['saved', 'all'] as const).map((scope) => (
               <button
                 key={scope}
                 type="button"
-                aria-pressed={positionScope === scope}
-                onClick={() => setPositionScope(scope)}
+                aria-pressed={!similarTarget && positionScope === scope}
+                onClick={() => {
+                  setSimilarTarget(undefined);
+                  setPositionScope(scope);
+                }}
               >
                 {decisionText(scope)}
               </button>
@@ -1251,6 +1255,8 @@ export default function App() {
                 revision={revision}
                 bookmarkRevision={bookmarkRevision}
                 onBookmarkChanged={bookmarkChanged}
+                deckRevision={deckRevision}
+                onDeckChanged={deckChanged}
                 theme={theme}
                 onOpenPosition={(id) => {
                   setDetail('overview');

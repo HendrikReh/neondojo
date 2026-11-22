@@ -85,7 +85,8 @@ the member and name dialogs focus their field.
 
 **Saved positions** and **All analyzed decisions** switch the Positions
 workspace between the bookmarked collection and a search over every analyzed
-decision of one player. The decision search keeps its filters above a result
+decision of one player. They stay visible while **Similar positions** is open
+and close it. The decision search keeps its filters above a result
 table with a board preview on the right. **Practice results** opens the
 recurring-mistakes practice dialog with the errors of the current page.
 
@@ -105,7 +106,9 @@ Study; after adding positions to a deck, **Study this deck** appears beside
 the transfer outcome.
 
 **All analyzed decisions** uses the same filter card and keeps its filters,
-results and chosen row while the saved positions are open. A row is selected
+results and chosen row while the saved positions are open. Before the first
+search it names **Search decisions** as the next step. The preview of a checker
+decision offers **Add to deck**. A row is selected
 with a click or the arrow keys; Enter or a double-click opens the decision in
 Analysis (checker decisions in **Checker**, cube decisions in **Cube**). The
 **Loss** heading reverses the order.

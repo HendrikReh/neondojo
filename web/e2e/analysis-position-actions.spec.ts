@@ -348,6 +348,31 @@ test('similar search opens from a saved position with the current match excluded
     .getByRole('button', { name: 'Back to saved positions', exact: true })
     .click();
   await expect(results).toBeHidden();
+  // The position scopes stay visible beside the similar search and close it.
+  await openSimilarSearch(page, neighbor.id);
+  const scope = page.getByRole('group', { name: 'Position source' });
+  await expect(results).toBeVisible();
+  await expect(scope).toBeVisible();
+  for (const name of ['Saved positions', 'All analyzed decisions'])
+    await expect(scope.getByRole('button', { name })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+  await scope.getByRole('button', { name: 'All analyzed decisions' }).click();
+  await expect(results).toBeHidden();
+  await expect(
+    page.getByRole('region', { name: 'Analyzed decisions' }),
+  ).toBeVisible();
+  await expect(
+    scope.getByRole('button', { name: 'All analyzed decisions' }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await scope.getByRole('button', { name: 'Saved positions' }).click();
+  await openSimilarSearch(page, neighbor.id);
+  await scope.getByRole('button', { name: 'Saved positions' }).click();
+  await expect(results).toBeHidden();
+  await expect(
+    scope.getByRole('button', { name: 'Saved positions' }),
+  ).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('practice uses the latest filtered similar positions in result order', async ({
