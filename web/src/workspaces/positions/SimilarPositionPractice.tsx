@@ -389,14 +389,16 @@ function PracticeQuestion({
               </p>
               <p>
                 {p('practiceYourMove')} ·{' '}
-                <strong>{formatDecision(score.played)}</strong> ·{' '}
-                {formatEquity(score.played_equity)}
+                <strong>{formatDecision(score.played)}</strong>
+                {score.played_equity != null &&
+                  ` · ${formatEquity(score.played_equity)}`}
               </p>
             </>
           )}
           <p>
             {t('best')} · <strong>{formatDecision(answer.best)}</strong>
-            {score && ` · ${formatEquity(score.best_equity)}`}
+            {score?.best_equity != null &&
+              ` · ${formatEquity(score.best_equity)}`}
           </p>
           <p>
             <EngineLabel

@@ -118,7 +118,8 @@ pub(crate) async fn execute(
     }
     ensure!(
         summary.analyzed_moves == total_moves,
-        "GNUbg analyzed {} of {total_moves} checker moves",
+        "{} analyzed {} of {total_moves} checker moves",
+        engine.id().display_name(),
         summary.analyzed_moves
     );
     Ok(serde_json::to_value(summary)?)

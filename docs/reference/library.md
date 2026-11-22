@@ -134,7 +134,7 @@ The table shows the match, the player on roll, game, move, the score as away val
 
 **Practice results** opens **Practice similar positions** with every result of the current search, in list order. Each question names the match, game and move and shows the match length or the money-game Jacoby setting.
 
-- Play a complete checker move and choose **Check my move**. GNUbg evaluates the position at the default analysis depth from **Settings → Analysis** and returns the best play, your move, both equities and the normalized equity loss. Scoring saves no analysis job and leaves the displayed analysis unchanged.
+- Play a complete checker move and choose **Check my move**. As in Study, the analysis engine from **Settings → Analysis** evaluates the position at its default depth, capped at GNUbg 3-ply or NeonGammon 2-ply, and returns the best play, your move, both equities and the normalized equity loss. If that engine is unavailable, the check fails; NeonDojo does not switch to another engine. A forced pass needs no evaluation and shows no equities. One check runs at a time. Scoring saves no analysis job and leaves the displayed analysis unchanged.
 - **Reveal answer** shows the best play from the match's displayed analysis without scoring it. It reports an error if that analysis has no supported checker answer for the position.
 - After a check, **Your move** and **Best play** switch the arrow preview on the board.
 - **Next**, or **Finish** on the last question, moves on. While a check is running, the same button is **Skip position**. Skipped and revealed positions are not scored.
