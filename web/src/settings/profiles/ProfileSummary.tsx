@@ -10,7 +10,7 @@ import {
   type ProfileMessageKey,
 } from './profile-messages';
 import { themes } from '../../shared/board/themes';
-import { languages } from '../../shared/i18n/i18n-core';
+import { languages, numberFormat } from '../../shared/i18n/i18n-core';
 import {
   ALL_CARDS,
   CARDS_WITHOUT_DECK,
@@ -110,8 +110,7 @@ export default function ProfileSummary({
     if (typeof value === 'boolean') return t(value ? 'yes' : 'no');
     if (path.endsWith('.human_player'))
       return t(value === 0 ? 'white' : 'black');
-    if (typeof value === 'number')
-      return new Intl.NumberFormat(locale).format(value);
+    if (typeof value === 'number') return numberFormat(locale).format(value);
     if (
       Array.isArray(value) &&
       (path === 'positions.definition.dice' || path.endsWith('_range'))
@@ -119,7 +118,7 @@ export default function ProfileSummary({
       const numberOrText = (part: unknown) => {
         const numeric = Number(part);
         return Number.isFinite(numeric) && !path.endsWith('date_range')
-          ? new Intl.NumberFormat(locale).format(numeric)
+          ? numberFormat(locale).format(numeric)
           : String(part);
       };
       const [from, to] = value;

@@ -172,7 +172,7 @@
 }
 .benchmark-history .benchmark-run-error,
 .benchmark-status-failed {
-  color: var(--ui-danger, #bd403c);
+  color: var(--ui-danger-text);
 }
 .benchmark-status-running {
   color: var(--ui-accent);
@@ -209,7 +209,9 @@
   align-items: center;
   gap: 6px 8px;
 }
-.benchmark-delete-confirm .danger {
+.benchmark-delete-confirm .danger,
+.benchmark-delete-confirm .action-button.danger:not(:disabled),
+.benchmark-delete-confirm .action-button.danger:hover:not(:disabled) {
   background: var(--ui-danger-button);
   color: var(--ui-danger-button-text);
   border-color: var(--ui-danger-button);

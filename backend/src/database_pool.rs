@@ -1,4 +1,23 @@
 use sqlx::{Executor, postgres::PgPoolOptions};
+use std::time::Duration;
+
+/// Connections when `NEONDOJO_DB_MAX_CONNECTIONS` is unset. Up to eight
+/// parallel analysis jobs each sample progress, renew a lease and write
+/// checkpoints while the API, background workers and backups also query.
+pub(crate) const DEFAULT_MAX_CONNECTIONS: u32 = 32;
+/// How long a query waits for a free connection before it fails.
+pub(crate) const ACQUIRE_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// Pool size from the optional `NEONDOJO_DB_MAX_CONNECTIONS` value.
+pub(crate) fn max_connections(configured: Option<&str>) -> anyhow::Result<u32> {
+    let Some(configured) = configured else {
+        return Ok(DEFAULT_MAX_CONNECTIONS);
+    };
+    match configured.trim().parse::<u32>() {
+        Ok(connections @ 1..=1000) => Ok(connections),
+        _ => anyhow::bail!("NEONDOJO_DB_MAX_CONNECTIONS must be a whole number from 1 to 1000"),
+    }
+}
 
 pub(crate) fn options() -> PgPoolOptions {
     PgPoolOptions::new()
@@ -30,7 +49,15 @@ pub(crate) fn options() -> PgPoolOptions {
 mod tests {
     use super::*;
     use sqlx::PgPool;
-    use std::time::Duration;
+
+    #[test]
+    fn pool_size_defaults_and_rejects_invalid_overrides() {
+        assert_eq!(max_connections(None).unwrap(), DEFAULT_MAX_CONNECTIONS);
+        assert_eq!(max_connections(Some(" 48 ")).unwrap(), 48);
+        for invalid in ["", "0", "-1", "ten", "1001"] {
+            assert!(max_connections(Some(invalid)).is_err(), "{invalid:?}");
+        }
+    }
 
     #[sqlx::test(migrations = false)]
     async fn cancelled_begin_cannot_leak_a_transaction_to_the_next_borrower(db: PgPool) {

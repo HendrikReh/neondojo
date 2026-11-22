@@ -248,6 +248,7 @@ export function VirtualPlayerCard({
             icon="delete"
             type="button"
             label={v('delete')}
+            className="danger"
             aria-haspopup="dialog"
             onClick={() => setDialog('delete')}
           />

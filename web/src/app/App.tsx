@@ -9,7 +9,7 @@ import {
 import ProfileSelector from '../settings/profiles/ProfileSelector';
 import { openingBookConfigurationKey } from '../settings/configuration/configuration-model';
 import { settingsFromConfiguration } from '../settings/configuration/configuration-settings';
-import { loadBenchmarkStatus } from '../workspaces/extras/benchmark-api';
+import { useBenchmarkActivity } from '../workspaces/extras/useBenchmarkActivity';
 import ExtrasWorkspace, {
   readExtrasTool,
   saveExtrasTool,
@@ -143,29 +143,9 @@ export default function App() {
   >('general');
   const playText = usePlayText();
   const benchmarkT = useBenchmarkText();
-  const [benchmarkActive, setBenchmarkActive] = useState(false);
+  const benchmarkActivity = useBenchmarkActivity();
   const [extrasTool, setExtrasTool] = useState(readExtrasTool);
   useEffect(() => saveExtrasTool(extrasTool), [extrasTool]);
-  useEffect(() => {
-    const abort = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    async function pollBenchmarkStatus() {
-      try {
-        const status = await loadBenchmarkStatus(abort.signal);
-        if (!abort.signal.aborted) setBenchmarkActive(status.active === true);
-      } catch {
-        // Status is advisory; a temporary failure must not block the app.
-      } finally {
-        if (!abort.signal.aborted)
-          timer = setTimeout(() => void pollBenchmarkStatus(), 2000);
-      }
-    }
-    void pollBenchmarkStatus();
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-    };
-  }, []);
   const [requestedPlaySession, setRequestedPlaySession] = useState<{
     id: string;
     token: number;
@@ -986,7 +966,7 @@ export default function App() {
           }}
         />
       </header>
-      {benchmarkActive && (
+      {benchmarkActivity.active && (
         <p className="benchmark-global-status" role="status">
           {benchmarkT('globalBusy')}
         </p>
@@ -1227,14 +1207,18 @@ export default function App() {
             className="text-navigation position-scope"
             role="group"
             aria-label={decisionText('scope')}
-            hidden={!!similarTarget}
           >
+            {/* The scopes stay available beside a similar-position search;
+                choosing one closes that search. */}
             {(['saved', 'all'] as const).map((scope) => (
               <button
                 key={scope}
                 type="button"
-                aria-pressed={positionScope === scope}
-                onClick={() => setPositionScope(scope)}
+                aria-pressed={!similarTarget && positionScope === scope}
+                onClick={() => {
+                  setSimilarTarget(undefined);
+                  setPositionScope(scope);
+                }}
               >
                 {decisionText(scope)}
               </button>
@@ -1251,6 +1235,8 @@ export default function App() {
                 revision={revision}
                 bookmarkRevision={bookmarkRevision}
                 onBookmarkChanged={bookmarkChanged}
+                deckRevision={deckRevision}
+                onDeckChanged={deckChanged}
                 theme={theme}
                 onOpenPosition={(id) => {
                   setDetail('overview');
@@ -1337,6 +1323,8 @@ export default function App() {
             onOpenMatch={openMatch}
             defaultPlies={analysisPlies}
             playPlies={settings?.play_plies}
+            benchmarkActive={benchmarkActivity.active}
+            onBenchmarkActivity={benchmarkActivity.report}
           />
         </div>
         <footer className="app-footer">

@@ -46,19 +46,23 @@ export default function LibraryImport({
         disabled={uploading || !target}
         onClick={() => target && onImportFolder(target.id)}
       />
-      <select
-        aria-label={l('importDestination')}
-        value={target?.id ?? ''}
-        disabled={uploading || !destinations.length}
-        onChange={(event) => setChosen(event.target.value)}
-      >
-        {!target && <option value="">{l('importDestination')}</option>}
-        {destinations.map((database) => (
-          <option key={database.id} value={database.id}>
-            {databaseDisplayName(database, l)}
-          </option>
-        ))}
-      </select>
+      <label className="library-import-destination">
+        <span aria-hidden="true">{l('importInto')}</span>
+        {/* The accessible name contains the visible label's word. */}
+        <select
+          aria-label={l('importIntoName')}
+          value={target?.id ?? ''}
+          disabled={uploading || !destinations.length}
+          onChange={(event) => setChosen(event.target.value)}
+        >
+          {!target && <option value="">{l('importDestination')}</option>}
+          {destinations.map((database) => (
+            <option key={database.id} value={database.id}>
+              {databaseDisplayName(database, l)}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

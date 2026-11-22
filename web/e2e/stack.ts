@@ -242,6 +242,9 @@ export async function startStack(worker: number): Promise<Stack> {
         DATABASE_URL: database.href,
         NEONDOJO_E2E_DATABASE_NAME: name,
         NEONDOJO_BIND: '127.0.0.1:0',
+        // Parallel test backends share one PostgreSQL server; keep each pool
+        // small so they stay below its connection limit.
+        NEONDOJO_DB_MAX_CONNECTIONS: '10',
         RUST_LOG: 'neondojo=info',
       },
       stdio: ['ignore', 'pipe', 'pipe'],

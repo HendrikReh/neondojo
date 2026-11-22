@@ -4,12 +4,14 @@ Specification: https://www.bgblitz.com/Create_a_theme_How_to.txt
 Images are copied verbatim. Nothing is downloaded or extracted as executable code.
 """
 
+import argparse
 import io
 import json
 import math
 import os
 from pathlib import Path, PurePosixPath
 import struct
+import sys
 import xml.etree.ElementTree as ET
 from zipfile import ZipFile, BadZipFile
 import zlib
@@ -19,6 +21,7 @@ MAX_ARCHIVE = 32 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
 BUILTIN_THEMES = ("forest", "walnut", "slate")
 ALLOW_MISSING_ENV = "NEONDOJO_ALLOW_MISSING_THEMES"
+UPDATE_OPTIONS_FLAG = "--update-options"
 MAX_CHECKER_PIXELS = 1024 * 1024
 
 
@@ -395,7 +398,24 @@ def missing_archives(options, catalog):
     ]
 
 
-def prepare(source, output, manifest, options_manifest=None, allow_missing=False):
+def zip_names(themes):
+    return ", ".join(theme.removeprefix("bgblitz:") + ".zip" for theme in themes)
+
+
+def prepare(
+    source,
+    output,
+    manifest,
+    options_manifest=None,
+    allow_missing=False,
+    update_options=False,
+):
+    """Write the untracked catalog and artwork for the ZIPs in `source`.
+
+    `options_manifest` (the tracked shared/configuration-options.json) is only
+    checked against the archives unless `update_options` asks to rewrite its
+    `board_themes` list, so running without local ZIPs never edits it.
+    """
     used = set()
     catalog = []
     archives = sorted(source.glob("*.zip"))
@@ -415,13 +435,26 @@ def prepare(source, output, manifest, options_manifest=None, allow_missing=False
         # rejects the saved board theme and serves no theme images.
         missing = missing_archives(options, catalog)
         if missing and not allow_missing:
-            names = ", ".join(
-                theme.removeprefix("bgblitz:") + ".zip" for theme in missing
-            )
             raise ValueError(
-                f"Missing theme archives in {source}: {names}. "
-                f"Copy them there, or set {ALLOW_MISSING_ENV}=1 to remove "
-                f"these themes from {options_manifest.name}."
+                f"Missing theme archives in {source}: {zip_names(missing)}. "
+                f"Copy them there, or set {ALLOW_MISSING_ENV}=1 to build without "
+                f"them (add {UPDATE_OPTIONS_FLAG} to also remove them from "
+                f"{options_manifest.name})."
+            )
+        # A theme the backend does not list would be offered but rejected on save.
+        listed = set(options.get("board_themes", []))
+        unlisted = [theme["id"] for theme in catalog if theme["id"] not in listed]
+        if unlisted and not update_options:
+            raise ValueError(
+                f"Theme archives not listed in {options_manifest.name}: "
+                f"{zip_names(unlisted)}. Run the preparation with "
+                f"{UPDATE_OPTIONS_FLAG} to add them, or remove them from {source}."
+            )
+        if missing and not update_options:
+            print(
+                f"Building without missing theme archives: {zip_names(missing)}; "
+                f"{options_manifest.name} still lists them.",
+                file=sys.stderr,
             )
     if output.exists():
         for stale in output.rglob("*"):
@@ -430,7 +463,7 @@ def prepare(source, output, manifest, options_manifest=None, allow_missing=False
     write_changed(
         manifest, (json.dumps(catalog, ensure_ascii=False, indent=2) + "\n").encode()
     )
-    if options is not None:
+    if options is not None and update_options:
         options["board_themes"] = list(BUILTIN_THEMES) + [theme["id"] for theme in catalog]
         write_changed(
             options_manifest,
@@ -439,15 +472,28 @@ def prepare(source, output, manifest, options_manifest=None, allow_missing=False
     return catalog
 
 
-if __name__ == "__main__":
+def main(argv=None, root=ROOT, environ=os.environ):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        UPDATE_OPTIONS_FLAG,
+        action="store_true",
+        help="rewrite board_themes in the tracked shared/configuration-options.json "
+        "to the built-in themes plus the archives in themes/",
+    )
+    args = parser.parse_args(argv)
     try:
         result = prepare(
-            ROOT / "themes",
-            ROOT / "web/public/themes",
-            ROOT / "web/src/generated-themes.json",
-            ROOT / "shared/configuration-options.json",
-            allow_missing=os.environ.get(ALLOW_MISSING_ENV) == "1",
+            root / "themes",
+            root / "web/public/themes",
+            root / "web/src/generated-themes.json",
+            root / "shared/configuration-options.json",
+            allow_missing=environ.get(ALLOW_MISSING_ENV) == "1",
+            update_options=args.update_options,
         )
         print(f"Prepared {len(result)} local BGBlitz themes")
     except (ValueError, OSError) as error:
         raise SystemExit(str(error))
+
+
+if __name__ == "__main__":
+    main()

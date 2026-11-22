@@ -44,7 +44,7 @@ pub(super) fn reference_for(engine: &str, plies: i32) -> Result<PlayBenchmarkRef
     match crate::engines::EngineId::require(engine)? {
         crate::engines::EngineId::Gnubg => {}
         crate::engines::EngineId::NeonGammon => {
-            value.protocol_id = format!("bgsage-checker-turn-v3-{plies}ply-2threads-gnubg-rules");
+            value.protocol_id = format!("bgsage-checker-turn-v4-{plies}ply-2threads-gnubg-rules");
         }
     }
     Ok(value)

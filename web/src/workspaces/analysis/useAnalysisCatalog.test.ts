@@ -34,6 +34,33 @@ vi.mock('react', async (original) => ({
     }
   },
 }));
+const jobWatch = vi.hoisted(() => ({
+  watches: [] as {
+    ids: string[];
+    onChange: (job: Job | undefined, id: string) => void;
+    stopped: boolean;
+  }[],
+}));
+vi.mock('../../shared/jobs/job-watch', () => ({
+  watchJobChanges(
+    jobs: { id: string }[],
+    onChange: (job: Job | undefined, id: string) => void,
+  ) {
+    const watch = { ids: jobs.map((job) => job.id), onChange, stopped: false };
+    jobWatch.watches.push(watch);
+    return () => {
+      watch.stopped = true;
+    };
+  },
+}));
+/** Report a change of a followed job, as the shared job watch would. */
+function jobChanged(job: Job) {
+  const watch = jobWatch.watches.find(
+    (candidate) => !candidate.stopped && candidate.ids.includes(job.id),
+  );
+  expect(watch).toBeDefined();
+  watch!.onChange(job, job.id);
+}
 import { useAnalysisCatalog, useAnalysisResult } from './useAnalysisCatalog';
 import type { AnalysisCatalogPage } from './analysis-catalog-api';
 import { entryForJob } from './analysis-catalog-test-fixtures';
@@ -71,6 +98,7 @@ function response(body: unknown) {
   });
 }
 beforeEach(() => {
+  jobWatch.watches = [];
   hooks.slots = [];
   hooks.index = 0;
   hooks.pending.clear();
@@ -206,6 +234,7 @@ it.each([0, 1])(
           selected: newer,
         }),
       );
+      jobChanged({ ...running.job!, progress: 50, completed_games: 2 });
       await vi.advanceTimersByTimeAsync(3000);
       expect(render().selected?.job?.completed_games).toBe(2);
 
@@ -231,7 +260,7 @@ it.each([0, 1])(
   },
 );
 
-it('polls an active displayed analysis outside the first catalog page', async () => {
+it('refreshes an active displayed analysis outside the first catalog page when its job finishes', async () => {
   vi.useFakeTimers();
   try {
     const running = entryForJob({
@@ -267,7 +296,9 @@ it('polls an active displayed analysis outside the first catalog page', async ()
         selected: complete,
       }),
     );
-    await vi.advanceTimersByTimeAsync(3000);
+    jobChanged(complete.job!);
+    // A finished job reloads the catalog at once.
+    await vi.advanceTimersByTimeAsync(0);
     expect(render().selected?.job?.completed_games).toBe(2);
     expect(render().entries.find((item) => item.id === running.id)).toEqual(
       complete,
@@ -305,4 +336,40 @@ it('refreshes the same match after a selection write finishes on another positio
   commit();
   await tick();
   expect(render('match', 'two').analysisId).toBe(imported.id);
+});
+
+it('reads a pending catalog again only when its job changes', async () => {
+  vi.useFakeTimers();
+  try {
+    const running = entryForJob({
+      ...entry.job!,
+      status: 'running',
+      progress: 10,
+    });
+    fetch.mockResolvedValue(
+      response({ ...page, items: [running], selected: running }),
+    );
+    render();
+    commit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(jobWatch.watches.map((watch) => watch.ids)).toEqual([['native']]);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    // Progress reads are spaced like the former polling.
+    jobChanged({ ...running.job!, progress: 20 });
+    jobChanged({ ...running.job!, progress: 30 });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    jobChanged({ ...running.job!, progress: 40 });
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    // The same jobs keep their single watch across reads.
+    expect(jobWatch.watches).toHaveLength(1);
+  } finally {
+    fetch.mockReset();
+    vi.useRealTimers();
+  }
 });

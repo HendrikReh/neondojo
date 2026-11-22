@@ -11,12 +11,15 @@ pub(super) struct Book {
 impl Book {
     pub(super) fn open(path: &str) -> Result<Self> {
         use rusqlite::types::ValueRef;
-        let connection = rusqlite::Connection::open_with_flags(
-            path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
-        )
-        .with_context(|| format!("Cannot open opening book at {path}"))?;
+        let connection = crate::untrusted_sqlite::open(path)
+            .with_context(|| format!("Cannot open opening book at {path}"))?;
         connection.busy_timeout(std::time::Duration::from_millis(250))?;
+        for table in ["meta", "contexts", "entries"] {
+            ensure!(
+                crate::untrusted_sqlite::is_regular_table(&connection, table)?,
+                "Opening book table {table} is missing or not a regular table"
+            );
+        }
         let mut metadata = std::collections::HashMap::new();
         let mut dictionary = None;
         {

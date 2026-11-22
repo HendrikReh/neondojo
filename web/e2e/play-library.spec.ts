@@ -339,9 +339,9 @@ for (const primary of ['white', 'black'] as const) {
     }));
     expect(size.width).toBeGreaterThanOrEqual(size.text - 1);
     expect(size.width).toBeGreaterThan(30);
-    await page.locator('.database-table tbody tr').focus();
-    await expect(page.getByRole('tooltip')).toContainText(
-      'Competition · Independent',
+    await expect(page.locator('.database-table tbody tr')).toHaveAttribute(
+      'aria-description',
+      /Competition · Independent/,
     );
     await page.screenshot({
       path: test.info().outputPath(`match-name-${primary}.png`),
@@ -451,7 +451,7 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   ).toHaveCount(0);
   await expect(
     page
-      .getByRole('combobox', { name: 'Import destination' })
+      .getByRole('combobox', { name: 'Import into' })
       .locator('option:checked'),
   ).toHaveText('Unsorted');
   const matchRow = page

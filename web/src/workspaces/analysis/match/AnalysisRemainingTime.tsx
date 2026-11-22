@@ -79,7 +79,7 @@ export default function AnalysisRemainingTime({ job }: { job: Job }) {
     return null;
   const duration =
     timing?.remaining_ms != null
-      ? formatAnalysisDuration(timing.remaining_ms)
+      ? formatAnalysisDuration(locale, timing.remaining_ms)
       : null;
   const text =
     state === 'estimated' && duration

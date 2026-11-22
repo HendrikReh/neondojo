@@ -5,6 +5,9 @@ use std::{path::Path, process::Stdio, sync::OnceLock, time::Duration};
 use tokio::{io::AsyncReadExt, process::Command};
 use utoipa::ToSchema;
 
+mod installation;
+pub(crate) use installation::Installation;
+
 // Every application-created engine subprocess shares this gate. The benchmark
 // owns the writer for its entire run; its task-local scope avoids recursive reads.
 static ENGINE_WORK: tokio::sync::RwLock<()> = tokio::sync::RwLock::const_new(());
@@ -377,11 +380,22 @@ impl Engine {
             resolve_binary(&self.binary).context("Could not start GNUbg; check GNUBG_BIN")?;
         // A job may outlive an upgrade at the same path. Fence every native
         // invocation, including later games, dice batches and forced-pass calls.
-        if self.expected_version.is_some() {
-            self.version_unlocked(&binary)
-                .await
-                .context("Cannot execute the saved GNUbg job configuration")?;
-        }
+        let installation = match self.expected_version {
+            Some(_) => Some(
+                Installation::bind(self)
+                    .await
+                    .context("Cannot execute the saved GNUbg job configuration")?,
+            ),
+            None => None,
+        };
+        // Start exactly the executable that was checked.
+        let binary = installation
+            .as_ref()
+            .map_or(binary, |installation| installation.executable().to_owned());
+        // A direct binary proves its version with its own startup banner.
+        let mut startup = installation
+            .as_ref()
+            .filter(|installation| installation.reports_version_at_startup());
         let commands_path = directory.join("commands.txt");
         if let Some(threads) = self.threads {
             ensure!(
@@ -434,7 +448,21 @@ impl Engine {
                     output.len() <= MAX_OUTPUT as usize,
                     "GNUbg output limit exceeded"
                 );
+                // Stop another version before anyone observes its output.
+                if let Some(installation) = startup
+                    && let Some(end) = output.iter().position(|&byte| byte == b'\n')
+                {
+                    installation
+                        .check_startup_banner(self, &output[..end])
+                        .context("Cannot execute the saved GNUbg job configuration")?;
+                    startup = None;
+                }
                 observe(&output);
+            }
+            if let Some(installation) = startup {
+                installation
+                    .check_startup_banner(self, &output)
+                    .context("Cannot execute the saved GNUbg job configuration")?;
             }
             Ok::<_, anyhow::Error>(output)
         };
@@ -471,8 +499,9 @@ impl Engine {
         }
         // Discard output if an installation replacement raced the invocation;
         // no checkpoint or completed result may incorporate another version.
-        if self.expected_version.is_some() {
-            self.version_unlocked(&binary)
+        if let Some(installation) = &installation {
+            installation
+                .recheck(self)
                 .await
                 .context("GNUbg changed during execution; discarding the result")?;
         }
@@ -1142,6 +1171,174 @@ mod tests {
         assert!(error.to_string().contains("timed out"), "{error:#}");
         // The timed-out evaluation is dropped, which kills the hanging child.
         assert!(started.elapsed() < Duration::from_secs(5));
+    }
+
+    /// A wrapper fixture whose run executes `during_run` and logs every launch.
+    #[cfg(unix)]
+    fn fenced_wrapper(during_run: &str) -> (tempfile::TempDir, super::Engine) {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().to_str().unwrap();
+        std::fs::write(directory.path().join("version"), "GNU Backgammon fixture\n").unwrap();
+        let binary = directory.path().join("gnubg-wrapper");
+        std::fs::write(
+            &binary,
+            format!(
+                "#!/bin/sh\nif [ \"$1\" = --version ]; then echo version >>'{root}/launches'; cat '{root}/version'; exit 0; fi\necho run >>'{root}/launches'\ncat '{root}/version'\n{during_run}\n"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let engine = super::Engine::new(binary.to_str().unwrap().to_owned())
+            .with_expected_version(Some("GNU Backgammon fixture".into()));
+        (directory, engine)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn saved_version_run_rechecks_a_wrapper_and_its_bytes() {
+        let (directory, engine) = fenced_wrapper("");
+        let output = engine
+            .run_with_timeout(directory.path(), "", std::time::Duration::from_secs(5))
+            .await
+            .unwrap();
+        assert!(output.starts_with("GNU Backgammon fixture"));
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("launches")).unwrap(),
+            "version\nrun\nversion\n"
+        );
+        // Without a saved version no invocation is fenced.
+        let unfenced = super::Engine::new(engine.binary().to_owned());
+        std::fs::remove_file(directory.path().join("launches")).unwrap();
+        unfenced
+            .run_with_timeout(directory.path(), "", std::time::Duration::from_secs(5))
+            .await
+            .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("launches")).unwrap(),
+            "run\n"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn saved_version_run_discards_output_after_same_version_replacement() {
+        // The replacement reports the same version, so only its bytes differ.
+        let (directory, engine) = fenced_wrapper(
+            "cp \"$0\" \"$0.new\"; echo '# replaced' >>\"$0.new\"; mv \"$0.new\" \"$0\"",
+        );
+        let error = engine
+            .run_with_timeout(directory.path(), "", std::time::Duration::from_secs(5))
+            .await
+            .unwrap_err();
+        let error = format!("{error:#}");
+        assert!(
+            error.contains("GNUbg changed during execution")
+                && error.contains("installation changed"),
+            "{error}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn saved_version_run_rechecks_the_wrapper_target_version() {
+        let (directory, engine) =
+            fenced_wrapper("echo 'GNU Backgammon new' >\"$(dirname \"$0\")/version\"");
+        let error = engine
+            .run_with_timeout(directory.path(), "", std::time::Duration::from_secs(5))
+            .await
+            .unwrap_err();
+        let error = format!("{error:#}");
+        assert!(
+            error.contains("GNUbg changed during execution")
+                && error.contains("found 'GNU Backgammon new'"),
+            "{error}"
+        );
+    }
+
+    /// The real executable copied to a temporary path, so it is a direct
+    /// binary whose bytes the test can replace.
+    #[cfg(unix)]
+    fn copied_gnubg() -> (tempfile::TempDir, String, String) {
+        let source =
+            super::resolve_binary(&std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let binary = directory.path().join("gnubg");
+        std::fs::copy(&source, &binary).unwrap();
+        let version = std::process::Command::new(&binary)
+            .arg("--version")
+            .output()
+            .unwrap();
+        let version = String::from_utf8(version.stdout).unwrap();
+        let version = version.lines().next().unwrap().trim().to_owned();
+        (directory, binary.to_str().unwrap().to_owned(), version)
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    #[ignore = "requires a local native GNUbg binary"]
+    async fn saved_version_run_of_a_direct_binary_checks_its_banner_and_bytes() {
+        use std::time::{Duration, Instant};
+        let (directory, binary, version) = copied_gnubg();
+        let work = tempfile::tempdir().unwrap();
+        let fenced =
+            super::Engine::new(binary.clone()).with_expected_version(Some(version.clone()));
+        let output = fenced
+            .run_with_timeout(work.path(), "show threads\n", Duration::from_secs(10))
+            .await
+            .unwrap();
+        assert!(output.starts_with(&version));
+
+        // The banner of the running process is the saved-version check.
+        let error = super::Engine::new(binary.clone())
+            .with_expected_version(Some("GNU Backgammon 0.0".into()))
+            .run_with_timeout(work.path(), "show threads\n", Duration::from_secs(10))
+            .await
+            .unwrap_err();
+        let error = format!("{error:#}");
+        assert!(
+            error.contains("Cannot execute the saved GNUbg job configuration")
+                && error.contains(&format!("found '{version}'")),
+            "{error}"
+        );
+
+        // Fencing cost of one run: two version probes before, the bytes now.
+        let unfenced = super::Engine::new(binary.clone());
+        let started = Instant::now();
+        for _ in 0..5 {
+            unfenced.version().await.unwrap();
+            unfenced.version().await.unwrap();
+        }
+        let probes = started.elapsed() / 5;
+        let started = Instant::now();
+        for _ in 0..5 {
+            let installation = super::Installation::bind(&fenced).await.unwrap();
+            installation.recheck(&fenced).await.unwrap();
+        }
+        eprintln!(
+            "fence per run: two --version probes {probes:?}, digest before and after {:?}",
+            started.elapsed() / 5
+        );
+
+        // A replacement after the start reports the same version, yet differs.
+        let replace = format!(
+            "cp '{binary}' '{binary}.new' && printf x >>'{binary}.new' && mv '{binary}.new' '{binary}'"
+        );
+        let installation = super::Installation::bind(&fenced).await.unwrap();
+        assert!(installation.reports_version_at_startup());
+        assert!(
+            std::process::Command::new("/bin/sh")
+                .args(["-c", &replace])
+                .status()
+                .unwrap()
+                .success()
+        );
+        let error = installation.recheck(&fenced).await.unwrap_err();
+        assert!(
+            format!("{error:#}").contains("installation changed"),
+            "{error:#}"
+        );
+        drop(directory);
     }
 
     #[cfg(unix)]

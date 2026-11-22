@@ -1,10 +1,10 @@
 import { useI18n } from '../../../shared/i18n/i18n';
 import {
-  interpolate,
+  formatMessage,
   type Locale,
   type TranslationParams,
 } from '../../../shared/i18n/i18n-core';
-const rows = {
+export const sourceMessageRows = {
   imported: [
     'Imported analysis',
     'Importierte Analyse',
@@ -91,7 +91,7 @@ const rows = {
     '{count, plural, one {# Spielstandkontext} other {# Spielstandkontexte}}',
     '{count, plural, one {# contexto de marcador} other {# contextos de marcador}}',
     '{count, plural, one {# contexte de score} other {# contextes de score}}',
-    'Konteksty wyniku: {count}',
+    '{count, plural, one {# kontekst wyniku} few {# konteksty wyniku} many {# kontekstów wyniku}}',
     '{count, plural, one {# contesto di punteggio} other {# contesti di punteggio}}',
   ],
   configurationHelp: [
@@ -379,14 +379,25 @@ const rows = {
     'BackgammonDB combina posizione e lancio nella chiave. Il cubo usa una chiave senza dadi. I risultati XG mantengono le proprie etichette.',
   ],
 } as const;
-type Key = keyof typeof rows;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
+type Key = keyof typeof sourceMessageRows;
+export const sourceMessageLocales: Locale[] = [
+  'en',
+  'de',
+  'es',
+  'fr',
+  'pl',
+  'it',
+];
 export function sourceText(
   locale: Locale,
   key: Key,
   params: TranslationParams = {},
 ) {
-  return interpolate(rows[key][locales.indexOf(locale)], params, locale);
+  return formatMessage(
+    locale,
+    sourceMessageRows[key][sourceMessageLocales.indexOf(locale)],
+    params,
+  );
 }
 export function useSourceText() {
   const { locale } = useI18n();

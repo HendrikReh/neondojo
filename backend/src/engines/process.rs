@@ -11,6 +11,14 @@ use tokio::{
 
 const MAX_REQUEST: usize = 262_144;
 const MAX_RESPONSE: u64 = 2_097_152;
+/// The profile's thread count is NeonGammon's only parallelism: OpenMP,
+/// OpenBLAS and Apple Accelerate (vecLib) must not start their own pools.
+/// `tools/probe_open_sage.py` starts its worker with the same values.
+const SINGLE_THREADED_MATH: [(&str, &str); 3] = [
+    ("OMP_NUM_THREADS", "1"),
+    ("OPENBLAS_NUM_THREADS", "1"),
+    ("VECLIB_MAXIMUM_THREADS", "1"),
+];
 // One worker for playing and one for everything else, each behind its own
 // lock. A game retains its general worker, but each exchange reserves threads
 // separately so a waiting play request can run between evaluations. Benchmarks
@@ -108,8 +116,7 @@ impl Worker {
         );
         let mut child = Command::new(&profile.python)
             .args(["-I", "-u", "-c", &script])
-            .env("OMP_NUM_THREADS", "1")
-            .env("OPENBLAS_NUM_THREADS", "1")
+            .envs(SINGLE_THREADED_MATH)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -431,6 +438,11 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
             }
             Ok(())
         }
+        Some("cube") if request.get("decision_only") == Some(&Value::Bool(true)) => {
+            serde_json::from_value::<super::SageCubeDecision>(result.clone())
+                .context("Invalid NeonGammon cube decision response")?
+                .validate()
+        }
         Some("cube") => {
             let cube: super::SageCubeEvaluation = serde_json::from_value(result.clone())
                 .context("Invalid NeonGammon cube response")?;
@@ -503,6 +515,8 @@ mod tests {
 import json, os, pathlib, sys, time
 root = pathlib.Path(__file__).parent
 (root / 'pid').write_text(str(os.getpid()))
+(root / 'environment').write_text(json.dumps({key: os.environ.get(key) for key in
+    ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS')}))
 mode = MODE
 for line in sys.stdin:
     request = json.loads(line)
@@ -791,6 +805,31 @@ for line in sys.stdin:
         }
     }
 
+    #[test]
+    fn only_decision_only_cube_responses_may_omit_probabilities() {
+        let profile = FakeWorker::new("clean").profile;
+        let decision = json!({"no_double":0.2,"take":0.3,"pass":1.0});
+        let full = json!({"no_double":0.2,"take":0.3,"pass":1.0,
+                          "probabilities":[0.6,0.1,0.01,0.4,0.1,0.01]});
+        let scoped = json!({"operation":"cube","decision_only":true});
+        for request in [
+            json!({"operation":"cube"}),
+            json!({"operation":"cube","decision_only":false}),
+        ] {
+            validate_payload(&profile, &request, &full).unwrap();
+            assert!(validate_payload(&profile, &request, &decision).is_err());
+        }
+        validate_payload(&profile, &scoped, &decision).unwrap();
+        assert!(
+            validate_payload(
+                &profile,
+                &scoped,
+                &json!({"no_double":0.2,"take":null,"pass":1.0})
+            )
+            .is_err()
+        );
+    }
+
     #[tokio::test]
     async fn framing_faults_discard_and_reap_worker() {
         let _serial = TEST_LOCK.lock().await;
@@ -868,6 +907,49 @@ for line in sys.stdin:
         drop(GENERAL.lock().await.take());
         assert_reaped(&pid).await;
     }
+
+    #[test]
+    fn diagnostic_probe_starts_its_worker_with_the_same_math_threads() {
+        let probe = include_str!("../../../tools/probe_open_sage.py");
+        let line = probe
+            .lines()
+            .find(|line| line.starts_with("SINGLE_THREADED_MATH = "))
+            .expect("probe lists its math library threads");
+        let listed: Vec<&str> = line.split('\'').skip(1).step_by(2).collect();
+        let expected: Vec<&str> = SINGLE_THREADED_MATH
+            .iter()
+            .flat_map(|(key, value)| [*key, *value])
+            .collect();
+        assert_eq!(listed, expected);
+    }
+
+    #[tokio::test]
+    async fn workers_and_probes_disable_native_math_thread_pools() {
+        let _serial = TEST_LOCK.lock().await;
+        let single = json!({"OMP_NUM_THREADS":"1","OPENBLAS_NUM_THREADS":"1",
+                            "VECLIB_MAXIMUM_THREADS":"1"});
+        let worker = FakeWorker::new("healthy");
+        request(
+            &worker.profile,
+            json!({"operation":"identity"}),
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        let check = FakeWorker::new("healthy");
+        probe(&check.profile).await.unwrap();
+        for fake in [&worker, &check] {
+            let environment: Value = serde_json::from_str(
+                &std::fs::read_to_string(fake.directory.path().join("environment")).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(environment, single);
+        }
+        drop(GENERAL.lock().await.take());
+        assert_reaped(&worker.pid()).await;
+        assert_reaped(&check.pid()).await;
+    }
+
     #[tokio::test]
     async fn installation_probe_leaves_verified_worker_available() {
         let _serial = TEST_LOCK.lock().await;

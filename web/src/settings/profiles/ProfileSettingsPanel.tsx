@@ -13,6 +13,7 @@ import ProfileActionDialog from './ProfileActionDialog';
 import ProfileSummary from './ProfileSummary';
 import { profileChangeRows } from './profile-changes';
 import './profiles.css';
+import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 
 export default function ProfileSettingsPanel() {
   const config = useConfiguration(),
@@ -77,7 +78,7 @@ export default function ProfileSettingsPanel() {
     activeProfile.configuration,
     config.current,
   ).length;
-  const dateFormat = new Intl.DateTimeFormat(locale, {
+  const dateFormat = dateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
@@ -86,7 +87,7 @@ export default function ProfileSettingsPanel() {
     {
       title: string;
       message: string;
-      choices: { label: string; action: () => void }[];
+      choices: { label: string; action: () => void; primary?: boolean }[];
     }
   > = {
     switch: {
@@ -95,6 +96,7 @@ export default function ProfileSettingsPanel() {
       choices: [
         {
           label: t('saveSwitch'),
+          primary: true,
           action: () =>
             void run(() => config.activateProfile(selected, 'save_current')),
         },

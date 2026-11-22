@@ -28,6 +28,22 @@
 a.action-button--compact {
   text-decoration: none;
 }
+/* A disabled icon stays legible (at least 3:1 against the button) instead of
+   fading the whole button. */
+.app-shell .action-button--compact:disabled {
+  opacity: 1;
+  color: color-mix(in srgb, var(--ui-muted) 85%, var(--ui-surface));
+}
+/* An available destructive action is tinted red. Confirmation dialogs scope
+   their solid .danger buttons more specifically. */
+.action-button.danger:not(:disabled) {
+  color: var(--ui-danger-text);
+  border-color: color-mix(in srgb, var(--ui-danger-text) 45%, var(--ui-border));
+}
+.action-button.danger:hover:not(:disabled) {
+  background: var(--ui-danger-bg);
+  border-color: var(--ui-danger-text);
+}
 /* A shortcut is shown on its button, so nobody has to hover to learn it.
    The keycap follows the button's text color, so it reads on primary buttons
    too; the accessible name stays the label and aria-keyshortcuts names the
@@ -73,16 +89,16 @@ a.action-button--compact {
   box-sizing: border-box;
   overflow: auto;
   padding: 8px 10px;
-  border: 1px solid #ffffff22;
+  border: 1px solid color-mix(in srgb, var(--ui-surface) 13%, transparent);
   border-radius: 6px;
-  background: #172033;
-  color: #fff;
+  background: var(--ui-text);
+  color: var(--ui-surface);
   font: 400 12px/1.45 var(--font-ui, sans-serif);
   text-align: left;
   text-transform: none;
   letter-spacing: normal;
   white-space: pre-line;
   overflow-wrap: anywhere;
-  box-shadow: 0 5px 20px #0003;
+  box-shadow: 0 5px 20px var(--ui-shadow);
   cursor: default;
 }

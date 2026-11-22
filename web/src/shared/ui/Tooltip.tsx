@@ -12,7 +12,7 @@ import {
 import { createPortal } from 'react-dom';
 import { useActionTooltip, type TooltipText } from './useActionTooltip';
 
-type Trigger = 'button' | 'input' | 'select' | 'span' | 'tr' | 'g';
+type Trigger = 'button' | 'input' | 'select' | 'span' | 'summary' | 'tr' | 'g';
 
 export default function Tooltip<Tag extends Trigger>({
   as,

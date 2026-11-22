@@ -2,17 +2,24 @@ import { expect, test } from './test';
 
 test('all-games Cube review wraps across games', async ({ page }) => {
   test.setTimeout(90_000);
-  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  await page.addInitScript(() => {
+    localStorage.setItem('neondojo.locale', 'en');
+    // Review only the first player's cube errors from the start.
+    sessionStorage.setItem(
+      'neondojo.session.analysis.cubeReview.v1',
+      JSON.stringify({ player: '0', severity: '', errors_only: true }),
+    );
+  });
   await page.goto('/');
   await page
     .getByLabel('Match file', { exact: true })
     .setInputFiles('../backend/tests/fixtures/WC2014.xg');
+  await expect(page.locator('.board-heading')).toContainText('Game 1');
   await page.getByRole('tab', { name: 'Cube', exact: true }).click();
-  await page
-    .getByLabel('Filter analysis by player', { exact: true })
-    .selectOption('0');
+  await expect(
+    page.getByLabel('Filter analysis by player', { exact: true }),
+  ).toHaveValue('0');
   const board = page.getByRole('group', { name: 'Review errors' });
-  const heading = page.locator('.board-heading');
   const next = board.getByRole('button', { name: 'Next error', exact: true });
   const previous = board.getByRole('button', {
     name: 'Previous error',
@@ -21,14 +28,10 @@ test('all-games Cube review wraps across games', async ({ page }) => {
   await expect(page.getByLabel('Filter by game', { exact: true })).toHaveValue(
     '',
   );
-  await expect(heading).toContainText('Game 1');
   await expect(board).toContainText(
     'All games in this analysis · Akiko Yazawa',
   );
-  await expect(board.locator('.board-error-count')).toHaveText(
-    /^Errors: [1-9]/,
-  );
-  await next.click();
+  // Opening Cube steps from game 1 to the first matching error, in game 3.
   await expect(page.getByLabel('Select game', { exact: true })).toHaveValue(
     '3',
   );
@@ -180,8 +183,7 @@ test('imported decisions work in error navigation without a local job', async ({
   const next = page.getByRole('button', { name: 'Next error', exact: true });
   const counter = page.getByRole('group', { name: 'Review errors' });
   await expect(next).toBeEnabled();
-  await expect(counter).toContainText('Errors: 2');
-  await next.click();
+  // Opening Cube selects the first error.
   await expect(page.locator('.board-heading')).toContainText('Move 2');
   await expect(counter).toContainText('Error 1 of 2');
   const comparison = page.locator('.board-panel .board-decision-comparison');
@@ -242,6 +244,13 @@ test('real XG review opens checker and cube decisions with original source and r
         JSON.stringify({ matchId: id, gameNo: 1 }),
       ),
     match.id,
+  );
+  // Cube review includes every decision, so opening Cube selects the next one.
+  await page.addInitScript(() =>
+    sessionStorage.setItem(
+      'neondojo.session.analysis.cubeReview.v1',
+      JSON.stringify({ player: '', severity: '', errors_only: false }),
+    ),
   );
   const reviews = await page.request.get(
     `/api/matches/${match.id}/review-decisions?game_no=1&errors_only=false&limit=100`,
@@ -337,9 +346,10 @@ test('real XG review opens checker and cube decisions with original source and r
     name: 'Nächste Entscheidung',
     exact: true,
   });
-  await page.locator('.match-analysis-filters input[type=checkbox]').uncheck();
+  await expect(
+    page.locator('.match-analysis-filters input[type=checkbox]'),
+  ).not.toBeChecked();
   await expect(nextDecision).toBeEnabled();
-  await nextDecision.click();
   await expect(page.locator('.board-panel [data-dice]')).toHaveAttribute(
     'data-dice',
     '0-0',
@@ -438,6 +448,11 @@ test('the board crosses a late review page without scanning the earlier pages ag
         'neondojo.workspace',
         JSON.stringify({ matchId, gameNo }),
       );
+      // Opening Cube then selects the next decision after the board position.
+      sessionStorage.setItem(
+        'neondojo.session.analysis.cubeReview.v1',
+        JSON.stringify({ player: '', severity: '', errors_only: false }),
+      );
     },
     { matchId: match.id, gameNo: anchor.game_no },
   );
@@ -459,7 +474,6 @@ test('the board crosses a late review page without scanning the earlier pages ag
     exact: true,
   });
   const ordinal = startPage * pageSize;
-  await next.click();
   const count = board.locator('.board-error-count');
   await expect(count).toHaveText(/^Decision \d+ of /);
   const current = Number(

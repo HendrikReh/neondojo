@@ -11,6 +11,7 @@ import {
   formatAnalysisDuration,
 } from './analysis-time-estimate-messages';
 import './analysis-time-estimate.css';
+import { dateTimeFormat } from '../../../shared/i18n/i18n-core';
 
 export default function AnalysisTimeEstimate({
   matchId,
@@ -84,7 +85,7 @@ export default function AnalysisTimeEstimate({
   }, [key, unavailable, matchId, plies, engineId, selectedGame]);
   const duration =
     value?.estimated_ms != null
-      ? formatAnalysisDuration(value.estimated_ms)
+      ? formatAnalysisDuration(locale, value.estimated_ms)
       : null;
   const reason =
     unavailable ??
@@ -125,7 +126,7 @@ export default function AnalysisTimeEstimate({
               }
               format={(engine) =>
                 text('basis', {
-                  date: new Intl.DateTimeFormat(locale, {
+                  date: dateTimeFormat(locale, {
                     dateStyle: 'medium',
                   }).format(new Date(value.benchmark!.finished_at)),
                   engine,

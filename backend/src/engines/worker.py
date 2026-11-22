@@ -72,6 +72,8 @@ class Runtime:
         self.identity = self.check_identity()
         if self.identity['package_version'] == '3.1.0' and not callable(getattr(self.sage, 'DifficultyPolicy', None)):
             raise ValueError('NeonGammon 3.1.0 did not export DifficultyPolicy')
+        if not callable(getattr(self.sage.BgBotAnalyzer, 'cube_decision', None)):
+            raise ValueError('NeonGammon did not export BgBotAnalyzer.cube_decision; install the locked wheels')
         expected = profile.get('artifact_fingerprint')
         if expected and expected != self.identity['artifact_fingerprint']:
             raise ValueError('NeonGammon assets changed since submission; restore the saved installation')
@@ -107,8 +109,25 @@ class Runtime:
                 'artifact_fingerprint': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()}
 
     def verify(self):
+        """Complete check: hash every locked file again and record the metadata guarding it."""
+        # Record the metadata first: a change made while hashing leaves the
+        # record stale, so the next guarded check repeats the complete one.
+        paths = self.integrity['locked_paths'](self.sage, self.native)
+        snapshot = self.integrity['stat_snapshot'](paths)
         if self.check_identity() != self.identity:
             raise ValueError('NeonGammon installation changed during evaluation')
+        self.guard = paths, snapshot
+
+    def verify_unchanged(self):
+        """Steady-state check around a single request.
+
+        Unchanged metadata of every locked path, recorded at the last complete
+        check, stands for that check; any difference runs the complete check
+        immediately, which rejects a changed installation as before.
+        """
+        guard = getattr(self, 'guard', None)
+        if guard is None or self.integrity['stat_snapshot'](guard[0]) != guard[1]:
+            self.verify()
 
     def top_two_candidates(self, before, moves, context):
         if len(moves) < 2 or self.sage.board.is_race(before):
@@ -179,7 +198,7 @@ class Runtime:
         if self.batch_active and operation not in ('checker', 'cube'):
             raise ValueError('Unsupported integrity batch operation')
         if not self.batch_active:
-            self.verify()
+            self.verify_unchanged()
         # Engine work only: integrity checks before and after stay outside.
         cpu_before, wall_before = process_cpu_us(), time.perf_counter_ns()
         if request['operation'] == 'identity':
@@ -261,7 +280,8 @@ class Runtime:
                 if dice[0] and dice[1]:
                     continuation = self.analyzer.checker_play(before, *dice, **kwargs).moves[0].equity
                 else:
-                    continuation = self.analyzer.cube_action(before, **kwargs).equity_nd
+                    # Only the no-double equity matters; skip cube_action's probability search.
+                    continuation = self.analyzer.cube_decision(before, **kwargs).equity_nd
                 # Independent terminal outcome for the offered single/gammon/
                 # backgammon. Sage performs its own match-equity conversion.
                 terminal = [0] * 26
@@ -275,21 +295,36 @@ class Runtime:
             elif request['operation'] == 'cube':
                 if self.cubeless:
                     raise ValueError('A cubeless NeonGammon profile makes no cube decisions')
-                result = self.analyzer.cube_action(before, **kwargs)
-                try:
-                    self.integrity['validate_result'](result, probabilities)
-                    if result.eval_level != f"{self.profile['plies']}-ply":
+                decision_only = request.get('decision_only', False)
+                if type(decision_only) is not bool:
+                    raise ValueError('Invalid cube decision scope')
+                depth = f"{self.profile['plies']}-ply"
+                if decision_only:
+                    # Same equities as cube_action, without its second, cubeless
+                    # search for probabilities the caller does not use.
+                    result = self.analyzer.cube_decision(before, **kwargs)
+                    equities = (result.equity_nd, result.equity_dt, result.equity_dp, result.optimal_equity)
+                    if not all(math.isfinite(value) for value in equities):
+                        raise ValueError(f'Invalid cube decision: board={before}, context={context}')
+                    if result.eval_level != depth:
                         raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
-                except Exception as error:
-                    raise ValueError(f'Invalid cube evaluation: probabilities={result.probs.to_list()}, board={before}, context={context}; {error}') from error
-                result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp,
-                          'probabilities': probabilities(result.probs.to_list())}
+                    result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp}
+                else:
+                    result = self.analyzer.cube_action(before, **kwargs)
+                    try:
+                        self.integrity['validate_result'](result, probabilities)
+                        if result.eval_level != depth:
+                            raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
+                    except Exception as error:
+                        raise ValueError(f'Invalid cube evaluation: probabilities={result.probs.to_list()}, board={before}, context={context}; {error}') from error
+                    result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp,
+                              'probabilities': probabilities(result.probs.to_list())}
             else:
                 raise ValueError('Unsupported sidecar operation')
         cost = {'cpu_us': process_cpu_us() - cpu_before,
                 'wall_us': (time.perf_counter_ns() - wall_before) // 1000}
         if not self.batch_active:
-            self.verify()
+            self.verify_unchanged()
         return result, cost
 
 

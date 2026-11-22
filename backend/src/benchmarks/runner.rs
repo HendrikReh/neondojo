@@ -39,7 +39,7 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
     let watch = async {
         let mut renewed = Instant::now();
         loop {
-            tokio::time::sleep(Duration::from_millis(100)).await;
+            tokio::time::sleep(Duration::from_millis(500)).await;
             let active: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE id=$1 AND status='running' AND worker_token=$2 AND lease_until>now())")
                 .bind(run.id).bind(token).fetch_one(&state.pool).await?;
             ensure!(active, "Benchmark cancelled or worker ownership lost");

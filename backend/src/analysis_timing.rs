@@ -228,12 +228,37 @@ pub(crate) async fn start_game(pool: &PgPool, job: &Job, token: Uuid) -> Result<
 /// Persist only a monotonic duration; wall-clock timestamps are ownership/start
 /// metadata and never become elapsed analysis time. Run concurrently with work
 /// so a checkpoint's row lock cannot prevent that checkpoint from committing.
+/// Sample the running game's elapsed time every `interval` until the job's
+/// lease is lost. A sample that fails, for example because no database
+/// connection is free, is only logged: the estimate misses one sample, and the
+/// lease heartbeat decides whether the job still owns its lease.
+pub(crate) async fn sample_until_lease_lost(
+    pool: &PgPool,
+    job: &Job,
+    token: Uuid,
+    started: std::time::Instant,
+    interval: std::time::Duration,
+) -> Result<()> {
+    loop {
+        tokio::time::sleep(interval).await;
+        match sample_game(pool, job, token, started.elapsed().as_secs_f64() * 1000.0).await {
+            Ok(true) => {}
+            Ok(false) => anyhow::bail!("Job lease was lost"),
+            Err(error) => {
+                tracing::warn!(job = %job.id, error = %format!("{error:#}"), "Skipping an analysis time sample");
+            }
+        }
+    }
+}
+
+/// Save the running game's elapsed time. Returns `false` when the job no
+/// longer owns its lease.
 pub(crate) async fn sample_game(
     pool: &PgPool,
     job: &Job,
     token: Uuid,
     elapsed_ms: f64,
-) -> Result<()> {
+) -> Result<bool> {
     let changed = sqlx::query(
         r#"
         UPDATE match_analysis_timing t SET active_elapsed_ms=GREATEST(active_elapsed_ms,$4)
@@ -253,9 +278,9 @@ pub(crate) async fn sample_game(
         // waited for its row lock. That is benign only for the live owner.
         let owns: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM jobs WHERE id=$1 AND lease_token=$2 AND attempts=$3 AND status='running' AND lease_until>statement_timestamp())")
             .bind(job.id).bind(token).bind(job.attempts).fetch_one(pool).await?;
-        ensure!(owns, "Job lease was lost");
+        return Ok(owns);
     }
-    Ok(())
+    Ok(true)
 }
 async fn touch(tx: &mut Transaction<'_, Postgres>, id: Uuid, token: Uuid) -> Result<()> {
     sqlx::query("UPDATE jobs SET updated_at=clock_timestamp() WHERE id=$1 AND lease_token=$2")
@@ -325,8 +350,8 @@ mod tests {
             .unwrap();
         assert!(start_game(&pool, &job, Uuid::new_v4()).await.is_err());
         start_game(&pool, &job, token).await.unwrap();
-        sample_game(&pool, &job, token, 1000.0).await.unwrap();
-        sample_game(&pool, &job, token, 500.0).await.unwrap();
+        assert!(sample_game(&pool, &job, token, 1000.0).await.unwrap());
+        assert!(sample_game(&pool, &job, token, 500.0).await.unwrap());
         let sampled: f64 = sqlx::query_scalar(
             "SELECT active_elapsed_ms FROM match_analysis_timing WHERE job_id=$1",
         )
@@ -339,9 +364,10 @@ mod tests {
             "a saved monotonic duration never goes backwards"
         );
         assert!(
-            sample_game(&pool, &job, Uuid::new_v4(), 9000.0)
+            !sample_game(&pool, &job, Uuid::new_v4(), 9000.0)
                 .await
-                .is_err()
+                .unwrap(),
+            "a stale worker no longer owns the lease"
         );
         let mut tx = pool.begin().await.unwrap();
         assert!(
@@ -363,10 +389,13 @@ mod tests {
             "sampler waits for the confirmation row lock"
         );
         tx.commit().await.unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(1), pending_sample)
-            .await
-            .expect("confirmation must release the sampler without deadlocking")
-            .expect("normal active clear must not fail the completed game");
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_secs(1), pending_sample)
+                .await
+                .expect("confirmation must release the sampler without deadlocking")
+                .unwrap(),
+            "normal active clear must not fail the completed game"
+        );
         let cleared: f64 = sqlx::query_scalar(
             "SELECT active_elapsed_ms FROM match_analysis_timing WHERE job_id=$1",
         )
@@ -405,5 +434,64 @@ mod tests {
         let mut tx = pool.begin().await.unwrap();
         assert!(confirm_game(&mut tx, &job, token, 0, 9999.0).await.is_err());
         tx.rollback().await.unwrap();
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn failed_samples_are_skipped_until_the_lease_is_lost(pool: PgPool) {
+        use std::time::{Duration, Instant};
+        let sgf = "(;GM[6]FF[4]MI[length:7][ws:0][bs:0];W[31hefe])";
+        let imported = store::import_match(
+            &pool,
+            "samples.sgf",
+            "sgf",
+            sgf.as_bytes(),
+            sgf,
+            &crate::import::parse_sgf(sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+        let job = store::create_match_job(&pool, imported.r#match.id, 1, 1)
+            .await
+            .unwrap();
+        let token = Uuid::new_v4();
+        sqlx::query("UPDATE jobs SET status='running',attempts=1,lease_token=$2,lease_until=now()+interval '120 seconds' WHERE id=$1").bind(job.id).bind(token).execute(&pool).await.unwrap();
+        let job = store::get_job(&pool, job.id).await.unwrap().unwrap();
+        // A saturated pool: every sample times out waiting for a connection.
+        let busy = sqlx::postgres::PgPoolOptions::new()
+            .max_connections(1)
+            .acquire_timeout(Duration::from_millis(250))
+            .test_before_acquire(false)
+            .connect_with((*pool.connect_options()).clone())
+            .await
+            .unwrap();
+        let held = busy.acquire().await.unwrap();
+        let started = Instant::now();
+        let mut sampler = Box::pin(sample_until_lease_lost(
+            &busy,
+            &job,
+            token,
+            started,
+            Duration::from_millis(10),
+        ));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(700), &mut sampler)
+                .await
+                .is_err(),
+            "failed samples must not end the running analysis"
+        );
+        drop(held);
+        // A replaced worker owns the job now; the sampler stops this one.
+        sqlx::query("UPDATE jobs SET lease_token=$2 WHERE id=$1")
+            .bind(job.id)
+            .bind(Uuid::new_v4())
+            .execute(&pool)
+            .await
+            .unwrap();
+        let error = tokio::time::timeout(Duration::from_secs(5), sampler)
+            .await
+            .expect("lease loss must stop the sampler")
+            .unwrap_err();
+        assert_eq!(error.to_string(), "Job lease was lost");
+        busy.close().await;
     }
 }

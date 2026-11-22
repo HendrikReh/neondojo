@@ -3,6 +3,7 @@ import Tooltip from '../../../shared/ui/Tooltip';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { usePositionText } from '../../positions/position-browser-messages';
 import type { PracticeHistoryPage } from './similar-practice-history-api';
+import { dateTimeFormat } from '../../../shared/i18n/i18n-core';
 
 const tickFractions = [1, 0.75, 0.5, 0.25, 0];
 const rollingWindows = [5, 10, 20];
@@ -66,14 +67,14 @@ export default function SimilarPracticeChart({
   const selectedId = rounds.some(({ id }) => id === focusedId)
     ? focusedId
     : last.id;
-  const day = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' });
-  const dateTime = new Intl.DateTimeFormat(locale, {
+  const day = dateTimeFormat(locale, { dateStyle: 'medium' });
+  const dateTime = dateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'medium',
   });
   const formatDate =
     day.format(first.time) === day.format(last.time)
-      ? new Intl.DateTimeFormat(locale, {
+      ? dateTimeFormat(locale, {
           dateStyle: 'medium',
           timeStyle: duration < 60_000 ? 'medium' : 'short',
         })

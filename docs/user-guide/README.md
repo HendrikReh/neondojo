@@ -693,7 +693,7 @@ Details: [Version information](../reference/extras.md#version-information)
 
 The **Profile** button in the header shows the active configuration profile. It is marked *modified* when your current settings differ from the saved profile. Open it to:
 
-- switch to another profile,
+- switch to another profile; with unsaved changes, **Save and switch** keeps them in the current profile first,
 - choose **Show changes** to list each changed setting with its saved and current value, and restore single values with the arrow,
 - choose **Manage profiles** to open **Settings → Profiles**.
 

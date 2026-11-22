@@ -3,6 +3,7 @@ import { catalogs } from './i18n-catalogs';
 import { projectMove } from '../board/move-preview';
 import {
   AppError,
+  dateTimeFormat,
   formatLocalizedError,
   formatMessage,
   interpolate,
@@ -334,5 +335,24 @@ describe('numberFormat', () => {
     expect(numberFormat('de')).not.toBe(numberFormat('de', options));
     expect(numberFormat('de', options).format(0.05)).toBe('0,050');
     expect(numberFormat('en', options).format(0.05)).toBe('0.050');
+  });
+});
+
+describe('dateTimeFormat', () => {
+  it('reuses one formatter per locale and options', () => {
+    const options = { dateStyle: 'medium', timeZone: 'UTC' } as const;
+    expect(dateTimeFormat('de', options)).toBe(
+      dateTimeFormat('de', { ...options }),
+    );
+    expect(dateTimeFormat('de', options)).not.toBe(
+      dateTimeFormat('fr', options),
+    );
+    expect(dateTimeFormat('de')).not.toBe(dateTimeFormat('de', options));
+    expect(dateTimeFormat('de', { dateStyle: 'short' })).not.toBe(
+      dateTimeFormat('de', { dateStyle: 'medium' }),
+    );
+    const date = new Date('2026-11-22T12:00:00Z');
+    expect(dateTimeFormat('de', options).format(date)).toBe('22.11.2026');
+    expect(dateTimeFormat('en', options).format(date)).toBe('Nov 22, 2026');
   });
 });

@@ -3438,9 +3438,17 @@ export interface components {
             /** @description Complete ordered checker steps in board coordinates. An empty list is a forced pass. */
             steps: components["schemas"]["PlayStep"][];
         };
-        CheckerPracticeScore: components["schemas"]["CheckerPracticeAnswer"] & {
+        /**
+         * @description A checker move graded like a Study answer: by the configured analysis
+         *     engine at no more than its practice depth. A forced pass is not evaluated
+         *     and has no engine, depth or equities.
+         */
+        CheckerPracticeScore: {
+            best: string;
             /** Format: double */
-            best_equity: number;
+            best_equity?: number | null;
+            depth?: string | null;
+            engine?: string | null;
             /**
              * Format: double
              * @description Best minus played normalized cubeful equity, from the mover's perspective.
@@ -3448,7 +3456,7 @@ export interface components {
             equity_loss: number;
             played: string;
             /** Format: double */
-            played_equity: number;
+            played_equity?: number | null;
         };
         CheckerTurn: {
             /** @description The die used by each step, in the same order. */
@@ -12544,7 +12552,31 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

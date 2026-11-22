@@ -3,7 +3,7 @@ import { DeckDialog } from './DeckLibraryDialogs';
 import ActionButton from '../../../shared/ui/ActionButton';
 import { useCardPracticeText } from './card-practice-messages';
 import { useI18n } from '../../../shared/i18n/i18n';
-import { AppError } from '../../../shared/i18n/i18n-core';
+import { AppError, dateTimeFormat } from '../../../shared/i18n/i18n-core';
 import {
   actOnAnkiSync,
   loadAnkiSyncHistory,
@@ -141,7 +141,7 @@ function SyncHistory({
     failed: 'ankiHistoryNoFailures',
     open: 'ankiHistoryNoOpenFailures',
   } as const;
-  const date = new Intl.DateTimeFormat(locale, {
+  const date = dateTimeFormat(locale, {
     dateStyle: 'short',
     timeStyle: 'medium',
   });
@@ -390,7 +390,7 @@ export default function AnkiSyncOverview({
   const succeeded =
     bulk?.results.filter(({ attempt }) => attempt?.outcome === 'synced')
       .length ?? 0;
-  const date = new Intl.DateTimeFormat(locale, {
+  const date = dateTimeFormat(locale, {
     dateStyle: 'short',
     timeStyle: 'short',
   });

@@ -68,7 +68,7 @@ fn reference_for(
     let value = &mut reference.protocol;
     match EngineId::parse(engine) {
         Some(EngineId::NeonGammon) => {
-            value.id = format!("bgsage-match-v3-{plies}ply-4threads");
+            value.id = format!("bgsage-match-v4-{plies}ply-4threads");
             value.process_strategy =
                 "persistent-worker-atomic-game-verified-at-both-boundaries".into();
             value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
@@ -294,18 +294,15 @@ async fn create(
 #[utoipa::path(post, path="/api/benchmarks/play", request_body=Option<PlayBenchmarkRequest>, responses((status=202,body=BenchmarkRun),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
 async fn create_play(
     State(state): State<AppState>,
-    body: axum::body::Bytes,
+    payload: Option<crate::json_errors::Json<PlayBenchmarkRequest>>,
 ) -> ApiResult<(StatusCode, Json<BenchmarkRun>)> {
     let settings = crate::settings::load(&state).await?;
-    let payload: Option<PlayBenchmarkRequest> = if body.is_empty() {
-        None
-    } else {
-        serde_json::from_slice(&body).map_err(|e| ApiError::invalid(e.to_string()))?
-    };
-    let request = payload.unwrap_or(PlayBenchmarkRequest {
-        engine_id: settings.play_engine,
-        plies: settings.play_plies,
-    });
+    let request = payload
+        .map(|payload| payload.0)
+        .unwrap_or(PlayBenchmarkRequest {
+            engine_id: settings.play_engine,
+            plies: settings.play_plies,
+        });
     if !crate::configuration::engine_depths(&request.engine_id, "play").contains(&request.plies) {
         return Err(ApiError::invalid("Unsupported play benchmark profile"));
     }
@@ -493,14 +490,27 @@ mod tests {
             "bgsage",
             4,
             None,
-            "bgsage-match-v3-4ply-4threads"
+            "bgsage-match-v4-4ply-4threads"
         ));
         assert!(!known_protocol_id(
             "bgsage",
             4,
             None,
-            "bgsage-match-v3-3ply-4threads"
+            "bgsage-match-v4-3ply-4threads"
         ));
+        // v3 timings predate the cheaper per-request checks and stay historical.
+        assert!(!known_protocol_id(
+            "bgsage",
+            4,
+            None,
+            "bgsage-match-v3-4ply-4threads"
+        ));
+        assert_eq!(
+            play_latency::reference_for("bgsage", 2)
+                .unwrap()
+                .protocol_id,
+            "bgsage-checker-turn-v4-2ply-2threads-gnubg-rules"
+        );
         assert!(known_protocol_id("gnubg", 2, None, "gnubg-match-v1"));
     }
 }

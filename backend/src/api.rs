@@ -74,6 +74,15 @@ impl AppState {
         self.job_heartbeat = interval;
         self
     }
+
+    /// Sets how long a database restore waits for background work it cannot
+    /// stop (`preflight`) and then for running requests and stopped analysis
+    /// jobs to release the database (`drain`). Call it before sharing the state.
+    #[cfg(test)]
+    pub(crate) fn with_restore_waits(mut self, preflight: Duration, drain: Duration) -> Self {
+        self.backup = Arc::new(crate::database_backup::Access::with_waits(preflight, drain));
+        self
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -191,6 +200,9 @@ pub fn router(state: AppState) -> Router {
                     header::HeaderName::from_static("last-event-id"),
                 ]),
         )
+        // Outside CORS and every merged router, including the backup routes;
+        // inside tracing, so rejected requests are still logged.
+        .layer(middleware::from_fn(crate::local_origin::guard))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -1069,7 +1081,7 @@ async fn events(
 #[openapi(
     info(
         title = "NeonDojo API",
-        description = "Local headless backgammon library with GNUbg and NeonGammon analysis. No authentication; bind to loopback."
+        description = "Local headless backgammon library with GNUbg and NeonGammon analysis. No authentication; bind to loopback. Requests whose Host is not a loopback name, and unsafe requests from a foreign Origin, receive HTTP 403."
     ),
     paths(
         health,

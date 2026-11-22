@@ -137,8 +137,23 @@ function pluralBlocks(template: string): PluralBlock[] {
 }
 
 const pluralRules = new Map<Locale, Intl.PluralRules>();
-/** The CLDR plural category of a count: the one place that decides it. */
 const numberFormats = new Map<string, Intl.NumberFormat>();
+const dateTimeFormats = new Map<string, Intl.DateTimeFormat>();
+
+function cachedFormat<Format, Options>(
+  cache: Map<string, Format>,
+  create: (locale: string, options?: Options) => Format,
+  locale: string,
+  options?: Options,
+) {
+  const key = options ? `${locale}|${JSON.stringify(options)}` : locale;
+  let format = cache.get(key);
+  if (!format) {
+    format = create(locale, options);
+    cache.set(key, format);
+  }
+  return format;
+}
 
 /**
  * Shared `Intl.NumberFormat` per locale and options. Dense tables format many
@@ -148,15 +163,28 @@ export function numberFormat(
   locale: string,
   options?: Intl.NumberFormatOptions,
 ) {
-  const key = options ? `${locale}|${JSON.stringify(options)}` : locale;
-  let format = numberFormats.get(key);
-  if (!format) {
-    format = new Intl.NumberFormat(locale, options);
-    numberFormats.set(key, format);
-  }
-  return format;
+  return cachedFormat(
+    numberFormats,
+    (language, settings) => new Intl.NumberFormat(language, settings),
+    locale,
+    options,
+  );
 }
 
+/** Shared `Intl.DateTimeFormat` per locale and options, like `numberFormat`. */
+export function dateTimeFormat(
+  locale: string,
+  options?: Intl.DateTimeFormatOptions,
+) {
+  return cachedFormat(
+    dateTimeFormats,
+    (language, settings) => new Intl.DateTimeFormat(language, settings),
+    locale,
+    options,
+  );
+}
+
+/** The CLDR plural category of a count: the one place that decides it. */
 export function pluralCategory(locale: Locale, count: number) {
   let rules = pluralRules.get(locale);
   if (!rules) {

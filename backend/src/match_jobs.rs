@@ -102,18 +102,13 @@ pub(crate) async fn execute(
                 )
                 .await
             };
-            let samples = async {
-                loop {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    crate::analysis_timing::sample_game(
-                        &state.pool,
-                        job,
-                        token,
-                        started.elapsed().as_secs_f64() * 1000.0,
-                    )
-                    .await?;
-                }
-            };
+            let samples = crate::analysis_timing::sample_until_lease_lost(
+                &state.pool,
+                job,
+                token,
+                started,
+                std::time::Duration::from_secs(1),
+            );
             tokio::select! {
                 result = work => result,
                 result = samples => result,
@@ -123,7 +118,8 @@ pub(crate) async fn execute(
     }
     ensure!(
         summary.analyzed_moves == total_moves,
-        "GNUbg analyzed {} of {total_moves} checker moves",
+        "{} analyzed {} of {total_moves} checker moves",
+        engine.id().display_name(),
         summary.analyzed_moves
     );
     Ok(serde_json::to_value(summary)?)

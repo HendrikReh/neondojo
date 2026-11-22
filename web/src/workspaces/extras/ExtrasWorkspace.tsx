@@ -46,6 +46,8 @@ export default function ExtrasWorkspace({
   tool,
   setTool,
   onOpenMatch,
+  benchmarkActive,
+  onBenchmarkActivity,
 }: {
   visible: boolean;
   defaultPlies: number;
@@ -53,6 +55,9 @@ export default function ExtrasWorkspace({
   tool: ExtrasTool;
   setTool: (tool: ExtrasTool) => void;
   onOpenMatch: (match: Match) => void;
+  /** Whether the global status knows of a queued or running benchmark. */
+  benchmarkActive?: boolean;
+  onBenchmarkActivity?: (active: boolean) => void;
 }) {
   const benchmark = useBenchmarkText();
   const { locale } = useI18n();
@@ -71,6 +76,8 @@ export default function ExtrasWorkspace({
         visible={visible && tool === 'benchmark'}
         defaultPlies={defaultPlies}
         playPlies={playPlies}
+        activeElsewhere={benchmarkActive}
+        onActivity={onBenchmarkActivity}
       />
     ),
     matches: (

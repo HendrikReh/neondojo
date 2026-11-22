@@ -331,9 +331,12 @@ export default function MatchAnalysisPanel({
   const names = [match.white, match.black];
   const filter = decisionFilterQuery(selected);
   const scopeGame = scoped ? gameNo : undefined;
+  // Checker steps through its errors on the board without the review filters.
+  const directCheckerReview =
+    reviewKind === 'checker' && !!boardReview && !checkerControls;
   const showDecisions =
     !!analysisId &&
-    (showResults || !!checkerControls) &&
+    (showResults || !!checkerControls || directCheckerReview) &&
     (!scoped || scopeGame !== undefined);
   const reviewScope = `${match.id}:${analysisId ?? ''}:${filter}`;
   const reviewRevision = JSON.stringify([
@@ -457,9 +460,55 @@ export default function MatchAnalysisPanel({
         setReviewJump({ key: selectionKey, entry: currentJump?.entry, error });
     }
   }
+  // Opening Cube without a reviewed decision shows the first matching one
+  // from the board position on, as Next error would. An existing selection
+  // is kept, and this happens once per visit, so returning to the checker
+  // move stays put.
+  const cubeReview = showResults && reviewKind === 'cube' && !!boardReview;
+  const awaitingCubeSelection = useRef(false);
+  useEffect(() => {
+    awaitingCubeSelection.current = cubeReview;
+  }, [cubeReview]);
+  useEffect(() => {
+    if (!awaitingCubeSelection.current || !cubeReview) return;
+    if (cubeId) {
+      awaitingCubeSelection.current = false;
+      return;
+    }
+    // An empty page keeps waiting: the decisions of a just-finished analysis
+    // arrive with a later revision, and the first page can precede it.
+    if (
+      !showDecisions ||
+      loading ||
+      pageError ||
+      boardReview?.busy ||
+      currentJump?.busy ||
+      !decisions.result ||
+      decisions.total === 0
+    )
+      return;
+    awaitingCubeSelection.current = false;
+    void navigateReview('next');
+    // The loaded page and the selection decide; the callbacks are current.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    cubeReview,
+    cubeId,
+    showDecisions,
+    loading,
+    pageError,
+    boardReview?.busy,
+    currentJump?.busy,
+    decisions.result,
+    decisions.total,
+  ]);
   const narrowed = !!(player || severity || filteredGame !== scopeGame);
   const emptyPage =
-    showDecisions && !loading && !pageError && decisions.total === 0
+    showDecisions &&
+    !directCheckerReview &&
+    !loading &&
+    !pageError &&
+    decisions.total === 0
       ? decisions.result
       : undefined;
   const [emptyReview, setEmptyReview] = useState<{
@@ -870,6 +919,7 @@ export default function MatchAnalysisPanel({
         }
       />
       {boardReview &&
+        (!directCheckerReview || (!pageError && decisions.total > 0)) &&
         createPortal(
           <BoardErrorNavigation
             game={filteredGame}
@@ -882,7 +932,7 @@ export default function MatchAnalysisPanel({
             busy={loading || boardReview.busy || !!currentJump?.busy}
             onNavigate={(direction) => void navigateReview(direction)}
           >
-            {emptyFeedback}
+            {!directCheckerReview && emptyFeedback}
             {!!currentJump?.error && (
               <small role="alert">{formatError(currentJump.error)}</small>
             )}

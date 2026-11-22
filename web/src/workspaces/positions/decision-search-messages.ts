@@ -166,6 +166,14 @@ const entries = {
     'Wybierz gracza, aby przeszukać jego przeanalizowane decyzje.',
     'Scegli un giocatore per cercare le sue decisioni analizzate.',
   ],
+  idle: [
+    'Select “{action}” to list the analyzed decisions of {player} that match the filters above.',
+    'Wähle „{action}“, um die analysierten Entscheidungen von {player} aufzulisten, die zu den Filtern oben passen.',
+    'Selecciona «{action}» para ver las decisiones analizadas de {player} que coinciden con los filtros de arriba.',
+    'Sélectionnez « {action} » pour afficher les décisions analysées de {player} qui correspondent aux filtres ci-dessus.',
+    'Wybierz „{action}”, aby wyświetlić przeanalizowane decyzje gracza {player} pasujące do powyższych filtrów.',
+    'Seleziona «{action}» per elencare le decisioni analizzate di {player} che corrispondono ai filtri sopra.',
+  ],
   loading: [
     'Searching decisions …',
     'Entscheidungen werden gesucht …',

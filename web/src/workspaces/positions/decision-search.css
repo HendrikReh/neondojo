@@ -94,3 +94,10 @@
   justify-content: flex-start;
   margin-right: auto;
 }
+
+/* The add-to-deck outcome sits below the preview heading. */
+.decision-search .decision-deck-outcome {
+  margin: 0 0 6px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}

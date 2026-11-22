@@ -7,11 +7,12 @@ import { useAnalysisCatalogText } from './analysis-catalog-messages';
 import { useI18n } from '../../shared/i18n/i18n';
 import { shortEngineLabel } from '../../shared/engine/engine-version';
 import { useLibraryText } from '../library/library-messages';
+import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 
 export function useAnalysisEntryLabel(includeEngine = true) {
   const text = useAnalysisCatalogText();
   const { locale } = useI18n();
-  const date = new Intl.DateTimeFormat(locale, {
+  const date = dateTimeFormat(locale, {
     dateStyle: 'short',
     timeStyle: 'short',
   });

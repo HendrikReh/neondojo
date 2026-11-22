@@ -60,7 +60,7 @@ it('separates play measurements by the recorded GNUbg rules and protocol', () =>
   };
   const reference = {
     id: 'wc2014-checker-turns-v1',
-    protocol_id: 'bgsage-checker-turn-v3-2ply-2threads-gnubg-rules',
+    protocol_id: 'bgsage-checker-turn-v4-2ply-2threads-gnubg-rules',
     sha256: 'abc',
     total_turns: 11,
   };

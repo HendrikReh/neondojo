@@ -173,7 +173,7 @@ test('uses native benchmarks at every depth for both analysis scopes without sta
         });
         expect(result.estimated_ms).toBeCloseTo(expectedMs, 6);
         await expect(estimate).toContainText(
-          `Estimated analysis time: approx. ${formatAnalysisDuration(expectedMs)}`,
+          `Estimated analysis time: approx. ${formatAnalysisDuration('en', expectedMs)}`,
         );
         await expect(estimate).toContainText(
           `${moveCount} checker moves · ${plies} Ply`,
