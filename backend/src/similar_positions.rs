@@ -150,66 +150,24 @@ async fn search(
 
     // Read only board vectors while ranking. Keep the closest 50 in memory and
     // load their full decision context from the same snapshot afterward.
-    let mut closest = BinaryHeap::with_capacity(RESULT_LIMIT + 1);
-    {
-        let statement = format!(
-            "SELECT p.id,p.board,p.player
-             FROM positions p JOIN matches m ON m.id=p.match_uuid
-             JOIN positions origin ON origin.id=$1
-             JOIN matches origin_match ON origin_match.id=origin.match_uuid
-             WHERE p.id<>$1
-               AND ($2 OR (coalesce(m.source_match_id,m.id)<>$3
-                            AND ($4::text IS NULL OR m.sha256<>$4)))
-               AND (NOT $5 OR (
-                    least(p.dice[1],p.dice[2])=least(origin.dice[1],origin.dice[2])
-                    AND greatest(p.dice[1],p.dice[2])=greatest(origin.dice[1],origin.dice[2])
-               ))
-               AND (NOT $6 OR (
-                    m.match_length=origin_match.match_length AND (
-                        m.match_length=0 OR (
-                            p.source_crawford=origin.source_crawford
-                            AND (p.source_white_score,p.source_black_score)=(
-                                CASE WHEN p.player=origin.player THEN origin.source_white_score
-                                     ELSE origin.source_black_score END,
-                                CASE WHEN p.player=origin.player THEN origin.source_black_score
-                                     ELSE origin.source_white_score END
-                            )
-                        )
-                    )
-               ))
-               AND (NOT $7 OR (
-                    p.source_cube_value=origin.source_cube_value
-                    AND p.source_cube_owner=CASE
-                        WHEN p.player=origin.player OR origin.source_cube_owner=-1
-                            THEN origin.source_cube_owner
-                        ELSE 1-origin.source_cube_owner
-                    END
-               ))
-               AND NOT {REVIEW_BLOCKED}"
-        );
-        let mut candidates = sqlx::query_as::<_, (Uuid, Vec<i32>, i32)>(&statement)
-            .bind(id)
-            .bind(query.include_current_match)
-            .bind(target.source_match)
-            .bind(target.source_hash)
-            .bind(query.same_dice)
-            .bind(query.same_score)
-            .bind(query.same_cube)
-            .fetch(&mut *tx);
-        while let Some((id, board, player)) =
-            candidates.try_next().await.map_err(anyhow::Error::from)?
-        {
-            let Some(candidate) = profile(&board, player) else {
-                continue;
-            };
-            let rank = (distance(&origin, &candidate), id);
-            if closest.len() < RESULT_LIMIT {
-                closest.push(rank);
-            } else if closest.peek().is_some_and(|worst| rank < *worst) {
-                *closest.peek_mut().expect("full heap") = rank;
-            }
-        }
-    }
+    //
+    // The distance between two positions is at least the sum of their own
+    // and opposing pip-count differences (see `pips`). Ranking therefore reads
+    // the positions within a band of that sum around the target through
+    // `positions_similar_pips_idx` (migration 0091), widening it until 50 hits
+    // are no farther than the band reaches: every position outside the band is
+    // then strictly farther than the 50th. A band that covers every possible
+    // pip count is a complete scan.
+    let filter = Filter {
+        target: id,
+        include_current_match: query.include_current_match,
+        source_match: target.source_match,
+        source_hash: target.source_hash,
+        same_dice: query.same_dice,
+        same_score: query.same_score,
+        same_cube: query.same_cube,
+    };
+    let closest = nearest(&mut tx, &filter, &origin).await?;
     let (distances, ids): (Vec<i32>, Vec<Uuid>) = closest.into_sorted_vec().into_iter().unzip();
     let items = sqlx::query_as(
         "WITH ranked AS (
@@ -332,6 +290,147 @@ async fn checker_answer(state: &AppState, position: &Position) -> ApiResult<Chec
     })
 }
 
+/// First pip band searched around a target. A pass without 50 hits widens
+/// it 4×; a full pass is repeated once at the distance of its 50th hit.
+const INITIAL_PIP_BAND: i32 = 8;
+/// Largest pip count of one side: 15 checkers on the bar.
+const MAX_PIPS: i32 = 15 * 25;
+
+struct Filter {
+    target: Uuid,
+    include_current_match: bool,
+    source_match: Uuid,
+    source_hash: Option<String>,
+    same_dice: bool,
+    same_score: bool,
+    same_cube: bool,
+}
+
+/// The 50 nearest occurrences matching `filter`, as a max-heap of
+/// (distance, id), reading widening pip bands around the target.
+async fn nearest(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    filter: &Filter,
+    origin: &CheckerProfile,
+) -> ApiResult<BinaryHeap<(i32, Uuid)>> {
+    let (own, opposing) = pips(origin);
+    let mut band = INITIAL_PIP_BAND;
+    loop {
+        let complete = band >= MAX_PIPS;
+        let closest = scan(
+            tx,
+            filter,
+            origin,
+            (!complete).then_some((band, own, opposing)),
+        )
+        .await?;
+        if complete {
+            return Ok(closest);
+        }
+        match closest.peek() {
+            // Every unread position is farther than `band`, so none beats the 50th.
+            Some((worst, _)) if closest.len() == RESULT_LIMIT && *worst <= band => {
+                return Ok(closest);
+            }
+            // One more pass reaching exactly the current 50th distance is
+            // complete: that pass can only bring the 50th closer.
+            Some((worst, _)) if closest.len() == RESULT_LIMIT => band = (*worst).min(MAX_PIPS),
+            _ => band *= 4,
+        }
+    }
+}
+
+/// The 50 nearest occurrences matching `filter`, as a max-heap of
+/// (distance, id). With `band`, only positions whose own and opposing pip
+/// counts each lie within `band` of the given counts are read; positions
+/// whose differences add up to more are farther than `band` as well.
+async fn scan(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    filter: &Filter,
+    origin: &CheckerProfile,
+    band: Option<(i32, i32, i32)>,
+) -> ApiResult<BinaryHeap<(i32, Uuid)>> {
+    // The expressions match the index definition exactly, so the band is read
+    // from the index without evaluating the pip function per row.
+    let band_condition = if band.is_some() {
+        "AND public.checker_pips(p.board, p.player) BETWEEN $9-$8 AND $9+$8
+         AND public.checker_pips(p.board, 1 - p.player) BETWEEN $10-$8 AND $10+$8"
+    } else {
+        ""
+    };
+    let statement = format!(
+        "SELECT p.id,p.board,p.player
+         FROM positions p JOIN matches m ON m.id=p.match_uuid
+         JOIN positions origin ON origin.id=$1
+         JOIN matches origin_match ON origin_match.id=origin.match_uuid
+         WHERE p.id<>$1 {band_condition}
+           AND ($2 OR (coalesce(m.source_match_id,m.id)<>$3
+                        AND ($4::text IS NULL OR m.sha256<>$4)))
+           AND (NOT $5 OR (
+                least(p.dice[1],p.dice[2])=least(origin.dice[1],origin.dice[2])
+                AND greatest(p.dice[1],p.dice[2])=greatest(origin.dice[1],origin.dice[2])
+           ))
+           AND (NOT $6 OR (
+                m.match_length=origin_match.match_length AND (
+                    m.match_length=0 OR (
+                        p.source_crawford=origin.source_crawford
+                        AND (p.source_white_score,p.source_black_score)=(
+                            CASE WHEN p.player=origin.player THEN origin.source_white_score
+                                 ELSE origin.source_black_score END,
+                            CASE WHEN p.player=origin.player THEN origin.source_black_score
+                                 ELSE origin.source_white_score END
+                        )
+                    )
+                )
+           ))
+           AND (NOT $7 OR (
+                p.source_cube_value=origin.source_cube_value
+                AND p.source_cube_owner=CASE
+                    WHEN p.player=origin.player OR origin.source_cube_owner=-1
+                        THEN origin.source_cube_owner
+                    ELSE 1-origin.source_cube_owner
+                END
+           ))
+           AND NOT {REVIEW_BLOCKED}"
+    );
+    let mut query = sqlx::query_as::<_, (Uuid, Vec<i32>, i32)>(&statement)
+        .bind(filter.target)
+        .bind(filter.include_current_match)
+        .bind(filter.source_match)
+        .bind(filter.source_hash.as_deref())
+        .bind(filter.same_dice)
+        .bind(filter.same_score)
+        .bind(filter.same_cube);
+    if let Some((width, own, opposing)) = band {
+        query = query.bind(width).bind(own).bind(opposing);
+    }
+    let mut candidates = query.fetch(&mut **tx);
+    let mut closest = BinaryHeap::with_capacity(RESULT_LIMIT + 1);
+    while let Some((id, board, player)) =
+        candidates.try_next().await.map_err(anyhow::Error::from)?
+    {
+        let Some(candidate) = profile(&board, player) else {
+            continue;
+        };
+        let rank = (distance(origin, &candidate), id);
+        if closest.len() < RESULT_LIMIT {
+            closest.push(rank);
+        } else if closest.peek().is_some_and(|worst| rank < *worst) {
+            *closest.peek_mut().expect("full heap") = rank;
+        }
+    }
+    Ok(closest)
+}
+
+/// Own and opposing pip counts of the player on roll. A side's pip count is
+/// the sum of its cumulative profile, and the distance adds both sides'
+/// profile differences, so by the triangle inequality the sum of the own and
+/// opposing pip differences of two positions never exceeds their distance.
+/// These equal `public.checker_pips` (migration 0091) for every valid board.
+fn pips(profile: &CheckerProfile) -> (i32, i32) {
+    (profile[0].iter().sum(), profile[1].iter().sum())
+}
+
 type CheckerProfile = [[i32; 25]; 2];
 
 fn profile(board: &[i32], player: i32) -> Option<CheckerProfile> {
@@ -388,6 +487,121 @@ pub(crate) struct SimilarPositionsDoc;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Deterministic boards with up to 15 checkers per side, some borne off,
+    /// never mixing sides on a point.
+    fn boards(count: usize) -> Vec<([i32; 26], i32)> {
+        let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+        let mut next = |limit: u64| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % limit) as usize
+        };
+        (0..count)
+            .map(|_| {
+                let mut board = [0; 26];
+                for side in 0..2 {
+                    for _ in 0..(10 + next(6)) {
+                        loop {
+                            // Side 0 uses indices 1..=25, side 1 uses 0..=24.
+                            let index = if side == 0 { 1 + next(25) } else { next(25) };
+                            let sign = if side == 0 { 1 } else { -1 };
+                            if board[index] * sign >= 0 {
+                                board[index] += sign;
+                                break;
+                            }
+                        }
+                    }
+                }
+                (board, next(2) as i32)
+            })
+            .collect()
+    }
+
+    async fn insert_boards(pool: &sqlx::PgPool, boards: &[([i32; 26], i32)]) -> Vec<Uuid> {
+        let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
+        let imported = store::import_match(
+            pool,
+            "similar.sgf",
+            "sgf",
+            sgf.as_bytes(),
+            sgf,
+            &crate::import::parse_sgf(sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+        let rows: Vec<serde_json::Value> = boards
+            .iter()
+            .map(|(board, player)| serde_json::json!({"board": board, "player": player}))
+            .collect();
+        // One statement: the played-record trigger runs once.
+        sqlx::query_scalar(
+            "INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation)
+             SELECT gen_random_uuid(),$1,1000+t.ord::int,1,t.ord::int,(t.item->>'player')::int,ARRAY[3,1],
+                    ARRAY(SELECT jsonb_array_elements_text(t.item->'board')::int),'synthetic','synthetic',''
+             FROM jsonb_array_elements($2) WITH ORDINALITY AS t(item,ord)
+             ORDER BY t.ord RETURNING id",
+        )
+        .bind(imported.r#match.id)
+        .bind(serde_json::Value::Array(rows))
+        .fetch_all(pool)
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn sql_pip_counts_equal_the_profile_bound(pool: sqlx::PgPool) {
+        let boards = boards(500);
+        let ids = insert_boards(&pool, &boards).await;
+        let stored: Vec<(Uuid, i32, i32)> = sqlx::query_as(
+            "SELECT id,public.checker_pips(board,player),public.checker_pips(board,1-player)
+             FROM positions WHERE id=ANY($1)",
+        )
+        .bind(&ids)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let expected: std::collections::HashMap<Uuid, (i32, i32)> = ids
+            .iter()
+            .zip(&boards)
+            .map(|(id, (board, player))| (*id, pips(&profile(board, *player).unwrap())))
+            .collect();
+        assert_eq!(stored.len(), boards.len());
+        for (id, own, opposing) in stored {
+            assert_eq!(expected[&id], (own, opposing), "{id}");
+        }
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn banded_search_returns_the_complete_scan_result(pool: sqlx::PgPool) {
+        let boards = boards(3000);
+        let ids = insert_boards(&pool, &boards).await;
+        let mut tx = pool.begin().await.unwrap();
+        let mut widened = 0;
+        for (index, (board, player)) in boards.iter().enumerate().step_by(150) {
+            let filter = Filter {
+                target: ids[index],
+                include_current_match: true,
+                source_match: Uuid::nil(),
+                source_hash: None,
+                same_dice: false,
+                same_score: false,
+                same_cube: false,
+            };
+            let origin = profile(board, *player).unwrap();
+            let complete = scan(&mut tx, &filter, &origin, None).await.ok().unwrap();
+            let banded = nearest(&mut tx, &filter, &origin).await.ok().unwrap();
+            let worst = banded.peek().unwrap().0;
+            widened += usize::from(worst > INITIAL_PIP_BAND);
+            assert_eq!(
+                banded.into_sorted_vec(),
+                complete.into_sorted_vec(),
+                "target {index}"
+            );
+        }
+        assert!(widened > 0, "the fixture must exercise a widened band");
+    }
 
     #[test]
     fn orientation_bar_and_bearoff_are_measured_in_checker_pips() {
