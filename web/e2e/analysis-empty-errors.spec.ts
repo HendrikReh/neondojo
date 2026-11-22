@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { ReviewDecision } from '../src/review-decisions-api';
+import type { ReviewDecision } from '../src/workspaces/analysis/review-decisions-api';
 import { expect, test } from './test';
 
 const decision: ReviewDecision = {

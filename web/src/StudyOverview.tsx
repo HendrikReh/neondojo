@@ -6,7 +6,7 @@ import { useConfirmedConfiguration } from './settings/configuration/Configuratio
 import MistakeGroupTable from './MistakeGroupTable';
 import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';
-import { useGamePlanText } from './game-plan-messages';
+import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
 import { useI18n } from './shared/i18n/i18n';
 import {
   loadLearningSummary,

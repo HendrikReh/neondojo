@@ -21,7 +21,9 @@ import { request, type Match, type Position } from './shared/api/api';
 import SearchPagination from './shared/ui/SearchPagination';
 import { useSearchPages } from './shared/hooks/useSearchPages';
 import { useLibraryMatchOpening } from './useLibraryMatchOpening';
-import AnnotationSearch, { type AnnotationHit } from './AnnotationSearch';
+import AnnotationSearch, {
+  type AnnotationHit,
+} from './workspaces/analysis/notes/AnnotationSearch';
 import { useI18n } from './shared/i18n/i18n';
 import { usePlayModeText } from './workspaces/play/play-mode-messages';
 import { useWorkspaceText } from './shared/i18n/workspace-messages';

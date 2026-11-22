@@ -12,7 +12,7 @@ import AnkiSyncOverview from './AnkiSyncOverview';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { request } from './shared/api/api';
 import type { components } from './generated-api';
-import { useAnalysisCatalogText } from './analysis-catalog-messages';
+import { useAnalysisCatalogText } from './workspaces/analysis/analysis-catalog-messages';
 import { AppError } from './shared/i18n/i18n-core';
 import { useI18n } from './shared/i18n/i18n';
 import { useLearningText } from './learning-messages';

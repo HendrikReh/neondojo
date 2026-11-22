@@ -1,5 +1,5 @@
 import { matchContext } from '../board/boardMath';
-import { useSourceText } from '../../analysis-source-messages';
+import { useSourceText } from '../../workspaces/analysis/candidates/analysis-source-messages';
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from '../ui/ActionButton';
 import {

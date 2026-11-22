@@ -24,8 +24,8 @@ import {
 import PositionBookmarkButton from './PositionBookmarkButton';
 import { usePositionText } from './position-browser-messages';
 import { SearchResultRow } from './shared/ui/SearchResultList';
-import { useGamePlanText } from './game-plan-messages';
-import type { GamePlan } from './game-plan-api';
+import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
+import type { GamePlan } from './workspaces/analysis/game-plans/game-plan-api';
 import { useI18n } from './shared/i18n/i18n';
 import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';

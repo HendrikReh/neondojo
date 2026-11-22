@@ -12,8 +12,8 @@ import { request } from './shared/api/api';
 import type { Database } from './library-api';
 import type { Theme } from './shared/board/themes';
 import { useI18n } from './shared/i18n/i18n';
-import { useGamePlanText } from './game-plan-messages';
-import type { GamePlan } from './game-plan-api';
+import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
+import type { GamePlan } from './workspaces/analysis/game-plans/game-plan-api';
 import { useMistakeText } from './recurring-mistakes-messages';
 import {
   loadMistakes,

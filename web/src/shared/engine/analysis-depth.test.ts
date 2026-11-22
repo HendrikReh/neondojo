@@ -1,14 +1,14 @@
-import { catalogFixture } from '../../analysis-catalog-test-fixtures';
+import { catalogFixture } from '../../workspaces/analysis/analysis-catalog-test-fixtures';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { PositionAnalysisDepth } from '../../AnalysisPanel';
+import { PositionAnalysisDepth } from '../../workspaces/analysis/AnalysisPanel';
 import { ANALYSIS_PLIES } from './analysis-depth';
-import MatchAnalysisPanel from '../../MatchAnalysisPanel';
+import MatchAnalysisPanel from '../../workspaces/analysis/match/MatchAnalysisPanel';
 import { I18nProvider } from '../i18n/i18n';
 import type { Match } from '../api/api';
 
-vi.mock('../../useMatchAnalysis', () => ({
+vi.mock('../../workspaces/analysis/match/useMatchAnalysis', () => ({
   useMatchAnalysis: () => ({
     job: undefined,
     error: null,

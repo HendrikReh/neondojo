@@ -48,7 +48,7 @@ import {
   type PositionMessageKey,
 } from './position-browser-messages';
 import type { Theme } from './shared/board/themes';
-import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';
+import { useAnalysisMatchHeaderText } from './workspaces/analysis/analysis-match-header-messages';
 export interface PositionResultsProps {
   selectPageRef?: Ref<HTMLInputElement>;
   items: readonly PositionBrowserHit[];

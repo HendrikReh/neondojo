@@ -4,7 +4,7 @@ import SearchFilterForm, {
   SearchFilterSelect,
 } from './shared/ui/SearchFilterForm';
 import { useCardPracticeText } from './card-practice-messages';
-import { useGamePlanText } from './game-plan-messages';
+import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
 import type { CardFilters } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
 export default function CardSearchControls({

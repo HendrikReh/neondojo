@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import ActionButton from './shared/ui/ActionButton';
 import Board from './shared/board/Board';
 import { useCardSuggestionText } from './card-suggestion-messages';
-import { useGamePlanText } from './game-plan-messages';
+import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
 import { useI18n } from './shared/i18n/i18n';
 import { AppError, interpolate } from './shared/i18n/i18n-core';
 import { useLearningText } from './learning-messages';

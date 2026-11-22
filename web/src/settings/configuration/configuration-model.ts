@@ -29,7 +29,7 @@ import {
   positionDraft,
   type PositionFilterDefinition,
 } from '../../position-browser-api';
-import type { AnnotationFilters } from '../../annotation-api';
+import type { AnnotationFilters } from '../../workspaces/analysis/notes/annotation-api';
 import { isLocale, type Locale } from '../../shared/i18n/i18n-core';
 import {
   isPlayMode,

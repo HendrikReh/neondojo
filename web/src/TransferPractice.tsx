@@ -3,7 +3,7 @@ import ActionButton from './shared/ui/ActionButton';
 import { request } from './shared/api/api';
 import { useCardPracticeText } from './card-practice-messages';
 import { useCardSearchText } from './card-search-messages';
-import { useGamePlanText } from './game-plan-messages';
+import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
 import { useI18n } from './shared/i18n/i18n';
 import type {
   PracticeRound,

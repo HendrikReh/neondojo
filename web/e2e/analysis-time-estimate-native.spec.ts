@@ -3,8 +3,8 @@ import {
   openMatchAnalysisOptions,
 } from './analysis-controls';
 import { expect, backendTest as test } from './test';
-import type { AnalysisTimeEstimateResult } from '../src/analysis-time-estimate-api';
-import { formatAnalysisDuration } from '../src/analysis-time-estimate-messages';
+import type { AnalysisTimeEstimateResult } from '../src/workspaces/analysis/match/analysis-time-estimate-api';
+import { formatAnalysisDuration } from '../src/workspaces/analysis/match/analysis-time-estimate-messages';
 import type { components } from '../src/generated-api';
 
 type BenchmarkHistory = components['schemas']['BenchmarkHistory'];

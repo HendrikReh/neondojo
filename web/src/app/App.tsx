@@ -34,12 +34,14 @@ import {
   type Match,
   type Position,
 } from '../shared/api/api';
-import AnalysisWorkspace, { type AnalysisDetail } from '../AnalysisWorkspace';
+import AnalysisWorkspace, {
+  type AnalysisDetail,
+} from '../workspaces/analysis/AnalysisWorkspace';
 import PlayerDirectory from '../PlayerDirectory';
 import { usePlayerText } from '../player-directory-messages';
 import MatchDatabase, { type PositionSearchRequest } from '../MatchDatabase';
-import MatchAnalysisDialog from '../MatchAnalysisDialog';
-import BulkMatchAnalysisDialog from '../BulkMatchAnalysisDialog';
+import MatchAnalysisDialog from '../workspaces/analysis/match/MatchAnalysisDialog';
+import BulkMatchAnalysisDialog from '../workspaces/analysis/match/BulkMatchAnalysisDialog';
 import StudyWorkspace from '../StudyWorkspace';
 import type { AssessmentEntry } from '../match-assessment-api';
 import PositionBrowser from '../PositionBrowser';
@@ -62,8 +64,8 @@ import {
   saveSelection,
 } from './workspace-state';
 import { AppError } from '../shared/i18n/i18n-core';
-import type { AnnotationHit } from '../AnnotationSearch';
-import type { AnnotationKind } from '../annotation-api';
+import type { AnnotationHit } from '../workspaces/analysis/notes/AnnotationSearch';
+import type { AnnotationKind } from '../workspaces/analysis/notes/annotation-api';
 import './workspace.css';
 import {
   acceptsLibraryMatches,
@@ -89,7 +91,9 @@ import {
 import { isUnfinishedCompetition } from '../library-match-summary';
 import type { PlaySession } from '../workspaces/play/play-api';
 import { DEFAULT_ANALYSIS_PLIES } from '../shared/engine/analysis-depth';
-import MoveNotesDialog, { type MoveNotesTarget } from '../MoveNotesDialog';
+import MoveNotesDialog, {
+  type MoveNotesTarget,
+} from '../workspaces/analysis/notes/MoveNotesDialog';
 import { useUiAppearance } from '../settings/appearance/useUiAppearance';
 import { useButtonShortcuts } from './useButtonShortcuts';
 import DecisionSearch from '../DecisionSearch';

@@ -419,7 +419,7 @@ test('the board crosses a late review page without scanning the earlier pages ag
   );
   expect(reviews.ok(), await reviews.text()).toBe(true);
   const { items } =
-    (await reviews.json()) as import('../src/review-decisions-api').ReviewDecisionPage;
+    (await reviews.json()) as import('../src/workspaces/analysis/review-decisions-api').ReviewDecisionPage;
   expect(items).toHaveLength(pageSize);
   const anchorIndex = pageSize - 3;
   const anchor = items[anchorIndex];

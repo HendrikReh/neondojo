@@ -74,7 +74,7 @@ import './settings.css';
 import {
   openingBookProviderLabel,
   useSourceText,
-} from '../analysis-source-messages';
+} from '../workspaces/analysis/candidates/analysis-source-messages';
 import {
   uiThemes,
   type UiAppearance,

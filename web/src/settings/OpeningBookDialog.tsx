@@ -14,14 +14,14 @@ import {
   openingBookProviderLabel,
   openingBookProviders,
   useSourceText,
-} from '../analysis-source-messages';
+} from '../workspaces/analysis/candidates/analysis-source-messages';
 import {
   bookSettings,
   type BookSettings,
   type BookConfig,
   type BookStatus,
   type XgBookStatus,
-} from '../source-analysis-api';
+} from '../workspaces/analysis/candidates/source-analysis-api';
 export default function OpeningBookDialog({
   onClose,
   onRefresh,

@@ -1,7 +1,7 @@
 import { request } from './shared/api/api';
 import type { components } from './generated-api';
 type Schema = components['schemas'];
-import type { GamePlan } from './game-plan-api';
+import type { GamePlan } from './workspaces/analysis/game-plans/game-plan-api';
 export const mistakeGamePlans: GamePlan[] = [
   'opening',
   'pure_race',

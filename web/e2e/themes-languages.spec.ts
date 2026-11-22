@@ -3,7 +3,7 @@ import { test, expect, type Locator, type Page } from './test';
 import { applyAndCloseSettings, closeSettings } from './settings-actions';
 import { readFileSync } from 'node:fs';
 import { catalogs } from '../src/shared/i18n/i18n-catalogs';
-import { candidateMessages } from '../src/candidate-messages';
+import { candidateMessages } from '../src/workspaces/analysis/candidates/candidate-messages';
 import type { Locale } from '../src/shared/i18n/i18n-core';
 import { learningMessages } from '../src/learning-messages';
 import { settingsText } from '../src/settings/settings-messages';

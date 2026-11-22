@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { request, terminal, mergeJob, jobEngine, type Job } from '../api/api';
 import { watchJob } from './job-watch';
 import type { components } from '../../generated-api';
-import type { MatchAnalysisEngine } from '../../useMatchAnalysis';
+import type { MatchAnalysisEngine } from '../../workspaces/analysis/match/useMatchAnalysis';
 
 export type Jobs = Partial<Record<'analysis' | 'dice', Job>>;
 export function positionJobsPath(

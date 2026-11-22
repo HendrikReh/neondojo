@@ -1,5 +1,8 @@
 import { expect, it } from 'vitest';
-import { annotationMessages, annotationText } from '../../annotation-messages';
+import {
+  annotationMessages,
+  annotationText,
+} from '../../workspaces/analysis/notes/annotation-messages';
 import { placeholders as args } from './i18n-core';
 import { learningMessages } from '../../learning-messages';
 

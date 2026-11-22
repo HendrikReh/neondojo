@@ -2,7 +2,7 @@ import { errorGrades } from './move-severity';
 import { useEffect, useRef, useState } from 'react';
 import { request, type Job } from '../api/api';
 import type { components } from '../../generated-api';
-import { statisticsRevision } from '../../match-statistics-api';
+import { statisticsRevision } from '../../workspaces/analysis/match/match-statistics-api';
 
 export type MoveAssessment = components['schemas']['MoveAssessment'];
 export type GameMoveAssessments = components['schemas']['GameMoveAssessments'];

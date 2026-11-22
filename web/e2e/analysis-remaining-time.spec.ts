@@ -35,7 +35,7 @@ async function mount(page: Page, value = job()) {
     const { React, createRoot } = await import('/e2e/react-fixture.ts');
     const { I18nProvider } = await import('/src/shared/i18n/i18n.tsx');
     const { default: Remaining } =
-      await import('/src/AnalysisRemainingTime.tsx');
+      await import('/src/workspaces/analysis/match/AnalysisRemainingTime.tsx');
     const original = document.getElementById('root');
     if (original) original.hidden = true;
     const host = document.createElement('main');

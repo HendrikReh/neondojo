@@ -2,8 +2,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { I18nProvider } from '../i18n/i18n';
-import SourceAnalysisView from '../../SourceAnalysisView';
-import type { BookLookup } from '../../source-analysis-api';
+import SourceAnalysisView from '../../workspaces/analysis/candidates/SourceAnalysisView';
+import type { BookLookup } from '../../workspaces/analysis/candidates/source-analysis-api';
 import { candidatePreviewNotation } from './candidate-preview';
 
 test('uses the recorded steps in preference to compact notation', () => {

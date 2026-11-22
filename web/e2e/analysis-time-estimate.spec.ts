@@ -383,9 +383,10 @@ async function mountEstimateHarness(page: Page) {
       await import('/src/settings/configuration/ConfigurationProvider.tsx');
     const { defaultConfiguration } =
       await import('/src/settings/configuration/configuration-model.ts');
-    const { default: MatchPanel } = await import('/src/MatchAnalysisPanel.tsx');
+    const { default: MatchPanel } =
+      await import('/src/workspaces/analysis/match/MatchAnalysisPanel.tsx');
     const { catalogFixture } =
-      await import('/src/analysis-catalog-test-fixtures.ts');
+      await import('/src/workspaces/analysis/analysis-catalog-test-fixtures.ts');
     const config = structuredClone(defaultConfiguration);
     const profile = {
       id: 'fixture',

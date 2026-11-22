@@ -5,7 +5,7 @@ import SearchFilterForm, {
   SearchFilterSelect,
   searchTextFields,
 } from './shared/ui/SearchFilterForm';
-import { useGamePlanText } from './game-plan-messages';
+import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
 import { mistakeGamePlans } from './recurring-mistakes-api';
 import { useEffect, useId, useRef, useState } from 'react';
 import { DeckDialog } from './DeckLibraryDialogs';
