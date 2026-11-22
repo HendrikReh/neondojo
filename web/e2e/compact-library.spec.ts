@@ -176,6 +176,19 @@ test('tracks selected matches after closing the dialog and reloading the page', 
   });
   await page.route(/\/api\/jobs\/[^/]+$/, (route) => {
     const id = new URL(route.request().url()).pathname.split('/')[3];
+    if (id === 'status' && route.request().method() === 'POST') {
+      // Background job reads batch several watched jobs into one request.
+      const { ids } = route.request().postDataJSON() as { ids: string[] };
+      const known = ids.filter((requested) => jobs.has(requested));
+      if (known.length === 0) return route.fallback();
+      return route.fulfill({
+        json: {
+          jobs: known.map(job),
+          missing: ids.filter((requested) => !jobs.has(requested)),
+          restricted: [],
+        },
+      });
+    }
     return jobs.has(id) ? route.fulfill({ json: job(id) }) : route.fallback();
   });
   await library(page);
