@@ -62,22 +62,25 @@ export async function openFullMatchAnalysis(page: Page) {
   });
   if ((await clear.isVisible()) && (await clear.isEnabled()))
     await clear.click();
+  const dialog = page.getByRole('dialog', {
+    name: /^(Analyze entire match|Gesamtes Match analysieren)$/,
+  });
   // A library refresh right after an import can re-render the row and drop a
-  // selection made a moment earlier; select until the batch bar confirms it.
+  // selection made a moment earlier, even after the batch bar confirmed it;
+  // select and open until the dialog appears.
   await expect(async () => {
     await row.getByRole('checkbox').check();
     await expect(actions.getByRole('status')).toHaveText(/^1\s/, {
       timeout: 1_000,
     });
+    await actions
+      .getByRole('button', {
+        name: /^(Analyze selected matches|Ausgewählte Matches analysieren) …$/,
+      })
+      .click({ timeout: 1_000 });
+    await expect(dialog).toBeVisible({ timeout: 1_000 });
   }).toPass();
-  await actions
-    .getByRole('button', {
-      name: /^(Analyze selected matches|Ausgewählte Matches analysieren) …$/,
-    })
-    .click();
-  return page.getByRole('dialog', {
-    name: /^(Analyze entire match|Gesamtes Match analysieren)$/,
-  });
+  return dialog;
 }
 
 export async function submitFullMatchAnalysis(
