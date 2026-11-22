@@ -242,15 +242,17 @@ async fn run_claimed(state: &AppState, claimed: Claimed) -> Result<bool> {
 
 async fn execute_with_heartbeat(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
     let cancelled = state.running_jobs.register(job.id);
+    // The job future is large; keep it on the heap rather than in this frame.
+    let work = Box::pin(with_heartbeat(
+        &state.pool,
+        job.id,
+        token,
+        execute(state, job, token),
+        state.job_heartbeat,
+    ));
     // Dropping the work on cancellation terminates its engine processes.
     let result = tokio::select! {
-        result = with_heartbeat(
-            &state.pool,
-            job.id,
-            token,
-            execute(state, job, token),
-            state.job_heartbeat,
-        ) => result,
+        result = work => result,
         () = cancelled.cancelled() => Err(anyhow::anyhow!(CANCELLED_ERROR)),
     };
     state.running_jobs.remove(job.id);
