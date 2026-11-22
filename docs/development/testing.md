@@ -26,6 +26,12 @@ The filter matches substrings, so `play::` also selects `open_sage_play::` and `
 
 [cargo-nextest](https://nexte.st/) runs each test in its own process and in parallel across test binaries. With nextest installed, `cargo nextest run --workspace` replaces `cargo test --workspace` and does not run doctests; `-E 'binary(integration) & test(/^play::/)'` selects exactly the `play` module of the integration tests. On November 21, 2026, on the Mac mini M4 Pro, the default suite of 604 tests took 56 s with `cargo test` and 54 s with nextest, after the build. With one binary per test file, `cargo test` had needed 100 s. After a change in the library, rebuilding the tests took 4.0 s instead of 6.3 s.
 
+### Continuous integration
+
+[GitHub Actions](../../.github/workflows/ci.yml) runs the default tier on every pull request and on pushes to `main` and `release/**`. The `Rust` job runs `cargo fmt`, Clippy, and `cargo test --workspace` against a PostgreSQL 17 service. The `Web` job runs Vitest, `typecheck:e2e`, the Python tests under `tools/`, and the production build. Both jobs run on Ubuntu. The Rust toolchain is pinned in the workflow, so new Clippy lints only arrive when someone updates that pin.
+
+CI has neither GNUbg, NeonGammon, import corpora, nor the BGBlitz theme archives. The `Web` job therefore prepares themes with `NEONDOJO_ALLOW_MISSING_THEMES=1`. That empties the archive catalog for the run, and the test that renders every archive theme is skipped. The Playwright suite, the ignored Rust tests, and the macOS-specific code paths still need a local run before a release.
+
 ### Which Rust tests run by default
 
 | Requirement | Default `cargo test --workspace` | Marked |
