@@ -12,12 +12,20 @@
 
 use crate::model::{ImportWarning, ImportWarningKind, MatchGame};
 use anyhow::{Context, Result, anyhow, bail};
-use std::future::Future;
+use std::{future::Future, time::Duration};
+use tokio::time::Instant;
 
 /// Games a single transcript may lose to rejected moves before the import fails.
 const MAX_TRUNCATED_GAMES: usize = 20;
 /// GNUbg runs one recovery may start, including the first full attempt.
 const MAX_VALIDATIONS: usize = 400;
+/// Wall-clock budget of one recovery, from the first full attempt on. A GNUbg
+/// validation takes about 0.1 s, so this covers the binary searches of
+/// ordinary transcripts, while a malformed upload cannot hold one of the two
+/// import permits for the minutes that `MAX_VALIDATIONS` runs could take.
+const MAX_RECOVERY_TIME: Duration = Duration::from_secs(60);
+const TOO_MANY_ERRORS: &str = "The MAT file has too many errors to locate";
+const TOO_SLOW: &str = "Locating the errors in the MAT file took too long";
 /// Characters of a rejected move kept in its warning.
 const SOURCE_TEXT_LIMIT: usize = 120;
 
@@ -230,9 +238,38 @@ struct Located<'a> {
     truncations: Vec<Truncation>,
 }
 
+/// Run one recovery validation unless the recovery has used up its runs or
+/// its time, and cut it off at `deadline`. `Err` names the exhausted budget.
+async fn attempt<F, Fut>(
+    validate: &mut F,
+    text: Vec<u8>,
+    validations: &mut usize,
+    deadline: Instant,
+) -> std::result::Result<Result<String>, &'static str>
+where
+    F: FnMut(Vec<u8>) -> Fut,
+    Fut: Future<Output = Result<String>>,
+{
+    if *validations >= MAX_VALIDATIONS {
+        return Err(TOO_MANY_ERRORS);
+    }
+    // `timeout_at` would still start a validation after the deadline.
+    if Instant::now() >= deadline {
+        return Err(TOO_SLOW);
+    }
+    *validations += 1;
+    tokio::time::timeout_at(deadline, validate(text))
+        .await
+        .map_err(|_| TOO_SLOW)
+}
+
 /// Validate the transcript and, if it fails, end every game at its first
-/// rejected move cell.
-async fn locate<'a, F, Fut>(source: &'a [u8], mut validate: F) -> Result<Located<'a>>
+/// rejected move cell. Recovery stops with an error at `deadline`.
+async fn locate<'a, F, Fut>(
+    source: &'a [u8],
+    mut validate: F,
+    deadline: Instant,
+) -> Result<Located<'a>>
 where
     F: FnMut(Vec<u8>) -> Fut,
     Fut: Future<Output = Result<String>>,
@@ -265,14 +302,15 @@ where
         let (mut low, mut high) = (0, units.len());
         while low < high {
             let middle = low + (high - low) / 2;
-            if validations >= MAX_VALIDATIONS {
-                return Err(failure.context("The MAT file has too many errors to locate"));
-            }
-            validations += 1;
             let (game, kept) = units[middle];
             let mut trial = keep.clone();
             trial[game] = (kept < transcript.games[game].cells.len()).then_some(kept);
-            match validate(transcript.render(&trial, Some(game))).await {
+            let text = transcript.render(&trial, Some(game));
+            let outcome = match attempt(&mut validate, text, &mut validations, deadline).await {
+                Ok(outcome) => outcome,
+                Err(budget) => return Err(failure.context(budget)),
+            };
+            match outcome {
                 Ok(_) => low = middle + 1,
                 Err(error) => {
                     high = middle;
@@ -304,11 +342,12 @@ where
             bail!("The MAT file has errors in more than {MAX_TRUNCATED_GAMES} games");
         }
         first_game = game + 1;
-        if validations >= MAX_VALIDATIONS {
-            return Err(failure.context("The MAT file has too many errors to locate"));
-        }
-        validations += 1;
-        match validate(transcript.render(&keep, None)).await {
+        let text = transcript.render(&keep, None);
+        let outcome = match attempt(&mut validate, text, &mut validations, deadline).await {
+            Ok(outcome) => outcome,
+            Err(budget) => return Err(failure.context(budget)),
+        };
+        match outcome {
             Ok(sgf) => {
                 return Ok(Located {
                     sgf,
@@ -376,7 +415,7 @@ where
     F: FnMut(Vec<u8>) -> Fut,
     Fut: Future<Output = Result<String>>,
 {
-    let located = locate(source, validate).await?;
+    let located = locate(source, validate, Instant::now() + MAX_RECOVERY_TIME).await?;
     let imported = super::parse_sgf(&located.sgf)?;
     // Lines only identify games when GNUbg kept every game of the transcript.
     let score_lines: Option<Vec<Option<usize>>> = located
@@ -531,10 +570,58 @@ mod tests {
         }
     }
 
+    fn later() -> Instant {
+        Instant::now() + MAX_RECOVERY_TIME
+    }
+
+    #[tokio::test]
+    async fn recovery_stops_at_its_deadline() {
+        // A deadline that has passed starts no recovery validation.
+        let calls = std::cell::Cell::new(0);
+        let error = locate(
+            SOURCE.as_bytes(),
+            validator(&["BAD: 13/7"], &calls),
+            Instant::now(),
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(calls.get(), 1, "only the first full attempt");
+        assert_eq!(error.to_string(), TOO_SLOW);
+        assert!(
+            format!("{error:#}").contains("Unrecognised move"),
+            "{error:#}"
+        );
+
+        // A validation still running at the deadline is abandoned, which
+        // kills its GNUbg process (`kill_on_drop`).
+        let calls = std::cell::Cell::new(0);
+        let mut stalled = validator(&["BAD: 13/7"], &calls);
+        let error = locate(
+            SOURCE.as_bytes(),
+            |text| {
+                let first = calls.get() == 0;
+                let outcome = stalled(text);
+                async move {
+                    if !first {
+                        std::future::pending::<()>().await;
+                    }
+                    outcome.await
+                }
+            },
+            Instant::now() + Duration::from_millis(50),
+        )
+        .await
+        .err()
+        .unwrap();
+        assert_eq!(calls.get(), 2);
+        assert_eq!(error.to_string(), TOO_SLOW);
+    }
+
     #[tokio::test]
     async fn a_valid_transcript_is_validated_once() {
         let calls = std::cell::Cell::new(0);
-        let located = locate(SOURCE.as_bytes(), validator(&[], &calls))
+        let located = locate(SOURCE.as_bytes(), validator(&[], &calls), later())
             .await
             .unwrap();
         assert!(located.truncations.is_empty());
@@ -548,6 +635,7 @@ mod tests {
         let located = locate(
             SOURCE.as_bytes(),
             validator(&["BAD: 13/7", "55: 8/3(2)"], &calls),
+            later(),
         )
         .await
         .unwrap();
@@ -572,12 +660,12 @@ mod tests {
     #[tokio::test]
     async fn a_rejected_header_or_text_without_games_keeps_the_error() {
         let calls = std::cell::Cell::new(0);
-        let error = locate(SOURCE.as_bytes(), validator(&["Bob : 1"], &calls))
+        let error = locate(SOURCE.as_bytes(), validator(&["Bob : 1"], &calls), later())
             .await
             .err()
             .unwrap();
         assert!(format!("{error:#}").contains("MAT game 2 cannot be read (line 13)"));
-        let error = locate(b"not a match", validator(&["not"], &calls))
+        let error = locate(b"not a match", validator(&["not"], &calls), later())
             .await
             .err()
             .unwrap();

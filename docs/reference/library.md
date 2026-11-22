@@ -81,7 +81,7 @@ Transcribed MAT and `.txt` matches can contain wrong moves and scores. The impor
 - **Score mismatch.** A game header's score differs from the previous game's result. The recorded header score is used, because GNUbg and the match context take it from there.
 - **Unfinished game.** A game without an ending line is followed by the next game. The game keeps its moves but has no result.
 
-A file whose games cannot be read at all, a game header that cannot be read, a file without any legal checker move, or errors in more than 20 games are still rejected.
+A file whose games cannot be read at all, a game header that cannot be read, a file without any legal checker move, or errors in more than 20 games are still rejected. So is a file whose errors cannot be located within 400 GNUbg validations or 60 seconds.
 
 The notes are saved with the match (`0087_match_import_warnings`) and kept with its copies. They appear as **Import notes** above the match or game comment in **Notes**, the analysis header shows their number, and the match database marks the PR of these matches with a warning sign. `GET /api/matches/{id}/import-warnings` returns the saved list, and library rows expose `import_warning_count`. Analyses and statistics cover the imported moves only; a game ended early has fewer decisions. Matches imported before this check have no saved notes.
 

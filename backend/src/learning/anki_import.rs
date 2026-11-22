@@ -1,7 +1,6 @@
 //! Import the structured decision model emitted by NeonDojo APKG exports.
 use super::*;
 use axum::extract::Multipart;
-use rusqlite::{Connection, OpenFlags};
 use std::io::{Cursor, Read, Write};
 
 const MAX_DB_BYTES: u64 = 32 * 1024 * 1024;
@@ -107,16 +106,11 @@ pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTr
     let copied = std::io::copy(&mut collection.take(MAX_DB_BYTES + 1), &mut tempfile)?;
     anyhow::ensure!(copied <= MAX_DB_BYTES, "Collection is too large");
     tempfile.flush()?;
-    let db = Connection::open_with_flags(
-        tempfile.path(),
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
-    db.set_db_config(
-        rusqlite::config::DbConfig::SQLITE_DBCONFIG_TRUSTED_SCHEMA,
-        false,
-    )?;
-    let notes: bool = db.query_row("SELECT EXISTS (SELECT 1 FROM sqlite_schema WHERE type='table' AND name='notes' AND upper(sql) NOT LIKE '%VIRTUAL%')", [], |row| row.get(0))?;
-    anyhow::ensure!(notes, "Expected a standard notes table");
+    let db = crate::untrusted_sqlite::open(tempfile.path())?;
+    anyhow::ensure!(
+        crate::untrusted_sqlite::is_regular_table(&db, "notes")?,
+        "Expected a standard notes table"
+    );
     let mut statement = db.prepare("SELECT data,tags FROM notes LIMIT 1001")?;
     let mut rows = statement.query([])?;
     let mut cards = BTreeMap::new();

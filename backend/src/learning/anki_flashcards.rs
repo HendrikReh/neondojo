@@ -164,22 +164,37 @@ fn renderer_unavailable() -> ApiError {
     )
 }
 
+/// Upper bound for the decompressed contents of an uploaded package.
+const MAX_UNCOMPRESSED: u64 = 512 * 1024 * 1024;
+
 fn inspect_archive(path: &FilePath) -> Result<()> {
+    inspect_archive_within(path, MAX_UNCOMPRESSED)
+}
+
+/// Checks that the package holds an Anki collection and decompresses to at
+/// most `limit` bytes. The sizes in ZIP headers are the uploader's claims, so
+/// every entry is decompressed and counted; this also verifies its checksum.
+fn inspect_archive_within(path: &FilePath, limit: u64) -> Result<()> {
     let mut archive = zip::ZipArchive::new(std::fs::File::open(path)?)?;
     ensure!(archive.len() <= 20_000, "Too many package entries");
-    let mut size = 0_u64;
+    let mut remaining = limit;
     let mut collection = false;
     for index in 0..archive.len() {
-        let file = archive.by_index_raw(index)?;
-        size = size.saturating_add(file.size());
-        ensure!(
-            size <= 512 * 1024 * 1024,
-            "Uncompressed package exceeds 512 MiB"
-        );
+        let mut file = archive.by_index(index)?;
         collection |= matches!(
             file.name(),
             "collection.anki2" | "collection.anki21" | "collection.anki21b"
         );
+        let read = std::io::copy(
+            &mut std::io::Read::take(&mut file, remaining.saturating_add(1)),
+            &mut std::io::sink(),
+        )?;
+        ensure!(
+            read <= remaining,
+            "Uncompressed package exceeds {} MiB",
+            limit / (1024 * 1024)
+        );
+        remaining -= read;
     }
     ensure!(collection, "No Anki collection in the package");
     Ok(())
@@ -487,4 +502,72 @@ pub async fn import_rendered_package(
     }
     tx.commit().await?;
     Ok(counts)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Cursor, Write};
+
+    const MIB: u64 = 1024 * 1024;
+
+    /// A package with a collection and one deflated entry of `size` zero bytes.
+    /// With `claimed_size`, both ZIP headers of that entry claim that size.
+    fn package(size: u32, claimed_size: Option<u32>) -> tempfile::NamedTempFile {
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+        zip.start_file("collection.anki21", options).unwrap();
+        zip.write_all(b"SQLite format 3\0").unwrap();
+        zip.start_file("0", options).unwrap();
+        zip.write_all(&vec![0; size as usize]).unwrap();
+        let mut bytes = zip.finish().unwrap().into_inner();
+        if let Some(claimed) = claimed_size {
+            // The uncompressed size is at offset 22 of a local file header and
+            // at offset 24 of a central directory header.
+            let mut patched = 0;
+            for (signature, offset) in [(0x0403_4b50_u32, 22), (0x0201_4b50, 24)] {
+                for start in 0..bytes.len() - offset - 4 {
+                    let field = start + offset..start + offset + 4;
+                    if bytes[start..start + 4] == signature.to_le_bytes()
+                        && bytes[field.clone()] == size.to_le_bytes()
+                    {
+                        bytes[field].copy_from_slice(&claimed.to_le_bytes());
+                        patched += 1;
+                    }
+                }
+            }
+            assert_eq!(patched, 2, "both headers of the entry are patched");
+        }
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(&bytes).unwrap();
+        file
+    }
+
+    #[test]
+    fn package_size_counts_decompressed_bytes() {
+        let honest = package(2 * MIB as u32, None);
+        inspect_archive_within(honest.path(), 3 * MIB).unwrap();
+        let error = inspect_archive_within(honest.path(), MIB).unwrap_err();
+        assert_eq!(error.to_string(), "Uncompressed package exceeds 1 MiB");
+
+        // Both headers claim 16 bytes, so summing them would accept it.
+        let lying = package(2 * MIB as u32, Some(16));
+        let mut archive = zip::ZipArchive::new(std::fs::File::open(lying.path()).unwrap()).unwrap();
+        assert_eq!(archive.by_index_raw(1).unwrap().size(), 16);
+        let error = inspect_archive_within(lying.path(), MIB).unwrap_err();
+        assert_eq!(error.to_string(), "Uncompressed package exceeds 1 MiB");
+    }
+
+    #[test]
+    fn package_needs_a_collection() {
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        zip.start_file("media", zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(b"{}").unwrap();
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(&zip.finish().unwrap().into_inner()).unwrap();
+        let error = inspect_archive(file.path()).unwrap_err();
+        assert_eq!(error.to_string(), "No Anki collection in the package");
+    }
 }

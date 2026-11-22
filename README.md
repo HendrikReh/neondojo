@@ -63,7 +63,7 @@ The backend reads these settings from its environment or from `.env` in its work
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DATABASE_URL` | `postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo` | PostgreSQL database |
-| `NEONDOJO_BIND` | `127.0.0.1:8787` | Listen address for the API and the built frontend |
+| `NEONDOJO_BIND` | `127.0.0.1:8787` | Listen address for the API and the built frontend. Requests must address a loopback host name ([Local access](docs/development/api.md#local-access)) |
 | `NEONDOJO_WEB_DIR` | unset | Serve the built frontend from this directory, usually `web/dist` |
 | `GNUBG_BIN` | `gnubg` | GNUbg executable until a path is saved in **Settings** |
 | `RUST_LOG` | `neondojo=info,tower_http=info` | Log filter |
