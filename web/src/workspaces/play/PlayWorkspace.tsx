@@ -1,20 +1,10 @@
-import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
 import { useDecimalInput } from '../../shared/format/decimal-input';
-import { engineDisplayName } from '../../shared/engine/engine-version';
 import {
   playStrengthLabel,
   useSettingsText,
 } from '../../settings/settings-messages';
 import { loadEngines, type EngineInfo } from '../../settings/settings-api';
-import {
-  preferredDepth,
-  TOP_TWO_PLAY_STRENGTH,
-  type DepthEngine,
-} from '../../shared/engine/analysis-depth';
-import EngineLabel from '../../shared/engine/EngineLabel';
 import Tooltip from '../../shared/ui/Tooltip';
-import { useConfirmedConfiguration } from '../../settings/configuration/ConfigurationProvider';
-import { defaultConfiguration } from '../../settings/configuration/configuration-model';
 import ActionButton from '../../shared/ui/ActionButton';
 import {
   useEffect,
@@ -44,12 +34,7 @@ import {
 } from './play-mode-messages';
 import type { AppSettings } from '../../settings/settings-api';
 import { usePlayReview } from './usePlayReview';
-import {
-  projectMove,
-  type MovePreview,
-  type BoardView,
-} from '../../shared/board/move-preview';
-import { useBoardReviewText } from '../../shared/board/board-review-messages';
+import { projectMove, type MovePreview } from '../../shared/board/move-preview';
 import type { Theme } from '../../shared/board/themes';
 import { useI18n } from '../../shared/i18n/i18n';
 import { AppError } from '../../shared/i18n/i18n-core';
@@ -72,7 +57,6 @@ import {
   changePlayMode,
   type PlayAction,
   type PlaySession,
-  type SageDifficulty,
 } from './play-api';
 import {
   playSounds,
@@ -92,19 +76,13 @@ import {
   reverseFrame,
 } from '../../shared/board/play-animation';
 import { usePlayAnimation, useRollingFaces } from './usePlayAnimation';
+import PlaySetupForm from './PlaySetupForm';
+import { usePlaySetupOptions } from './usePlaySetupOptions';
+import PlayMatchSummary from './PlayMatchSummary';
+import PlayHistoryReviewToolbar from './PlayHistoryReviewToolbar';
+import PlayTurnToolbar from './PlayTurnToolbar';
 import './play.css';
 const storageKey = 'neondojo.play-session';
-// Five-point PRs rounded from the shared 6,912-decision rollout benchmark.
-const sageDifficulties = [
-  { id: 'beginner', pr: 20.3, plies: 1 },
-  { id: 'casual', pr: 15.8, plies: 1 },
-  { id: 'intermediate', pr: 9.3, plies: 1 },
-  { id: 'full_strength', pr: 1, plies: 3 },
-] as const satisfies ReadonlyArray<{
-  id: SageDifficulty;
-  pr: number;
-  plies: number;
-}>;
 function storedSession() {
   try {
     return localStorage.getItem(storageKey);
@@ -163,7 +141,6 @@ export default function PlayWorkspace({
   const playback = usePlayAnimation(visible);
   const boardAnchor = useRef<HTMLDivElement>(null);
   const doubleReasonId = useId();
-  const setupId = useId();
   const turnNotationId = useId();
   const hintTrigger = useRef<HTMLButtonElement>(null);
   const learningReviewTrigger = useRef<HTMLButtonElement>(null);
@@ -207,7 +184,7 @@ export default function PlayWorkspace({
     return () => stopPlaySounds();
   }, [visible]);
   const t = usePlayText(),
-    { formatError, formatNumber, formatPoints, locale, t: appT } = useI18n();
+    { formatError, locale, t: appT } = useI18n();
   const modeT = usePlayModeText();
   const libraryT = useLibraryText();
   const resignT = usePlayResignText();
@@ -257,69 +234,21 @@ export default function PlayWorkspace({
       resumeTrigger.current?.focus({ preventScroll: true });
     if (!visible || !busy) focusResume.current = false;
   }, [visible, paused, busy, setup]);
-  const reviewText = useBoardReviewText();
   const settingsT = useSettingsText();
-  const [setupOptions, setSetupOptions] = useState<{
-    human?: number;
-    length?: number;
-    mode?: PlayMode;
-    automatic?: boolean;
-    name?: string;
-    engine?: DepthEngine;
-    plies?: number;
-    topTwo?: boolean;
-    difficulty?: SageDifficulty;
-  }>({});
-  const confirmed = useConfirmedConfiguration();
-  const defaults = defaultConfiguration.play;
-  const human =
-    setupOptions.human ?? confirmed?.play.human_player ?? defaults.human_player;
-  const length =
-    setupOptions.length ??
-    confirmed?.play.match_length ??
-    defaults.match_length;
-  const mode =
-    setupOptions.mode ??
-    confirmed?.play.default_mode ??
-    settings?.default_play_mode ??
-    defaults.default_mode;
-  const threshold =
-    confirmed?.analysis.error_thresholds.error ??
-    defaultConfiguration.analysis.error_thresholds.error;
-  const automatic =
-    setupOptions.automatic ??
-    confirmed?.play.training_auto_analysis ??
-    settings?.training_auto_analysis ??
-    defaults.training_auto_analysis;
-  // Name, bot engine and strength apply to the new match only.
-  const playerName =
-    setupOptions.name ??
-    confirmed?.general.player_name ??
-    settings?.player_name ??
-    '';
-  const savedBotEngine =
-    confirmed?.play.engine ?? settings?.play_engine ?? defaults.engine;
-  const botEngine = setupOptions.engine ?? savedBotEngine;
-  const botDepths = configurationOptions.engine_profiles[botEngine].play;
-  const botDifficulty =
-    botEngine === 'bgsage' ? setupOptions.difficulty : undefined;
-  const requestedPlies =
-    setupOptions.plies ??
-    (botEngine === savedBotEngine
-      ? (confirmed?.play.plies ?? settings?.play_plies ?? defaults.plies)
-      : preferredDepth(botEngine));
-  const botPlies = botDepths.includes(requestedPlies)
-    ? requestedPlies
-    : botDepths.includes(preferredDepth(botEngine))
-      ? preferredDepth(botEngine)
-      : botDepths[0];
-  const botTopTwo =
-    botEngine === 'bgsage' &&
-    botPlies === 2 &&
-    (setupOptions.topTwo ??
-      confirmed?.play.top_two ??
-      settings?.play_top_two ??
-      false);
+  const setupChoices = usePlaySetupOptions(settings);
+  const {
+    options: setupOptions,
+    setOptions: setSetupOptions,
+    confirmed,
+    human,
+    length,
+    mode,
+    automatic,
+    botEngine,
+    botDifficulty,
+    botPlies,
+    botTopTwo,
+  } = setupChoices;
   const sessionStrength =
     session &&
     (session.engine.difficulty
@@ -340,7 +269,6 @@ export default function PlayWorkspace({
       'right',
   );
   const [engines, setEngines] = useState<EngineInfo[]>([]);
-  const sageInfo = engines.find((engine) => engine.id === 'bgsage');
   useEffect(() => {
     if (!setupOpen) return;
     const abort = new AbortController();
@@ -1353,335 +1281,31 @@ export default function PlayWorkspace({
           returnFocus={session ? menuTrigger : newMatchTrigger}
           onClose={closeSetup}
         >
-          <div className="play-setup">
-            {errorNotice}
-            {busy && <p role="status">{t('thinking')}</p>}
-            <form onSubmit={create}>
-              <label>
-                {t('playerName')}
-                <input
-                  type="text"
-                  value={playerName}
-                  maxLength={120}
-                  autoComplete="off"
-                  spellCheck={false}
-                  disabled={setupDisabled}
-                  onChange={(event) =>
-                    setSetupOptions({
-                      ...setupOptions,
-                      name: event.target.value,
-                    })
-                  }
-                />
-              </label>
-              <div className="play-setup-bot">
-                <label>
-                  {t('botEngine')}
-                  <select
-                    value={botEngine}
-                    disabled={setupDisabled}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      if (value === 'gnubg' || value === 'bgsage')
-                        setSetupOptions({
-                          ...setupOptions,
-                          engine: value,
-                          plies: undefined,
-                          topTwo: false,
-                          difficulty: undefined,
-                        });
-                    }}
-                  >
-                    {(['gnubg', 'bgsage'] as const).map((id) => {
-                      const available =
-                        engines.find((item) => item.id === id)?.available ??
-                        true;
-                      return (
-                        <option
-                          key={id}
-                          value={id}
-                          disabled={!available && id !== botEngine}
-                        >
-                          {engineDisplayName(id)}
-                          {available ? '' : ` — ${settingsT('unavailable')}`}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-                <label>
-                  {t('strength')}
-                  <select
-                    value={
-                      botDifficulty ??
-                      (botTopTwo ? TOP_TWO_PLAY_STRENGTH : botPlies)
-                    }
-                    disabled={setupDisabled}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      const difficulty = sageDifficulties.find(
-                        ({ id }) => id === value,
-                      );
-                      const topTwo = value === TOP_TWO_PLAY_STRENGTH;
-                      setSetupOptions({
-                        ...setupOptions,
-                        engine: botEngine,
-                        plies: difficulty
-                          ? undefined
-                          : topTwo
-                            ? 2
-                            : Number(value),
-                        topTwo,
-                        difficulty: difficulty?.id,
-                      });
-                    }}
-                  >
-                    {botEngine === 'bgsage' && (
-                      <optgroup
-                        label={t(
-                          length === 5
-                            ? 'difficultyFivePoint'
-                            : 'difficultyPresets',
-                        )}
-                      >
-                        {sageDifficulties.map(({ id, pr, plies }) => (
-                          <option
-                            key={id}
-                            value={id}
-                            disabled={
-                              !!sageInfo &&
-                              (!sageInfo.available ||
-                                sageInfo.difficulty_presets === false ||
-                                !sageInfo.plies.includes(plies))
-                            }
-                          >
-                            {t(id)}
-                            {id === 'full_strength' &&
-                              ` · ${t('fullStrengthDepth')}`}
-                            {length === 5 &&
-                              ` · ≈ ${formatNumber(pr, { minimumFractionDigits: 1 })} PR`}
-                          </option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {botDepths.map((ply) => (
-                      <option key={ply} value={ply}>
-                        {playStrengthLabel(settingsT, ply, botEngine)}
-                      </option>
-                    ))}
-                    {botEngine === 'bgsage' && botDepths.includes(2) && (
-                      <option value={TOP_TWO_PLAY_STRENGTH}>
-                        {playStrengthLabel(settingsT, 2, botEngine, true)}
-                      </option>
-                    )}
-                  </select>
-                </label>
-              </div>
-              <p className="play-setup-help">{t('matchChoicesHelp')}</p>
-              <fieldset className="play-choice">
-                <legend>{t('humanColor')}</legend>
-                {([0, 1] as const).map((value) => (
-                  <label key={value}>
-                    <input
-                      type="radio"
-                      name={`${setupId}-color`}
-                      checked={human === value}
-                      disabled={setupDisabled}
-                      onChange={() =>
-                        setSetupOptions({ ...setupOptions, human: value })
-                      }
-                    />
-                    {t(value === 0 ? 'white' : 'black')}
-                  </label>
-                ))}
-              </fieldset>
-              <label>
-                {t('length')}
-                <select
-                  value={length}
-                  onChange={(event) =>
-                    setSetupOptions({
-                      ...setupOptions,
-                      length: Number(event.target.value),
-                    })
-                  }
-                  disabled={setupDisabled}
-                >
-                  <option value="0">{appT('common.moneyGame')}</option>
-                  {[1, 3, 5, 7, 9, 11, 15, 21, 25].map((n) => (
-                    <option key={n} value={n}>
-                      {formatPoints(n)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <fieldset className="play-choice play-mode-choice">
-                <legend>{modeT('mode')}</legend>
-                {playModes.map((value) => (
-                  <label key={value}>
-                    <input
-                      type="radio"
-                      name={`${setupId}-mode`}
-                      aria-label={modeT(value)}
-                      aria-describedby={`${setupId}-${value}`}
-                      checked={mode === value}
-                      disabled={setupDisabled}
-                      onChange={() =>
-                        setSetupOptions({ ...setupOptions, mode: value })
-                      }
-                    />
-                    <span>
-                      <strong>{modeT(value)}</strong>
-                      <small id={`${setupId}-${value}`}>
-                        {modeT(`${value}Help`)}
-                      </small>
-                    </span>
-                  </label>
-                ))}
-              </fieldset>
-              {mode === 'tutor' && (
-                <p>
-                  {modeT('threshold')} ·{' '}
-                  {formatNumber(threshold, {
-                    minimumFractionDigits: 3,
-                    maximumFractionDigits: 6,
-                  })}
-                </p>
-              )}
-              {mode === 'training' && (
-                <label className="play-mode-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={automatic}
-                    onChange={(event) =>
-                      setSetupOptions({
-                        ...setupOptions,
-                        automatic: event.target.checked,
-                      })
-                    }
-                    disabled={setupDisabled}
-                  />
-                  {modeT('automatic')}
-                </label>
-              )}
-              <p className="play-engine play-setup-engine">
-                <span>
-                  {settingsT('analysisEngine')} ·{' '}
-                  {(confirmed?.analysis.engine ?? settings?.analysis_engine) ===
-                  'bgsage'
-                    ? 'NeonGammon'
-                    : 'GNUbg'}{' '}
-                  ·{' '}
-                  {confirmed?.analysis.plies ??
-                    settings?.analysis_plies ??
-                    defaultConfiguration.analysis.plies}
-                  -ply
-                  {' / '}
-                  {t('rulesEngine')} · GNUbg
-                </span>
-                <ActionButton
-                  type="button"
-                  compact
-                  icon="settings"
-                  label={t('changeEngine')}
-                  disabled={setupDisabled}
-                  onClick={onOpenPlaySettings}
-                />
-              </p>
-              <div className="play-actions">
-                <ActionButton
-                  type="submit"
-                  className="primary"
-                  disabled={setupDisabled}
-                  icon="play"
-                  label={t('start')}
-                >
-                  {t('start')}
-                </ActionButton>
-                {session && (
-                  <ActionButton
-                    type="button"
-                    onClick={resumeMatch}
-                    disabled={uiBusy}
-                    icon={session.paused ? 'resume' : 'back'}
-                    label={t(session.paused ? 'resumeMatch' : 'backToMatch')}
-                  >
-                    {t(session.paused ? 'resumeMatch' : 'backToMatch')}
-                  </ActionButton>
-                )}
-                <ActionButton
-                  type="button"
-                  onClick={onOpenPausedMatches}
-                  disabled={uiBusy}
-                  icon="open"
-                  label={libraryT('pausedMatches')}
-                >
-                  {libraryT('pausedMatches')}
-                </ActionButton>
-              </div>
-            </form>
-          </div>
+          <PlaySetupForm
+            choices={setupChoices}
+            engines={engines}
+            errorNotice={errorNotice}
+            busy={busy}
+            disabled={setupDisabled}
+            uiBusy={uiBusy}
+            settings={settings}
+            session={session}
+            onSubmit={create}
+            onResume={resumeMatch}
+            onOpenPausedMatches={onOpenPausedMatches}
+            onOpenPlaySettings={onOpenPlaySettings}
+          />
         </PlayBoardDialog>
       )}
       {session && (
         <>
           <div className="play-match-heading" inert={setupOpen}>
-            <div className="play-match-summary">
-              <h2>
-                {name(0)} {formatNumber(session.scores[0])} :{' '}
-                {formatNumber(session.scores[1])} {name(1)}
-              </h2>
-              <p className="play-match-format">
-                {session.match_length
-                  ? formatPoints(session.match_length)
-                  : appT('common.moneyGame')}{' '}
-                · {t('game')} {formatNumber(session.game_no)}
-              </p>
-              <p className="play-engine play-match-engine">
-                <span>
-                  {t('botEngine')} ·{' '}
-                  <EngineLabel
-                    details={session.engine.version}
-                    tooltip={[
-                      session.engine.version,
-                      sessionStrength,
-                      t(
-                        session.bearoff_direction === 'left' ? 'left' : 'right',
-                      ),
-                    ].join(' · ')}
-                  />{' '}
-                  <span>{sessionStrength}</span>
-                </span>
-                <span>
-                  {settingsT('analysisEngine')} ·{' '}
-                  <EngineLabel
-                    details={
-                      session.engine_snapshots?.analysis.engine_version ??
-                      (session.engine_snapshots?.analysis.engine_id === 'bgsage'
-                        ? 'NeonGammon'
-                        : 'GNUbg')
-                    }
-                  />{' '}
-                  {session.analysis_plies ??
-                    defaultConfiguration.analysis.plies}
-                  -ply
-                </span>
-                <span>
-                  {t('rulesEngine')} ·{' '}
-                  <EngineLabel
-                    details={
-                      session.engine_snapshots?.rules.engine_version ??
-                      (session.engine.id === 'gnubg'
-                        ? session.engine.version
-                        : 'GNUbg')
-                    }
-                  />
-                </span>
-              </p>
-              <p className="play-match-status" role="status">
-                {turnStatus()}
-              </p>
-            </div>
+            <PlayMatchSummary
+              session={session}
+              name={name}
+              strength={sessionStrength}
+              status={turnStatus()}
+            />
             <div
               className="play-mode-slot"
               aria-hidden={Boolean(interruption)}
@@ -1894,73 +1518,12 @@ export default function PlayWorkspace({
                   </PlayBoardDialog>
                 )}
                 {review.index !== null && (
-                  <section className="play-history-review play-board-toolbar">
-                    <div className="play-history-review-heading">
-                      <strong>
-                        {t('reviewing')} {formatNumber(review.index + 1)}
-                        {historical
-                          ? ` · ${t('game')} ${formatNumber(historical.game_no)}`
-                          : ''}
-                      </strong>
-                      <ActionButton
-                        type="button"
-                        onClick={review.reset}
-                        className="primary"
-                        icon="resume"
-                        label={t('returnToGame')}
-                        shortcut="Escape"
-                      >
-                        {t('returnToGame')}
-                      </ActionButton>
-                    </div>
-                    {review.loading && (
-                      <p role="status">{t('loadingHistory')}</p>
-                    )}
-                    {review.error !== undefined && (
-                      <div role="alert" className="play-error">
-                        <p>{t('historyError')}</p>
-                        <p>{formatError(review.error)}</p>
-                        <ActionButton
-                          onClick={() => load(session.id)}
-                          icon="refresh"
-                          label={t('retry')}
-                        >
-                          {t('retry')}
-                        </ActionButton>
-                      </div>
-                    )}
-                    {historical && (
-                      <div
-                        className="board-view-buttons text-navigation text-navigation--compact"
-                        role="group"
-                        aria-label={reviewText('views')}
-                      >
-                        {(['before', 'arrows', 'after'] as BoardView[])
-                          .filter(
-                            (mode) =>
-                              historical.kind === 'checker' ||
-                              mode !== 'arrows',
-                          )
-                          .map((mode) => (
-                            <button
-                              type="button"
-                              key={mode}
-                              aria-pressed={historyView === mode}
-                              aria-keyshortcuts={
-                                mode === 'before'
-                                  ? 'ArrowLeft'
-                                  : mode === 'after'
-                                    ? 'ArrowRight'
-                                    : undefined
-                              }
-                              onClick={() => review.setView(mode)}
-                            >
-                              {reviewText(mode)}
-                            </button>
-                          ))}
-                      </div>
-                    )}
-                  </section>
+                  <PlayHistoryReviewToolbar
+                    review={review}
+                    index={review.index}
+                    view={historyView}
+                    onRetry={() => load(session.id)}
+                  />
                 )}
                 {coachDecision && (
                   <PlayCoachFeedback
@@ -1979,124 +1542,32 @@ export default function PlayWorkspace({
                   />
                 )}
                 {showBoardActions && (
-                  <div
-                    className="play-board-toolbar"
-                    data-testid="play-board-toolbar"
-                    role="group"
-                    aria-label={t(turnHeading)}
-                  >
-                    <h3>{t(turnHeading)}</h3>
-                    {/* The dice pair stays a second way to trigger the same action. */}
-                    {beforeRoll ? (
-                      <ActionButton
-                        className="primary play-main-action"
-                        data-play-action="roll"
-                        disabled={!boardRollReady}
-                        onClick={rollTurn}
-                        icon="roll"
-                        label={t('roll')}
-                        shortcut="Enter"
-                      />
-                    ) : forcedPass ? (
-                      <ActionButton
-                        className="primary play-main-action"
-                        data-play-action="pass"
-                        disabled={!canPass}
-                        onClick={() => action('pass')}
-                        icon="pass"
-                        label={t('passTurn')}
-                        shortcut="Enter"
-                      />
-                    ) : (
-                      <ActionButton
-                        className="primary play-main-action"
-                        data-play-action="confirm"
-                        disabled={!canConfirm}
-                        onClick={confirmTurn}
-                        icon="confirm"
-                        label={t('confirm')}
-                        shortcut="Enter"
-                      />
-                    )}
-                    {beforeRoll && !pendingRoutineRoll && (
-                      <ActionButton
-                        className="play-double-button"
-                        data-play-action="double"
-                        disabled={!boardRollReady || !session.can_double}
-                        aria-describedby={
-                          session.can_double ? undefined : doubleReasonId
-                        }
-                        onClick={doubleCube}
-                        icon="double"
-                        label={t('double')}
-                        shortcut="D"
-                      />
-                    )}
-                    {beforeRoll && !session.can_double && (
-                      <p
-                        id={doubleReasonId}
-                        className="play-double-unavailable"
-                      >
-                        {doubleUnavailableReason}
-                      </p>
-                    )}
-                    {!competition &&
-                      !pendingRoutineRoll &&
-                      !forcedPass &&
-                      (!beforeRoll || session.can_double) &&
-                      hintButton()}
-                    {!beforeRoll && !forcedPass && (
-                      <ActionButton
-                        type="button"
-                        className="play-undo-button"
-                        disabled={uiBusy || !canMove || !steps.length}
-                        onClick={undo}
-                        icon="undo"
-                        label={t('undo')}
-                        shortcut="Z"
-                      >
-                        <span>{t('undo')}</span>
-                        {steps.length > 0 && (
-                          <span className="play-undo-count" aria-hidden="true">
-                            {steps.length}
-                          </span>
-                        )}
-                      </ActionButton>
-                    )}
-                    {missingCheckerPaths && (
-                      <div role="alert" className="play-error">
-                        <p>{t('checkerTurnsError')}</p>
-                        <ActionButton
-                          icon="refresh"
-                          label={t('retry')}
-                          onClick={() => load(session.id)}
-                        >
-                          {t('retry')}
-                        </ActionButton>
-                      </div>
-                    )}
-                    {steps.length > 0 && (
-                      <p id={turnNotationId} className="play-selected-steps">
-                        {steps
-                          .map(
-                            (step) =>
-                              `${step.from === 0 || step.from === 25 ? t('bar') : relativePoint(step.from, session.human_player)}/${step.to < 0 || step.to > 25 ? t('off') : relativePoint(step.to, session.human_player)}`,
-                          )
-                          .join(' ')}
-                      </p>
-                    )}
-                    {!beforeRoll && (
-                      <p className="play-turn-help">
-                        {t(
-                          forcedPass
-                            ? 'passReady'
-                            : completed
-                              ? 'ready'
-                              : 'select',
-                        )}
-                      </p>
-                    )}
-                  </div>
+                  <PlayTurnToolbar
+                    session={session}
+                    heading={turnHeading}
+                    beforeRoll={beforeRoll}
+                    forcedPass={forcedPass}
+                    rollReady={boardRollReady}
+                    canPass={canPass}
+                    canConfirm={canConfirm}
+                    canMove={canMove}
+                    pendingRoutineRoll={Boolean(pendingRoutineRoll)}
+                    competition={competition}
+                    hint={hintButton()}
+                    busy={uiBusy}
+                    steps={steps}
+                    complete={Boolean(completed)}
+                    missingCheckerPaths={missingCheckerPaths}
+                    doubleReasonId={doubleReasonId}
+                    doubleUnavailableReason={doubleUnavailableReason}
+                    notationId={turnNotationId}
+                    onRoll={rollTurn}
+                    onPass={() => action('pass')}
+                    onConfirm={confirmTurn}
+                    onDouble={doubleCube}
+                    onUndo={undo}
+                    onRetry={() => load(session.id)}
+                  />
                 )}
                 <Board
                   position={
