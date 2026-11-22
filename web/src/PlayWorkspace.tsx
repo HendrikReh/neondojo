@@ -2278,7 +2278,6 @@ export default function PlayWorkspace({
                           onClick={() => action('take')}
                           icon="take"
                           label={t('take')}
-                          shortcut="T"
                         >
                           {t('take')}
                         </ActionButton>
@@ -2287,7 +2286,6 @@ export default function PlayWorkspace({
                           onClick={() => action('drop')}
                           icon="drop"
                           label={t('drop')}
-                          shortcut="D"
                         >
                           {t('drop')}
                         </ActionButton>
@@ -2297,7 +2295,6 @@ export default function PlayWorkspace({
                             onClick={() => feedback('hint')}
                             icon="hint"
                             label={modeT('hint')}
-                            shortcut="H"
                           >
                             {modeT('hint')}
                           </ActionButton>
