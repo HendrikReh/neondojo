@@ -1033,6 +1033,126 @@ async fn loss_pagination_covers_known_losses_and_unknowns_once(pool: PgPool) {
     );
 }
 
+async fn browser_page(app: axum::Router, filters: &str, query: &str) -> Value {
+    let (status, page) = call(
+        app,
+        "GET",
+        &format!("/api/position-browser?filters={filters}&limit=2{query}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    page
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn numbered_pages_count_and_order_the_same_hits_as_cursor_pages(pool: PgPool) {
+    let (app, original, positions) = setup(&pool).await;
+    let database = Uuid::new_v4();
+    sqlx::query("INSERT INTO databases(id,name) VALUES($1,'Second')")
+        .bind(database)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let copy = store::import_match_in_database(
+        &pool,
+        "copy.sgf",
+        "sgf",
+        SOURCE.as_bytes(),
+        SOURCE,
+        &import::parse_sgf(SOURCE).unwrap(),
+        database,
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    save_match(&pool, copy).await;
+    let copied: Vec<Position> =
+        sqlx::query_as("SELECT * FROM positions WHERE match_uuid=$1 ORDER BY ordinal")
+            .bind(copy)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    native(&pool, original, &positions[0], 2, 0.04, "completed").await;
+    native(&pool, original, &positions[1], 2, 0.16, "completed").await;
+    native(&pool, copy, &copied[2], 2, 0.3, "completed").await;
+    for (fields, total) in [
+        (json!({}), 6),
+        (json!({"sort":"loss"}), 6),
+        (json!({"sort":"loss","direction":"asc"}), 6),
+        (json!({"database_id":database}), 3),
+        (json!({"database_id":database,"sort":"loss"}), 3),
+        (json!({"analysis_state":"ready"}), 3),
+        (json!({"analysis_state":"missing","sort":"loss"}), 3),
+        (json!({"min_loss":0.1,"sort":"ply"}), 2),
+    ] {
+        let filters = encoded(&definition(fields.clone()));
+        let mut cursor_items = vec![];
+        let mut after = String::new();
+        loop {
+            let page = browser_page(app.clone(), &filters, &after).await;
+            assert!(page.get("total").is_none(), "{page}");
+            cursor_items.extend(page["items"].as_array().unwrap().iter().cloned());
+            let Some(cursor) = page["next_cursor"].as_str() else {
+                break;
+            };
+            after = format!("&after={cursor}");
+            assert!(cursor_items.len() < 8, "{fields}");
+        }
+        assert_eq!(cursor_items.len(), total, "{fields}");
+        let mut numbered = vec![];
+        for number in 1..=total.div_ceil(2) {
+            let page = browser_page(app.clone(), &filters, &format!("&page={number}")).await;
+            assert_eq!(page["total"], total, "{fields}");
+            let items = page["items"].as_array().unwrap();
+            assert_eq!(items.len(), 2.min(total - numbered.len()), "{fields}");
+            numbered.extend(items.iter().cloned());
+            assert_eq!(
+                page["next_cursor"].is_string(),
+                numbered.len() < total,
+                "{fields}"
+            );
+        }
+        assert_eq!(numbered, cursor_items, "{fields}");
+        let past = browser_page(
+            app.clone(),
+            &filters,
+            &format!("&page={}", total.div_ceil(2) + 1),
+        )
+        .await;
+        assert_eq!(past["items"], json!([]), "{fields}");
+        assert_eq!(past["total"], total, "{fields}");
+        assert!(past["next_cursor"].is_null(), "{fields}");
+    }
+    let losses: Vec<Value> = browser_page(
+        app.clone(),
+        &encoded(&definition(json!({"sort":"loss"}))),
+        "&page=1",
+    )
+    .await["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|hit| hit["native_error"]["equity_loss"].clone())
+        .collect();
+    assert_eq!(losses, vec![json!(0.3), json!(0.16)]);
+    let scoped = browser_page(
+        app,
+        &encoded(&definition(json!({"database_id":database,"sort":"loss"}))),
+        "&page=1",
+    )
+    .await;
+    assert_eq!(
+        scoped["items"][0]["position"]["id"],
+        copied[2].id.to_string()
+    );
+    assert_eq!(scoped["items"][0]["database_id"], database.to_string());
+    assert_eq!(scoped["items"][0]["card_ready"], true);
+    assert!(scoped["items"][1]["native_error"].is_null());
+    assert_eq!(scoped["items"][1]["card_ready"], false);
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn generated_position_context_works_with_the_restore_search_path(pool: PgPool) {
     let (_, _, positions) = setup(&pool).await;

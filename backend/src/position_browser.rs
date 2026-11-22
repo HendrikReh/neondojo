@@ -23,6 +23,8 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
 mod browse;
+#[cfg(test)]
+mod browse_performance;
 mod filters;
 mod routes;
 use browse::*;
