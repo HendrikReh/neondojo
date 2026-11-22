@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { request } from '../../shared/http/api';
+import { request, terminal } from '../../shared/http/api';
+import { watchJobChanges } from '../../shared/jobs/job-watch';
 import {
   analysisCatalogPath,
   analysisResultPath,
@@ -8,6 +9,9 @@ import {
   type AnalysisCatalogPage,
   type PositionAnalysisResult,
 } from './analysis-catalog-api';
+
+/** Catalog reads while pending entries report progress. */
+export const CATALOG_PROGRESS_READ_MS = 3_000;
 
 function isPending(entry: AnalysisCatalogEntry | null | undefined) {
   return entry?.status === 'running' || entry?.status === 'queued';
@@ -60,7 +64,54 @@ export function useAnalysisCatalog(
     const abort = new AbortController();
     const version = readVersion.current;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let reads = 0;
+    let lastRead = 0;
+    let watched = '';
+    let stopWatching: (() => void) | undefined;
+    function reloadSoon(immediately: boolean) {
+      if (immediately) clearTimeout(timer);
+      else if (timer !== undefined) return;
+      timer = setTimeout(
+        () => {
+          timer = undefined;
+          void load(true);
+        },
+        immediately
+          ? 0
+          : Math.max(0, CATALOG_PROGRESS_READ_MS - (Date.now() - lastRead)),
+      );
+    }
+    // Pending entries follow their jobs over the shared job watch: a finished
+    // job reloads the catalog at once, progress at most every few seconds.
+    function follow(page: AnalysisCatalogPage) {
+      const pending = [page.selected, ...page.items].filter(isPending);
+      const jobs = [
+        ...new Map(
+          pending.flatMap((entry) =>
+            entry?.job && !terminal(entry.job)
+              ? [[entry.job.id, entry.job] as const]
+              : [],
+          ),
+        ).values(),
+      ];
+      const key = jobs
+        .map((job) => job.id)
+        .sort()
+        .join(',');
+      if (key !== watched) {
+        stopWatching?.();
+        stopWatching = jobs.length
+          ? watchJobChanges(jobs, (job) => reloadSoon(!job || terminal(job)))
+          : undefined;
+        watched = key;
+      }
+      // Pending entries without a job to follow are read again periodically.
+      if (pending.some((entry) => !entry?.job || terminal(entry.job)))
+        reloadSoon(false);
+    }
     async function load(poll = false) {
+      const read = ++reads;
+      lastRead = Date.now();
       try {
         const next = await request<AnalysisCatalogPage>(
           analysisCatalogPath(matchId!, positionId),
@@ -68,6 +119,7 @@ export function useAnalysisCatalog(
         );
         if (
           abort.signal.aborted ||
+          read !== reads ||
           current.current !== scope ||
           version !== readVersion.current ||
           next.match_id !== matchId
@@ -92,10 +144,7 @@ export function useAnalysisCatalog(
         );
         setMatchPage({ matchId: matchId!, page: next });
         setFailure(undefined);
-        if (isPending(next.selected) || next.items.some(isPending))
-          timer = setTimeout(() => {
-            void load(true);
-          }, 3000);
+        follow(next);
       } catch (error) {
         if (
           !abort.signal.aborted &&
@@ -109,6 +158,7 @@ export function useAnalysisCatalog(
     return () => {
       abort.abort();
       clearTimeout(timer);
+      stopWatching?.();
     };
   }, [matchId, positionId, scope, revision, generation]);
 

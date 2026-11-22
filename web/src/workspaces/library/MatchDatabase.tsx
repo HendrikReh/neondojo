@@ -22,6 +22,7 @@ import type { Match, Position } from '../../shared/http/api';
 import SearchPagination from '../../shared/ui/SearchPagination';
 import { useSearchPages } from '../../shared/hooks/useSearchPages';
 import { useLibraryMatchOpening } from './useLibraryMatchOpening';
+import { useLibraryJobRefresh } from './useLibraryJobRefresh';
 import AnnotationSearch, {
   type AnnotationHit,
 } from '../analysis/notes/AnnotationSearch';
@@ -499,17 +500,8 @@ export default function MatchDatabase({
         ?.focus();
     }
   }
-  useEffect(() => {
-    if (
-      !visible ||
-      !matches.some((m) =>
-        ['queued', 'running'].includes(m.analysis_status ?? ''),
-      )
-    )
-      return;
-    const timer = setInterval(() => setRevision((n) => n + 1), 4000);
-    return () => clearInterval(timer);
-  }, [visible, matches]);
+  const reloadPage = useCallback(() => setRevision((n) => n + 1), []);
+  useLibraryJobRefresh(matches, visible, reloadPage);
   const active = databases.find((d) => d.id === databaseId);
   const hasFilters = Object.entries(filters).some(
     ([key, value]) => key !== 'date_field' && value.trim(),

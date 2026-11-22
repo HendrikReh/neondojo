@@ -42,10 +42,16 @@ export default function BenchmarkWorkspace({
   visible,
   defaultPlies,
   playPlies,
+  activeElsewhere = false,
+  onActivity,
 }: {
   visible: boolean;
   defaultPlies: number;
   playPlies: number | undefined;
+  /** The global status knows of a queued or running run. */
+  activeElsewhere?: boolean;
+  /** Reports whether the queue is active after each read and start. */
+  onActivity?: (active: boolean) => void;
 }) {
   const t = useBenchmarkText();
   const { locale, formatNumber, formatError } = useI18n();
@@ -76,6 +82,13 @@ export default function BenchmarkWorkspace({
   const [configurationRevision, setConfigurationRevision] = useState(0);
   const [queueActive, setQueueActive] = useState(false);
   const previousActive = useRef(false);
+  const activity = useRef(onActivity);
+  useEffect(() => {
+    activity.current = onActivity;
+  });
+  // A run the global status learned of, for example on window focus, that
+  // this view has not read yet.
+  const unseenRun = activeElsewhere && !queueActive;
   useEffect(() => {
     if (!visible) return;
     const abort = new AbortController();
@@ -106,8 +119,11 @@ export default function BenchmarkWorkspace({
   useEffect(() => {
     if (!visible) return;
     const abort = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let reading = false;
     async function poll() {
+      reading = true;
+      timer = undefined;
       try {
         const result = await loadBenchmarks(abort.signal);
         if (abort.signal.aborted) return;
@@ -116,27 +132,36 @@ export default function BenchmarkWorkspace({
         if (previousActive.current && !result.active)
           setConfigurationRevision((r) => r + 1);
         previousActive.current = result.active;
+        activity.current?.(result.active);
         setHistoryError(undefined);
       } catch (error) {
         if (!abort.signal.aborted) setHistoryError(error);
       } finally {
+        reading = false;
         if (!abort.signal.aborted) {
           setLoading(false);
-          // Follow an active queue closely; an idle history only needs to
-          // notice runs started elsewhere. Starting a run here re-polls at once.
-          timer = setTimeout(
-            () => void poll(),
-            previousActive.current ? 1000 : 10_000,
-          );
+          // Follow an active queue closely. An idle history is read again when
+          // a run starts here, the window regains focus, or the global status
+          // learns of a run started elsewhere.
+          if (previousActive.current)
+            timer = setTimeout(() => void poll(), 1000);
         }
       }
     }
     void poll();
+    const refresh = () => {
+      if (document.visibilityState === 'visible' && !reading && !timer)
+        void poll();
+    };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
     return () => {
       abort.abort();
       clearTimeout(timer);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
     };
-  }, [visible, revision]);
+  }, [visible, revision, unseenRun]);
   const engine = engines.find((e) => e.id === engineId && e.available);
   const requestedAnalysisDepths = analysisDepthsByEngine[engineId] ?? [
     defaultPlies,
@@ -213,6 +238,7 @@ export default function BenchmarkWorkspace({
       setRuns((current) => [...created, ...current]);
       setQueueActive(true);
       previousActive.current = true;
+      activity.current?.(true);
       setRevision((r) => r + 1);
     } catch (error) {
       setActionError(error);

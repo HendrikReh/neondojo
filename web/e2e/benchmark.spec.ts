@@ -796,3 +796,44 @@ test('comparison identifies stored engine versions and measurement protocols', a
     /^\d[\d.,]* ms$/,
   );
 });
+
+test('the global benchmark status is read at start, on focus and only while a run is active', async ({
+  page,
+}) => {
+  let active = false;
+  let reads = 0;
+  await page.route('**/api/benchmarks/status', (route) => {
+    reads++;
+    return route.fulfill({ json: { active } });
+  });
+  await page.clock.install();
+  await page.goto('/');
+  await expect(
+    page.getByRole('tab', { name: 'Extras', exact: true }),
+  ).toBeVisible();
+  await page.clock.runFor(1_000);
+  // Development mode mounts effects twice.
+  const start = reads;
+  expect(start).toBeGreaterThanOrEqual(1);
+  expect(start).toBeLessThanOrEqual(2);
+  // The former status polling read every 2 s for the app's whole lifetime.
+  await page.clock.runFor(20_000);
+  expect(reads).toBe(start);
+  const notice = page
+    .getByRole('status')
+    .filter({ hasText: 'Benchmark running or waiting.' });
+  active = true;
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(notice).toBeVisible();
+  for (let step = 1; step <= 2; step++) {
+    const before = reads;
+    await page.clock.runFor(2_000);
+    await expect.poll(() => reads).toBeGreaterThan(before);
+  }
+  active = false;
+  await page.clock.runFor(2_000);
+  await expect(notice).toHaveCount(0);
+  const idle = reads;
+  await page.clock.runFor(20_000);
+  expect(reads).toBe(idle);
+});

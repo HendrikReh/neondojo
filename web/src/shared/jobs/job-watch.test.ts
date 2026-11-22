@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { Job } from '../http/api';
-import { JOB_POLL_MS, JOB_SAFETY_READ_MS, watchJob } from './job-watch';
+import {
+  JOB_POLL_MS,
+  JOB_SAFETY_READ_MS,
+  watchJob,
+  watchJobChanges,
+} from './job-watch';
 
 class FakeEventSource {
   static readonly CONNECTING = 0;
@@ -341,4 +346,37 @@ test('a batch accepts canonical responses for mixed-case UUIDs', async () => {
   } finally {
     stops.forEach((stop) => stop());
   }
+});
+
+test('job changes report status and progress transitions, not repeated reads', async () => {
+  const changes: (string | undefined)[] = [];
+  const stop = watchJobChanges(
+    [{ id: 'job-1', status: 'running', progress: 40 }],
+    (current) =>
+      changes.push(current && `${current.status}:${current.progress}`),
+  );
+  await flush();
+  expect(reads).toBe(1);
+  expect(changes).toEqual([]);
+  const [stream] = FakeEventSource.instances;
+  stream.emit('running', { status: 'running', progress: 40, attempt: 1 });
+  stream.emit('progress', { status: 'running', progress: 60 });
+  expect(changes).toEqual(['running:60']);
+  served = job({ status: 'completed', progress: 100 });
+  stream.emit('completed', {});
+  await flush();
+  expect(changes).toEqual(['running:60', 'completed:100']);
+  stop();
+});
+
+test('job changes report a job that no longer exists', async () => {
+  status = 404;
+  const changes: (string | undefined)[] = [];
+  const stop = watchJobChanges(
+    [{ id: 'job-1', status: 'running', progress: 40 }],
+    (current, id) => changes.push(current ? current.status : `missing ${id}`),
+  );
+  await flush();
+  expect(changes).toEqual(['missing job-1']);
+  stop();
 });
