@@ -15,7 +15,7 @@ import { useGameCubeActions, type CubeAction } from './useGameCubeActions';
 import Board, { type Theme } from '../../shared/board/Board';
 import BoardReviewControls from './BoardReviewControls';
 import { useBoardReviewShortcuts } from '../../shared/review/useBoardReviewShortcuts';
-import PositionBookmarkButton from '../../PositionBookmarkButton';
+import PositionBookmarkButton from '../positions/PositionBookmarkButton';
 import { projectMove, type BoardView } from '../../shared/board/move-preview';
 import { useBoardReviewText } from '../../shared/board/board-review-messages';
 import type { PreviewCandidate } from '../../shared/review/candidate-preview';

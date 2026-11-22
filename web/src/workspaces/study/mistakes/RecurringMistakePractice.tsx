@@ -21,7 +21,7 @@ import {
 } from '../../../shared/board/move-preview';
 import { useBoardReviewText } from '../../../shared/board/board-review-messages';
 import { useLearningText } from '../flashcards/learning-messages';
-import { usePositionText } from '../../../position-browser-messages';
+import { usePositionText } from '../../positions/position-browser-messages';
 import type { PracticeAnswer } from '../flashcards/learning-api';
 import { useMistakeText } from './recurring-mistakes-messages';
 import {

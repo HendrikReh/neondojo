@@ -1,5 +1,5 @@
 import ActionIcon from './action-icons';
-import { usePositionText } from '../../position-browser-messages';
+import { usePositionText } from '../../workspaces/positions/position-browser-messages';
 import './applied-filter-chips.css';
 
 export type AppliedFilterChip<Key extends string> = {

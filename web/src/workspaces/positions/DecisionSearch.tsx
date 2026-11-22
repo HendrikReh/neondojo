@@ -1,34 +1,34 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { useDecimalInput } from './shared/format/decimal-input';
-import ActionButton from './shared/ui/ActionButton';
-import { request } from './shared/api/api';
-import type { Database } from './library-api';
-import Board from './shared/board/Board';
-import { CubeContextLine } from './shared/review/CubeDecisionDetails';
+import { useDecimalInput } from '../../shared/format/decimal-input';
+import ActionButton from '../../shared/ui/ActionButton';
+import { request } from '../../shared/api/api';
+import type { Database } from '../../library-api';
+import Board from '../../shared/board/Board';
+import { CubeContextLine } from '../../shared/review/CubeDecisionDetails';
 import { useDecisionSearchText } from './decision-search-messages';
-import EngineLabel from './shared/engine/EngineLabel';
-import LibraryColumnPicker from './shared/ui/LibraryColumnPicker';
-import LibrarySortHeading from './shared/ui/LibrarySortHeading';
+import EngineLabel from '../../shared/engine/EngineLabel';
+import LibraryColumnPicker from '../../shared/ui/LibraryColumnPicker';
+import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';
 import {
   DECISION_COLUMN_IDS,
   DECISION_COLUMN_LAYOUT,
   DECISION_COLUMNS,
   type DecisionColumn,
 } from './decision-table-columns';
-import { useLibraryText } from './library-messages';
-import { useResizableColumns } from './shared/hooks/useResizableColumns';
+import { useLibraryText } from '../../library-messages';
+import { useResizableColumns } from '../../shared/hooks/useResizableColumns';
 import {
   layoutColumns,
   useWorkspaceLayout,
-} from './shared/hooks/useWorkspaceSession';
+} from '../../shared/hooks/useWorkspaceSession';
 import PositionBookmarkButton from './PositionBookmarkButton';
 import { usePositionText } from './position-browser-messages';
-import { SearchResultRow } from './shared/ui/SearchResultList';
-import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
-import type { GamePlan } from './workspaces/analysis/game-plans/game-plan-api';
-import { useI18n } from './shared/i18n/i18n';
-import MistakePlayerSelect from './workspaces/study/mistakes/MistakePlayerSelect';
-import RecurringMistakePractice from './workspaces/study/mistakes/RecurringMistakePractice';
+import { SearchResultRow } from '../../shared/ui/SearchResultList';
+import { useGamePlanText } from '../analysis/game-plans/game-plan-messages';
+import type { GamePlan } from '../analysis/game-plans/game-plan-api';
+import { useI18n } from '../../shared/i18n/i18n';
+import MistakePlayerSelect from '../study/mistakes/MistakePlayerSelect';
+import RecurringMistakePractice from '../study/mistakes/RecurringMistakePractice';
 import {
   loadMistakes,
   mistakeGamePlans,
@@ -38,18 +38,18 @@ import {
   type DecisionSearchPage,
   type MistakeKind,
   type MistakeQuestion,
-} from './workspaces/study/mistakes/recurring-mistakes-api';
-import { useMistakeText } from './workspaces/study/mistakes/recurring-mistakes-messages';
+} from '../study/mistakes/recurring-mistakes-api';
+import { useMistakeText } from '../study/mistakes/recurring-mistakes-messages';
 import {
   mistakeProvenance,
   mistakeReferenceKey,
-} from './workspaces/study/mistakes/recurring-mistakes-provenance';
+} from '../study/mistakes/recurring-mistakes-provenance';
 import {
   SearchFilterInput,
   SearchFilterSelect,
-} from './shared/ui/SearchFilterForm';
-import { NumberedSearchPagination } from './shared/ui/SearchPagination';
-import type { Theme } from './shared/board/themes';
+} from '../../shared/ui/SearchFilterForm';
+import { NumberedSearchPagination } from '../../shared/ui/SearchPagination';
+import type { Theme } from '../../shared/board/themes';
 import './decision-search.css';
 
 const PAGE_SIZE = 50;

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { request } from '../../../shared/api/api';
-import { useDecisionSearchText } from '../../../decision-search-messages';
+import { useDecisionSearchText } from '../../positions/decision-search-messages';
 import { useGamePlanText } from '../../analysis/game-plans/game-plan-messages';
 import type { GamePlan } from '../../analysis/game-plans/game-plan-api';
 import type { components } from '../../../generated-api';

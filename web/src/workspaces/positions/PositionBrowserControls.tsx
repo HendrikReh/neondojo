@@ -1,17 +1,17 @@
-import ActionButton from './shared/ui/ActionButton';
-import AppliedFilterChips from './shared/ui/AppliedFilterChips';
+import ActionButton from '../../shared/ui/ActionButton';
+import AppliedFilterChips from '../../shared/ui/AppliedFilterChips';
 import SearchFilterForm, {
   SearchFilterInput,
   SearchFilterSelect,
   searchTextFields,
-} from './shared/ui/SearchFilterForm';
-import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
-import { mistakeGamePlans } from './workspaces/study/mistakes/recurring-mistakes-api';
+} from '../../shared/ui/SearchFilterForm';
+import { useGamePlanText } from '../analysis/game-plans/game-plan-messages';
+import { mistakeGamePlans } from '../study/mistakes/recurring-mistakes-api';
 import { useEffect, useId, useRef, useState } from 'react';
-import { DeckDialog } from './workspaces/study/flashcards/DeckLibraryDialogs';
-import { usePopoverPlacement } from './shared/hooks/usePopoverPlacement';
-import { useI18n } from './shared/i18n/i18n';
-import type { Database } from './library-api';
+import { DeckDialog } from '../study/flashcards/DeckLibraryDialogs';
+import { usePopoverPlacement } from '../../shared/hooks/usePopoverPlacement';
+import { useI18n } from '../../shared/i18n/i18n';
+import type { Database } from '../../library-api';
 import {
   deletePositionFilter,
   loadPositionFilters,

@@ -1,5 +1,5 @@
-import { request } from './shared/api/api';
-import type { components } from './generated-api';
+import { request } from '../../shared/api/api';
+import type { components } from '../../generated-api';
 
 export type PositionBookmark = Required<
   components['schemas']['PositionBookmark']

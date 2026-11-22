@@ -44,9 +44,9 @@ import MatchAnalysisDialog from '../workspaces/analysis/match/MatchAnalysisDialo
 import BulkMatchAnalysisDialog from '../workspaces/analysis/match/BulkMatchAnalysisDialog';
 import StudyWorkspace from '../workspaces/study/StudyWorkspace';
 import type { AssessmentEntry } from '../workspaces/study/reports/match-assessment-api';
-import PositionBrowser from '../PositionBrowser';
-import SimilarPositions from '../SimilarPositions';
-import { usePositionText } from '../position-browser-messages';
+import PositionBrowser from '../workspaces/positions/PositionBrowser';
+import SimilarPositions from '../workspaces/positions/SimilarPositions';
+import { usePositionText } from '../workspaces/positions/position-browser-messages';
 import SettingsDialog from '../settings/SettingsDialog';
 import { loadSettings, type AppSettings } from '../settings/settings-api';
 import { readTheme, saveTheme } from '../settings/ui-preferences';
@@ -96,8 +96,8 @@ import MoveNotesDialog, {
 } from '../workspaces/analysis/notes/MoveNotesDialog';
 import { useUiAppearance } from '../settings/appearance/useUiAppearance';
 import { useButtonShortcuts } from './useButtonShortcuts';
-import DecisionSearch from '../DecisionSearch';
-import { useDecisionSearchText } from '../decision-search-messages';
+import DecisionSearch from '../workspaces/positions/DecisionSearch';
+import { useDecisionSearchText } from '../workspaces/positions/decision-search-messages';
 
 type ImportSource = {
   files: readonly MatchFileEntry[];

@@ -1,17 +1,17 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import ActionButton from './shared/ui/ActionButton';
-import SearchPagination from './shared/ui/SearchPagination';
-import { SearchResultRow } from './shared/ui/SearchResultList';
-import { lastSearchPage } from './shared/hooks/useSearchPages';
-import Board from './shared/board/Board';
-import { request, type Position } from './shared/api/api';
-import { matchContext } from './shared/board/boardMath';
-import type { components } from './generated-api';
-import { useI18n } from './shared/i18n/i18n';
+import ActionButton from '../../shared/ui/ActionButton';
+import SearchPagination from '../../shared/ui/SearchPagination';
+import { SearchResultRow } from '../../shared/ui/SearchResultList';
+import { lastSearchPage } from '../../shared/hooks/useSearchPages';
+import Board from '../../shared/board/Board';
+import { request, type Position } from '../../shared/api/api';
+import { matchContext } from '../../shared/board/boardMath';
+import type { components } from '../../generated-api';
+import { useI18n } from '../../shared/i18n/i18n';
 import { usePositionText } from './position-browser-messages';
 import { useDecisionSearchText } from './decision-search-messages';
 import SimilarPositionPractice from './SimilarPositionPractice';
-import type { Theme } from './shared/board/themes';
+import type { Theme } from '../../shared/board/themes';
 
 type SimilarResponse = components['schemas']['SimilarPositions'];
 

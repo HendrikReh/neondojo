@@ -1,5 +1,8 @@
-import { useI18n, type Locale } from './shared/i18n/i18n';
-import { interpolate, type TranslationParams } from './shared/i18n/i18n-core';
+import { useI18n, type Locale } from '../../shared/i18n/i18n';
+import {
+  interpolate,
+  type TranslationParams,
+} from '../../shared/i18n/i18n-core';
 const entries = {
   scope: [
     'Position source',

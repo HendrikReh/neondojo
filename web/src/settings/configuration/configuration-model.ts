@@ -23,12 +23,12 @@ import {
   POSITION_COLUMNS,
   POSITION_DATA_COLUMNS,
   type PositionDataColumn,
-} from '../../position-table-columns';
+} from '../../workspaces/positions/position-table-columns';
 import {
   positionDefinition,
   positionDraft,
   type PositionFilterDefinition,
-} from '../../position-browser-api';
+} from '../../workspaces/positions/position-browser-api';
 import type { AnnotationFilters } from '../../workspaces/analysis/notes/annotation-api';
 import { isLocale, type Locale } from '../../shared/i18n/i18n-core';
 import {

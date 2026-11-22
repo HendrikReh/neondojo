@@ -1,7 +1,7 @@
 import type { InputHTMLAttributes, ReactNode, Ref } from 'react';
 import ActionButton from './ActionButton';
-import { usePositionText } from '../../position-browser-messages';
-import '../../position-browser.css';
+import { usePositionText } from '../../workspaces/positions/position-browser-messages';
+import '../../workspaces/positions/position-browser.css';
 
 export const searchTextFields = {
   q: { label: 'q', maxLength: 200 },

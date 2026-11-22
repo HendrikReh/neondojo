@@ -30,7 +30,7 @@ import {
 import CubePracticeChoices from '../practice/CubePracticeChoices';
 import PracticeResult from '../practice/PracticeResult';
 import { CubeContextLine } from '../../../shared/review/CubeDecisionDetails';
-import { usePositionText } from '../../../position-browser-messages';
+import { usePositionText } from '../../positions/position-browser-messages';
 import type { Theme } from '../../../shared/board/themes';
 
 export default function StudyCardExercise({

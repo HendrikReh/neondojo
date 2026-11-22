@@ -1,27 +1,27 @@
-import { useWorkspaceDefaults } from './settings/configuration/ConfigurationProvider';
+import { useWorkspaceDefaults } from '../../settings/configuration/ConfigurationProvider';
 import {
   layoutColumns,
   useWorkspaceLayout,
-} from './shared/hooks/useWorkspaceSession';
-import ActionButton from './shared/ui/ActionButton';
-import EngineLabel from './shared/engine/EngineLabel';
+} from '../../shared/hooks/useWorkspaceSession';
+import ActionButton from '../../shared/ui/ActionButton';
+import EngineLabel from '../../shared/engine/EngineLabel';
 import { useMemo, type ReactNode, type Ref } from 'react';
 import {
   SearchResultNotes,
   SearchResultRow,
   SearchResultTable,
   SearchResultTags,
-} from './shared/ui/SearchResultList';
+} from '../../shared/ui/SearchResultList';
 import {
   SearchPreviewBoard,
   SearchPreviewDecks,
   SearchPreviewDetails,
   SearchResultPreview,
-} from './shared/ui/SearchResultPreview';
-import LibrarySortHeading from './shared/ui/LibrarySortHeading';
-import LibraryColumnPicker from './shared/ui/LibraryColumnPicker';
-import { useResizableColumns } from './shared/hooks/useResizableColumns';
-import { useLibraryText } from './library-messages';
+} from '../../shared/ui/SearchResultPreview';
+import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';
+import LibraryColumnPicker from '../../shared/ui/LibraryColumnPicker';
+import { useResizableColumns } from '../../shared/hooks/useResizableColumns';
+import { useLibraryText } from '../../library-messages';
 import {
   POSITION_COLUMNS,
   POSITION_COLUMN_LAYOUT,
@@ -37,7 +37,7 @@ import {
   positionAnalysisProvenance,
 } from './position-row-summary';
 export { positionPlayer } from './position-row-summary';
-import { useI18n } from './shared/i18n/i18n';
+import { useI18n } from '../../shared/i18n/i18n';
 import type {
   PositionBrowserHit,
   PositionSort,
@@ -47,8 +47,8 @@ import {
   usePositionText,
   type PositionMessageKey,
 } from './position-browser-messages';
-import type { Theme } from './shared/board/themes';
-import { useAnalysisMatchHeaderText } from './workspaces/analysis/analysis-match-header-messages';
+import type { Theme } from '../../shared/board/themes';
+import { useAnalysisMatchHeaderText } from '../analysis/analysis-match-header-messages';
 export interface PositionResultsProps {
   selectPageRef?: Ref<HTMLInputElement>;
   items: readonly PositionBrowserHit[];

@@ -1,10 +1,10 @@
-import { cursorSearchParams } from './shared/api/cursor-search';
-import { request } from './shared/api/api';
-import { AppError } from './shared/i18n/i18n-core';
-import type { GamePlan } from './workspaces/analysis/game-plans/game-plan-api';
-import { mistakeGamePlans } from './workspaces/study/mistakes/recurring-mistakes-api';
+import { cursorSearchParams } from '../../shared/api/cursor-search';
+import { request } from '../../shared/api/api';
+import { AppError } from '../../shared/i18n/i18n-core';
+import type { GamePlan } from '../analysis/game-plans/game-plan-api';
+import { mistakeGamePlans } from '../study/mistakes/recurring-mistakes-api';
 
-import type { components } from './generated-api';
+import type { components } from '../../generated-api';
 type Schema = components['schemas'];
 export type PositionFilterDefinition = Schema['PositionFilterDefinition'];
 export type PositionBrowserHit = Schema['PositionBrowserHit'];

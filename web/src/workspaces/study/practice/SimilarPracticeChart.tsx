@@ -1,7 +1,7 @@
 import { useRef, useState, type KeyboardEvent } from 'react';
 import Tooltip from '../../../shared/ui/Tooltip';
 import { useI18n } from '../../../shared/i18n/i18n';
-import { usePositionText } from '../../../position-browser-messages';
+import { usePositionText } from '../../positions/position-browser-messages';
 import type { PracticeHistoryPage } from './similar-practice-history-api';
 
 const tickFractions = [1, 0.75, 0.5, 0.25, 0];

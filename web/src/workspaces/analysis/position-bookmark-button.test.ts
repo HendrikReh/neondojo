@@ -1,6 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { PositionBookmark } from '../../position-bookmark-api';
+import type { PositionBookmark } from '../positions/position-bookmark-api';
 
 // Match the existing Node hook tests while retaining real JSX and API requests.
 // Effects are committed separately to exercise navigation before old cleanup.
@@ -59,9 +59,9 @@ vi.mock('../../shared/i18n/i18n', () => ({
     formatError: () => 'Request failed',
   }),
 }));
-import PositionBookmarkButton from '../../PositionBookmarkButton';
+import PositionBookmarkButton from '../positions/PositionBookmarkButton';
 import ActionButton from '../../shared/ui/ActionButton';
-import { positionBookmarkMessages } from '../../position-bookmark-messages';
+import { positionBookmarkMessages } from '../positions/position-bookmark-messages';
 import AnalysisWorkspace from './AnalysisWorkspace';
 import AnalysisPanel from './AnalysisPanel';
 import BoardReviewControls from './BoardReviewControls';

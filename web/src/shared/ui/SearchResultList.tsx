@@ -1,6 +1,6 @@
 import type { ComponentPropsWithRef, KeyboardEvent, ReactNode } from 'react';
 import Tooltip from './Tooltip';
-import { usePositionText } from '../../position-browser-messages';
+import { usePositionText } from '../../workspaces/positions/position-browser-messages';
 
 export function SearchResultList({
   className,

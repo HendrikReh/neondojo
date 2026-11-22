@@ -10,7 +10,7 @@ import type { Database, LibraryMatch } from './library-api';
 import { canAnalyzeMatch } from './library-match-summary';
 import { usePlayerText } from './player-directory-messages';
 import { useLibraryText } from './library-messages';
-import { usePositionText } from './position-browser-messages';
+import { usePositionText } from './workspaces/positions/position-browser-messages';
 import { usePlayerPage } from './PlayerResults';
 import { prDigits } from './shared/format/pr-format';
 import PlayerRatingTrend from './PlayerRatingTrend';

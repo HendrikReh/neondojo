@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import ActionButton from '../../../shared/ui/ActionButton';
 import SimilarPracticeChart from './SimilarPracticeChart';
 import { useI18n } from '../../../shared/i18n/i18n';
-import { usePositionText } from '../../../position-browser-messages';
+import { usePositionText } from '../../positions/position-browser-messages';
 import { useStudyText } from '../study-messages';
 import {
   loadPracticeHistory,

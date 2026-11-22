@@ -13,7 +13,7 @@ import type { AssessmentEntry } from './reports/match-assessment-api';
 import RecurringMistakes from './mistakes/RecurringMistakes';
 import SimilarPracticeHistory from './practice/SimilarPracticeHistory';
 import MistakePracticeHistory from './mistakes/MistakePracticeHistory';
-import { usePositionText } from '../../position-browser-messages';
+import { usePositionText } from '../positions/position-browser-messages';
 import { useStudyOverviewText, useStudyText } from './study-messages';
 import './study.css';
 type Area = 'overview' | 'cards' | 'reports' | 'mistakes' | 'practice';

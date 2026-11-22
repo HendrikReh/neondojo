@@ -2,7 +2,7 @@ import { Children, type ComponentPropsWithoutRef, type ReactNode } from 'react';
 import type { Position } from '../api/api';
 import Board from '../board/Board';
 import type { Theme } from '../board/themes';
-import { usePositionText } from '../../position-browser-messages';
+import { usePositionText } from '../../workspaces/positions/position-browser-messages';
 
 export function SearchResultPreview({
   title,

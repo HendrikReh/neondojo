@@ -15,7 +15,7 @@ vi.mock('./AnalysisPanel', () => ({
 vi.mock('./notes/NotesPanel', () => ({
   default: () => createElement('div', { 'data-retained-notes': true }),
 }));
-vi.mock('../../PositionBookmarkButton', () => ({
+vi.mock('../positions/PositionBookmarkButton', () => ({
   default: () => createElement('div', { 'data-retained-bookmark': true }),
 }));
 vi.mock('../study/flashcards/LearningPanel', () => ({

@@ -1,5 +1,5 @@
-import { createColumnLayout } from './shared/hooks/column-widths';
-import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
+import { createColumnLayout } from '../../shared/hooks/column-widths';
+import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
 
 export const POSITION_COLUMNS = [
   { id: 'select', className: 'position-col-select', min: 32, defaultWidth: 36 },

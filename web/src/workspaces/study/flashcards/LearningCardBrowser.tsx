@@ -26,7 +26,7 @@ import {
   type CardBrowseContext,
 } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
-import { usePositionText } from '../../../position-browser-messages';
+import { usePositionText } from '../../positions/position-browser-messages';
 import { useDeckLibraryText } from './deck-library-messages';
 import { useCardPreviewResize } from './useCardPreviewResize';
 

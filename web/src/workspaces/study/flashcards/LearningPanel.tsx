@@ -46,7 +46,7 @@ import CardTagEditor from './CardTagEditor';
 import CardTopics from './CardTopics';
 import TransferPractice from './TransferPractice';
 import CardSpecialPractice from './CardSpecialPractice';
-import { usePositionText } from '../../../position-browser-messages';
+import { usePositionText } from '../../positions/position-browser-messages';
 import './learning-workspace.css';
 import DeckManagementDialog from './DeckManagementDialog';
 import CreateDeckForm from './CreateDeckForm';

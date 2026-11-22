@@ -1,9 +1,9 @@
 import type { PositionBrowserHit } from './position-browser-api';
-import type { Locale } from './shared/i18n/i18n-core';
-import { localizeDecision } from './shared/i18n/i18n-core';
+import type { Locale } from '../../shared/i18n/i18n-core';
+import { localizeDecision } from '../../shared/i18n/i18n-core';
 import { positionText } from './position-browser-messages';
-import { libraryText } from './library-messages';
-import { analysisCatalogText } from './workspaces/analysis/analysis-catalog-messages';
+import { libraryText } from '../../library-messages';
+import { analysisCatalogText } from '../analysis/analysis-catalog-messages';
 
 export const positionPlayer = (hit: PositionBrowserHit) =>
   hit.position.player === 0 ? hit.match_info.white : hit.match_info.black;

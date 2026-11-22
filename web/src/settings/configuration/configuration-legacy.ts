@@ -19,7 +19,7 @@ import { LIBRARY_RESIZABLE_LAYOUT as LIBRARY_COLUMN_LAYOUT } from '../../library
 import {
   POSITION_COLUMN_LAYOUT,
   POSITION_PLAYED_KEY,
-} from '../../position-table-columns';
+} from '../../workspaces/positions/position-table-columns';
 
 export function readLegacyConfiguration(
   settings: AppSettings,

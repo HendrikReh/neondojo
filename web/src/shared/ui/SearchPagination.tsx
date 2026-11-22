@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n/i18n';
-import { usePositionText } from '../../position-browser-messages';
+import { usePositionText } from '../../workspaces/positions/position-browser-messages';
 
 export function NumberedSearchPagination({
   page,

@@ -1,4 +1,4 @@
-import { useCheckerTurns } from './workspaces/study/practice/useCheckerTurns';
+import { useCheckerTurns } from '../study/practice/useCheckerTurns';
 import {
   useEffect,
   useRef,
@@ -6,26 +6,29 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import ActionButton from './shared/ui/ActionButton';
-import EngineLabel from './shared/engine/EngineLabel';
-import Board from './shared/board/Board';
+import ActionButton from '../../shared/ui/ActionButton';
+import EngineLabel from '../../shared/engine/EngineLabel';
+import Board from '../../shared/board/Board';
 import CheckerPracticeBoard, {
   type CheckerDraft,
-} from './workspaces/study/practice/CheckerPracticeBoard';
-import PlayBoardDialog from './shared/board/PlayBoardDialog';
-import { request } from './shared/api/api';
-import { useBoardReviewText } from './shared/board/board-review-messages';
-import { matchContext } from './shared/board/boardMath';
-import type { components } from './generated-api';
-import { useI18n } from './shared/i18n/i18n';
-import { projectMove, projectPracticeSteps } from './shared/board/move-preview';
+} from '../study/practice/CheckerPracticeBoard';
+import PlayBoardDialog from '../../shared/board/PlayBoardDialog';
+import { request } from '../../shared/api/api';
+import { useBoardReviewText } from '../../shared/board/board-review-messages';
+import { matchContext } from '../../shared/board/boardMath';
+import type { components } from '../../generated-api';
+import { useI18n } from '../../shared/i18n/i18n';
+import {
+  projectMove,
+  projectPracticeSteps,
+} from '../../shared/board/move-preview';
 import { usePositionText } from './position-browser-messages';
-import { useMistakeText } from './workspaces/study/mistakes/recurring-mistakes-messages';
+import { useMistakeText } from '../study/mistakes/recurring-mistakes-messages';
 import {
   savePracticeSummary,
   type PracticeSummaryInput,
-} from './workspaces/study/practice/similar-practice-history-api';
-import type { Theme } from './shared/board/themes';
+} from '../study/practice/similar-practice-history-api';
+import type { Theme } from '../../shared/board/themes';
 
 type Hit = components['schemas']['SimilarHit'];
 type Answer = components['schemas']['CheckerPracticeAnswer'];
