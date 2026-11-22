@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
-import { shortEngineVersion } from './shared/engine/engine-version';
-import EngineLabel from './shared/engine/EngineLabel';
-import { useI18n } from './shared/i18n/i18n';
+import { shortEngineVersion } from '../../shared/engine/engine-version';
+import EngineLabel from '../../shared/engine/EngineLabel';
+import { useI18n } from '../../shared/i18n/i18n';
 import {
   loadAppVersion,
   loadEngines,
   type AppVersion,
   type EngineInfo,
-} from './settings/settings-api';
+} from '../../settings/settings-api';
 import { versionInfoMessages } from './version-info-messages';
 import './version-info.css';
 

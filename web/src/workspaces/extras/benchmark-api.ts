@@ -1,6 +1,6 @@
-import { request } from './shared/api/api';
+import { request } from '../../shared/api/api';
 
-import type { components, paths } from './generated-api';
+import type { components, paths } from '../../generated-api';
 
 type Schemas = components['schemas'];
 export type BenchmarkReference = Schemas['BenchmarkReference'];

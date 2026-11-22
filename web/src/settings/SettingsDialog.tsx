@@ -23,7 +23,7 @@ import {
   type ErrorThresholds,
   type ProfileConfiguration,
 } from './configuration/configuration-model';
-import { useBenchmarkText } from '../benchmark-messages';
+import { useBenchmarkText } from '../workspaces/extras/benchmark-messages';
 import ActionButton from '../shared/ui/ActionButton';
 import {
   ANALYSIS_PLIES,

@@ -1,5 +1,5 @@
-import { request, type Match } from './shared/api/api';
-import type { components } from './generated-api';
+import { request, type Match } from '../../shared/api/api';
+import type { components } from '../../generated-api';
 
 type Schemas = components['schemas'];
 export type CreateSeries = Schemas['CreateSeries'];

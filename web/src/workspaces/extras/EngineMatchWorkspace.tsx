@@ -1,11 +1,11 @@
-import ActionButton from './shared/ui/ActionButton';
+import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useId, useRef, useState } from 'react';
-import { engineDisplayName } from './shared/engine/engine-version';
-import { depthLabel } from './shared/engine/analysis-depth';
-import type { Match } from './shared/api/api';
+import { engineDisplayName } from '../../shared/engine/engine-version';
+import { depthLabel } from '../../shared/engine/analysis-depth';
+import type { Match } from '../../shared/api/api';
 import { formatBenchmarkDuration } from './benchmark-duration';
-import EngineLabel from './shared/engine/EngineLabel';
-import options from '../../shared/configuration-options.json' with { type: 'json' };
+import EngineLabel from '../../shared/engine/EngineLabel';
+import options from '../../../../shared/configuration-options.json' with { type: 'json' };
 import {
   cancelSeries,
   createSeries,
@@ -23,9 +23,9 @@ import {
   engineMatchText,
   type EngineMatchLabel,
 } from './engine-match-messages';
-import { useI18n } from './shared/i18n/i18n';
-import LibraryDialog from './shared/ui/LibraryDialog';
-import { loadEngines, type EngineInfo } from './settings/settings-api';
+import { useI18n } from '../../shared/i18n/i18n';
+import LibraryDialog from '../../shared/ui/LibraryDialog';
+import { loadEngines, type EngineInfo } from '../../settings/settings-api';
 import './engine-match.css';
 
 type Competitor = CreateSeries['a'];

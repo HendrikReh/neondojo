@@ -9,12 +9,12 @@ import {
 import ProfileSelector from '../settings/profiles/ProfileSelector';
 import { openingBookConfigurationKey } from '../settings/configuration/configuration-model';
 import { settingsFromConfiguration } from '../settings/configuration/configuration-settings';
-import { loadBenchmarkStatus } from '../benchmark-api';
+import { loadBenchmarkStatus } from '../workspaces/extras/benchmark-api';
 import ExtrasWorkspace, {
   readExtrasTool,
   saveExtrasTool,
-} from '../ExtrasWorkspace';
-import { useBenchmarkText } from '../benchmark-messages';
+} from '../workspaces/extras/ExtrasWorkspace';
+import { useBenchmarkText } from '../workspaces/extras/benchmark-messages';
 import ActionButton from '../shared/ui/ActionButton';
 import PlayWorkspace from '../workspaces/play/PlayWorkspace';
 import MatchDropZone from '../workspaces/library/import/MatchDropZone';

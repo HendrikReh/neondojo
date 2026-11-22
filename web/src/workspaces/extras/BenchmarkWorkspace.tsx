@@ -1,16 +1,16 @@
 import BenchmarkComparison, {
   BenchmarkInitialization,
 } from './BenchmarkComparison';
-import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
+import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
 import { useEffect, useMemo, useRef, useState } from 'react';
-import ActionButton from './shared/ui/ActionButton';
-import EngineLabel from './shared/engine/EngineLabel';
-import LibrarySortHeading from './shared/ui/LibrarySortHeading';
+import ActionButton from '../../shared/ui/ActionButton';
+import EngineLabel from '../../shared/engine/EngineLabel';
+import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';
 import {
   ANALYSIS_PLIES,
   PLAY_PLIES,
   preferredDepth as enginePreferredDepth,
-} from './shared/engine/analysis-depth';
+} from '../../shared/engine/analysis-depth';
 import { formatBenchmarkDuration } from './benchmark-duration';
 import {
   DEFAULT_BENCHMARK_HISTORY_ORDER,
@@ -18,8 +18,8 @@ import {
   sortBenchmarkRuns,
   type BenchmarkHistorySort,
 } from './benchmark-history-sort';
-import { useI18n } from './shared/i18n/i18n';
-import { loadEngines, type EngineInfo } from './settings/settings-api';
+import { useI18n } from '../../shared/i18n/i18n';
+import { loadEngines, type EngineInfo } from '../../settings/settings-api';
 import {
   cancelBenchmark,
   deleteBenchmark,

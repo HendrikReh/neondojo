@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import ActionButton from './shared/ui/ActionButton';
-import LibraryDialog from './shared/ui/LibraryDialog';
-import { downloadResponse, request, requestResponse } from './shared/api/api';
+import ActionButton from '../../shared/ui/ActionButton';
+import LibraryDialog from '../../shared/ui/LibraryDialog';
+import {
+  downloadResponse,
+  request,
+  requestResponse,
+} from '../../shared/api/api';
 import { databaseBackupMessages } from './database-backup-messages';
-import type { paths } from './generated-api';
-import { useI18n } from './shared/i18n/i18n';
-import { AppError } from './shared/i18n/i18n-core';
+import type { paths } from '../../generated-api';
+import { useI18n } from '../../shared/i18n/i18n';
+import { AppError } from '../../shared/i18n/i18n-core';
 import './database-backup.css';
 
 const path = '/database-backup';
