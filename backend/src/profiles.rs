@@ -89,14 +89,7 @@ pub(crate) fn routes() -> Router<AppState> {
 async fn list_profiles(State(app): State<AppState>) -> Result<Json<Vec<ConfigurationProfile>>> {
     let mut tx = app.pool.begin().await?;
     store::lock(&mut tx).await?;
-    let ids: Vec<Uuid> =
-        sqlx::query_scalar("SELECT id FROM configuration_profiles ORDER BY name_key,id")
-            .fetch_all(&mut *tx)
-            .await?;
-    let mut result = vec![];
-    for id in ids {
-        result.push(store::profile(&mut tx, id).await?);
-    }
+    let result = store::profiles(&mut tx).await?;
     tx.commit().await?;
     Ok(Json(result))
 }

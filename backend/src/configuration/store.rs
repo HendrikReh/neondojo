@@ -46,11 +46,9 @@ fn configuration(value: Value) -> Result<ProfileConfiguration> {
 pub(crate) fn value(config: &ProfileConfiguration) -> Value {
     serde_json::to_value(config).expect("serializable configuration")
 }
-pub(crate) async fn profile(
-    tx: &mut Transaction<'_, Postgres>,
-    id: Uuid,
-) -> Result<ConfigurationProfile> {
-    let row=sqlx::query("SELECT id,name,revision,configuration,created_at,updated_at FROM configuration_profiles WHERE id=$1").bind(id).fetch_optional(&mut **tx).await?.ok_or_else(||ConfigurationError::new(StatusCode::NOT_FOUND,"profile_not_found","Profile not found"))?;
+const PROFILE_SELECT: &str =
+    "SELECT id,name,revision,configuration,created_at,updated_at FROM configuration_profiles";
+fn profile_row(row: sqlx::postgres::PgRow) -> Result<ConfigurationProfile> {
     Ok(ConfigurationProfile {
         id: row.get("id"),
         name: row.get("name"),
@@ -59,6 +57,34 @@ pub(crate) async fn profile(
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     })
+}
+pub(crate) async fn profile(
+    tx: &mut Transaction<'_, Postgres>,
+    id: Uuid,
+) -> Result<ConfigurationProfile> {
+    let row = sqlx::query(&format!("{PROFILE_SELECT} WHERE id=$1"))
+        .bind(id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(|| {
+            ConfigurationError::new(
+                StatusCode::NOT_FOUND,
+                "profile_not_found",
+                "Profile not found",
+            )
+        })?;
+    profile_row(row)
+}
+/// All profiles in display order, read with one query.
+pub(crate) async fn profiles(
+    tx: &mut Transaction<'_, Postgres>,
+) -> Result<Vec<ConfigurationProfile>> {
+    sqlx::query(&format!("{PROFILE_SELECT} ORDER BY name_key,id"))
+        .fetch_all(&mut **tx)
+        .await?
+        .into_iter()
+        .map(profile_row)
+        .collect()
 }
 pub(crate) async fn state(tx: &mut Transaction<'_, Postgres>) -> Result<ConfigurationState> {
     let row=sqlx::query("SELECT revision,active_profile_id,current_configuration FROM configuration_state WHERE singleton=true FOR UPDATE").fetch_optional(&mut **tx).await?.ok_or_else(||ConfigurationError::new(StatusCode::CONFLICT,"configuration_not_initialized","Configuration has not been initialized"))?;

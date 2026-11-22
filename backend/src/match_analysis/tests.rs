@@ -1,4 +1,3 @@
-
 use super::*;
 const MATCH: &str = include_str!("../../tests/fixtures/WC2014.gnubg.sgf");
 
