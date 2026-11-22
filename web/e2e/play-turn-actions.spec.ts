@@ -301,3 +301,41 @@ test('a money session names resignations and its score without match wording', a
   await expect(dialog).toContainText('If accepted, the session continues.');
   await expect(dialog).not.toContainText('match continues');
 });
+
+test('shortcut buttons show their key as a keycap without wrapping labels', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  const { saved } = await historyFixture(page);
+  Object.assign(saved, {
+    phase: 'roll',
+    play_mode: 'coach',
+    can_double: true,
+    legal_moves: [],
+    position: { ...saved.position, dice: [] },
+  });
+  await page.reload();
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const toolbar = page.getByTestId('play-board-toolbar');
+  const badges = async () =>
+    toolbar.locator('.action-button[data-shortcut]').evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const label = button.querySelector('.action-label')!;
+        const lines = Math.round(
+          label.getBoundingClientRect().height /
+            parseFloat(getComputedStyle(label).lineHeight),
+        );
+        return [
+          button.getAttribute('aria-label'),
+          getComputedStyle(button, '::after').content,
+          lines,
+        ];
+      }),
+    );
+  // The accessible name stays the label; the keycap is decoration.
+  await expect.poll(badges).toEqual([
+    ['Roll dice', '"↵"', 1],
+    ['Double', '"D"', 1],
+    ['Hint', '"H"', 1],
+  ]);
+});

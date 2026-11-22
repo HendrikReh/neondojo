@@ -833,6 +833,21 @@
   background: var(--ui-selected);
 }
 
+/* The board panel's buttons are too narrow for an inline keycap: it sits on
+   the top corner instead, so every label keeps one line. */
+.play-board-toolbar .action-button[data-shortcut] {
+  position: relative;
+}
+.play-board-toolbar
+  .action-button[data-shortcut]:not(.action-button--compact)::after {
+  position: absolute;
+  top: -7px;
+  right: 6px;
+  border-color: var(--ui-border-strong);
+  background: var(--ui-surface);
+  color: var(--ui-muted);
+  opacity: 1;
+}
 .play-board-toolbar {
   position: sticky;
   top: 10px;

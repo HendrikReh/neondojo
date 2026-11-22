@@ -112,8 +112,11 @@ Analysis (checker decisions in **Checker**, cube decisions in **Cube**). The
 
 ## Keyboard shortcuts in practice and review
 
-Buttons that have a shortcut name it in their tooltip, for example
-`Undo step (Z)`, and expose it through `aria-keyshortcuts`. **N**, **D**,
+Buttons that have a shortcut show it as a keycap badge (↵ for Enter, Esc,
+⇧E for Shift+E), name it in their tooltip, for example `Undo step (Z)`,
+and expose it through `aria-keyshortcuts`. In the narrow Playing panel the
+badge sits on the button's top corner so labels keep one line; icon-only
+buttons keep the key in the tooltip only. **N**, **D**,
 **T** and **P** choose a cube action, **Enter** checks an answer and then
 continues, **A** shows the answer, **1**–**4** rate a flashcard, and **E** /
 **Shift+E** move to the next or previous error (or decision, without an error

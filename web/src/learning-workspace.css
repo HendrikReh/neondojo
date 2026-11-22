@@ -372,22 +372,6 @@
   font-size: var(--font-size-meta);
   color: var(--ui-muted);
 }
-/* A shortcut is shown on its button, so nobody has to hover to learn it. */
-.study-card .action-button[data-shortcut]::after {
-  content: attr(data-shortcut);
-  min-width: 1.5em;
-  padding: 1px 5px;
-  border: 1px solid var(--ui-border-strong);
-  border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: var(--font-size-micro);
-  line-height: 1.4;
-  text-align: center;
-  color: var(--ui-muted);
-}
-.study-card .action-button[data-shortcut='Enter']::after {
-  content: '↵';
-}
 .study-ratings .action-button > .action-icon {
   display: none;
 }

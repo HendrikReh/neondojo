@@ -28,6 +28,33 @@
 a.action-button--compact {
   text-decoration: none;
 }
+/* A shortcut is shown on its button, so nobody has to hover to learn it.
+   The keycap follows the button's text color, so it reads on primary buttons
+   too; the accessible name stays the label and aria-keyshortcuts names the
+   key. Icon-only buttons keep the key in their tooltip. */
+.action-button[data-shortcut]:not(.action-button--compact)::after {
+  content: attr(data-shortcut);
+  flex: 0 0 auto;
+  min-width: 1.5em;
+  padding: 1px 5px;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-micro);
+  font-weight: normal;
+  line-height: 1.4;
+  text-align: center;
+  opacity: 0.8;
+}
+.action-button[data-shortcut='Enter']:not(.action-button--compact)::after {
+  content: '↵';
+}
+.action-button[data-shortcut='Escape']:not(.action-button--compact)::after {
+  content: 'Esc';
+}
+.action-button[data-shortcut='Shift+E']:not(.action-button--compact)::after {
+  content: '⇧E';
+}
 .engine-label-details {
   cursor: help;
   text-decoration: underline dotted;
