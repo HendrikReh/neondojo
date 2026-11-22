@@ -211,7 +211,7 @@ The worker runs a complete check when it starts and at every block boundary. Eac
 
 For a NeonGammon play action, the isolated GNUbg rules process is kept between inspection and execution and during the bounded chain of bot actions. Each subsequent step checks the exact GNUbg ID. GNUbg still produces rules, dice and SGF; the revision and the final SGF/snapshot are stored atomically. The process is terminated before storing; on errors, the previously stored game state remains. Log lines, artifacts, runtime and the number of actions are bounded.
 
-For direct GNUbg binaries, the rules adapter reads the version message from the running process. It checks the resolved path and SHA-256 of the binary before startup and after the process exits cleanly. For executable wrappers, the separate version check before and after the action is still required.
+For direct GNUbg binaries, the rules adapter and every GNUbg run that expects a saved version (analysis jobs, play sessions, engine duels and benchmarks) read the version message from the running process. They check the resolved path and SHA-256 of the binary before startup and after the process exits cleanly, which also detects a replacement that reports the same version. For executable wrappers, the separate version check before and after the action is still required, in addition to the SHA-256 of the wrapper. One implementation ([`engine/installation.rs`](../backend/src/engine/installation.rs)) serves both. On the Mac mini M4 Pro with a release build, the two `gnubg --version` launches that previously fenced every run took 113 ms together, the two digests of the 1.9 MB binary 8 ms (means of five).
 
 ### Warm-up for games
 
