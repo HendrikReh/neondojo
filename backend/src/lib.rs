@@ -61,6 +61,7 @@ mod analysis_timing;
 mod practice;
 mod search;
 mod similar_positions;
+mod untrusted_sqlite;
 
 pub mod engine_matches;
 mod engine_process;

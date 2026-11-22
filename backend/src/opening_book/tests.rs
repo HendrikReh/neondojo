@@ -219,6 +219,39 @@ async fn sqlite_lookup_reads_compressed_and_plain_candidates_and_cube() {
     }
 }
 
+#[test]
+fn books_whose_tables_are_views_or_virtual_tables_are_rejected() {
+    let (_dir, config) = book(false);
+    Book::open(&config.path).unwrap();
+    for (table, replacement) in [
+        (
+            "entries",
+            "CREATE VIEW entries AS SELECT xgid,payload FROM original",
+        ),
+        (
+            "meta",
+            "CREATE VIRTUAL TABLE meta USING fts5(key,value); INSERT INTO meta SELECT key,value FROM original",
+        ),
+        (
+            "contexts",
+            "CREATE VIEW contexts AS SELECT name,entries,depth,complete FROM original",
+        ),
+    ] {
+        let (_dir, config) = book(false);
+        rusqlite::Connection::open(&config.path)
+            .unwrap()
+            .execute_batch(&format!(
+                "ALTER TABLE {table} RENAME TO original; {replacement};"
+            ))
+            .unwrap();
+        let error = Book::open(&config.path).err().expect(table).to_string();
+        assert_eq!(
+            error,
+            format!("Opening book table {table} is missing or not a regular table")
+        );
+    }
+}
+
 #[tokio::test]
 async fn off_missing_wrong_score_and_wrong_engine_return_misses() {
     let (_dir, mut config) = book(true);
