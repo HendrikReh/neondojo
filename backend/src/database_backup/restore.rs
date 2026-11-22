@@ -65,12 +65,15 @@ async fn rebuild_analysis_revisions(connection: &mut PgConnection) -> Result<()>
     .execute(&mut *connection)
     .await
     .context("Rebuilding native analysis revisions")?;
-    // The token `mark_imported_analysis_rows` (migration 0089) writes.
+    // The rows and conflict rule `mark_imported_analysis_rows` (migration 0089)
+    // writes, so a row another trigger wrote during the copy cannot fail the restore.
     sqlx::query(
-        "INSERT INTO public.imported_analysis_revisions(match_id, revision)
+        "INSERT INTO public.imported_analysis_revisions AS revisions(match_id, revision)
          SELECT m.id, 'tx:' || pg_current_xact_id()::text FROM public.matches m
          WHERE EXISTS (SELECT FROM public.imported_analyses a WHERE a.match_uuid=m.id)
-         ORDER BY m.id",
+         ORDER BY m.id
+         ON CONFLICT (match_id) DO UPDATE SET revision = EXCLUDED.revision
+         WHERE revisions.revision <> EXCLUDED.revision",
     )
     .execute(connection)
     .await
