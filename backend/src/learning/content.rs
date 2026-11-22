@@ -127,6 +127,26 @@ pub(crate) async fn saved_position_cards(
     position_cards(pool, ids, None, true).await
 }
 
+/// Card content of the occurrences `$1` from analysis `$2`, or from each
+/// match's effective selection, limited to saved positions when `$3`.
+/// OFFSET 0 keeps the selection and catalog lookups per match; joined
+/// directly, PostgreSQL may build the analysis catalog of the whole library.
+pub(crate) fn position_cards_sql() -> String {
+    format!(
+        "SELECT to_jsonb(p) AS position,m.white,m.black,m.format,c.analysis_id,c.engine,j.id AS job_id,j.kind AS job_kind,j.plies,j.result,
+                ma.data AS decision,ia.id AS imported_id,ia.data AS imported,to_jsonb(e) AS event
+         FROM positions p JOIN matches m ON m.id=p.match_uuid
+         LEFT JOIN LATERAL (SELECT effective.analysis_id FROM effective_analysis_selections effective WHERE effective.match_id=m.id OFFSET 0) selected ON true
+         LEFT JOIN LATERAL (SELECT catalog.analysis_id,catalog.engine,catalog.job_id,catalog.source FROM analysis_catalog_sources catalog WHERE catalog.match_id=m.id AND catalog.analysis_id=coalesce($2,selected.analysis_id) OFFSET 0) c ON true
+         LEFT JOIN jobs j ON j.id=c.job_id AND (j.kind='match' AND (j.game_no IS NULL OR j.game_no=p.game_no) OR j.kind='analysis' AND j.position_uuid=p.id)
+         LEFT JOIN LATERAL (SELECT data FROM move_analyses WHERE job_id=j.id AND position_uuid=p.id AND game_no=p.game_no AND kind='checker' ORDER BY id DESC LIMIT 1) ma ON true
+         LEFT JOIN LATERAL (SELECT id,data,source_move_no FROM primary_imported_analyses WHERE match_uuid=m.id AND position_uuid=p.id AND kind='checker' ORDER BY source_ordinal LIMIT 1) ia ON c.source='imported'
+         LEFT JOIN match_moves e ON e.match_uuid=m.id AND e.game_no=p.game_no AND e.move_no=ia.source_move_no AND e.position_uuid=p.id
+         WHERE p.id=ANY($1) AND (NOT $3 OR EXISTS(SELECT 1 FROM saved_positions s WHERE s.position_uuid=p.id)) AND {}",
+        crate::position_browser::SAVED_VISIBLE,
+    )
+}
+
 async fn position_cards(
     pool: &PgPool,
     ids: &[Uuid],
@@ -157,19 +177,13 @@ async fn position_cards(
         imported: Option<serde_json::Value>,
         event: Option<sqlx::types::Json<crate::move_catalog::StoredMove>>,
     }
-    let rows = sqlx::query_as::<_, Row>(&format!(
-        "SELECT to_jsonb(p) AS position,m.white,m.black,m.format,c.analysis_id,c.engine,j.id AS job_id,j.kind AS job_kind,j.plies,j.result,
-                ma.data AS decision,ia.id AS imported_id,ia.data AS imported,to_jsonb(e) AS event
-         FROM positions p JOIN matches m ON m.id=p.match_uuid
-         LEFT JOIN effective_analysis_selections selected ON selected.match_id=m.id
-         LEFT JOIN analysis_catalog_sources c ON c.match_id=m.id AND c.analysis_id=coalesce($2,selected.analysis_id)
-         LEFT JOIN jobs j ON j.id=c.job_id AND (j.kind='match' AND (j.game_no IS NULL OR j.game_no=p.game_no) OR j.kind='analysis' AND j.position_uuid=p.id)
-         LEFT JOIN LATERAL (SELECT data FROM move_analyses WHERE job_id=j.id AND position_uuid=p.id AND game_no=p.game_no AND kind='checker' ORDER BY id DESC LIMIT 1) ma ON true
-         LEFT JOIN LATERAL (SELECT id,data,source_move_no FROM primary_imported_analyses WHERE match_uuid=m.id AND position_uuid=p.id AND kind='checker' ORDER BY source_ordinal LIMIT 1) ia ON c.source='imported'
-         LEFT JOIN match_moves e ON e.match_uuid=m.id AND e.game_no=p.game_no AND e.move_no=ia.source_move_no AND e.position_uuid=p.id
-         WHERE p.id=ANY($1) AND (NOT $3 OR EXISTS(SELECT 1 FROM saved_positions s WHERE s.position_uuid=p.id)) AND {}",
-        crate::position_browser::SAVED_VISIBLE,
-    )).bind(ids).bind(requested).bind(saved_only).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    let rows = sqlx::query_as::<_, Row>(&position_cards_sql())
+        .bind(ids)
+        .bind(requested)
+        .bind(saved_only)
+        .fetch_all(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
     let mut output = std::collections::HashMap::with_capacity(rows.len());
     for row in rows {
         let position = row.position.0;
