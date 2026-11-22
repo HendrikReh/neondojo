@@ -43,9 +43,9 @@ test('five-point difficulty labels and the selected opponent survive pause and r
       'optgroup[label="Difficulty presets · 5-point PR"] option',
     ),
   ).toHaveText([
-    'Beginner · ≈ 22 PR',
-    'Casual · ≈ 16.2 PR',
-    'Intermediate · ≈ 8.1 PR',
+    'Beginner · ≈ 20.3 PR',
+    'Casual · ≈ 15.8 PR',
+    'Intermediate · ≈ 9.3 PR',
     'Full Strength · 3-ply checkers / 2-ply cube · ≈ 1.0 PR',
   ]);
   await length.selectOption('7');

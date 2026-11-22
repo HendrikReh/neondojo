@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Changed
+
+- The five-point NeonGammon preset labels now show approximately 20.3, 15.8, 9.3, and 1.0 PR. All four presets were scored on the same 6,912 decisions against a shared rollout reference. [Five-point preset PR benchmark](docs/open-sage-local.md#five-point-preset-pr-benchmark)
+
 ## [1.2.0] - 2026-11-21
 
 NeonDojo 1.2.0 adds calibrated NeonGammon playing strengths, finds duplicate matches, exports matches as XG files, imports whole folders and plain-text MAT transcripts, and keeps faulty MAT transcripts with import notes instead of rejecting them. No change requires action from users: NeonGammon 3.0.0 installations keep working, and the difficulty presets need NeonGammon 3.1.0. Migrations `0086_played_record_fingerprint`, `0087_match_import_warnings`, `0088_play_top_two` and `0089_decision_source_revisions` run at startup; as with every schema migration, a backup made with 1.1.0 can only be restored with 1.1.0.

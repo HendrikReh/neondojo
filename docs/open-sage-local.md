@@ -87,6 +87,28 @@ The application process stays fully local. The sidecar has no download path; ins
 
 ### Five-point preset PR benchmark
 
+The four presets were scored on the same **6,912 decisions** from 130 archived
+five-point matches against the same full-rollout reference. The sample covers
+6,610 checker decisions and 302 cube decisions. Full Strength used Stage 11
+at 3-ply for checker moves and 2-ply for cube decisions.
+
+| Preset | PR | 95% bootstrap interval |
+|--------|---:|-----------------------:|
+| Beginner | 20.26 | 19.77–20.75 |
+| Casual | 15.85 | 15.48–16.21 |
+| Intermediate | 9.26 | 9.04–9.48 |
+| Full Strength | 0.99 | 0.91–1.09 |
+
+The benchmark retained the archived Stage 9 rollout equities and added
+1,296 full games per missing checker alternative that a preset could select.
+Close best-move comparisons received 2,309 additional batches. For the
+stochastic presets, each decision contributes the expected equity loss weighted
+by the preset's choice probabilities. The intervals use 10,000 bootstrap
+resamples of whole matches. The chooser rounds the unrounded PR to one decimal
+place. [NeonGammon rollout benchmark](https://github.com/HendrikReh/neongammon/blob/6e285eb/XG_COMPARISON.md#match-play)
+
+### Earlier head-to-head validation
+
 On November 21, 2026, the Apple M4 Pro validation ran 100 simulated five-point
 matches per preset against NeonDojo's Full Strength with 3-ply checker play and
 2-ply cube decisions. The bots used the bundled policies and the installed
@@ -103,19 +125,7 @@ Stage 11 3-ply. Each benchmark worker used one engine thread.
 The simulation and scoring use NeonGammon's `calibrate_difficulty.py` validation
 at `6e285eb`, with the then-bundled Full Strength policy as the opponent. PR
 pools equity loss across counted checker and cube decisions. The 95% intervals
-come from 4,000 bootstrap resamples of whole matches. The chooser rounds the
-measured PR to one decimal place.
-
-### Full Strength rollout PR
-
-Full Strength measured **0.975 PR** (95% interval **0.890–1.069**) on the
-NeonGammon five-point rollout benchmark.
-The score pools 6,610 checker choices at 3-ply and 302 cube choices at 2-ply
-across archived positions from 130 matches. The choices were scored using the
-same full-rollout equities as the comparison of 2-ply and 3-ply. For checker
-play, the reference best move and the 2-ply and 3-ply picks all had to have
-full rollout values. The 95% interval comes from resampling whole matches. The
-five-point chooser rounds this result to **≈ 1.0 PR**. [NeonGammon rollout benchmark](https://github.com/HendrikReh/neongammon/blob/6e285eb/XG_COMPARISON.md#match-play)
+come from 4,000 bootstrap resamples of whole matches.
 
 ## Tests with a real installation
 

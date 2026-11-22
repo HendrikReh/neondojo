@@ -15,18 +15,17 @@ by the API with HTTP 422 (while 1-ply, 2-ply, and 2-ply + Top-2 remain
 available). The presets are **Beginner**, **Casual**, **Intermediate**, and
 **Full Strength**. Beginner, Casual, and Intermediate sample 1-ply checker
 alternatives and close cube decisions. When the selected match length is 5
-points, the preset group shows **5-point PR** estimates of about **22**,
-**16.2**, and **8.1 PR**, respectively. These values come from matches against
-Full Strength, with sampled decisions scored using Stage 11 at 3-ply.
+points, the preset group shows **5-point PR** estimates of about **20.3**,
+**15.8**, **9.3**, and **1.0 PR**, respectively. All four presets were scored
+on the same 6,912 decisions against the same rollout reference.
 [Five-point preset PR benchmark](../open-sage-local.md#five-point-preset-pr-benchmark)
 
 In new matches, **Full Strength** plays Stage 11 at **3-ply for checker moves**
 and **2-ply for cube decisions**, following the engine's recommendation for
-each. Its five-point label shows **≈ 1.0 PR**, measured against a full-rollout
-reference. The match saves its preset (`engine.difficulty`) and checker depth.
+each. The match saves its preset (`engine.difficulty`) and checker depth.
 On reload or resume, the match bar shows the saved preset, and Full Strength
 matches started with the original 2-ply preset continue to play at their saved
-depth. [Full Strength rollout PR](../open-sage-local.md#full-strength-rollout-pr)
+depth.
 
 API clients can omit `play_plies` when selecting a preset. For new Full
 Strength matches, the former explicit value `2` is also accepted and the
