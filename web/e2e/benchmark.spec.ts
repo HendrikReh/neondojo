@@ -377,7 +377,7 @@ test('play-turn latency starts independently and has its own history metric', as
     protocol: null,
     play_reference: {
       id: 'wc2014-checker-turns-v1',
-      protocol_id: 'bgsage-checker-turn-v3-1ply-2threads-gnubg-rules',
+      protocol_id: 'bgsage-checker-turn-v4-1ply-2threads-gnubg-rules',
       sha256: 'abc',
       total_turns: 11,
     },

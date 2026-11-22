@@ -68,7 +68,7 @@ fn reference_for(
     let value = &mut reference.protocol;
     match EngineId::parse(engine) {
         Some(EngineId::NeonGammon) => {
-            value.id = format!("bgsage-match-v3-{plies}ply-4threads");
+            value.id = format!("bgsage-match-v4-{plies}ply-4threads");
             value.process_strategy =
                 "persistent-worker-atomic-game-verified-at-both-boundaries".into();
             value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
@@ -490,14 +490,27 @@ mod tests {
             "bgsage",
             4,
             None,
-            "bgsage-match-v3-4ply-4threads"
+            "bgsage-match-v4-4ply-4threads"
         ));
         assert!(!known_protocol_id(
             "bgsage",
             4,
             None,
-            "bgsage-match-v3-3ply-4threads"
+            "bgsage-match-v4-3ply-4threads"
         ));
+        // v3 timings predate the cheaper per-request checks and stay historical.
+        assert!(!known_protocol_id(
+            "bgsage",
+            4,
+            None,
+            "bgsage-match-v3-4ply-4threads"
+        ));
+        assert_eq!(
+            play_latency::reference_for("bgsage", 2)
+                .unwrap()
+                .protocol_id,
+            "bgsage-checker-turn-v4-2ply-2threads-gnubg-rules"
+        );
         assert!(known_protocol_id("gnubg", 2, None, "gnubg-match-v1"));
     }
 }
