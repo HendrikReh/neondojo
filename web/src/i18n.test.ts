@@ -7,6 +7,7 @@ import {
   formatMessage,
   interpolate,
   localizeDecision,
+  numberFormat,
   languages,
   type Locale,
   placeholders,
@@ -320,5 +321,18 @@ describe('plural forms for counted nouns', () => {
       }
     }
     expect(checked).toBeGreaterThan(100);
+  });
+});
+
+describe('numberFormat', () => {
+  it('reuses one formatter per locale and options', () => {
+    const options = { minimumFractionDigits: 3, maximumFractionDigits: 3 };
+    expect(numberFormat('de', options)).toBe(
+      numberFormat('de', { ...options }),
+    );
+    expect(numberFormat('de', options)).not.toBe(numberFormat('en', options));
+    expect(numberFormat('de')).not.toBe(numberFormat('de', options));
+    expect(numberFormat('de', options).format(0.05)).toBe('0,050');
+    expect(numberFormat('en', options).format(0.05)).toBe('0.050');
   });
 });

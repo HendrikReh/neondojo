@@ -71,8 +71,25 @@ export default function PlayCoachFeedback({
             <p className="play-coach-choice">{choice}</p>
             {decision.revealed && <DecisionEvaluation decision={decision} />}
           </div>
+          {/* Enter confirms here as in the regular turn toolbar; the dice
+              pair remains a second way to continue a checker turn. */}
           {checkerTurn ? (
-            <p>{playT(decision.action === 'pass' ? 'passReady' : 'ready')}</p>
+            <>
+              <ActionButton
+                className="primary play-main-action"
+                data-play-action={
+                  decision.action === 'pass' ? 'pass' : 'confirm'
+                }
+                disabled={busy}
+                onClick={onContinue}
+                icon={decision.action === 'pass' ? 'pass' : 'confirm'}
+                label={playT(
+                  decision.action === 'pass' ? 'passTurn' : 'confirm',
+                )}
+                shortcut="Enter"
+              />
+              <p>{playT(decision.action === 'pass' ? 'passReady' : 'ready')}</p>
+            </>
           ) : (
             <ActionButton
               className="primary play-main-action"
@@ -80,6 +97,7 @@ export default function PlayCoachFeedback({
               onClick={onContinue}
               icon="confirm"
               label={t('continue')}
+              shortcut="Enter"
             />
           )}
           <ActionButton

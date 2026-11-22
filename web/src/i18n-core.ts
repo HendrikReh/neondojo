@@ -135,6 +135,25 @@ function pluralBlocks(template: string): PluralBlock[] {
 
 const pluralRules = new Map<Locale, Intl.PluralRules>();
 /** The CLDR plural category of a count: the one place that decides it. */
+const numberFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * Shared `Intl.NumberFormat` per locale and options. Dense tables format many
+ * cells per render; constructing a formatter for each one is expensive.
+ */
+export function numberFormat(
+  locale: string,
+  options?: Intl.NumberFormatOptions,
+) {
+  const key = options ? `${locale}|${JSON.stringify(options)}` : locale;
+  let format = numberFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(locale, options);
+    numberFormats.set(key, format);
+  }
+  return format;
+}
+
 export function pluralCategory(locale: Locale, count: number) {
   let rules = pluralRules.get(locale);
   if (!rules) {
@@ -164,7 +183,7 @@ export function selectPluralForms(
       throw new Error(`Missing plural form: ${locale} ${template}`);
     result +=
       template.slice(from, start) +
-      form.replaceAll('#', new Intl.NumberFormat(locale).format(count));
+      form.replaceAll('#', numberFormat(locale).format(count));
     from = end;
   }
   return result + template.slice(from);
@@ -208,7 +227,7 @@ export function formatMessage(
   template: string,
   params: TranslationParams = {},
 ) {
-  const number = new Intl.NumberFormat(locale);
+  const number = numberFormat(locale);
   return interpolate(
     selectPluralForms(locale, template, params),
     Object.fromEntries(

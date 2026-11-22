@@ -103,6 +103,7 @@
 .play-live-board > .board-shell > .player-bar > span:last-child {
   font-size: var(--font-size-body);
   font-weight: var(--font-weight-normal);
+  color: var(--ui-text);
   font-variant-numeric: tabular-nums;
 }
 @media (max-width: 1100px) {
@@ -112,7 +113,7 @@
 }
 .play-header p,
 .play-engine {
-  color: var(--text-muted, #8d998f);
+  color: var(--ui-muted);
   font-size: 0.9rem;
 }
 .play-actions {
@@ -268,7 +269,7 @@
   cursor: pointer;
 }
 .play-point-number {
-  fill: var(--text, #d6ddca);
+  fill: var(--ui-text);
   font-weight: 600;
   pointer-events: none;
 }
@@ -556,7 +557,7 @@
 .play-mode-help {
   max-width: 60ch;
   margin: 0;
-  color: var(--text-muted);
+  color: var(--ui-muted);
 }
 .play-setup .play-mode-checkbox {
   display: flex;
@@ -566,11 +567,11 @@
 }
 .play-feedback,
 .play-learning-review {
-  border: 1px solid var(--border);
+  border: 1px solid var(--ui-border);
   border-radius: 10px;
   padding: 16px;
   margin: 0 0 16px;
-  background: var(--surface);
+  background: var(--ui-surface);
 }
 .play-feedback h3,
 .play-learning-review h3 {
@@ -579,7 +580,7 @@
 .play-feedback small {
   display: block;
   margin-top: 12px;
-  color: var(--text-muted);
+  color: var(--ui-muted);
 }
 .play-feedback-results {
   overflow-x: auto;
@@ -604,7 +605,7 @@
 .play-learning-review th,
 .play-learning-review td {
   padding: 7px 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--ui-border);
   white-space: nowrap;
 }
 .play-feedback th:first-child,
@@ -614,7 +615,7 @@
 .play-feedback-result[data-severity='bad'],
 .play-feedback-result[data-severity='blunder'],
 .play-feedback-result[data-severity='very_bad'] {
-  color: var(--danger, #be6958);
+  color: var(--ui-danger-text);
 }
 .play-hint {
   margin-bottom: 12px;
@@ -676,7 +677,7 @@
   border: 2px solid var(--ui-accent, #3158c9);
   border-radius: 16px;
   background: var(--ui-surface, white);
-  color: var(--text);
+  color: var(--ui-text);
   box-shadow: 0 20px 80px #0007;
   text-align: center;
 }
@@ -705,10 +706,10 @@
   font-weight: 700;
   border-radius: 12px;
   background: var(--ui-accent, #3158c9);
-  color: white;
+  color: var(--ui-accent-text, #fff);
 }
 .play-cube-offer span {
-  color: var(--text-muted);
+  color: var(--ui-muted);
   font-size: 0.85rem;
 }
 .play-cube-choices {
@@ -744,7 +745,7 @@
 }
 .play-dialog-preferences summary {
   cursor: pointer;
-  color: var(--text-muted);
+  color: var(--ui-muted);
   font-size: 0.85rem;
 }
 .play-dialog-preferences .play-mode-control {
@@ -764,7 +765,7 @@
 }
 .play-dialog-grip {
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--ui-muted);
 }
 .play-interruption-dialog[data-dragging='true'] .play-dialog-drag-handle {
   cursor: grabbing;
@@ -772,7 +773,7 @@
 
 .play-board-toolbar .play-double-unavailable {
   margin: 6px 0 0;
-  color: var(--text-muted);
+  color: var(--ui-muted);
   font-size: var(--font-size-meta);
 }
 
@@ -912,7 +913,7 @@
 }
 .play-board-toolbar > .play-turn-help {
   margin: 0;
-  color: var(--text-muted);
+  color: var(--ui-muted);
   font-size: var(--font-size-meta);
 }
 .play-coach-summary {
@@ -1060,11 +1061,11 @@
 }
 
 .play-workspace .play-resign-confirm {
-  border-color: #d7aaaa;
+  border-color: var(--ui-danger-text);
   min-height: 48px;
 }
 .play-workspace .play-resign-confirm {
-  color: #a32929;
+  color: var(--ui-danger-text);
 }
 .play-resign-dialog > p {
   text-align: left;
@@ -1101,7 +1102,7 @@
   overflow-wrap: anywhere;
 }
 .play-resign-outcome[data-match-ending='true'] {
-  color: #a32929;
+  color: var(--ui-danger-text);
 }
 .play-history-first-attempt {
   display: block;

@@ -122,7 +122,12 @@ export default function BenchmarkWorkspace({
       } finally {
         if (!abort.signal.aborted) {
           setLoading(false);
-          timer = setTimeout(() => void poll(), 1000);
+          // Follow an active queue closely; an idle history only needs to
+          // notice runs started elsewhere. Starting a run here re-polls at once.
+          timer = setTimeout(
+            () => void poll(),
+            previousActive.current ? 1000 : 10_000,
+          );
         }
       }
     }

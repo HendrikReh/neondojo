@@ -2,7 +2,7 @@
   grid-column: 1 / -1;
   margin: 10px 0;
   padding: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--ui-border);
   border-radius: 8px;
   background: var(--ui-surface, white);
   overflow-wrap: anywhere;
@@ -16,5 +16,5 @@
   margin: 5px 0 0;
 }
 .game-result-summary .game-result-score {
-  color: var(--text-muted);
+  color: var(--ui-muted);
 }

@@ -611,11 +611,15 @@
 
 }
 
-@media (min-width: 3000px) {
+/* Statistics uses two summary columns whenever its pane is wide enough,
+   for example with a narrower board, not only on very wide windows. */
+@media (min-width: 961px) {
   .analysis-workspace.analysis-statistics .position-inspector {
     container: analysis-statistics / inline-size;
   }
+}
 
+@media (min-width: 3000px) {
   .analysis-workspace.analysis-notes .annotation-panel textarea {
     font-size: var(--font-size-subject);
   }

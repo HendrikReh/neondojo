@@ -971,40 +971,6 @@ export default function App() {
         </p>
       )}
       <main className={`app-body app-body-${view}`}>
-        <section
-          className="workspace-panel"
-          id="workspace-panel-play"
-          role="tabpanel"
-          aria-labelledby="workspace-tab-play"
-          hidden={view !== 'play'}
-        >
-          <PlayWorkspace
-            visible={view === 'play'}
-            settings={settings}
-            theme={theme}
-            requestedSession={requestedPlaySession}
-            onSaved={() => setRevision((n) => n + 1)}
-            onModeChanged={playModeChanged}
-            onOpenPlaySettings={() => {
-              setSettingsCategory('play');
-              setSettingsOpen(true);
-            }}
-            onOpenAssessment={(id) => {
-              cancelRestoration();
-              setRequestedAssessment((previous) => ({
-                id,
-                token: (previous?.token ?? 0) + 1,
-              }));
-              setView('learning');
-            }}
-            onOpenPausedMatches={() => {
-              cancelRestoration();
-              setDatabaseId(PAUSED_MATCHES_DATABASE_ID);
-              setView('database');
-              tabs.current.database?.focus();
-            }}
-          />
-        </section>
         {!!(error || navigation.error) && (
           <div className="error" role="alert">
             {formatError(error || navigation.error)}
@@ -1054,6 +1020,41 @@ export default function App() {
             onClose={() => setImportRun(undefined)}
           />
         )}
+        {/* Global errors, notices and import progress stay above every workspace. */}
+        <section
+          className="workspace-panel"
+          id="workspace-panel-play"
+          role="tabpanel"
+          aria-labelledby="workspace-tab-play"
+          hidden={view !== 'play'}
+        >
+          <PlayWorkspace
+            visible={view === 'play'}
+            settings={settings}
+            theme={theme}
+            requestedSession={requestedPlaySession}
+            onSaved={() => setRevision((n) => n + 1)}
+            onModeChanged={playModeChanged}
+            onOpenPlaySettings={() => {
+              setSettingsCategory('play');
+              setSettingsOpen(true);
+            }}
+            onOpenAssessment={(id) => {
+              cancelRestoration();
+              setRequestedAssessment((previous) => ({
+                id,
+                token: (previous?.token ?? 0) + 1,
+              }));
+              setView('learning');
+            }}
+            onOpenPausedMatches={() => {
+              cancelRestoration();
+              setDatabaseId(PAUSED_MATCHES_DATABASE_ID);
+              setView('database');
+              tabs.current.database?.focus();
+            }}
+          />
+        </section>
         <div
           id="workspace-panel-analysis"
           role="tabpanel"

@@ -11,6 +11,7 @@ import {
   defaultLocale,
   formatLocalizedError,
   localizeDecision,
+  numberFormat,
   readLocale,
   saveLocale,
   translate,
@@ -26,15 +27,15 @@ const createFormatters = (locale: Locale) => ({
   t: (key: TranslationKey, params?: TranslationParams) =>
     translate(locale, key, params),
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) =>
-    new Intl.NumberFormat(locale, options).format(value),
+    numberFormat(locale, options).format(value),
   formatPercent: (value: number, digits = 0) =>
-    new Intl.NumberFormat(locale, {
+    numberFormat(locale, {
       style: 'percent',
       minimumFractionDigits: digits,
       maximumFractionDigits: digits,
     }).format(value),
   formatEquity: (value: number, digits = 3) =>
-    new Intl.NumberFormat(locale, {
+    numberFormat(locale, {
       signDisplay: 'always',
       minimumFractionDigits: digits,
       maximumFractionDigits: digits,

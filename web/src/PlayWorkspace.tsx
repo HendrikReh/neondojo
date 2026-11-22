@@ -1,4 +1,5 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
+import { engineDisplayName } from './engine-version';
 import { playStrengthLabel, useSettingsText } from './settings-messages';
 import { loadEngines, type EngineInfo } from './settings-api';
 import {
@@ -1382,7 +1383,7 @@ export default function PlayWorkspace({
                           value={id}
                           disabled={!available && id !== botEngine}
                         >
-                          {id === 'bgsage' ? 'NeonGammon' : 'GNUbg'}
+                          {engineDisplayName(id)}
                           {available ? '' : ` — ${settingsT('unavailable')}`}
                         </option>
                       );
@@ -2277,6 +2278,7 @@ export default function PlayWorkspace({
                           onClick={() => action('take')}
                           icon="take"
                           label={t('take')}
+                          shortcut="T"
                         >
                           {t('take')}
                         </ActionButton>
@@ -2285,6 +2287,7 @@ export default function PlayWorkspace({
                           onClick={() => action('drop')}
                           icon="drop"
                           label={t('drop')}
+                          shortcut="D"
                         >
                           {t('drop')}
                         </ActionButton>
@@ -2294,6 +2297,7 @@ export default function PlayWorkspace({
                             onClick={() => feedback('hint')}
                             icon="hint"
                             label={modeT('hint')}
+                            shortcut="H"
                           >
                             {modeT('hint')}
                           </ActionButton>
