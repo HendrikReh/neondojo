@@ -15,9 +15,16 @@ use axum::{
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, Postgres, postgres::PgArguments, query::QueryAs};
+use sqlx::{FromRow, PgConnection, Postgres, postgres::PgArguments, query::QueryAs};
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
+
+mod hits;
+mod projection;
+mod routes;
+use hits::*;
+use projection::*;
+pub use routes::{ReviewDoc, routes};
 
 // Native decision numbering includes skipped doubles that share a source
 // checker event. Recover the source ordinal before filtering out any decisions.
@@ -153,19 +160,6 @@ fn review_rows_query<'q>() -> QueryAs<'q, Postgres, Row, PgArguments> {
     sqlx::query_as(REVIEW_SQL).persistent(false)
 }
 
-pub fn routes() -> Router<AppState> {
-    Router::new().route("/api/matches/{id}/review-decisions", get(review))
-}
-#[utoipa::path(get,path="/api/matches/{id}/review-decisions",params(("id"=Uuid,Path),ReviewQuery),responses((status=200,body=ReviewDecisionPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
-async fn review(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    query: Result<Query<ReviewQuery>, axum::extract::rejection::QueryRejection>,
-) -> ApiResult<Json<ReviewDecisionPage>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
-    Ok(Json(load_review(&state, id, query).await?))
-}
-
 pub(crate) async fn load_review(
     state: &AppState,
     id: Uuid,
@@ -182,23 +176,54 @@ pub(crate) async fn load_all_review(
     game_no: Option<i32>,
     kind: Option<String>,
 ) -> ApiResult<Vec<ReviewDecision>> {
-    const MAX: i64 = 200_000;
-    let page = load_review_bounded(
-        state,
+    let query = all_review_query(analysis_id, game_no, kind);
+    review_bounds(&query, ALL_REVIEW_MAX)?;
+    prepare_review(&state.pool, id).await?;
+    let mut tx = begin_review_snapshot(&state.pool).await?;
+    let items = read_all_review(&mut tx, id, &query).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(items)
+}
+
+/// Batch consumers reuse the same projection inside the caller's read-only
+/// snapshot. Call [`prepare_review`] before opening that snapshot.
+pub(crate) async fn load_all_review_on(
+    connection: &mut PgConnection,
+    id: Uuid,
+    analysis_id: &str,
+    game_no: Option<i32>,
+    kind: Option<String>,
+) -> ApiResult<Vec<ReviewDecision>> {
+    read_all_review(
+        connection,
         id,
-        ReviewQuery {
-            analysis_id: Some(analysis_id.into()),
-            game_no,
-            kind,
-            page: Some(1),
-            limit: Some(MAX),
-            ..Default::default()
-        },
-        MAX,
-        false,
+        &all_review_query(analysis_id, game_no, kind),
     )
-    .await?;
-    if page.total.is_some_and(|total| total > MAX) {
+    .await
+}
+
+const ALL_REVIEW_MAX: i64 = 200_000;
+fn all_review_query(analysis_id: &str, game_no: Option<i32>, kind: Option<String>) -> ReviewQuery {
+    ReviewQuery {
+        analysis_id: Some(analysis_id.into()),
+        game_no,
+        kind,
+        page: Some(1),
+        limit: Some(ALL_REVIEW_MAX),
+        ..Default::default()
+    }
+}
+async fn read_all_review(
+    connection: &mut PgConnection,
+    id: Uuid,
+    query: &ReviewQuery,
+) -> ApiResult<Vec<ReviewDecision>> {
+    let (limit, offset) = review_bounds(query, ALL_REVIEW_MAX)?;
+    let page = match read_review(connection, id, query, limit, offset, false).await? {
+        ReviewRead::Page(page) => page,
+        ReviewRead::StaleHits(_) => unreachable!("hit sets are only rebuilt on request"),
+    };
+    if page.total.is_some_and(|total| total > ALL_REVIEW_MAX) {
         return Err(ApiError::invalid(
             "Analysis exceeds supported decision count",
         ));
@@ -206,13 +231,28 @@ pub(crate) async fn load_all_review(
     Ok(page.items)
 }
 
-async fn load_review_bounded(
-    state: &AppState,
-    id: Uuid,
-    query: ReviewQuery,
-    max_limit: i64,
-    rebuild: bool,
-) -> ApiResult<ReviewDecisionPage> {
+/// Writes the lazily built catalogs a review reads. They cannot be built inside
+/// the read-only snapshot that serves the review itself.
+pub(crate) async fn prepare_review(pool: &sqlx::PgPool, id: Uuid) -> ApiResult<()> {
+    crate::play::require_review_available(pool, id).await?;
+    if !crate::move_catalog::ensure_catalog(pool, id).await?
+        || !crate::imported_analysis::ensure_catalog(pool, id).await?
+    {
+        return Err(ApiError::missing());
+    }
+    Ok(())
+}
+
+pub(crate) async fn begin_review_snapshot(
+    pool: &sqlx::PgPool,
+) -> ApiResult<sqlx::Transaction<'static, Postgres>> {
+    Ok(pool
+        .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .await
+        .map_err(anyhow::Error::from)?)
+}
+
+fn review_bounds(query: &ReviewQuery, max_limit: i64) -> ApiResult<(i64, Option<i64>)> {
     let limit = query.limit.unwrap_or(50);
     if !(1..=max_limit).contains(&limit)
         || query.game_no.is_some_and(|g| g <= 0)
@@ -227,17 +267,62 @@ async fn load_review_bounded(
         ));
     }
     let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
-    crate::play::require_review_available(&state.pool, id).await?;
-    if !crate::move_catalog::ensure_catalog(&state.pool, id).await?
-        || !crate::imported_analysis::ensure_catalog(&state.pool, id).await?
-    {
-        return Err(ApiError::missing());
+    Ok((limit, offset))
+}
+
+async fn load_review_bounded(
+    state: &AppState,
+    id: Uuid,
+    query: ReviewQuery,
+    max_limit: i64,
+    rebuild: bool,
+) -> ApiResult<ReviewDecisionPage> {
+    let (limit, offset) = review_bounds(&query, max_limit)?;
+    prepare_review(&state.pool, id).await?;
+    let mut tx = begin_review_snapshot(&state.pool).await?;
+    match read_review(&mut tx, id, &query, limit, offset, rebuild).await? {
+        ReviewRead::Page(page) => {
+            tx.commit().await.map_err(anyhow::Error::from)?;
+            Ok(page)
+        }
+        ReviewRead::StaleHits(stale) => {
+            // Build outside this read-only snapshot, then answer from a new one.
+            tx.rollback().await.map_err(anyhow::Error::from)?;
+            build_hits(
+                &state.pool,
+                id,
+                &stale.analysis_id,
+                stale.job.as_deref(),
+                stale.imported,
+                &stale.format,
+            )
+            .await?;
+            Box::pin(load_review_bounded(state, id, query, max_limit, false)).await
+        }
     }
-    let mut tx = state
-        .pool
-        .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(anyhow::Error::from)?;
+}
+
+enum ReviewRead {
+    Page(ReviewDecisionPage),
+    StaleHits(StaleHits),
+}
+
+/// The stored hit set no longer matches this analysis; rebuild it first.
+struct StaleHits {
+    analysis_id: String,
+    job: Option<Box<Job>>,
+    imported: bool,
+    format: String,
+}
+
+async fn read_review(
+    tx: &mut PgConnection,
+    id: Uuid,
+    query: &ReviewQuery,
+    limit: i64,
+    offset: Option<i64>,
+    rebuild: bool,
+) -> ApiResult<ReviewRead> {
     let (format, revision): (String, i64) =
         sqlx::query_as("SELECT format,source_revision FROM matches WHERE id=$1")
             .bind(id)
@@ -255,7 +340,7 @@ async fn load_review_bounded(
         ));
     }
     let selected = crate::analysis_catalog::resolve_selection_on(
-        &mut tx,
+        &mut *tx,
         id,
         query.analysis_id.as_deref().or(legacy.as_deref()),
     )
@@ -383,12 +468,11 @@ async fn load_review_bounded(
         if offset.is_some_and(|offset| offset > 0) || query.after.is_some() {
             items.clear();
         }
-        tx.commit().await.map_err(anyhow::Error::from)?;
-        return Ok(ReviewDecisionPage {
+        return Ok(ReviewRead::Page(ReviewDecisionPage {
             items,
             next_cursor: None,
             total: query.page.map(|_| total),
-        });
+        }));
     }
     // Numbered pages count and select in the narrow hit set under this read
     // snapshot and project only their own decisions. Cursor pages and batch
@@ -396,7 +480,7 @@ async fn load_review_bounded(
     if let (Some(offset), Some(analysis_id)) = (offset, analysis_id.as_deref())
         && limit <= HIT_PAGE_LIMIT
     {
-        let current = hits_fingerprint(&mut tx, id, analysis_id, job_id).await?;
+        let current = hits_fingerprint(&mut *tx, id, analysis_id, job_id).await?;
         let stored: Option<String> = sqlx::query_scalar(
             "SELECT fingerprint FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
         )
@@ -414,28 +498,21 @@ async fn load_review_bounded(
                 format: &format,
                 job: job.as_deref(),
                 game,
-                query: &query,
+                query,
                 thresholds,
                 offset,
                 limit,
             };
-            if let Some(page) = page.load(&mut tx).await? {
-                tx.commit().await.map_err(anyhow::Error::from)?;
-                return Ok(page);
+            if let Some(page) = page.load(&mut *tx).await? {
+                return Ok(ReviewRead::Page(page));
             }
         } else if rebuild {
-            // Build outside this read-only snapshot, then answer from a new one.
-            tx.rollback().await.map_err(anyhow::Error::from)?;
-            build_hits(
-                &state.pool,
-                id,
-                analysis_id,
-                job.as_deref(),
+            return Ok(ReviewRead::StaleHits(StaleHits {
+                analysis_id: analysis_id.to_owned(),
+                job,
                 imported,
-                &format,
-            )
-            .await?;
-            return Box::pin(load_review_bounded(state, id, query, max_limit, false)).await;
+                format,
+            }));
         }
     }
     let mut cursor = cursor;
@@ -509,472 +586,15 @@ async fn load_review_bounded(
                 .map(|c| serde_json::to_vec(&c).map(|bytes| URL_SAFE_NO_PAD.encode(bytes)))
                 .transpose()
                 .map_err(anyhow::Error::from)?;
-            tx.commit().await.map_err(anyhow::Error::from)?;
-            return Ok(ReviewDecisionPage {
+            return Ok(ReviewRead::Page(ReviewDecisionPage {
                 items,
                 next_cursor,
                 total: offset.map(|_| matched),
-            });
+            }));
         }
         cursor = continuation;
     }
 }
-
-fn filtered_decision(
-    row: Row,
-    id: Uuid,
-    format: &str,
-    job: Option<&Job>,
-    errors_only: bool,
-    filter: Option<MoveSeverity>,
-    thresholds: ErrorThresholds,
-) -> Option<ReviewDecision> {
-    let mut result = project(row, id, format, job)?;
-    let severity = review_severity(
-        result.decision.evaluation_status == "evaluated",
-        result.decision.equity_loss,
-        thresholds,
-    );
-    if !severity_selected(severity, errors_only, filter) {
-        return None;
-    }
-    result.decision.severity = severity.as_str().into();
-    Some(result)
-}
-
-/// Only evaluated decisions are graded by the error thresholds.
-fn review_severity(evaluated: bool, equity_loss: f64, thresholds: ErrorThresholds) -> MoveSeverity {
-    if evaluated {
-        thresholds.classify(equity_loss)
-    } else {
-        MoveSeverity::None
-    }
-}
-
-fn severity_selected(
-    severity: MoveSeverity,
-    errors_only: bool,
-    filter: Option<MoveSeverity>,
-) -> bool {
-    !(errors_only && severity == MoveSeverity::None) && filter.is_none_or(|grade| grade == severity)
-}
-
-/// Saved data a hit set was built from: projection version, analysis, source
-/// revision and catalog state, and the analysis rows and checkpoints.
-async fn hits_fingerprint(
-    connection: &mut sqlx::PgConnection,
-    match_id: Uuid,
-    analysis_id: &str,
-    job_id: Option<Uuid>,
-) -> ApiResult<String> {
-    Ok(sqlx::query_scalar(
-        "SELECT concat_ws('|', $3::text, m.source_revision::text, m.format,
-                m.moves_cataloged::text, m.imported_analysis_loaded::text,
-                (SELECT count(*)::text||':'||coalesce(sum(a.id),0)::text
-                 FROM move_analyses a WHERE a.job_id=$2),
-                (SELECT count(*)::text||':'||coalesce(sum(c.game_no),0)::text
-                 FROM match_analysis_games c WHERE c.job_id=$2),
-                (SELECT count(*)::text FROM imported_analyses i WHERE i.match_uuid=m.id))
-         FROM matches m WHERE m.id=$1",
-    )
-    .bind(match_id)
-    .bind(job_id)
-    .bind(format!("{HITS_VERSION}:{analysis_id}"))
-    .fetch_one(connection)
-    .await
-    .map_err(anyhow::Error::from)?)
-}
-
-/// One validated decision of a hit set, in review order.
-struct Hit {
-    game_no: i32,
-    decision_no: i32,
-    checker: bool,
-    id: String,
-    player: i32,
-    evaluated: bool,
-    equity_loss: f64,
-}
-
-/// Project every decision of the analysis once and store the valid ones with
-/// what numbered pages need to count and select them.
-async fn build_hits(
-    pool: &sqlx::PgPool,
-    match_id: Uuid,
-    analysis_id: &str,
-    job: Option<&Job>,
-    imported: bool,
-    format: &str,
-) -> ApiResult<()> {
-    let job_id = job.map(|job| job.id);
-    let mut tx = pool
-        .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ")
-        .await
-        .map_err(anyhow::Error::from)?;
-    // Concurrent builds for the same analysis must not interleave their rows.
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 73))")
-        .bind(format!("{match_id}:{analysis_id}"))
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    let fingerprint = hits_fingerprint(&mut tx, match_id, analysis_id, job_id).await?;
-    let stored: Option<String> = sqlx::query_scalar(
-        "SELECT fingerprint FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
-    )
-    .bind(match_id)
-    .bind(analysis_id)
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(anyhow::Error::from)?;
-    if stored.as_deref() == Some(fingerprint.as_str()) {
-        tx.commit().await.map_err(anyhow::Error::from)?;
-        return Ok(());
-    }
-    let mut hits = Vec::new();
-    let mut cursor: Option<(i32, i32, bool, String)> = None;
-    loop {
-        let rows = review_rows_query()
-            .bind(match_id)
-            .bind(job_id)
-            .bind(None::<i32>)
-            .bind(None::<i32>)
-            .bind(None::<String>)
-            .bind(cursor.as_ref().map(|c| c.0))
-            .bind(cursor.as_ref().map(|c| c.1))
-            .bind(cursor.as_ref().map(|c| c.2))
-            .bind(cursor.as_ref().map(|c| c.3.clone()))
-            .bind(SCAN_LIMIT)
-            .bind(imported)
-            .bind(None::<Vec<String>>)
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?;
-        let complete = rows.len() < SCAN_LIMIT as usize;
-        cursor = rows.last().map(|row| {
-            (
-                row.game_no,
-                row.decision_no,
-                row.kind == "checker",
-                row.id.clone(),
-            )
-        });
-        let format = format.to_owned();
-        let job = job.cloned();
-        let batch = tokio::task::spawn_blocking(move || {
-            rows.into_iter()
-                .filter_map(|row| {
-                    let (game_no, decision_no, checker, id, player) = (
-                        row.game_no,
-                        row.decision_no,
-                        row.kind == "checker",
-                        row.id.clone(),
-                        row.player,
-                    );
-                    let decision = project(row, match_id, &format, job.as_ref())?.decision;
-                    Some(Hit {
-                        game_no,
-                        decision_no,
-                        checker,
-                        id,
-                        player,
-                        evaluated: decision.evaluation_status == "evaluated",
-                        equity_loss: decision.equity_loss,
-                    })
-                })
-                .collect::<Vec<_>>()
-        })
-        .await
-        .map_err(anyhow::Error::from)?;
-        hits.extend(batch);
-        if complete {
-            break;
-        }
-    }
-    sqlx::query("DELETE FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2")
-        .bind(match_id)
-        .bind(analysis_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    sqlx::query("INSERT INTO review_hit_sets(match_id,analysis_id,fingerprint) VALUES($1,$2,$3)")
-        .bind(match_id)
-        .bind(analysis_id)
-        .bind(&fingerprint)
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    sqlx::query(
-        "INSERT INTO review_hits(match_id,analysis_id,game_no,decision_no,checker,id,player,evaluated,equity_loss)
-         SELECT $1,$2,u.game_no,u.decision_no,u.checker,u.id,u.player,u.evaluated,u.equity_loss
-         FROM unnest($3::int[],$4::int[],$5::bool[],$6::text[],$7::int[],$8::bool[],$9::float8[])
-              AS u(game_no,decision_no,checker,id,player,evaluated,equity_loss)",
-    )
-    .bind(match_id)
-    .bind(analysis_id)
-    .bind(hits.iter().map(|h| h.game_no).collect::<Vec<_>>())
-    .bind(hits.iter().map(|h| h.decision_no).collect::<Vec<_>>())
-    .bind(hits.iter().map(|h| h.checker).collect::<Vec<_>>())
-    .bind(hits.iter().map(|h| h.id.clone()).collect::<Vec<_>>())
-    .bind(hits.iter().map(|h| h.player).collect::<Vec<_>>())
-    .bind(hits.iter().map(|h| h.evaluated).collect::<Vec<_>>())
-    .bind(hits.iter().map(|h| h.equity_loss).collect::<Vec<_>>())
-    .execute(&mut *tx)
-    .await
-    .map_err(anyhow::Error::from)?;
-    tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(())
-}
-
-/// A numbered page answered from a current hit set.
-struct HitPage<'a> {
-    match_id: Uuid,
-    analysis_id: &'a str,
-    job_id: Option<Uuid>,
-    imported: bool,
-    format: &'a str,
-    job: Option<&'a Job>,
-    game: Option<i32>,
-    query: &'a ReviewQuery,
-    thresholds: ErrorThresholds,
-    offset: i64,
-    limit: i64,
-}
-
-impl HitPage<'_> {
-    /// None when the page's decisions no longer project as the set recorded;
-    /// the caller then scans the analysis instead.
-    async fn load(
-        self,
-        connection: &mut sqlx::PgConnection,
-    ) -> ApiResult<Option<ReviewDecisionPage>> {
-        #[derive(FromRow)]
-        struct Selected {
-            id: String,
-            evaluated: bool,
-            equity_loss: f64,
-        }
-        let rows: Vec<Selected> = sqlx::query_as(
-            "SELECT id,evaluated,equity_loss FROM review_hits
-             WHERE match_id=$1 AND analysis_id=$2
-               AND ($3::integer IS NULL OR game_no=$3) AND ($4::integer IS NULL OR player=$4)
-               AND ($5::text IS NULL OR checker=($5='checker'))
-             ORDER BY game_no,decision_no,checker,id",
-        )
-        .bind(self.match_id)
-        .bind(self.analysis_id)
-        .bind(self.game)
-        .bind(self.query.player)
-        .bind(&self.query.kind)
-        .fetch_all(&mut *connection)
-        .await
-        .map_err(anyhow::Error::from)?;
-        let selected: Vec<String> = rows
-            .into_iter()
-            .filter(|row| {
-                severity_selected(
-                    review_severity(row.evaluated, row.equity_loss, self.thresholds),
-                    self.query.errors_only,
-                    self.query.severity,
-                )
-            })
-            .map(|row| row.id)
-            .collect();
-        let total = selected.len() as i64;
-        let page: Vec<String> = selected
-            .into_iter()
-            .skip(usize::try_from(self.offset).map_err(anyhow::Error::from)?)
-            .take(usize::try_from(self.limit).map_err(anyhow::Error::from)?)
-            .collect();
-        let mut items = Vec::new();
-        if !page.is_empty() {
-            let rows = review_rows_query()
-                .bind(self.match_id)
-                .bind(self.job_id)
-                .bind(self.game)
-                .bind(self.query.player)
-                .bind(&self.query.kind)
-                .bind(None::<i32>)
-                .bind(None::<i32>)
-                .bind(None::<bool>)
-                .bind(None::<String>)
-                .bind(page.len() as i64 + 1)
-                .bind(self.imported)
-                .bind(&page)
-                .fetch_all(&mut *connection)
-                .await
-                .map_err(anyhow::Error::from)?;
-            let (match_id, format, job) =
-                (self.match_id, self.format.to_owned(), self.job.cloned());
-            let (errors_only, severity, thresholds) =
-                (self.query.errors_only, self.query.severity, self.thresholds);
-            items = tokio::task::spawn_blocking(move || {
-                rows.into_iter()
-                    .filter_map(|row| {
-                        filtered_decision(
-                            row,
-                            match_id,
-                            &format,
-                            job.as_ref(),
-                            errors_only,
-                            severity,
-                            thresholds,
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .await
-            .map_err(anyhow::Error::from)?;
-            if !items.iter().map(|item| &item.id).eq(page.iter()) {
-                return Ok(None);
-            }
-        }
-        Ok(Some(ReviewDecisionPage {
-            items,
-            next_cursor: None,
-            total: Some(total),
-        }))
-    }
-}
-fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<ReviewDecision> {
-    let (decision, move_id, review_position, engine, depth, depth_plies, job_id, source) = if row
-        .native
-    {
-        let job = job?;
-        if row.kind == "checker" && row.data["evaluation_status"] != "unavailable" {
-            let position: crate::model::Position =
-                serde_json::from_value(row.position.clone()?).ok()?;
-            crate::move_assessments::native_checker_loss(&position, &row.data, row.equity_loss?)?;
-        }
-        let decision: Decision = serde_json::from_value(row.data).ok()?;
-        if decision.decision_no != row.decision_no
-            || decision.kind != row.kind
-            || decision.player != row.player
-            || row
-                .equity_loss
-                .is_none_or(|loss| !loss.is_finite() || (loss - decision.equity_loss).abs() > 1e-9)
-        {
-            return None;
-        }
-        let valid_status = match decision.evaluation_status.as_str() {
-            "evaluated" => source::evaluated(&decision),
-            "forced" => {
-                decision.kind == "checker"
-                    && decision.equity_loss == 0.0
-                    && row
-                        .position
-                        .and_then(|value| {
-                            serde_json::from_value::<crate::model::Position>(value).ok()
-                        })
-                        .is_some_and(|p| {
-                            p.player == decision.player
-                                && crate::move_assessments::after_play(&p, "Cannot move").is_some()
-                        })
-            }
-            "unavailable" => decision.played_equity.is_none() && decision.best_equity.is_none(),
-            _ => false,
-        };
-        if !valid_status {
-            return None;
-        }
-        let saved_engine = job
-            .engine_snapshot
-            .as_ref()
-            .map(|s| {
-                s.provider()
-                    .map_or(s.engine_id.as_str(), |engine| engine.product_name())
-            })
-            // Legacy jobs without a snapshot ran on GNUbg.
-            .unwrap_or(crate::engines::EngineId::Gnubg.product_name());
-        let engine = job
-            .result
-            .as_ref()
-            .and_then(|r| r["engine"].as_str())
-            .unwrap_or(saved_engine)
-            .to_owned();
-        let context = native_cube_context(row.event, row.checker_ply, match_id, &decision);
-        let (move_id, review_position) = context.unzip();
-        (
-            decision,
-            move_id,
-            review_position,
-            engine,
-            Some(format!("{}-ply", job.plies)),
-            Some(job.plies),
-            Some(job.id),
-            crate::move_assessments::AssessmentSource::Native,
-        )
-    } else {
-        let event: StoredMove = serde_json::from_value(row.event?).ok()?;
-        let source = imported_projection::source_move(&event, row.checker_ply)?;
-        let record: ImportedAnalysisData = serde_json::from_value(row.data).ok()?;
-        if record.kind != row.kind {
-            return None;
-        }
-        let projected =
-            imported_projection::project(&record, &source, match_id, row.position_uuid, format)?;
-        let engine = record
-            .engine_version
-            .as_deref()
-            .filter(|v| !v.trim().is_empty())
-            .map_or_else(
-                || record.engine.clone(),
-                |v| format!("{} {v}", record.engine),
-            );
-        (
-            projected.decision,
-            Some(event.id),
-            (record.kind == "cube").then_some(projected.position),
-            engine,
-            projected.depth,
-            projected.depth_plies,
-            None,
-            crate::move_assessments::AssessmentSource::Imported,
-        )
-    };
-    Some(ReviewDecision {
-        id: row.id,
-        position_uuid: row.position_uuid,
-        move_id,
-        review_position,
-        next_checker_no: row.next_checker_no,
-        game_no: row.game_no,
-        decision,
-        source,
-        engine,
-        depth,
-        depth_plies,
-        job_id,
-    })
-}
-fn native_cube_context(
-    event: Option<serde_json::Value>,
-    checker_ply: Option<i32>,
-    match_id: Uuid,
-    decision: &Decision,
-) -> Option<(Uuid, crate::model::Position)> {
-    if decision.kind != "cube" {
-        return None;
-    }
-    let event: StoredMove = serde_json::from_value(event?).ok()?;
-    let before_roll = decision.played == "no double";
-    if event.player != decision.player
-        || if before_roll {
-            event.kind != "checker" || checker_ply.is_none() || checker_ply != decision.checker_no
-        } else {
-            event.kind != "cube" || !event.notation.eq_ignore_ascii_case(&decision.played)
-        }
-    {
-        return None;
-    }
-    let source = imported_projection::source_move(&event, checker_ply)?;
-    let position =
-        imported_projection::review_position(&source, match_id, event.position_uuid, before_roll)?;
-    Some((event.id, position))
-}
-
-#[derive(OpenApi)]
-#[openapi(paths(review), components(schemas(ReviewDecision, ReviewDecisionPage)))]
-pub struct ReviewDoc;
 
 #[cfg(test)]
 mod tests {

@@ -92,15 +92,14 @@ async fn statistics(
     if query.game_no.is_some_and(|g| g <= 0) {
         return Err(ApiError::invalid("game_no must be positive"));
     }
-    // The imported review loader owns a repeatable-read snapshot. Guard its
-    // surrounding source metadata reads with the monotonic source revision so
-    // a source replacement cannot combine old decisions with new coverage.
-    let revision: i64 = sqlx::query_scalar("SELECT source_revision FROM matches WHERE id=$1")
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM matches WHERE id=$1)")
         .bind(id)
-        .fetch_optional(&state.pool)
+        .fetch_one(&state.pool)
         .await
-        .map_err(anyhow::Error::from)?
-        .ok_or_else(ApiError::missing)?;
+        .map_err(anyhow::Error::from)?;
+    if !exists {
+        return Err(ApiError::missing());
+    }
     let selected = resolve_selection(&state.pool, id, query.analysis_id.as_deref()).await?;
     let analysis_id = selected.as_ref().map(|s| s.id());
     if let Some(SelectedAnalysis::Job(job)) = &selected
@@ -144,11 +143,17 @@ async fn statistics(
         }));
     }
     let key = analysis_id.as_deref().ok_or_else(ApiError::missing)?;
-    let rows =
-        crate::review_decisions::load_all_review(&state, id, key, query.game_no, None).await?;
-    let source_games = crate::store::match_games(&state.pool, id)
+    // Build the lazy catalogs first, then read every statistics input from one
+    // repeatable-read snapshot so a source replacement cannot combine old
+    // decisions with new coverage.
+    crate::review_decisions::prepare_review(&state.pool, id).await?;
+    crate::store::game_catalog(&state.pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;
+    let mut tx = crate::review_decisions::begin_review_snapshot(&state.pool).await?;
+    let rows =
+        crate::review_decisions::load_all_review_on(&mut tx, id, key, query.game_no, None).await?;
+    let source_games = crate::store::match_games_on(&mut tx, id).await?;
     if query
         .game_no
         .is_some_and(|n| !source_games.iter().any(|g| g.game_no == n))
@@ -160,26 +165,15 @@ async fn statistics(
         .filter(|g| query.game_no.is_none_or(|n| n == g.game_no))
         .collect();
     let positions:Vec<Position>=sqlx::query_as("SELECT * FROM positions WHERE match_uuid=$1 AND ($2::integer IS NULL OR game_no=$2) ORDER BY ordinal LIMIT 100001")
-        .bind(id).bind(query.game_no).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
+        .bind(id).bind(query.game_no).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
     if positions.len() > 100_000 {
         return Err(ApiError::invalid(
             "Analysis exceeds supported position count",
         ));
     }
     let explicit_cubes:Vec<(i32,i64)>=sqlx::query_as("SELECT game_no,count(*) FROM match_moves WHERE match_uuid=$1 AND kind='cube' AND ($2::integer IS NULL OR game_no=$2) GROUP BY game_no")
-        .bind(id).bind(query.game_no).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
-    let current_revision: i64 =
-        sqlx::query_scalar("SELECT source_revision FROM matches WHERE id=$1")
-            .bind(id)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(anyhow::Error::from)?
-            .ok_or_else(ApiError::missing)?;
-    if current_revision != revision {
-        return Err(ApiError::invalid(
-            "Match source changed while reading statistics; reload analysis",
-        ));
-    }
+        .bind(id).bind(query.game_no).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
     let data = tokio::task::spawn_blocking(move || -> anyhow::Result<MatchAnalysisStatistics> {
         let engines: BTreeSet<_> = rows.iter().map(|r| r.engine.clone()).collect();
         let depths: BTreeSet<_> = rows.iter().map(|r| r.depth.clone()).collect();

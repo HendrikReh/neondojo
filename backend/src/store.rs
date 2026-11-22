@@ -250,9 +250,9 @@ async fn insert_games(
 /// under the match row lock for libraries created before the catalog migration.
 /// The game catalog of a match, built once from the stored SGF for older
 /// imports. Results are not derived; scope checks need only the games.
+const GAME_CATALOG: &str = "SELECT game_no,position_count,white_score,black_score,crawford FROM match_games WHERE match_uuid=$1 ORDER BY game_no";
 pub async fn game_catalog(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<MatchGame>>> {
-    const QUERY: &str = "SELECT game_no,position_count,white_score,black_score,crawford FROM match_games WHERE match_uuid=$1 ORDER BY game_no";
-    let games = sqlx::query_as::<_, MatchGame>(QUERY)
+    let games = sqlx::query_as::<_, MatchGame>(GAME_CATALOG)
         .bind(match_id)
         .fetch_all(pool)
         .await?;
@@ -269,7 +269,7 @@ pub async fn game_catalog(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Ma
         return Ok(None);
     };
     // A concurrent request may have populated the catalog while this one waited.
-    let games = sqlx::query_as::<_, MatchGame>(QUERY)
+    let games = sqlx::query_as::<_, MatchGame>(GAME_CATALOG)
         .bind(match_id)
         .fetch_all(&mut *tx)
         .await?;
@@ -302,17 +302,31 @@ pub async fn match_games(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Mat
     }
 }
 
+/// The game catalog with results inside the caller's snapshot. Unlike
+/// [`match_games`] it never builds a missing catalog; call [`game_catalog`]
+/// before opening a read-only snapshot.
+pub(crate) async fn match_games_on(
+    connection: &mut sqlx::PgConnection,
+    match_id: Uuid,
+) -> Result<Vec<MatchGame>> {
+    let games = sqlx::query_as::<_, MatchGame>(GAME_CATALOG)
+        .bind(match_id)
+        .fetch_all(&mut *connection)
+        .await?;
+    enrich_game_results(&mut *connection, match_id, games).await
+}
+
 // Computed metadata deliberately stays out of match_games and retained source-less
 // collection context. A damaged/unavailable source must not hide the catalog.
 async fn enrich_game_results(
-    pool: &PgPool,
+    executor: impl sqlx::PgExecutor<'_>,
     id: Uuid,
     mut games: Vec<MatchGame>,
 ) -> Result<Vec<MatchGame>> {
     let source: Option<String> =
         sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1 AND NOT collection_only")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await?;
     if let Some(source) = source.filter(|source| !source.trim().is_empty()) {
         let parsed = tokio::task::spawn_blocking(move || {
