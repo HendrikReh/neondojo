@@ -20,6 +20,78 @@ pub const LEASE: Duration = Duration::from_secs(120);
 /// state sets another one with [`AppState::with_job_heartbeat`].
 pub const DEFAULT_HEARTBEAT: Duration = Duration::from_secs(20);
 
+/// Error of a job the user cancelled. Cancelling uses the existing `failed`
+/// state, as a database restore or an advancing match already do when they
+/// stop a job; the frontend recognizes this text and labels it as cancelled.
+pub const CANCELLED_ERROR: &str = "Cancelled by user";
+
+/// Cancellation tokens of the jobs this process is running, so that cancelling
+/// a running job stops its engine work at once instead of at the next lease
+/// renewal. The database state stays authoritative: once a job is cancelled,
+/// its lease token no longer matches and any later write is rejected.
+#[derive(Default)]
+pub(crate) struct RunningJobs(std::sync::Mutex<std::collections::HashMap<Uuid, CancellationToken>>);
+
+impl RunningJobs {
+    fn register(&self, id: Uuid) -> CancellationToken {
+        let token = CancellationToken::new();
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(id, token.clone());
+        token
+    }
+
+    fn remove(&self, id: Uuid) {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&id);
+    }
+
+    fn cancel(&self, id: Uuid) {
+        if let Some(token) = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&id)
+        {
+            token.cancel();
+        }
+    }
+}
+
+/// Cancel a queued or running job. Returns `None` when the job does not exist
+/// and `Some(false)` when it has already finished. Results a match job saved
+/// for completed games stay with the job, as after any other failure.
+pub(crate) async fn cancel(state: &AppState, id: Uuid) -> Result<Option<(bool, Job)>> {
+    let mut tx = state.pool.begin().await?;
+    let cancelled = sqlx::query_as::<_, Job>("UPDATE jobs SET status='failed',error=$2,lease_token=NULL,lease_until=NULL,updated_at=now() WHERE id=$1 AND status IN ('queued','running') RETURNING *")
+        .bind(id)
+        .bind(CANCELLED_ERROR)
+        .fetch_optional(&mut *tx)
+        .await?;
+    let Some(job) = cancelled else {
+        tx.rollback().await?;
+        return Ok(store::get_job(&state.pool, id)
+            .await?
+            .map(|job| (false, job)));
+    };
+    sqlx::query("UPDATE match_analysis_timing SET active_started_at=NULL,active_elapsed_ms=0 WHERE job_id=$1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("INSERT INTO job_events(job_id,event,data) VALUES($1,'failed',$2)")
+        .bind(id)
+        .bind(json!({"status":"failed","progress":job.progress,"error":CANCELLED_ERROR,"completed_games":job.completed_games,"total_games":job.total_games}))
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    state.running_jobs.cancel(id);
+    state.wake.notify_one();
+    Ok(Some((true, job)))
+}
+
 /// Runs queued benchmarks and up to the configured number of analysis jobs at
 /// the same time. Each job runs in its own task and keeps its own lease,
 /// heartbeat and checkpoints. Stopping the worker aborts running tasks; their
@@ -169,14 +241,20 @@ async fn run_claimed(state: &AppState, claimed: Claimed) -> Result<bool> {
 }
 
 async fn execute_with_heartbeat(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
-    with_heartbeat(
-        &state.pool,
-        job.id,
-        token,
-        execute(state, job, token),
-        state.job_heartbeat,
-    )
-    .await
+    let cancelled = state.running_jobs.register(job.id);
+    // Dropping the work on cancellation terminates its engine processes.
+    let result = tokio::select! {
+        result = with_heartbeat(
+            &state.pool,
+            job.id,
+            token,
+            execute(state, job, token),
+            state.job_heartbeat,
+        ) => result,
+        () = cancelled.cancelled() => Err(anyhow::anyhow!(CANCELLED_ERROR)),
+    };
+    state.running_jobs.remove(job.id);
+    result
 }
 
 async fn with_heartbeat(
@@ -302,6 +380,137 @@ mod tests {
             }));
             assert!(rejected.is_err(), "{invalid:?}");
         }
+    }
+
+    async fn queued_position_job(pool: &PgPool) -> Uuid {
+        let sgf = "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
+        let imported = store::import_match(
+            pool,
+            "cancel.sgf",
+            "sgf",
+            sgf.as_bytes(),
+            sgf,
+            &crate::import::parse_sgf(sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+        let position: Uuid =
+            sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1 LIMIT 1")
+                .bind(imported.r#match.id)
+                .fetch_one(pool)
+                .await
+                .unwrap();
+        let id = Uuid::new_v4();
+        sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status) VALUES($1,$2,'analysis',1,'queued')")
+            .bind(id)
+            .bind(position)
+            .execute(pool)
+            .await
+            .unwrap();
+        id
+    }
+
+    async fn status(pool: &PgPool, id: Uuid) -> (String, Option<String>, Option<Uuid>) {
+        sqlx::query_as("SELECT status,error,lease_token FROM jobs WHERE id=$1")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn cancelling_a_queued_job_records_it_once(pool: PgPool) {
+        let state = AppState::new(pool.clone(), crate::engine::Engine::new("/unused".into()));
+        let id = queued_position_job(&pool).await;
+        let (changed, job) = cancel(&state, id).await.unwrap().unwrap();
+        assert!(changed);
+        assert_eq!(job.status, "failed");
+        assert_eq!(
+            status(&pool, id).await,
+            ("failed".into(), Some(CANCELLED_ERROR.into()), None)
+        );
+        let events: Vec<(String, Value)> =
+            sqlx::query_as("SELECT event,data FROM job_events WHERE job_id=$1")
+                .bind(id)
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0].0, "failed");
+        assert_eq!(events[0].1["error"], CANCELLED_ERROR);
+        // A finished job is reported, not changed; an unknown job is missing.
+        let (changed, _) = cancel(&state, id).await.unwrap().unwrap();
+        assert!(!changed);
+        assert!(cancel(&state, Uuid::new_v4()).await.unwrap().is_none());
+        // The worker no longer finds it.
+        assert!(claim(&state).await.unwrap().is_none());
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn cancelling_a_running_job_stops_its_engine_process(pool: PgPool) {
+        use std::os::unix::fs::PermissionsExt;
+        let directory = tempfile::tempdir().unwrap();
+        let pid_file = directory.path().join("engine.pid");
+        let engine = directory.path().join("gnubg");
+        // A stand-in engine that never answers.
+        std::fs::write(
+            &engine,
+            format!(
+                "#!/bin/sh\necho $$ > '{}'\nexec sleep 60\n",
+                pid_file.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let state = AppState::new(
+            pool.clone(),
+            crate::engine::Engine::new(engine.display().to_string()),
+        );
+        let id = queued_position_job(&pool).await;
+        let worker = tokio::spawn({
+            let state = state.clone();
+            async move { run_one(&state).await }
+        });
+        let pid = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if let Ok(pid) = std::fs::read_to_string(&pid_file)
+                    && let Ok(pid) = pid.trim().parse::<i32>()
+                {
+                    return pid;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("the stand-in engine must start");
+        assert_eq!(status(&pool, id).await.0, "running");
+        let (changed, _) = cancel(&state, id).await.unwrap().unwrap();
+        assert!(changed);
+        tokio::time::timeout(Duration::from_secs(5), worker)
+            .await
+            .expect("a cancelled job must stop without waiting for its lease")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            status(&pool, id).await,
+            ("failed".into(), Some(CANCELLED_ERROR.into()), None)
+        );
+        // kill_on_drop terminates the engine process with the cancelled work.
+        let alive = || {
+            std::process::Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .status()
+                .unwrap()
+                .success()
+        };
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while alive() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("the engine process must be terminated");
+        assert!(state.running_jobs.0.lock().unwrap().is_empty());
     }
 
     #[sqlx::test(migrations = "./migrations")]

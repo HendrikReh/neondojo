@@ -62,7 +62,14 @@ export async function openFullMatchAnalysis(page: Page) {
   });
   if ((await clear.isVisible()) && (await clear.isEnabled()))
     await clear.click();
-  await row.getByRole('checkbox').check();
+  // A library refresh right after an import can re-render the row and drop a
+  // selection made a moment earlier; select until the batch bar confirms it.
+  await expect(async () => {
+    await row.getByRole('checkbox').check();
+    await expect(actions.getByRole('status')).toHaveText(/^1\s/, {
+      timeout: 1_000,
+    });
+  }).toPass();
   await actions
     .getByRole('button', {
       name: /^(Analyze selected matches|Ausgewählte Matches analysieren) …$/,

@@ -757,8 +757,21 @@
   gap: 6px;
 }
 .analysis-running-jobs .analysis-running-job {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 8px;
   margin: 0;
   font-size: var(--font-size-meta);
+}
+/* Text above progress; the cancel button sits beside both. */
+.analysis-running-job > div,
+.analysis-running-job > progress {
+  grid-column: 1;
+}
+.analysis-running-job > button {
+  grid-column: 2;
+  grid-row: 1 / span 2;
 }
 .analysis-running-job progress {
   height: 4px;

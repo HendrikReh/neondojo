@@ -73,6 +73,17 @@ export const terminal = (job: Job) =>
 // SSE and polling can finish out of order. A terminal state for the same job
 // is authoritative even if its persisted timestamp moved backwards.
 /** Jobs without an engine snapshot predate engine selection and ran with GNUbg. */
+/** Error the backend gives a job the user cancelled (`jobs::CANCELLED_ERROR`). */
+export const JOB_CANCELLED_ERROR = 'Cancelled by user';
+export function isCancelledJob(job: Pick<Job, 'status' | 'error'>) {
+  return job.status === 'failed' && job.error === JOB_CANCELLED_ERROR;
+}
+/** Cancel a queued or running job; it ends as a cancelled `failed` job. */
+export function cancelJob(id: string) {
+  return request<Job>(`/jobs/${encodeURIComponent(id)}/cancel`, {
+    method: 'POST',
+  });
+}
 export function jobEngine(job: Pick<Job, 'engine_snapshot'>) {
   return job.engine_snapshot?.engine_id ?? 'gnubg';
 }

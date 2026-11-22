@@ -7,7 +7,7 @@ import {
   MatchAnalysisFields,
   useMatchAnalysisOptions,
 } from './MatchAnalysisFields';
-import { request, terminal, type Job } from './api';
+import { cancelJob, isCancelledJob, request, terminal, type Job } from './api';
 import { useI18n } from './i18n';
 import type { LibraryMatch } from './library-api';
 import { useLibraryText } from './library-messages';
@@ -48,6 +48,8 @@ export default function MatchAnalysisDialog({
   });
   const { engineId, plies, analysisConfigured, catalog } = options;
   const [submittedId, setSubmittedId] = useState<string>();
+  const [cancelling, setCancelling] = useState<string>();
+  const [cancelError, setCancelError] = useState<unknown>();
   const { job, error, submitting, run } = useMatchAnalysis(
     match.id,
     engineId,
@@ -125,6 +127,24 @@ export default function MatchAnalysisDialog({
               })}
             </p>
             <AnalysisRemainingTime key={job.id} job={job} />
+            <ActionButton
+              icon="cancel"
+              label={t('analysis.cancelJob')}
+              disabled={cancelling === job.id}
+              onClick={() => {
+                const id = job.id;
+                setCancelling(id);
+                setCancelError(undefined);
+                // The job's event stream reports the cancelled state.
+                cancelJob(id)
+                  .catch(setCancelError)
+                  .finally(() =>
+                    setCancelling((current) =>
+                      current === id ? undefined : current,
+                    ),
+                  );
+              }}
+            />
           </div>
         ) : (
           <AnalysisTimeEstimate
@@ -139,7 +159,15 @@ export default function MatchAnalysisDialog({
         {job?.status === 'completed' && (
           <p role="status">{t('matchAnalysis.completed')}</p>
         )}
-        {job?.status === 'failed' && (
+        {job && isCancelledJob(job) && (
+          <p role="status">{t('matchAnalysis.cancelled')}</p>
+        )}
+        {!!cancelError && (
+          <p className="error" role="alert">
+            {formatError(cancelError)}
+          </p>
+        )}
+        {job?.status === 'failed' && !isCancelledJob(job) && (
           <p className="error" role="alert">
             {t('matchAnalysis.failed')}{' '}
             {job.error && t('error.engine', { details: job.error })}

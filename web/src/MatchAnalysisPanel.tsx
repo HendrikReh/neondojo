@@ -6,7 +6,15 @@ import { useConfirmedConfiguration } from './ConfigurationProvider';
 import ActionButton from './ActionButton';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { request, terminal, type Job, type Match, type MatchGame } from './api';
+import {
+  cancelJob,
+  isCancelledJob,
+  request,
+  terminal,
+  type Job,
+  type Match,
+  type MatchGame,
+} from './api';
 import {
   canOpenReviewDecision,
   findReviewNeighbor,
@@ -202,6 +210,8 @@ export default function MatchAnalysisPanel({
   );
   const { job: gameJob, submitting, run, error } = gameAnalysis;
   useEffect(() => onJob?.(gameJob), [gameJob, onJob]);
+  const [cancelling, setCancelling] = useState<string>();
+  const [cancelError, setCancelError] = useState<unknown>();
   const filterScope = `${match.id}:${analysisId ?? ''}:${scoped ? (gameNo ?? 'none') : 'match'}`;
   const [cubeFilters, setCubeFilters] = useWorkspaceSession(
     'analysis.cubeReview',
@@ -543,11 +553,13 @@ export default function MatchAnalysisPanel({
         <strong>
           {job.status === 'completed'
             ? t(scoped ? 'gameAnalysis.completed' : 'matchAnalysis.completed')
-            : job.status === 'failed'
-              ? t(scoped ? 'gameAnalysis.failed' : 'matchAnalysis.failed')
-              : job.status === 'queued'
-                ? t('matchAnalysis.queued')
-                : t('analysis.movesRunning')}
+            : isCancelledJob(job)
+              ? t(scoped ? 'gameAnalysis.cancelled' : 'matchAnalysis.cancelled')
+              : job.status === 'failed'
+                ? t(scoped ? 'gameAnalysis.failed' : 'matchAnalysis.failed')
+                : job.status === 'queued'
+                  ? t('matchAnalysis.queued')
+                  : t('analysis.movesRunning')}
         </strong>
         <span>
           {t('matchAnalysis.progressText', {
@@ -565,7 +577,29 @@ export default function MatchAnalysisPanel({
       />
       {active && <small>{t('matchAnalysis.progressHint')}</small>}
       {active && <AnalysisRemainingTime key={job.id} job={job} />}
-      {job.error && (
+      {active && (
+        <ActionButton
+          icon="cancel"
+          label={t('analysis.cancelJob')}
+          compact
+          disabled={cancelling === job.id}
+          onClick={() => {
+            const id = job.id;
+            setCancelling(id);
+            setCancelError(undefined);
+            // The job's event stream reports the cancelled state.
+            cancelJob(id)
+              .catch(setCancelError)
+              .finally(() =>
+                setCancelling((current) =>
+                  current === id ? undefined : current,
+                ),
+              );
+          }}
+        />
+      )}
+      {!!cancelError && <p role="alert">{formatError(cancelError)}</p>}
+      {job.error && !isCancelledJob(job) && (
         <p role="alert">{t('error.engine', { details: job.error })}</p>
       )}
     </div>

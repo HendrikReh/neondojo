@@ -38,6 +38,7 @@ pub struct AppState {
     pub(crate) anki_connection: Arc<crate::learning::AnkiConnection>,
     /// How often a running analysis job renews its lease.
     pub(crate) job_heartbeat: Duration,
+    pub(crate) running_jobs: Arc<crate::jobs::RunningJobs>,
 }
 
 impl AppState {
@@ -53,6 +54,7 @@ impl AppState {
             backup: Arc::default(),
             anki_connection: Arc::default(),
             job_heartbeat: crate::jobs::DEFAULT_HEARTBEAT,
+            running_jobs: Arc::default(),
         }
     }
 
@@ -154,6 +156,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/jobs", post(create_job))
         .route("/api/jobs/status", post(job_status_batch))
         .route("/api/jobs/{id}", get(job))
+        .route("/api/jobs/{id}/cancel", post(cancel_job))
         .merge(crate::analysis_timing::routes())
         .route("/api/jobs/{id}/events", get(events))
         .route("/api/jobs/{id}/moves", get(move_analyses))
@@ -938,6 +941,25 @@ async fn job(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<J
     Ok(Json(job))
 }
 
+/// Cancel a queued or running analysis, dice or match job. The job ends as
+/// `failed` with the error "Cancelled by user"; a running engine process is
+/// stopped, and games a match analysis completed before stay saved.
+#[utoipa::path(post, path="/api/jobs/{id}/cancel", params(("id"=Uuid, Path)), responses((status=200, body=Job, description="The cancelled job"), (status=404, body=ErrorBody), (status=409, body=ErrorBody, description="The job has already finished"), (status=422, body=ErrorBody)), tag="Analysis")]
+async fn cancel_job(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<Job>> {
+    let job = store::get_job(&state.pool, id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    crate::play::require_job_review_available(&state.pool, &job).await?;
+    match crate::jobs::cancel(&state, id).await? {
+        Some((true, job)) => Ok(Json(job)),
+        Some((false, _)) => Err(ApiError(
+            StatusCode::CONFLICT,
+            "The job has already finished".into(),
+        )),
+        None => Err(ApiError::missing()),
+    }
+}
+
 #[derive(Deserialize, ToSchema)]
 struct JobStatusRequest {
     #[schema(max_items = 100)]
@@ -1057,6 +1079,7 @@ async fn events(
         dice,
         create_job,
         job,
+        cancel_job,
         job_status_batch,
         events,
         create_match_analysis,
