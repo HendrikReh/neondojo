@@ -22,10 +22,10 @@ analysis panels; `text-navigation--stacked` arranges sidebar choices vertically.
 The main header retains its 20 px gap; other horizontal groups use 16 px.
 The header orders its workspaces as Playing, Analysis, Study, Positions,
 Match database, Player database, and Extras. Rendering and keyboard navigation
-share the `views` list in `web/src/App.tsx`: Left/Right move through it and
+share the `views` list in `web/src/app/App.tsx`: Left/Right move through it and
 wrap, and Home/End select the first and last workspace.
 
-The shared rules live in `web/src/text-navigation.css`, imported after the other
+The shared rules live in `web/src/styles/text-navigation.css`, imported after the other
 styles. Local CSS manages surrounding layout and should not reintroduce filled
 navigation states or competing padding/gap rules.
 
@@ -126,7 +126,7 @@ Tutor feedback, **D** doubles, **H** requests a hint, **Z** undoes a checker ste
 and **Escape** returns from a reviewed move to the game.
 
 The shortcuts are declared with the `shortcut` property of `ActionButton` and
-handled once in `web/src/useButtonShortcuts.ts`. Only visible, enabled buttons
+handled once in `web/src/app/useButtonShortcuts.ts`. Only visible, enabled buttons
 respond. Shortcuts are ignored in text fields, and **Enter** is left to a
 focused button, link, tab or row. An open dialog confines them to its own
 buttons.
@@ -135,7 +135,7 @@ Left and Right have separate handlers. In Analysis, outside controls and tab
 lists, they step to the previous or next position of the game. While a
 candidate or dice-grid preview is selected in Analysis, or a move from the
 history is reviewed in Playing, they show the **Initial** and **Final** board
-instead (`web/src/useBoardReviewShortcuts.ts`).
+instead (`web/src/shared/review/useBoardReviewShortcuts.ts`).
 
 ## Match analysis
 
