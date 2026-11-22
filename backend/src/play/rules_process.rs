@@ -1,11 +1,10 @@
 //! Retain GNUbg only for one atomic Sage action chain; never pool rule state.
 use super::{NativeRequest, NativeSnapshot};
 use crate::{
-    engine::{Engine, resolve_binary},
+    engine::{Engine, Installation},
     engine_process::terminate_and_reap,
 };
 use anyhow::{Context, Result, ensure};
-use sha2::{Digest, Sha256};
 use std::{process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -19,58 +18,13 @@ const TIMEOUT: Duration = Duration::from_secs(180);
 pub(super) struct RulesProcess {
     directory: tempfile::TempDir,
     engine: Engine,
+    /// Checked before startup and again before commit.
     installation: Installation,
-    wrapper_version: Option<String>,
     child: Option<Child>,
     input: Option<ChildStdin>,
     output: BufReader<ChildStdout>,
     diagnostics: Option<JoinHandle<Result<Vec<u8>>>>,
     sequence: u32,
-}
-
-/// Bind the worker to the resolved executable for this action chain. The
-/// startup banner supplies the saved version check, and both boundary reads
-/// detect replacement even when the new executable reports the same version.
-#[derive(PartialEq, Eq)]
-struct Installation {
-    executable: String,
-    digest: [u8; 32],
-    direct_native: bool,
-}
-
-impl Installation {
-    async fn read(engine: &Engine) -> Result<Self> {
-        let executable = resolve_binary(engine.binary())?;
-        let mut file = tokio::fs::File::open(&executable).await?;
-        ensure!(
-            file.metadata().await?.is_file(),
-            "GNUbg executable is not a regular file"
-        );
-        let mut magic = [0; 4];
-        file.read_exact(&mut magic).await?;
-        // Wrappers may launch a different executable whose version changes
-        // while the wrapper itself stays identical. Keep their version probes.
-        let direct_native = cfg!(target_os = "macos")
-            && matches!(
-                magic,
-                [0xcf, 0xfa, 0xed, 0xfe] | [0xca, 0xfe, 0xba, 0xbe] | [0xca, 0xfe, 0xba, 0xbf]
-            );
-        let mut hash = Sha256::new();
-        hash.update(magic);
-        let mut chunk = vec![0; 64 * 1024];
-        loop {
-            let len = file.read(&mut chunk).await?;
-            if len == 0 {
-                break;
-            }
-            hash.update(&chunk[..len]);
-        }
-        Ok(Self {
-            executable,
-            digest: hash.finalize().into(),
-            direct_native,
-        })
-    }
 }
 
 async fn read_frame(reader: &mut BufReader<ChildStdout>) -> Result<Vec<u8>> {
@@ -99,15 +53,9 @@ impl RulesProcess {
         ] {
             tokio::fs::write(directory.path().join(name), content).await?;
         }
-        let installation = tokio::time::timeout(Duration::from_secs(5), Installation::read(engine))
-            .await
-            .context("GNUbg executable verification timed out")??;
-        let wrapper_version = if installation.direct_native {
-            None
-        } else {
-            Some(engine.version().await?)
-        };
-        let mut child = Command::new(&installation.executable)
+        // The startup banner supplies the saved version check.
+        let installation = Installation::bind(engine).await?;
+        let mut child = Command::new(installation.executable())
             .args(["-t", "-q", "-r", "-c", "commands.txt"])
             .current_dir(directory.path())
             .env("LC_ALL", "C")
@@ -137,7 +85,6 @@ impl RulesProcess {
             directory,
             engine: engine.clone(),
             installation,
-            wrapper_version,
             child: Some(child),
             input: Some(input),
             output,
@@ -151,11 +98,9 @@ impl RulesProcess {
                 let line = read_frame(&mut process.output).await?;
                 preamble += line.len();
                 ensure!(preamble <= FRAME_LIMIT, "GNUbg rule startup exceeds limit");
-                let banner = String::from_utf8_lossy(&line);
-                let banner = banner.trim_end();
-                if banner.starts_with("GNU Backgammon ") {
+                if line.starts_with(b"GNU Backgammon ") {
                     ensure!(version.is_none(), "Duplicate GNUbg startup version");
-                    version = Some(banner.to_owned());
+                    version = Some(line.clone());
                 }
                 if serde_json::from_slice::<serde_json::Value>(&line).ok()
                     == Some(serde_json::json!({"ready": true}))
@@ -164,14 +109,7 @@ impl RulesProcess {
                 }
             }
             let version = version.context("GNUbg startup version missing")?;
-            engine.validate_saved_version(&version)?;
-            if let Some(expected) = &process.wrapper_version {
-                ensure!(
-                    expected == &version,
-                    "GNUbg rules version changed at startup"
-                );
-            }
-            anyhow::Ok(())
+            process.installation.check_startup_banner(engine, &version)
         })
         .await
         .context("GNUbg rule startup timed out")??;
@@ -246,22 +184,10 @@ impl RulesProcess {
                 String::from_utf8_lossy(&bytes)
             );
         }
-        if let Some(expected) = &self.wrapper_version {
-            ensure!(
-                self.engine.version().await? == *expected,
-                "GNUbg rules version changed before commit"
-            );
-        }
-        let current =
-            tokio::time::timeout(Duration::from_secs(5), Installation::read(&self.engine))
-                .await
-                .context("GNUbg executable verification timed out")?
-                .context("Cannot verify GNUbg rules installation before commit")?;
-        ensure!(
-            current == self.installation,
-            "GNUbg rules installation changed before commit"
-        );
-        Ok(())
+        self.installation
+            .recheck(&self.engine)
+            .await
+            .context("GNUbg rules changed before commit")
     }
 }
 
@@ -410,7 +336,8 @@ time.sleep(60)
             std::fs::rename(replacement, path).unwrap();
             let error = process.finish().await.unwrap_err();
             assert!(
-                error.to_string().contains("installation changed"),
+                format!("{error:#}")
+                    .contains("GNUbg rules changed before commit: GNUbg installation changed"),
                 "{error:#}"
             );
             assert_reaped(&directory).await;
@@ -437,7 +364,8 @@ time.sleep(60)
             std::fs::write(directory.path().join("version"), "GNU Backgammon new").unwrap();
             let error = process.finish().await.unwrap_err();
             assert!(
-                error.to_string().contains("rules version changed"),
+                format!("{error:#}")
+                    .contains("GNUbg rules changed before commit: GNUbg version changed"),
                 "{error:#}"
             );
             assert_reaped(&directory).await;

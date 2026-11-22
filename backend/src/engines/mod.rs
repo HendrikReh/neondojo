@@ -12,7 +12,7 @@ use crate::{
 };
 use anyhow::{Context as _, Result, ensure};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 use utoipa::ToSchema;
 
@@ -134,6 +134,44 @@ pub struct SageCubeEvaluation {
     pub take: f64,
     pub pass: f64,
     pub probabilities: Vec<f64>,
+}
+
+/// A cube decision without probabilities, in the same perspective and with
+/// the same equities as [`SageCubeEvaluation`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SageCubeDecision {
+    pub no_double: f64,
+    pub take: f64,
+    pub pass: f64,
+}
+
+impl SageCubeDecision {
+    fn validate(&self) -> Result<()> {
+        ensure!(
+            [self.no_double, self.take, self.pass]
+                .iter()
+                .all(|equity| equity.is_finite()),
+            "Invalid NeonGammon cube decision"
+        );
+        Ok(())
+    }
+}
+
+/// Which part of a cube evaluation the sidecar computes.
+#[derive(Clone, Copy)]
+enum CubeScope {
+    /// Equities and the cubeless probabilities.
+    Evaluation,
+    /// Equities only (`BgBotAnalyzer.cube_decision`).
+    Decision,
+}
+
+fn cube_request(board: &[i32; 26], context: &context::Context, scope: CubeScope) -> Value {
+    let mut payload = json!({"operation":"cube", "board":board, "context":context});
+    if matches!(scope, CubeScope::Decision) {
+        payload["decision_only"] = json!(true);
+    }
+    payload
 }
 
 /// Whether a saved NeonGammon engine version names a cubeful profile at
@@ -587,14 +625,23 @@ impl SageEngine {
         self.cube_with_batch(position_id, match_id, None).await
     }
 
-    /// Cube evaluation plus the engine cost the worker measured for it.
-    pub async fn cube_costed(
+    /// The cube decision alone, plus the engine cost the worker measured for
+    /// it. The equities equal [`Self::cube`]'s; the sidecar skips the second,
+    /// cubeless search for probabilities, so use this whenever only the
+    /// equities are compared.
+    pub async fn cube_decision_costed(
         &self,
         position_id: &str,
         match_id: &str,
-    ) -> Result<(SageCubeEvaluation, Option<EngineCost>)> {
-        self.cube_costed_with_batch(position_id, match_id, None)
-            .await
+    ) -> Result<(SageCubeDecision, Option<EngineCost>)> {
+        let context = context::Context::decode(match_id)?;
+        let board = context.board(position_id, match_id)?;
+        let (value, cost) = self
+            .request_with_batch(cube_request(&board, &context, CubeScope::Decision), None)
+            .await?;
+        let result: SageCubeDecision = serde_json::from_value(value)?;
+        result.validate()?;
+        Ok((result, cost))
     }
 
     async fn cube_with_batch(
@@ -618,10 +665,7 @@ impl SageEngine {
         let context = context::Context::decode(match_id)?;
         let board = context.board(position_id, match_id)?;
         let (value, cost) = self
-            .request_with_batch(
-                json!({"operation":"cube", "board":board, "context":context}),
-                batch,
-            )
+            .request_with_batch(cube_request(&board, &context, CubeScope::Evaluation), batch)
             .await?;
         let result: SageCubeEvaluation = serde_json::from_value(value)?;
         for equity in [result.no_double, result.take, result.pass] {
@@ -959,6 +1003,45 @@ mod tests {
             ..snapshot(&"a".repeat(64))
         };
         assert!(super::SageEngine::new(snapshot).is_err());
+    }
+
+    #[test]
+    fn cube_requests_ask_for_probabilities_unless_only_the_decision_is_used() {
+        let context = super::context::Context::decode("cAkHAAAAAAAE").unwrap();
+        let board = context.board("4HPwATDgc/ABMA", "cAkHAAAAAAAE").unwrap();
+        let evaluation = super::cube_request(&board, &context, super::CubeScope::Evaluation);
+        let decision = super::cube_request(&board, &context, super::CubeScope::Decision);
+        // The full evaluation keeps the sidecar's default request unchanged.
+        assert_eq!(
+            evaluation,
+            serde_json::json!({"operation":"cube", "board":board, "context":context})
+        );
+        assert_eq!(decision["decision_only"], serde_json::json!(true));
+        let mut without_scope = decision.clone();
+        without_scope
+            .as_object_mut()
+            .unwrap()
+            .remove("decision_only");
+        assert_eq!(without_scope, evaluation);
+    }
+
+    #[test]
+    fn cube_decision_needs_finite_equities_but_no_probabilities() {
+        let decision: super::SageCubeDecision =
+            serde_json::from_value(serde_json::json!({"no_double":0.2,"take":0.3,"pass":1.0}))
+                .unwrap();
+        decision.validate().unwrap();
+        let invalid = super::SageCubeDecision {
+            take: f64::NAN,
+            ..decision
+        };
+        assert!(invalid.validate().is_err());
+        assert!(
+            serde_json::from_value::<super::SageCubeDecision>(
+                serde_json::json!({"no_double":0.2,"take":0.3})
+            )
+            .is_err()
+        );
     }
 
     #[test]

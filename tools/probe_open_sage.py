@@ -12,6 +12,7 @@ import importlib.metadata
 import inspect
 import json
 import math
+import os
 from pathlib import Path
 import platform
 import resource
@@ -23,6 +24,9 @@ import time
 # The worker and the Rust snapshot validation use this list as well.
 SUPPORTED_VERSIONS = ('3.0.0', '3.1.0',)
 NUMPY_VERSION = '2.5.4'
+# The requested thread budget is the engine's only parallelism, as in the
+# application worker (SINGLE_THREADED_MATH in backend/src/engines/process.rs).
+SINGLE_THREADED_MATH = {'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1', 'VECLIB_MAXIMUM_THREADS': '1'}
 
 
 class ProbeError(Exception):
@@ -163,6 +167,50 @@ def identity(sage, native):
             'files_sha256': files, 'identity_sha256': digest}
 
 
+def locked_paths(sage, native):
+    """Paths whose metadata guards an ``identity`` result between complete checks.
+
+    Every file ``identity`` hashes, the wheel metadata it and the version check
+    read, and every package directory: adding, removing or renaming an entry
+    changes its directory's modification time. The list is fixed when a
+    complete check starts, so a path added later surfaces through its parent.
+    """
+    package = Path(sage.__file__).parent
+    paths = {package, Path(native.__file__)}
+    paths.update(p for p in package.rglob('*')
+                 if p.is_dir() or p.is_file() and (p.suffix == '.py' or '_assets' in p.parts))
+    paths.update(Path(path) for path in sage.default_weights().weight_paths_list)
+    from neongammon.weights import bearoff_db_path
+    bearoff = bearoff_db_path()
+    if bearoff is not None:
+        paths.add(Path(bearoff))
+    for name in ('neongammon', 'numpy'):
+        distribution = importlib.metadata.distribution(name)
+        info = Path(distribution.locate_file(
+            f"{distribution.metadata['Name'].replace('-', '_')}-{distribution.version}.dist-info"))
+        require(info.is_dir(), f'Cannot locate the installed {name} metadata. Reinstall from the locked wheels.')
+        paths.update((info, info / 'METADATA', info / 'RECORD'))
+    return sorted(paths)
+
+
+def stat_snapshot(paths):
+    """Device, inode, size and modification/change times of each path.
+
+    Replacing a file (new inode), writing to it (size, mtime and ctime) or
+    resetting its mtime afterwards (ctime) changes the snapshot; a missing
+    path is recorded as ``None``. Reading never does.
+    """
+    snapshot = []
+    for path in paths:
+        try:
+            value = os.stat(path)
+        except OSError:
+            snapshot.append(None)
+        else:
+            snapshot.append((value.st_dev, value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns))
+    return tuple(snapshot)
+
+
 def run_worker(skip_platform=False, levels=None):
     levels = levels or ['1ply', '2ply']
     started = time.perf_counter()
@@ -188,11 +236,11 @@ def run_worker(skip_platform=False, levels=None):
         report['import_seconds'] = time.perf_counter() - import_start
         report['identity'] = identity(sage, native)
         validate_versions(report['identity'])
-        for name in ('checker_play', 'cube_action', 'post_move_analytics'):
+        for name in ('checker_play', 'cube_action', 'cube_decision', 'post_move_analytics'):
             require(callable(getattr(sage.BgBotAnalyzer, name, None)), f'Missing API {name}')
         require('force_boards' in inspect.signature(sage.BgBotAnalyzer.checker_play).parameters,
                 'Missing force_boards capability; this build cannot evaluate filtered played moves.')
-        report['capabilities'] = ['checker_play', 'cube_action', 'post_move_analytics', 'force_boards']
+        report['capabilities'] = ['checker_play', 'cube_action', 'cube_decision', 'post_move_analytics', 'force_boards']
 
         def check(name, function):
             start = time.perf_counter()
@@ -464,7 +512,8 @@ def main():
         start = time.perf_counter()
         try:
             process = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--worker', '--levels', *args.levels],
-                                     capture_output=True, text=True, timeout=args.timeout)
+                                     capture_output=True, text=True, timeout=args.timeout,
+                                     env=os.environ | SINGLE_THREADED_MATH)
             # Native engine may print diagnostic lines; worker JSON is the last line.
             report = json.loads(process.stdout.splitlines()[-1])
             require(process.returncode == 0 or report['status'] == 'failed', 'Worker failed without a valid failure report')

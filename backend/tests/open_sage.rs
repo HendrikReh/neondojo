@@ -75,6 +75,25 @@ async fn native_checker_cube_and_match_analysis() {
         assert!(game.decisions[0].played_equity.is_some());
         let cube = engine.cube("4HPwATDgc/ABMA", "cAkHAAAAAAAE").await.unwrap();
         assert!(cube.no_double.is_finite() && cube.take.is_finite() && cube.pass.is_finite());
+        // The decision alone skips the probability search, not the cube tree.
+        for (position, match_id) in [
+            ("4HPwATDgc/ABMA", "cAkHAAAAAAAE"),
+            ("4HPwATDgc/ABMA", "cAmvAgAAAAAE"),
+        ] {
+            let full = engine.cube(position, match_id).await.unwrap();
+            let (decision, cost) = engine
+                .cube_decision_costed(position, match_id)
+                .await
+                .unwrap();
+            assert!(cost.is_some());
+            for (alone, evaluated) in [
+                (decision.no_double, full.no_double),
+                (decision.take, full.take),
+                (decision.pass, full.pass),
+            ] {
+                assert!((alone - evaluated).abs() < 1e-9, "{depth}-ply {match_id}");
+            }
+        }
     }
 }
 
