@@ -41,7 +41,7 @@ NeonDojo is a local backgammon application for importing matches, finding positi
 - Python 3.10 or later for the frontend build and development scripts
 - A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
 - Optional: NeonGammon 3.1.0 as a second engine, running in a locked native ARM64 Python 3.12 environment on macOS 14 or later (3.0.0 remains supported for analysis and ordinary play without named difficulty presets). See [Local NeonGammon setup](docs/open-sage-local.md).
-- The BGBlitz theme archives listed in `shared/configuration-options.json`, copied into `themes/`. They are local third-party files and not part of the repository. Without them, `npm run build`, `npm run dev` and `npm test` stop and name the missing ZIP files; set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally removing those themes from the catalog. See [Board artwork](docs/reference/settings.md#board-artwork) and [Board theme formats](themes/README.md).
+- The BGBlitz theme archives listed in `shared/configuration-options.json`, copied into `themes/`. They are local third-party files and not part of the repository. Without them, `npm run build`, `npm run dev` and `npm test` stop and name the missing ZIP files; set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally building without them. Only `npm run themes:prepare --prefix web -- --update-options` rewrites the tracked theme list. See [Board artwork](docs/reference/settings.md#board-artwork) and [Board theme formats](themes/README.md).
 
 ### Database and engine
 
@@ -71,7 +71,7 @@ The backend reads these settings from its environment or from `.env` in its work
 | `NEONDOJO_ANKI_CONNECT_KEY` | unset | API key for a local AnkiConnect add-on that requires one |
 | `OPENAI_API_KEY`, `NEONDOJO_ASSESSMENT_MODEL` | unset, `gpt-6.1-terra` | Optional AI assessment of saved reports. See [AI assessment](docs/reference/study.md#ai-assessment). |
 
-Docker Compose and the frontend tools also recognize three variables: `NEONDOJO_DB_PORT` (default `54329`, host port in [compose.yaml](compose.yaml)), `NEONDOJO_API_URL` (default `http://127.0.0.1:8787`, Vite `/api` proxy target), and `NEONDOJO_ALLOW_MISSING_THEMES` (default unset; set to `1` only to drop missing BGBlitz archives from `shared/configuration-options.json` during theme preparation).
+Docker Compose and the frontend tools also recognize three variables: `NEONDOJO_DB_PORT` (default `54329`, host port in [compose.yaml](compose.yaml)), `NEONDOJO_API_URL` (default `http://127.0.0.1:8787`, Vite `/api` proxy target), and `NEONDOJO_ALLOW_MISSING_THEMES` (default unset; set to `1` only to build the theme catalog without missing BGBlitz archives; `shared/configuration-options.json` stays unchanged unless preparation runs with `--update-options`).
 
 ### Local use with the built frontend
 

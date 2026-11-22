@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -5,7 +7,7 @@ import unittest
 from zipfile import ZipFile
 import struct
 import zlib
-from prepare_themes import png_luminance, prepare
+from prepare_themes import main, png_luminance, prepare
 
 ROOT = Path(__file__).resolve().parents[1]
 ADAM7 = [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)]
@@ -81,7 +83,10 @@ class ThemePreparationTests(unittest.TestCase):
             options = target / "configuration-options.json"
             engines = {"gnubg": {"analysis": [0, 1, 2, 3, 4]}, "bgsage": {"analysis": [2]}}
             options.write_text(json.dumps({"board_themes": [], "engine_profiles": engines}))
-            prepare(source, target / "public", target / "catalog.json", options)
+            prepare(
+                source, target / "public", target / "catalog.json", options,
+                update_options=True,
+            )
             self.assertEqual(json.loads(options.read_text()).get("engine_profiles"), engines)
 
     def test_configuration_options_include_builtin_and_generated_theme_ids(self):
@@ -90,7 +95,7 @@ class ThemePreparationTests(unittest.TestCase):
             source = target / "source"
             source.mkdir()
             prepare(source, target / "public", target / "catalog.json",
-                    target / "configuration-options.json")
+                    target / "configuration-options.json", update_options=True)
             self.assertEqual(
                 json.loads((target / "configuration-options.json").read_text()),
                 {"board_themes": ["forest", "walnut", "slate"]},
@@ -117,7 +122,7 @@ class ThemePreparationTests(unittest.TestCase):
             self.assertEqual(catalog.read_text(), '[{"id": "bgblitz:bg-quantum"}]\n')
             self.assertEqual(asset.read_bytes(), b"artwork")
 
-    def test_allowed_missing_archive_removes_listed_theme(self):
+    def test_allowed_missing_archive_with_update_flag_removes_listed_theme(self):
         with tempfile.TemporaryDirectory() as tmp:
             target = Path(tmp)
             source = target / "source"
@@ -132,10 +137,62 @@ class ThemePreparationTests(unittest.TestCase):
                 target / "catalog.json",
                 options,
                 allow_missing=True,
+                update_options=True,
             )
             self.assertEqual(
                 json.loads(options.read_text()),
                 {"board_themes": ["forest", "walnut", "slate"]},
+            )
+
+    def test_allowed_missing_archive_without_update_flag_keeps_options(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp)
+            source = target / "source"
+            source.mkdir()
+            options = target / "configuration-options.json"
+            listed = b'{"board_themes": ["forest", "walnut", "slate", "bgblitz:bg-quantum"]}'
+            options.write_bytes(listed)
+            with contextlib.redirect_stderr(io.StringIO()) as warning:
+                catalog = prepare(
+                    source,
+                    target / "public",
+                    target / "catalog.json",
+                    options,
+                    allow_missing=True,
+                )
+            self.assertEqual(catalog, [])
+            self.assertEqual(options.read_bytes(), listed)
+            self.assertEqual((target / "catalog.json").read_text(), "[]\n")
+            self.assertIn("bg-quantum.zip", warning.getvalue())
+
+    def test_missing_themes_env_without_flag_leaves_tracked_options_untouched(self):
+        """The command-line entry point under NEONDOJO_ALLOW_MISSING_THEMES=1
+        only writes the untracked outputs, whatever the real options list."""
+        tracked = (ROOT / "shared/configuration-options.json").read_bytes()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "themes").mkdir()
+            options = root / "shared/configuration-options.json"
+            options.parent.mkdir()
+            options.write_bytes(tracked)
+            env = {"NEONDOJO_ALLOW_MISSING_THEMES": "1"}
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                main([], root=root, environ=env)
+            self.assertEqual(options.read_bytes(), tracked)
+            self.assertEqual(
+                json.loads((root / "web/src/generated-themes.json").read_text()), []
+            )
+            with contextlib.redirect_stdout(io.StringIO()):
+                main(["--update-options"], root=root, environ=env)
+            self.assertEqual(
+                json.loads(options.read_text())["board_themes"],
+                ["forest", "walnut", "slate"],
+            )
+            self.assertEqual(
+                {k: v for k, v in json.loads(options.read_text()).items() if k != "board_themes"},
+                {k: v for k, v in json.loads(tracked).items() if k != "board_themes"},
             )
 
     @unittest.skipUnless(
@@ -212,7 +269,16 @@ class ThemePreparationTests(unittest.TestCase):
                     z.writestr(f"themes/synthetic/{name}.png", png(4, 4))
             options = root / "configuration-options.json"
             options.write_text(json.dumps({"board_themes": ["forest", "walnut", "slate"]}))
-            [theme] = prepare(source, root / "out", root / "manifest.json", options)
+            with self.assertRaisesRegex(ValueError, r"synthetic\.zip.*--update-options"):
+                prepare(source, root / "out", root / "manifest.json", options)
+            self.assertEqual(
+                json.loads(options.read_text())["board_themes"],
+                ["forest", "walnut", "slate"],
+            )
+            [theme] = prepare(
+                source, root / "out", root / "manifest.json", options,
+                update_options=True,
+            )
             self.assertEqual(
                 json.loads(options.read_text())["board_themes"],
                 ["forest", "walnut", "slate", "bgblitz:synthetic"],

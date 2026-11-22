@@ -17,7 +17,7 @@ Prioritize backgammon correctness, preservation of user data, database performan
 - Get explicit authorization for destructive Git commands, database resets, or deletion of user data. Commit, push, and publish within the requested scope.
 - Do not run the legacy helper `tools/rebuild_demo.py` against the current schema — its activation step can delete the internal saved-position collection. [Private demo data](docs/development/architecture.md#private-demo-data)
 - Keep `strip = "none"` in [Cargo.toml](Cargo.toml) and do not re-enable stripping via `RUSTFLAGS` or Cargo config; implicit stripping breaks procedural-macro loading on macOS 27 with Rust 1.94.1.
-- Frontend `dev`, `build`, and `test` run `themes:prepare` automatically and abort if the untracked BGBlitz ZIP archives are missing from `themes/` (such as in fresh worktrees). Copy/link the archives or set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally running without them. [Board artwork](docs/reference/settings.md#board-artwork)
+- Frontend `dev`, `build`, and `test` run `themes:prepare` automatically and abort if the untracked BGBlitz ZIP archives are missing from `themes/` (such as in fresh worktrees). Copy/link the archives or set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally running without them; it never edits the tracked `shared/configuration-options.json`, which only `themes:prepare -- --update-options` rewrites (when adding or removing a theme). [Board artwork](docs/reference/settings.md#board-artwork)
 
 ## Architecture and module boundaries
 

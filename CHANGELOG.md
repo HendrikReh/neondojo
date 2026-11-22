@@ -9,6 +9,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 ### Changed
 
 - The five-point NeonGammon preset labels now show approximately 20.3, 15.8, 9.3, and 1.0 PR. All four presets were scored on the same 6,912 decisions against a shared rollout reference. [Five-point preset PR benchmark](docs/open-sage-local.md#five-point-preset-pr-benchmark)
+- **Theme preparation no longer edits the tracked theme list.** With `NEONDOJO_ALLOW_MISSING_THEMES=1`, `npm run themes:prepare` only writes the untracked catalog and artwork and leaves `shared/configuration-options.json` unchanged, so the backend keeps accepting saved BGBlitz themes. Adding or removing a theme now requires `npm run themes:prepare --prefix web -- --update-options`; a new archive in `themes/` without that flag stops preparation and names it. [Board artwork](docs/reference/settings.md#board-artwork)
 
 ### Fixed
 
