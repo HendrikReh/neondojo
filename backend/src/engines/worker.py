@@ -107,8 +107,25 @@ class Runtime:
                 'artifact_fingerprint': hashlib.sha256(json.dumps(manifest, sort_keys=True).encode()).hexdigest()}
 
     def verify(self):
+        """Complete check: hash every locked file again and record the metadata guarding it."""
+        # Record the metadata first: a change made while hashing leaves the
+        # record stale, so the next guarded check repeats the complete one.
+        paths = self.integrity['locked_paths'](self.sage, self.native)
+        snapshot = self.integrity['stat_snapshot'](paths)
         if self.check_identity() != self.identity:
             raise ValueError('NeonGammon installation changed during evaluation')
+        self.guard = paths, snapshot
+
+    def verify_unchanged(self):
+        """Steady-state check around a single request.
+
+        Unchanged metadata of every locked path, recorded at the last complete
+        check, stands for that check; any difference runs the complete check
+        immediately, which rejects a changed installation as before.
+        """
+        guard = getattr(self, 'guard', None)
+        if guard is None or self.integrity['stat_snapshot'](guard[0]) != guard[1]:
+            self.verify()
 
     def top_two_candidates(self, before, moves, context):
         if len(moves) < 2 or self.sage.board.is_race(before):
@@ -179,7 +196,7 @@ class Runtime:
         if self.batch_active and operation not in ('checker', 'cube'):
             raise ValueError('Unsupported integrity batch operation')
         if not self.batch_active:
-            self.verify()
+            self.verify_unchanged()
         # Engine work only: integrity checks before and after stay outside.
         cpu_before, wall_before = process_cpu_us(), time.perf_counter_ns()
         if request['operation'] == 'identity':
@@ -289,7 +306,7 @@ class Runtime:
         cost = {'cpu_us': process_cpu_us() - cpu_before,
                 'wall_us': (time.perf_counter_ns() - wall_before) // 1000}
         if not self.batch_active:
-            self.verify()
+            self.verify_unchanged()
         return result, cost
 
 

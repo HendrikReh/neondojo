@@ -1,5 +1,6 @@
 """Dependency-free tests for the bundled NeonGammon sidecar protocol."""
 import importlib.util
+import os
 from pathlib import Path
 import unittest
 import subprocess
@@ -111,7 +112,11 @@ class BatchTests(unittest.TestCase):
         self.runtime.identity = {'package_version': 'fixture', 'artifact_fingerprint': 'original'}
         self.runtime.check_identity = Mock(side_effect=lambda: dict(self.current_identity))
         self.current_identity = dict(self.runtime.identity)
-        self.runtime.integrity = {'validate_result': lambda result, validator: validator(result.probs.to_list())}
+        self.runtime.sage = self.runtime.native = None
+        self.metadata = ('original',)
+        self.runtime.integrity = {'validate_result': lambda result, validator: validator(result.probs.to_list()),
+                                  'locked_paths': lambda sage, native: ['locked'],
+                                  'stat_snapshot': lambda paths: self.metadata}
         self.runtime.analyzer = SimpleNamespace(cube_action=lambda *args, **kwargs: SimpleNamespace(
             eval_level='2-ply', equity_nd=.2, equity_dt=.3, equity_dp=1, probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01])))
         self.cube = {'operation': 'cube', 'board': [0] * 26,
@@ -197,13 +202,45 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(self.runtime.check_identity.call_count, 1)
         self.assertEqual(self.runtime.dispatch({'operation': 'end_batch'}), (self.runtime.identity, None))
         self.assertEqual(self.runtime.check_identity.call_count, 2)
+        # Unchanged metadata of the locked files stands for the complete check.
         self.assertEqual(self.runtime.dispatch(self.cube)[0], first)
-        self.assertEqual(self.runtime.check_identity.call_count, 4)
+        self.assertEqual(self.runtime.check_identity.call_count, 2)
+        self.metadata = ('changed',)
         self.current_identity['artifact_fingerprint'] = 'changed'
         with self.assertRaisesRegex(ValueError, 'changed'):
             self.runtime.dispatch(self.cube)
+        self.assertEqual(self.runtime.check_identity.call_count, 3)
         self.assertEqual(set(cost), {'cpu_us', 'wall_us'})
         self.assertTrue(all(type(value) is int and value >= 0 for value in cost.values()))
+
+    def test_single_requests_hash_only_after_metadata_changes(self):
+        self.runtime.verify()
+        self.assertEqual(self.runtime.check_identity.call_count, 1)
+        self.runtime.dispatch(self.cube)
+        self.runtime.dispatch(self.cube)
+        self.assertEqual(self.runtime.check_identity.call_count, 1)
+        # A metadata change with identical content passes one complete check
+        # and becomes the new guard.
+        self.metadata = ('touched',)
+        self.runtime.dispatch(self.cube)
+        self.assertEqual(self.runtime.check_identity.call_count, 2)
+        self.runtime.dispatch(self.cube)
+        self.assertEqual(self.runtime.check_identity.call_count, 2)
+
+    def test_change_during_a_single_request_is_rejected_after_it(self):
+        self.runtime.verify()
+        evaluate = self.runtime.analyzer.cube_action
+        def changing(*args, **kwargs):
+            self.metadata = ('changed',)
+            self.current_identity['artifact_fingerprint'] = 'changed'
+            return evaluate(*args, **kwargs)
+        self.runtime.analyzer.cube_action = changing
+        with self.assertRaisesRegex(ValueError, 'changed during evaluation'):
+            self.runtime.dispatch(self.cube)
+
+    def test_missing_guard_runs_the_complete_check(self):
+        self.runtime.dispatch(self.cube)
+        self.assertEqual(self.runtime.check_identity.call_count, 1)
 
     def test_changed_identity_is_rejected_at_each_boundary(self):
         for boundary in ('begin_batch', 'end_batch'):
@@ -261,6 +298,134 @@ class BatchTests(unittest.TestCase):
                             manifest[field] = 'modified'
                         with self.assertRaises(ValueError):
                             self.runtime.dispatch({'operation': boundary})
+
+class InstalledFilesGuardTests(unittest.TestCase):
+    """The real probe integrity functions over a minimal installed wheel."""
+
+    FILES = {
+        'neongammon/__init__.py': (
+            'from pathlib import Path\n'
+            "PRODUCTION_MODEL = 'stage11'\n"
+            'class _Weights:\n'
+            "    strategy_type = 'backgame_pair_phased'\n"
+            "    weight_paths_list = [str(Path(__file__).parent / '_assets/models/contact.weights')]\n"
+            'def default_weights():\n'
+            '    return _Weights()\n'),
+        'neongammon/weights.py': (
+            'from pathlib import Path\n'
+            'def bearoff_db_path():\n'
+            "    return str(Path(__file__).parent / '_assets/bearoff.db')\n"),
+        'neongammon/_assets/models/contact.weights': 'weights v1\n',
+        'neongammon/_assets/bearoff.db': 'bearoff v1\n',
+        'bgbot_cpp.so': 'native v1\n',
+    }
+
+    def setUp(self):
+        import base64, hashlib, tempfile
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        version = PROBE.SUPPORTED_VERSIONS[-1]
+        record = []
+        for name, content in self.FILES.items():
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+            digest = base64.urlsafe_b64encode(hashlib.sha256(content.encode()).digest()).decode().rstrip('=')
+            record.append(f'{name},sha256={digest},{len(content)}')
+        for name, release in (('neongammon', version), ('numpy', PROBE.NUMPY_VERSION)):
+            info = self.root / f'{name}-{release}.dist-info'
+            info.mkdir()
+            (info / 'METADATA').write_text(f'Metadata-Version: 2.1\nName: {name}\nVersion: {release}\n')
+            lines = record + [f'{info.name}/METADATA,,', f'{info.name}/RECORD,,'] if name == 'neongammon' else []
+            (info / 'RECORD').write_text('\n'.join(lines) + '\n')
+        self.record = self.root / f'neongammon-{version}.dist-info/RECORD'
+
+        sys.path.insert(0, str(self.root))
+        self.addCleanup(sys.path.remove, str(self.root))
+        modules = patch.dict(sys.modules)
+        modules.start()
+        self.addCleanup(modules.stop)
+        for name in [name for name in sys.modules if name == 'neongammon' or name.startswith('neongammon.')]:
+            del sys.modules[name]
+        sage = importlib.import_module('neongammon')
+
+        spec = importlib.util.spec_from_file_location('sage_worker', PATH)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        runtime = worker.Runtime.__new__(worker.Runtime)
+        runtime.batch_active = False
+        runtime.cubeless = False
+        runtime.profile = {'plies': 2}
+        runtime.sage, runtime.native = sage, SimpleNamespace(__file__=str(self.root / 'bgbot_cpp.so'))
+        self.hashes = Mock(wraps=PROBE.identity)
+        runtime.integrity = {name: getattr(PROBE, name) for name in (
+            'validate_versions', 'ProbeError', 'locked_paths', 'stat_snapshot')}
+        runtime.integrity['identity'] = self.hashes
+        runtime.integrity['validate_result'] = lambda result, validator: validator(result.probs.to_list())
+        runtime.analyzer = SimpleNamespace(cube_action=lambda *args, **kwargs: SimpleNamespace(
+            eval_level='2-ply', equity_nd=.2, equity_dt=.3, equity_dp=1,
+            probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01])))
+        runtime.identity = runtime.check_identity()
+        runtime.verify()
+        self.runtime = runtime
+        self.cube = {'operation': 'cube', 'board': [0] * 26,
+                     'context': dict(cube_value=1, cube_owner='centered', away1=0, away2=0, is_crawford=False, jacoby=True)}
+
+    def assert_detected(self, change):
+        self.runtime.dispatch(self.cube)
+        hashed = self.hashes.call_count
+        change()
+        with self.assertRaises(Exception):
+            self.runtime.dispatch(self.cube)
+        self.assertEqual(self.hashes.call_count, hashed + 1, 'a changed file must force the complete check')
+
+    def test_unchanged_installation_is_not_hashed_again(self):
+        hashed = self.hashes.call_count
+        for _ in range(3):
+            self.runtime.dispatch(self.cube)
+        self.assertEqual(self.hashes.call_count, hashed)
+
+    def test_same_size_modification_is_detected_even_with_restored_mtime(self):
+        path = self.root / 'neongammon/_assets/models/contact.weights'
+        def modify():
+            before = path.stat()
+            path.write_text('weights v2\n')
+            os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+        self.assert_detected(modify)
+
+    def test_size_change_is_detected(self):
+        self.assert_detected(lambda: (self.root / 'bgbot_cpp.so').write_text('native v1 patched\n'))
+
+    def test_atomic_replacement_is_detected(self):
+        path = self.root / 'neongammon/_assets/bearoff.db'
+        def replace():
+            before = path.stat()
+            replacement = path.with_name('bearoff.tmp')
+            replacement.write_text('bearoff v2\n')
+            os.utime(replacement, ns=(before.st_atime_ns, before.st_mtime_ns))
+            os.replace(replacement, path)
+        self.assert_detected(replace)
+
+    def test_record_edit_is_detected(self):
+        self.assert_detected(lambda: self.record.write_text(self.record.read_text() + 'extra.txt,,\n'))
+
+    def test_untracked_python_file_is_detected(self):
+        self.assert_detected(lambda: (self.root / 'neongammon/extra.py').write_text('pass\n'))
+
+    def test_untracked_file_in_a_nested_package_directory_is_detected(self):
+        self.assert_detected(lambda: (self.root / 'neongammon/_assets/models/extra.py').write_text('pass\n'))
+
+    def test_identical_rewrite_passes_one_complete_check(self):
+        path = self.root / 'neongammon/weights.py'
+        self.runtime.dispatch(self.cube)
+        hashed = self.hashes.call_count
+        os.replace(path, path.with_name('moved.py'))
+        os.replace(path.with_name('moved.py'), path)
+        self.runtime.dispatch(self.cube)
+        self.runtime.dispatch(self.cube)
+        self.assertEqual(self.hashes.call_count, hashed + 1)
+
 
 class OpponentPolicyTests(unittest.TestCase):
     def test_repeated_preset_decisions_reuse_analyzer_with_request_seed(self):
