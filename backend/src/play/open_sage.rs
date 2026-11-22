@@ -396,6 +396,10 @@ pub(super) async fn benchmark_checker_turn(
     .await
 }
 
+/// NeonGammon feedback alternatives. `rating_decisions` stays 0: it only
+/// corrects GNUbg's native game statistics (unforced moves, close cube
+/// decisions) for first attempts, and NeonGammon game analysis has no such
+/// statistics, so its play reviews report no first-attempt PR.
 pub(super) async fn alternatives(
     session: &PlaySession,
     engine: &SageEngine,
