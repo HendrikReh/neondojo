@@ -87,6 +87,7 @@ export default function MatchAnalysisPanel({
   analysisInstallationKey,
   onJob,
   onAccepted,
+  onAnalyzeMatch,
   boardReview,
   selectedPositionId,
   selectedDecisionId,
@@ -115,6 +116,8 @@ export default function MatchAnalysisPanel({
   analysisInstallationKey?: string;
   onJob?: (job: Job | undefined) => void;
   onAccepted?: (job: Job) => void;
+  /** Opens the whole-match analysis dialog from the header options. */
+  onAnalyzeMatch?: () => void;
   boardReview?: BoardReviewTarget;
   analysisRevision?: string;
   catalog: AnalysisCatalog;
@@ -691,6 +694,22 @@ export default function MatchAnalysisPanel({
               configured={analysisConfigured}
               installationKey={analysisInstallationKey}
             />
+          )}
+          {controlsTarget && onAnalyzeMatch && (
+            <div className="match-analysis-whole">
+              <ActionButton
+                type="button"
+                icon="analysis"
+                label={`${t('matchAnalysis.start')} …`}
+                aria-haspopup="dialog"
+                onClick={() => {
+                  // The dialog returns focus to the options button it hides.
+                  setShowSettings(false);
+                  settingsButton.current?.focus();
+                  onAnalyzeMatch();
+                }}
+              />
+            </div>
           )}
         </div>
         {!!engineCatalog?.error && (

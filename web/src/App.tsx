@@ -235,7 +235,10 @@ export default function App() {
   const [deckRevision, setDeckRevision] = useState(0);
   const [bookmarkRevision, setBookmarkRevision] = useState(0);
   const [analysisSelection, setAnalysisSelection] = useState<
-    | { kind: 'single'; match: LibraryMatch }
+    | {
+        kind: 'single';
+        match: Match & Pick<LibraryMatch, 'display_name'>;
+      }
     | { kind: 'bulk'; matches: LibraryMatch[]; unavailableCount: number }
   >();
   const [requestedAnalysis, setRequestedAnalysis] = useState<Job>();
@@ -1093,6 +1096,13 @@ export default function App() {
             detail={detail}
             onDetail={setDetail}
             onOpenDatabase={searchCurrentPosition}
+            onAnalyzeMatch={(match) =>
+              // The Analysis header names the players, like the dialog's fallback.
+              setAnalysisSelection({
+                kind: 'single',
+                match: { ...match, display_name: '' },
+              })
+            }
             onTrackJob={track}
             onNotesSaved={notesSaved}
             notesSuspended={!!moveNotes || view !== 'analysis'}
@@ -1112,6 +1122,7 @@ export default function App() {
             scopeRequest={scopeRequest}
             welcome={welcome}
           />
+          {view === 'analysis' && analysisDialogs}
         </div>
         <div
           id="workspace-panel-database"

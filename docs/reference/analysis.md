@@ -46,7 +46,8 @@ choose a depth and calculate again, use **Recalculate position …** or
 
 **Analyze game** stays visible in the Analysis header and starts the selected
 game. Its options include the engine, depth and time estimate. Start a
-whole-match analysis with **Analyze selected matches …** in the selection
+whole-match analysis of the open match with **Analysis options → Analyze entire
+match …**, or with **Analyze selected matches …** in the selection
 toolbar of the **Match database**. For one match, the dialog shows the engine, depth and estimate before you
 confirm. In Analysis, **Displayed analysis** determines which saved results
 the decision reviews and **Statistics** show. Running jobs stay

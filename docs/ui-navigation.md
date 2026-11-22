@@ -181,7 +181,9 @@ preserves the original match file.
 **Opening book** is an expandable reference beneath the selected result.
 Opening **Dice equity** displays the saved calculation or starts a missing one.
 **Analysis options** in the header includes **Recalculate position …** and
-**Recalculate dice equity …** for explicit calculations at a selected depth.
+**Recalculate dice equity …** for explicit calculations at a selected depth,
+and **Analyze entire match …**, which opens the whole-match analysis dialog for
+the open match; a completed run opens its **Statistics**.
 
 **Analyze game** in the Analysis header always starts the selected game. Its
 options show the engine, depth and estimated time. In the **Match database**,

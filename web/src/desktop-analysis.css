@@ -128,6 +128,12 @@
     box-shadow: 0 8px 24px var(--ui-shadow);
   }
 
+  /* The whole-match action is separate from the game analysis options. */
+  .analysis-workspace .match-analysis-popover .match-analysis-whole {
+    padding-top: 10px;
+    border-top: 1px solid var(--ui-border);
+  }
+
   .analysis-workspace
     .workspace-analysis-command
     .match-analysis-controls

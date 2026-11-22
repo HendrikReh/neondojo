@@ -34,7 +34,7 @@ import MatchAnalysisPanel, {
 import NotesPanel from './NotesPanel';
 import GameSelector from './GameSelector';
 import { AddCardsPanel } from './LearningPanel';
-import { type Job } from './api';
+import { type Job, type Match } from './api';
 import {
   canOpenReviewDecision,
   findCubeDecisionByNumber,
@@ -96,6 +96,7 @@ export default function AnalysisWorkspace({
   detail: requestedDetail,
   onDetail,
   onOpenDatabase,
+  onAnalyzeMatch,
   onTrackJob,
   onNotesSaved,
   onMoveNotes,
@@ -132,6 +133,7 @@ export default function AnalysisWorkspace({
   detail: AnalysisDetail;
   onDetail: (detail: AnalysisDetail) => void;
   onOpenDatabase: () => void;
+  onAnalyzeMatch?: (match: Match) => void;
   onTrackJob: (job: Job | undefined) => void;
   onNotesSaved: () => void;
   onMoveNotes: (target?: Omit<MoveNotesTarget, 'match'>) => void;
@@ -954,6 +956,7 @@ export default function AnalysisWorkspace({
               positionControlsRef={setPositionControls}
               onDecision={openReviewDecision}
               onTrackJob={onTrackJob}
+              onAnalyzeMatch={onAnalyzeMatch}
               catalog={catalog}
               analysisRevision={catalogRevision}
               boardReview={
@@ -1041,6 +1044,7 @@ function MatchResults({
   positionControlsRef,
   onDecision,
   onTrackJob,
+  onAnalyzeMatch,
   catalog,
   boardReview,
   analysisRevision,
@@ -1061,6 +1065,7 @@ function MatchResults({
   positionControlsRef: (element: HTMLDivElement | null) => void;
   onDecision: (decision: ReviewDecision) => void;
   onTrackJob: (job: Job | undefined) => void;
+  onAnalyzeMatch?: (match: Match) => void;
   catalog: AnalysisCatalog;
   boardReview?: BoardReviewTarget;
   analysisRevision?: string;
@@ -1100,6 +1105,9 @@ function MatchResults({
           onTrackJob(job);
           catalog.refresh();
         }}
+        onAnalyzeMatch={
+          onAnalyzeMatch && (() => onAnalyzeMatch(navigation.match!))
+        }
         boardReview={boardReview}
         analysisRevision={analysisRevision}
       />
