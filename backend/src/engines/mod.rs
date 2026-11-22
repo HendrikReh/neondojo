@@ -484,6 +484,48 @@ impl SageEngine {
         })
     }
 
+    /// Evaluate the position once per roll inside one verified batch: the
+    /// installation is verified before the first and after the last roll
+    /// instead of around every roll, and no analysis is returned before the
+    /// final check succeeds. Progress reports only the number of rolls done.
+    pub async fn analyze_rolls<F>(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+        rolls: &[[i32; 2]],
+        mut evaluated: impl FnMut(usize) -> F,
+    ) -> Result<Vec<Analysis>>
+    where
+        F: std::future::Future<Output = Result<()>>,
+    {
+        self.check_depth(plies)?;
+        crate::engine::with_shared_access(async {
+            let mut batch = process::VerifiedBatch::begin(&self.snapshot).await?;
+            let mut analyses = Vec::with_capacity(rolls.len());
+            for &dice in rolls {
+                let candidates = self
+                    .checker_boards_with_batch(
+                        position_id,
+                        match_id,
+                        Some(dice),
+                        None,
+                        Some(&mut batch),
+                    )
+                    .await?;
+                analyses.push(Analysis {
+                    engine: self.version.clone(),
+                    plies,
+                    candidates: self.ranked_candidates(candidates),
+                });
+                evaluated(analyses.len()).await?;
+            }
+            batch.finish().await?;
+            Ok(analyses)
+        })
+        .await
+    }
+
     fn ranked_candidates(&self, candidates: Vec<SageCheckerCandidate>) -> Vec<Candidate> {
         candidates
             .into_iter()
@@ -695,7 +737,7 @@ impl AnalysisEngine {
         match_id: &str,
         plies: i32,
         rolls: &[[i32; 2]],
-        mut evaluated: impl FnMut(usize) -> F,
+        evaluated: impl FnMut(usize) -> F,
     ) -> Result<Vec<Analysis>>
     where
         F: std::future::Future<Output = Result<()>>,
@@ -707,16 +749,9 @@ impl AnalysisEngine {
                     .await
             }
             Self::OpenSage(engine) => {
-                let mut analyses = Vec::with_capacity(rolls.len());
-                for &dice in rolls {
-                    analyses.push(
-                        engine
-                            .analyze(position_id, match_id, plies, Some(dice))
-                            .await?,
-                    );
-                    evaluated(analyses.len()).await?;
-                }
-                Ok(analyses)
+                engine
+                    .analyze_rolls(position_id, match_id, plies, rolls, evaluated)
+                    .await
             }
         }
     }
