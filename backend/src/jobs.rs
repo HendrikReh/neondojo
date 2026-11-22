@@ -25,21 +25,38 @@ pub const DEFAULT_HEARTBEAT: Duration = Duration::from_secs(20);
 /// stop a job; the frontend recognizes this text and labels it as cancelled.
 pub const CANCELLED_ERROR: &str = "Cancelled by user";
 
+/// Error of a job that a database restore stopped or found unfinished.
+pub const RESTORE_INTERRUPTED_ERROR: &str = "Interrupted by database restore";
+
 /// Cancellation tokens of the jobs this process is running, so that cancelling
 /// a running job stops its engine work at once instead of at the next lease
 /// renewal. The database state stays authoritative: once a job is cancelled,
 /// its lease token no longer matches and any later write is rejected.
 #[derive(Default)]
-pub(crate) struct RunningJobs(std::sync::Mutex<std::collections::HashMap<Uuid, CancellationToken>>);
+pub(crate) struct RunningJobs(std::sync::Mutex<std::collections::HashMap<Uuid, Stop>>);
+
+/// Stops one running job and records why; the first reason wins.
+#[derive(Clone, Default)]
+struct Stop {
+    token: CancellationToken,
+    reason: std::sync::Arc<std::sync::OnceLock<&'static str>>,
+}
+
+impl Stop {
+    fn stop(&self, reason: &'static str) {
+        let _ = self.reason.set(reason);
+        self.token.cancel();
+    }
+}
 
 impl RunningJobs {
-    fn register(&self, id: Uuid) -> CancellationToken {
-        let token = CancellationToken::new();
+    fn register(&self, id: Uuid) -> Stop {
+        let stop = Stop::default();
         self.0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
-            .insert(id, token.clone());
-        token
+            .insert(id, stop.clone());
+        stop
     }
 
     fn remove(&self, id: Uuid) {
@@ -56,8 +73,21 @@ impl RunningJobs {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .get(&id)
         {
-            token.cancel();
+            token.stop(CANCELLED_ERROR);
         }
+    }
+
+    /// Stop every running job, for example before a database restore, and
+    /// return how many were running.
+    pub(crate) fn interrupt_all(&self, reason: &'static str) -> usize {
+        let running = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for stop in running.values() {
+            stop.stop(reason);
+        }
+        running.len()
     }
 }
 
@@ -253,7 +283,9 @@ async fn execute_with_heartbeat(state: &AppState, job: &Job, token: Uuid) -> Res
     // Dropping the work on cancellation terminates its engine processes.
     let result = tokio::select! {
         result = work => result,
-        () = cancelled.cancelled() => Err(anyhow::anyhow!(CANCELLED_ERROR)),
+        () = cancelled.token.cancelled() => Err(anyhow::anyhow!(
+            cancelled.reason.get().copied().unwrap_or(CANCELLED_ERROR)
+        )),
     };
     state.running_jobs.remove(job.id);
     result
@@ -450,41 +482,14 @@ mod tests {
 
     #[sqlx::test(migrations = "./migrations")]
     async fn cancelling_a_running_job_stops_its_engine_process(pool: PgPool) {
-        use std::os::unix::fs::PermissionsExt;
-        let directory = tempfile::tempdir().unwrap();
-        let pid_file = directory.path().join("engine.pid");
-        let engine = directory.path().join("gnubg");
-        // A stand-in engine that never answers.
-        std::fs::write(
-            &engine,
-            format!(
-                "#!/bin/sh\necho $$ > '{}'\nexec sleep 60\n",
-                pid_file.display()
-            ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let state = AppState::new(
-            pool.clone(),
-            crate::engine::Engine::new(engine.display().to_string()),
-        );
+        let engine = SleepingEngine::new();
+        let state = AppState::new(pool.clone(), engine.engine());
         let id = queued_position_job(&pool).await;
         let worker = tokio::spawn({
             let state = state.clone();
             async move { run_one(&state).await }
         });
-        let pid = tokio::time::timeout(Duration::from_secs(10), async {
-            loop {
-                if let Ok(pid) = std::fs::read_to_string(&pid_file)
-                    && let Ok(pid) = pid.trim().parse::<i32>()
-                {
-                    return pid;
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-        })
-        .await
-        .expect("the stand-in engine must start");
+        let pid = engine.pid().await;
         assert_eq!(status(&pool, id).await.0, "running");
         let (changed, _) = cancel(&state, id).await.unwrap().unwrap();
         assert!(changed);
@@ -498,6 +503,144 @@ mod tests {
             ("failed".into(), Some(CANCELLED_ERROR.into()), None)
         );
         // kill_on_drop terminates the engine process with the cancelled work.
+        terminated(pid).await;
+        assert!(state.running_jobs.0.lock().unwrap().is_empty());
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn interrupting_running_jobs_records_the_restore_and_stops_the_engine(pool: PgPool) {
+        let engine = SleepingEngine::new();
+        let state = AppState::new(pool.clone(), engine.engine());
+        let id = queued_position_job(&pool).await;
+        let worker = tokio::spawn({
+            let state = state.clone();
+            async move { run_one(&state).await }
+        });
+        let pid = engine.pid().await;
+        assert_eq!(
+            state.running_jobs.interrupt_all(RESTORE_INTERRUPTED_ERROR),
+            1
+        );
+        tokio::time::timeout(Duration::from_secs(5), worker)
+            .await
+            .expect("an interrupted job must stop at once")
+            .unwrap()
+            .unwrap();
+        // The worker records the interruption itself while its lease is valid.
+        assert_eq!(
+            status(&pool, id).await,
+            (
+                "failed".into(),
+                Some(RESTORE_INTERRUPTED_ERROR.into()),
+                None
+            )
+        );
+        terminated(pid).await;
+        assert_eq!(
+            state.running_jobs.interrupt_all(RESTORE_INTERRUPTED_ERROR),
+            0
+        );
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn restore_stops_a_running_analysis_instead_of_reporting_busy(pool: PgPool) {
+        use axum::{
+            body::{Body, to_bytes},
+            http::{Request, StatusCode, header},
+        };
+        use tower::ServiceExt;
+        let engine = SleepingEngine::new();
+        let state = AppState::new(pool.clone(), engine.engine());
+        let app = crate::api::router(state.clone());
+        let id = queued_position_job(&pool).await;
+        let archive = app
+            .clone()
+            .oneshot(
+                Request::get("/api/database-backup")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(archive.status(), StatusCode::OK);
+        let archive = to_bytes(archive.into_body(), 16 * 1024 * 1024)
+            .await
+            .unwrap();
+        // The worker holds the database for the whole job, as in production.
+        let stop = CancellationToken::new();
+        let jobs = tokio::spawn(worker(state.clone(), stop.clone()));
+        let pid = engine.pid().await;
+        assert_eq!(status(&pool, id).await.0, "running");
+        let started = std::time::Instant::now();
+        let response = app
+            .oneshot(
+                Request::post("/api/database-backup?replace=true")
+                    .header(header::CONTENT_TYPE, "application/vnd.neondojo.backup")
+                    .body(Body::from(archive))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert!(started.elapsed() < Duration::from_secs(15));
+        terminated(pid).await;
+        // The archive held the job as queued; the restore ends it as interrupted.
+        assert_eq!(
+            status(&pool, id).await,
+            (
+                "failed".into(),
+                Some(RESTORE_INTERRUPTED_ERROR.into()),
+                None
+            )
+        );
+        stop.cancel();
+        jobs.await.unwrap();
+    }
+
+    /// A stand-in GNUbg that records its process id and never answers.
+    struct SleepingEngine {
+        directory: tempfile::TempDir,
+    }
+
+    impl SleepingEngine {
+        fn new() -> Self {
+            use std::os::unix::fs::PermissionsExt;
+            let directory = tempfile::tempdir().unwrap();
+            let engine = directory.path().join("gnubg");
+            std::fs::write(
+                &engine,
+                format!(
+                    "#!/bin/sh\necho $$ > '{}'\nexec sleep 60\n",
+                    directory.path().join("engine.pid").display()
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&engine, std::fs::Permissions::from_mode(0o755)).unwrap();
+            Self { directory }
+        }
+
+        fn engine(&self) -> crate::engine::Engine {
+            crate::engine::Engine::new(self.directory.path().join("gnubg").display().to_string())
+        }
+
+        async fn pid(&self) -> i32 {
+            let file = self.directory.path().join("engine.pid");
+            tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    if let Ok(pid) = std::fs::read_to_string(&file)
+                        && let Ok(pid) = pid.trim().parse::<i32>()
+                    {
+                        return pid;
+                    }
+                    tokio::time::sleep(Duration::from_millis(20)).await;
+                }
+            })
+            .await
+            .expect("the stand-in engine must start")
+        }
+    }
+
+    async fn terminated(pid: i32) {
         let alive = || {
             std::process::Command::new("kill")
                 .args(["-0", &pid.to_string()])
@@ -512,7 +655,6 @@ mod tests {
         })
         .await
         .expect("the engine process must be terminated");
-        assert!(state.running_jobs.0.lock().unwrap().is_empty());
     }
 
     #[sqlx::test(migrations = "./migrations")]

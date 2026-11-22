@@ -141,6 +141,7 @@ async fn preserve_host_settings(connection: &mut PgConnection, binary: &str) -> 
 }
 
 async fn retire_source_work(connection: &mut PgConnection) -> Result<()> {
+    use crate::jobs::RESTORE_INTERRUPTED_ERROR;
     // A restored deck requires a new opt-in for the active Anki collection.
     sqlx::query("DELETE FROM public.anki_auto_sync")
         .execute(&mut *connection)
@@ -150,14 +151,14 @@ async fn retire_source_work(connection: &mut PgConnection) -> Result<()> {
         .await?;
     sqlx::query(
         "WITH interrupted AS (
-             UPDATE public.jobs SET status='failed',error='Interrupted by database restore',
+             UPDATE public.jobs SET status='failed',error=$1,
                  lease_token=NULL,lease_until=NULL,updated_at=now()
              WHERE status IN ('queued','running') RETURNING id,status,error,progress,completed_games,total_games
          )
          INSERT INTO public.job_events(job_id,event,data)
          SELECT id,status,jsonb_build_object('status',status,'error',error,'progress',progress,
              'completed_games',completed_games,'total_games',total_games) FROM interrupted"
-    ).execute(&mut *connection).await?;
+    ).bind(RESTORE_INTERRUPTED_ERROR).execute(&mut *connection).await?;
     sqlx::query(
         "UPDATE public.match_analysis_timing SET active_started_at=NULL,active_elapsed_ms=0
          WHERE active_started_at IS NOT NULL",
@@ -172,15 +173,19 @@ async fn retire_source_work(connection: &mut PgConnection) -> Result<()> {
     .await?;
     sqlx::query(
         "UPDATE public.benchmark_runs SET status='failed',finished_at=now(),
-             error='Interrupted by database restore',worker_token=NULL,lease_until=NULL
+             error=$1,worker_token=NULL,lease_until=NULL
          WHERE status IN ('queued','running')",
     )
+    .bind(RESTORE_INTERRUPTED_ERROR)
     .execute(&mut *connection)
     .await?;
     sqlx::query(
-        "UPDATE public.engine_match_runs SET status='cancelled',error='Interrupted by database restore',
-             lease_token=NULL,lease_until=NULL WHERE status IN ('queued','running')"
-    ).execute(connection).await?;
+        "UPDATE public.engine_match_runs SET status='cancelled',error=$1,
+             lease_token=NULL,lease_until=NULL WHERE status IN ('queued','running')",
+    )
+    .bind(RESTORE_INTERRUPTED_ERROR)
+    .execute(connection)
+    .await?;
     Ok(())
 }
 

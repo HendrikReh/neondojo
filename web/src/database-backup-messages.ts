@@ -15,7 +15,7 @@ const en = {
   noFile: 'No file selected',
   review: 'Review database replacement',
   warning:
-    'Restoring replaces all NeonDojo data in the destination installation. Export the current database first if you want to keep it. Queued or running work in the backup will be ended.',
+    'Restoring replaces all NeonDojo data in the destination installation. Export the current database first if you want to keep it. Queued or running work in the backup will be ended. Running analyses on this installation stop when the restore starts; benchmarks, engine duels and AI assessments must finish first.',
   contents: 'Backup contents',
   compareContents: 'Compare contents',
   backupColumn: 'Backup',
@@ -63,7 +63,7 @@ export const databaseBackupMessages = {
     noFile: 'Keine Datei ausgewählt',
     review: 'Wiederherstellung ansehen',
     warning:
-      'Die Wiederherstellung ersetzt den gesamten NeonDojo-Datenbestand der Zielinstallation. Exportiere den aktuellen Bestand zuerst, wenn du ihn behalten möchtest. Wartende und laufende Aufträge aus der Sicherung werden beendet.',
+      'Die Wiederherstellung ersetzt den gesamten NeonDojo-Datenbestand der Zielinstallation. Exportiere den aktuellen Bestand zuerst, wenn du ihn behalten möchtest. Wartende und laufende Aufträge aus der Sicherung werden beendet. Laufende Analysen dieser Installation werden beim Start der Wiederherstellung angehalten; Benchmarks, Engine-Duelle und KI-Assessments müssen vorher abgeschlossen sein.',
     contents: 'Inhalt der Sicherung',
     compareContents: 'Bestände vergleichen',
     backupColumn: 'Sicherung',
@@ -107,7 +107,7 @@ export const databaseBackupMessages = {
     noFile: 'Ningún archivo seleccionado',
     review: 'Ver reemplazo de la base de datos',
     warning:
-      'La restauración reemplaza todos los datos de NeonDojo en la instalación de destino. Exporta primero la base de datos actual si quieres conservarla. Las tareas pendientes o en curso de la copia se detendrán.',
+      'La restauración reemplaza todos los datos de NeonDojo en la instalación de destino. Exporta primero la base de datos actual si quieres conservarla. Las tareas pendientes o en curso de la copia se detendrán. Los análisis en curso en esta instalación se detienen al iniciar la restauración; los benchmarks, los duelos de motores y las evaluaciones con IA deben terminar antes.',
     contents: 'Contenido de la copia',
     compareContents: 'Comparar contenidos',
     backupColumn: 'Copia de seguridad',
@@ -152,7 +152,7 @@ export const databaseBackupMessages = {
     noFile: 'Aucun fichier sélectionné',
     review: 'Voir le remplacement de la base',
     warning:
-      'La restauration remplace toutes les données de NeonDojo dans l’installation de destination. Exportez d’abord la base actuelle si vous souhaitez la conserver. Les tâches en attente ou en cours dans la sauvegarde seront arrêtées.',
+      'La restauration remplace toutes les données de NeonDojo dans l’installation de destination. Exportez d’abord la base actuelle si vous souhaitez la conserver. Les tâches en attente ou en cours dans la sauvegarde seront arrêtées. Les analyses en cours sur cette installation s’arrêtent au début de la restauration ; les benchmarks, les duels de moteurs et les évaluations IA doivent se terminer avant.',
     contents: 'Contenu de la sauvegarde',
     compareContents: 'Comparer les contenus',
     backupColumn: 'Sauvegarde',
@@ -197,7 +197,7 @@ export const databaseBackupMessages = {
     noFile: 'Nessun file selezionato',
     review: 'Rivedi la sostituzione del database',
     warning:
-      'Il ripristino sostituisce tutti i dati di NeonDojo nell’installazione di destinazione. Esporta prima il database attuale se vuoi conservarlo. Le attività in attesa o in corso nel backup saranno interrotte.',
+      'Il ripristino sostituisce tutti i dati di NeonDojo nell’installazione di destinazione. Esporta prima il database attuale se vuoi conservarlo. Le attività in attesa o in corso nel backup saranno interrotte. Le analisi in corso su questa installazione si interrompono all’avvio del ripristino; benchmark, duelli tra motori e valutazioni IA devono terminare prima.',
     contents: 'Contenuto del backup',
     compareContents: 'Confronta i contenuti',
     backupColumn: 'Backup',
@@ -242,7 +242,7 @@ export const databaseBackupMessages = {
     noFile: 'Nie wybrano pliku',
     review: 'Zobacz szczegóły zastąpienia bazy',
     warning:
-      'Przywrócenie zastąpi wszystkie dane NeonDojo w instalacji docelowej. Najpierw wyeksportuj obecną bazę, jeśli chcesz ją zachować. Oczekujące i trwające zadania z kopii zostaną przerwane.',
+      'Przywrócenie zastąpi wszystkie dane NeonDojo w instalacji docelowej. Najpierw wyeksportuj obecną bazę, jeśli chcesz ją zachować. Oczekujące i trwające zadania z kopii zostaną przerwane. Trwające analizy w tej instalacji zostaną zatrzymane na początku przywracania; benchmarki, pojedynki silników i oceny AI muszą się wcześniej zakończyć.',
     contents: 'Zawartość kopii zapasowej',
     compareContents: 'Porównaj zawartość',
     backupColumn: 'Kopia zapasowa',

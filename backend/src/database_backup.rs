@@ -16,7 +16,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::PgConnection;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 use tokio::{
     fs::File,
     sync::{OwnedSemaphorePermit, RwLock, Semaphore},
@@ -103,6 +103,11 @@ const TABLES: &[&str] = &[
     "engine_match_runs",
     "engine_match_results",
 ];
+
+/// How long a restore waits for running work to release the database after
+/// stopping the analysis jobs. Benchmarks, engine duels and AI assessments are
+/// not stopped and must finish within it.
+const RESTORE_DRAIN: Duration = Duration::from_secs(30);
 
 pub(crate) struct Access {
     /// Shared so background tasks can hold an owned read guard while they run.
@@ -434,17 +439,29 @@ async fn import(
 
     // Drain requests already using the destination and reject new ones until
     // the transaction finishes. The table locks also cover other DB clients.
-    let _maintenance = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        state.backup.requests.write(),
-    )
-    .await
-    .map_err(|_| {
-        ApiError(
-            StatusCode::CONFLICT,
-            "Database is busy; retry the restore when current work finishes".into(),
-        )
-    })?;
+    // Queueing for the write lock at once stops new readers, so no further job
+    // starts. Analysis jobs can hold their read access for hours, and the
+    // restore replaces their data anyway: stop them instead of waiting.
+    let mut maintenance = std::pin::pin!(state.backup.requests.write());
+    let _maintenance = match tokio::time::timeout(Duration::ZERO, &mut maintenance).await {
+        Ok(guard) => guard,
+        Err(_) => {
+            let interrupted = state
+                .running_jobs
+                .interrupt_all(crate::jobs::RESTORE_INTERRUPTED_ERROR);
+            if interrupted > 0 {
+                tracing::info!(interrupted, "Database restore stops running analysis jobs");
+            }
+            tokio::time::timeout(RESTORE_DRAIN, &mut maintenance)
+                .await
+                .map_err(|_| {
+                    ApiError(
+                        StatusCode::CONFLICT,
+                        "Database is busy; retry the restore when current work finishes".into(),
+                    )
+                })?
+        }
+    };
     restore::replace(&state, input).await?;
     Ok(StatusCode::NO_CONTENT)
 }
