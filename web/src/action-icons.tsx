@@ -56,6 +56,7 @@ import {
   Flag,
   Files,
   type LucideProps,
+  Merge,
 } from 'lucide-react';
 const icons = {
   save: Save,
@@ -118,6 +119,7 @@ const icons = {
   grip: GripVertical,
   resign: Flag,
   duplicates: Files,
+  merge: Merge,
 } as const;
 export type ActionIconName = keyof typeof icons;
 export default function ActionIcon({

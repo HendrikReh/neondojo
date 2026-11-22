@@ -292,16 +292,17 @@ export default function BenchmarkWorkspace({
       {error !== undefined && (
         <div className="error" role="alert">
           {formatError(error)}{' '}
-          <button
+          <ActionButton
+            icon="refresh"
+            label={t('retry')}
+            compact
             type="button"
             onClick={() => {
               setActionError(undefined);
               setConfigurationRevision((r) => r + 1);
               setRevision((r) => r + 1);
             }}
-          >
-            {t('retry')}
-          </button>
+          />
         </div>
       )}
       <div className="benchmark-engine-row">
@@ -374,9 +375,13 @@ export default function BenchmarkWorkspace({
                 ))}
               </select>
             </label>
-            <button type="submit" disabled={!canStartPlay}>
-              {t(starting === 'play' ? 'starting' : 'startPlay')}
-            </button>
+            <ActionButton
+              icon="play"
+              className="primary"
+              type="submit"
+              label={t(starting === 'play' ? 'starting' : 'startPlay')}
+              disabled={!canStartPlay}
+            />
           </div>
           {playFallback !== undefined && (
             <p className="benchmark-help" role="status">
@@ -425,9 +430,13 @@ export default function BenchmarkWorkspace({
                 ))}
               </div>
             </fieldset>
-            <button type="submit" disabled={!canStartAnalysis}>
-              {t(starting === 'analysis' ? 'starting' : 'start')}
-            </button>
+            <ActionButton
+              icon="play"
+              className="primary"
+              type="submit"
+              label={t(starting === 'analysis' ? 'starting' : 'start')}
+              disabled={!canStartAnalysis}
+            />
           </div>
           {analysisFallback !== undefined && (
             <p className="benchmark-help" role="status">
@@ -471,13 +480,13 @@ export default function BenchmarkWorkspace({
                   aria-label={progress(run)}
                 />
               </div>
-              <button
+              <ActionButton
+                icon="cancel"
                 type="button"
+                label={t(cancelling === run.id ? 'cancelling' : 'cancel')}
                 disabled={Boolean(cancelling)}
                 onClick={() => void cancel(run.id)}
-              >
-                {t(cancelling === run.id ? 'cancelling' : 'cancel')}
-              </button>
+              />
             </article>
           ))}
         </section>

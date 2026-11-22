@@ -280,13 +280,13 @@ export default function DatabaseBackupWorkspace() {
               {t.checkFailure} {formatError(check.error)}
             </p>
             <div className="database-backup-review">
-              <button
+              <ActionButton
+                icon="refresh"
                 type="button"
+                label={t.checkRetry}
                 disabled={busy}
                 onClick={() => void checkBackup(check.file)}
-              >
-                {t.checkRetry}
-              </button>
+              />
             </div>
           </>
         )}
@@ -349,12 +349,12 @@ export default function DatabaseBackupWorkspace() {
                     <p className="error" role="alert">
                       {t.targetError} {formatError(targetCounts.error)}
                     </p>
-                    <button
+                    <ActionButton
+                      icon="refresh"
                       type="button"
+                      label={t.targetRetry}
                       onClick={() => void loadTargetCounts()}
-                    >
-                      {t.targetRetry}
-                    </button>
+                    />
                   </>
                 )}
                 <p
@@ -380,13 +380,13 @@ export default function DatabaseBackupWorkspace() {
                   </p>
                 )}
                 <div className="library-dialog-actions database-backup-actions">
-                  <button
+                  <ActionButton
+                    icon="cancel"
                     type="button"
+                    label={t.cancel}
                     disabled={restoring}
                     onClick={closeConfirmation}
-                  >
-                    {t.cancel}
-                  </button>
+                  />
                   <ActionButton
                     type="button"
                     className="danger"

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import ActionButton from './ActionButton';
 import { request, type Match } from './api';
 import { NumberedSearchPagination } from './SearchPagination';
 import { SearchResultTable } from './SearchResultList';
@@ -128,7 +129,14 @@ export function PlayerMatches({
       </div>
       {error !== undefined && (
         <p role="alert">
-          {formatError(error)} <button onClick={retry}>{t('retry')}</button>
+          {formatError(error)}{' '}
+          <ActionButton
+            icon="refresh"
+            label={t('retry')}
+            compact
+            type="button"
+            onClick={retry}
+          />
         </p>
       )}
       {loading && !items.length && <p role="status">{t('loading')}</p>}
@@ -324,14 +332,14 @@ export function PlayerRatings({
         <p>{t('noPr')}</p>
       )}
       {onAnalyzeMatches && rated < matchCount && (
-        <button
+        <ActionButton
+          icon="analysis"
           type="button"
+          label={collecting ? t('loading') : t('analyzeRest')}
           aria-haspopup="dialog"
           disabled={collecting}
           onClick={() => void analyzeRest()}
-        >
-          {collecting ? t('loading') : t('analyzeRest')}
-        </button>
+        />
       )}
       {collected &&
         (collected.error === undefined ? (

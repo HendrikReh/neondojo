@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
+import ActionButton from './ActionButton';
 import type { Match } from './api';
 import { useI18n } from './i18n';
 import { AppError } from './i18n-core';
@@ -51,7 +52,14 @@ export function VirtualPlayerStrip({
       <h2 id="virtual-players">{v('title')}</h2>
       {error !== undefined && (
         <p role="alert">
-          {formatError(error)} <button onClick={onRetry}>{t('retry')}</button>
+          {formatError(error)}{' '}
+          <ActionButton
+            icon="refresh"
+            label={t('retry')}
+            compact
+            type="button"
+            onClick={onRetry}
+          />
         </p>
       )}
       {items === undefined && error === undefined && (
@@ -85,13 +93,13 @@ export function VirtualPlayerStrip({
           ))}
         </ul>
       )}
-      <button
+      <ActionButton
+        icon="add"
         type="button"
+        label={v('create')}
         aria-haspopup="dialog"
         onClick={() => setCreating(true)}
-      >
-        {v('create')}
-      </button>
+      />
       {creating && (
         <VirtualPlayerNameDialog
           onClose={() => setCreating(false)}
@@ -165,7 +173,14 @@ export function VirtualPlayerCard({
   if (!details)
     return error ? (
       <p role="alert">
-        {formatError(error)} <button onClick={retry}>{t('retry')}</button>
+        {formatError(error)}{' '}
+        <ActionButton
+          icon="refresh"
+          label={t('retry')}
+          compact
+          type="button"
+          onClick={retry}
+        />
       </p>
     ) : (
       <p role="status">{t('loading')}</p>
@@ -215,27 +230,27 @@ export function VirtualPlayerCard({
           )}
         </div>
         <div className="player-profile-actions">
-          <button
+          <ActionButton
+            icon="add"
             type="button"
+            label={v('addMember')}
             aria-haspopup="dialog"
             onClick={() => setDialog('member')}
-          >
-            {v('addMember')}
-          </button>
-          <button
+          />
+          <ActionButton
+            icon="edit"
             type="button"
+            label={v('rename')}
             aria-haspopup="dialog"
             onClick={() => setDialog('rename')}
-          >
-            {v('rename')}
-          </button>
-          <button
+          />
+          <ActionButton
+            icon="delete"
             type="button"
+            label={v('delete')}
             aria-haspopup="dialog"
             onClick={() => setDialog('delete')}
-          >
-            {v('delete')}
-          </button>
+          />
         </div>
       </header>
       <section className="virtual-player-members" aria-label={v('members')}>

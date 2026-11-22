@@ -1,3 +1,4 @@
+import ActionButton from './ActionButton';
 import { useEffect, useId, useRef, useState } from 'react';
 import { engineDisplayName } from './engine-version';
 import { depthLabel } from './analysis-depth';
@@ -415,15 +416,16 @@ export default function EngineMatchWorkspace({
       {displayedError !== undefined && (
         <div className="error" role="alert">
           {formatError(displayedError)}{' '}
-          <button
+          <ActionButton
+            icon="refresh"
+            label={text('retry')}
+            compact
             type="button"
             onClick={() => {
               setError(undefined);
               setRetry((revision) => revision + 1);
             }}
-          >
-            {text('retry')}
-          </button>
+          />
         </div>
       )}
       <div className="engine-match-layout">
@@ -433,14 +435,14 @@ export default function EngineMatchWorkspace({
         >
           <div className="engine-match-archive-heading">
             <h2 id={seriesHeading}>{text('series')}</h2>
-            <button
+            <ActionButton
+              icon="add"
               type="button"
               className="primary"
               ref={newSeriesButton}
+              label={text('newSeries')}
               onClick={(event) => openSetup(event.currentTarget)}
-            >
-              {text('newSeries')}
-            </button>
+            />
           </div>
           {!recent ? (
             loadError === undefined && <p role="status">{text('loading')}</p>
@@ -476,13 +478,13 @@ export default function EngineMatchWorkspace({
             </ul>
           )}
           {historyCursor && (
-            <button
+            <ActionButton
+              icon="expand"
               type="button"
+              label={text('olderSeries')}
               disabled={loadingOlder}
               onClick={() => void loadOlder()}
-            >
-              {text('olderSeries')}
-            </button>
+            />
           )}
         </section>
         {id && (
@@ -718,9 +720,13 @@ function SeriesSetup({
         {engineError !== undefined && (
           <div className="error" role="alert">
             {formatError(engineError)}{' '}
-            <button type="button" onClick={retryEngines}>
-              {text('retry')}
-            </button>
+            <ActionButton
+              icon="refresh"
+              label={text('retry')}
+              compact
+              type="button"
+              onClick={retryEngines}
+            />
           </div>
         )}
         {!engines && engineError === undefined && (
@@ -737,13 +743,13 @@ function SeriesSetup({
           </div>
         )}
         <div className="library-dialog-actions">
-          <button
+          <ActionButton
+            icon="play"
             type="submit"
             className="primary"
+            label={text('start')}
             disabled={!canStart || busy}
-          >
-            {text('start')}
-          </button>
+          />
         </div>
       </form>
     </LibraryDialog>
@@ -828,14 +834,22 @@ function SeriesResults({
               value={series.completed_matches}
               max={series.total_matches}
             />
-            <button type="button" disabled={busy} onClick={onCancel}>
-              {text('cancel')}
-            </button>
+            <ActionButton
+              icon="cancel"
+              type="button"
+              label={text('cancel')}
+              disabled={busy}
+              onClick={onCancel}
+            />
           </>
         )}
-        <button type="button" onClick={(event) => onReuse(event.currentTarget)}>
-          {text('reuse')}
-        </button>
+        <ActionButton
+          icon="copy"
+          type="button"
+          label={text('reuse')}
+          aria-haspopup="dialog"
+          onClick={(event) => onReuse(event.currentTarget)}
+        />
       </div>
       {(series.status === 'failed' || series.error) && (
         <div className="engine-match-failure error">
@@ -1058,17 +1072,17 @@ function SeriesResults({
                       <code>{match.seed}</code>
                     </td>
                     <td className="engine-match-actions">
-                      <button
+                      <ActionButton
+                        icon="analysis"
                         type="button"
-                        title={text('openInAnalysis')}
+                        label={text('analysis')}
+                        tooltip={text('openInAnalysis')}
                         aria-disabled={opening !== undefined || undefined}
                         aria-busy={opening === match.match_index || undefined}
                         onClick={() => {
                           if (opening === undefined) onOpen(match.match_index);
                         }}
-                      >
-                        {text('analysis')}
-                      </button>
+                      />
                       <a
                         href={seriesSgf(series.id, match.match_index)}
                         download
@@ -1085,27 +1099,27 @@ function SeriesResults({
       )}
       {(previous_offset != null || next_offset != null) && (
         <div className="engine-match-pagination">
-          <button
+          <ActionButton
+            icon="back"
             type="button"
+            label={text('previous')}
             disabled={previous_offset == null}
             aria-disabled={paging || undefined}
             onClick={() => {
               if (!paging && previous_offset != null)
                 setOffset(previous_offset);
             }}
-          >
-            {text('previous')}
-          </button>
-          <button
+          />
+          <ActionButton
+            icon="next"
             type="button"
+            label={text('next')}
             disabled={next_offset == null}
             aria-disabled={paging || undefined}
             onClick={() => {
               if (!paging && next_offset != null) setOffset(next_offset);
             }}
-          >
-            {text('next')}
-          </button>
+          />
         </div>
       )}
     </>

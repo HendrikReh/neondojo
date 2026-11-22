@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import ActionButton from './ActionButton';
 import { request, type Match } from './api';
 import { SearchResultList } from './SearchResultList';
 import { SearchResultPreview } from './SearchResultPreview';
@@ -60,7 +61,14 @@ function PlayerCard({
   if (!details)
     return error ? (
       <p role="alert">
-        {formatError(error)} <button onClick={retry}>{t('retry')}</button>
+        {formatError(error)}{' '}
+        <ActionButton
+          icon="refresh"
+          label={t('retry')}
+          compact
+          type="button"
+          onClick={retry}
+        />
       </p>
     ) : (
       <p role="status">{t('loading')}</p>
@@ -106,18 +114,23 @@ function PlayerCard({
           )}
         </div>
         <div className="player-profile-actions">
-          <button type="button" onClick={() => setDialog('edit')}>
-            {t('editShort')}
-          </button>
-          <button
+          <ActionButton
+            icon="edit"
             type="button"
+            label={t('editShort')}
+            aria-haspopup="dialog"
+            onClick={() => setDialog('edit')}
+          />
+          <ActionButton
+            icon="merge"
+            type="button"
+            label={t('mergeShort')}
+            aria-haspopup="dialog"
             onClick={() => {
               setMerged(false);
               setDialog('merge');
             }}
-          >
-            {t('mergeShort')}
-          </button>
+          />
         </div>
       </header>
       {merged && (
@@ -127,7 +140,14 @@ function PlayerCard({
       )}
       {error !== undefined && (
         <p role="alert">
-          {formatError(error)} <button onClick={retry}>{t('retry')}</button>
+          {formatError(error)}{' '}
+          <ActionButton
+            icon="refresh"
+            label={t('retry')}
+            compact
+            type="button"
+            onClick={retry}
+          />
         </p>
       )}
       <PlayerRatings
