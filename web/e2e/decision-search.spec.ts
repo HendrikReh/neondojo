@@ -186,3 +186,53 @@ test('all analyzed decisions are filtered on the server, previewed and practiced
     search.getByRole('button', { name: 'Practice results' }),
   ).toBeFocused();
 });
+
+test('Clear filters resets the decision filters but keeps the player and refreshes results', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  await page.route('**/api/study/mistakes?*', (route) =>
+    route.fulfill({
+      json: {
+        players: ['Alice', 'Bob'],
+        groups: [],
+        analyzed_decisions: 0,
+        analyzed_matches: 0,
+      },
+    }),
+  );
+  const searches: Record<string, string>[] = [];
+  await page.route('**/api/study/decisions?*', (route) => {
+    searches.push(
+      Object.fromEntries(new URL(route.request().url()).searchParams),
+    );
+    return route.fulfill({
+      json: { items: [hit(3, 0.125)], total: 1, page: 1, limit: 50 },
+    });
+  });
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Positions', exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Position source' })
+    .getByRole('button', { name: 'All analyzed decisions' })
+    .click();
+  const search = page.getByRole('region', { name: 'Analyzed decisions' });
+  const player = search.getByRole('combobox', { name: 'Player', exact: true });
+  await player.selectOption('Alice');
+  const kind = search.getByRole('combobox', { name: 'Decision type' });
+  await kind.selectOption('cube_response');
+  const maxLoss = search.getByRole('spinbutton', { name: 'Equity loss to' });
+  await maxLoss.fill('0.5');
+  await search.getByRole('button', { name: 'Search decisions' }).click();
+  await expect.poll(() => searches.at(-1)?.max_loss).toBe('0.5');
+
+  await search
+    .getByRole('button', { name: 'Clear filters', exact: true })
+    .click();
+  await expect(player).toHaveValue('Alice');
+  await expect(kind).toHaveValue('');
+  await expect(maxLoss).toHaveValue('');
+  await expect
+    .poll(() => searches.at(-1))
+    .toEqual({ player: 'Alice', min_loss: '0.05', limit: '50', page: '1' });
+});

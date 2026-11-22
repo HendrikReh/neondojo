@@ -166,6 +166,19 @@ export default function DecisionSearch({
     min: 0,
     max: 1000,
   });
+  // Like Saved positions, Clear resets the filters and refreshes shown
+  // results; the chosen player stays because every search needs one.
+  function clearFilters() {
+    const next = { ...emptyDraft, player: draft.player };
+    setDraft(next);
+    const cleared = decisionFilters(next);
+    if (applied && cleared)
+      setApplied((current) => ({
+        filters: { ...cleared, direction: current?.filters.direction },
+        page: 1,
+        attempt: (current?.attempt ?? 0) + 1,
+      }));
+  }
   const set = (key: keyof Draft) => (value: string) => {
     if (key === 'player') playerChosen.current = true;
     setDraft((current) => ({ ...current, [key]: value }));
@@ -356,6 +369,13 @@ export default function DecisionSearch({
               label={t('search')}
               disabled={!filters}
               aria-describedby={draft.player ? undefined : hintId}
+            />
+            <ActionButton
+              icon="clear"
+              label={p('clear')}
+              compact
+              type="button"
+              onClick={clearFilters}
             />
           </div>
           <div className="position-filter-toolbar">
