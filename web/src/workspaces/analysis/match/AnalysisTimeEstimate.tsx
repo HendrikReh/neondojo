@@ -84,7 +84,7 @@ export default function AnalysisTimeEstimate({
   }, [key, unavailable, matchId, plies, engineId, selectedGame]);
   const duration =
     value?.estimated_ms != null
-      ? formatAnalysisDuration(value.estimated_ms)
+      ? formatAnalysisDuration(locale, value.estimated_ms)
       : null;
   const reason =
     unavailable ??

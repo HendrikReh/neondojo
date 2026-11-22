@@ -9,6 +9,12 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 ### Changed
 
 - The five-point NeonGammon preset labels now show approximately 20.3, 15.8, 9.3, and 1.0 PR. All four presets were scored on the same 6,912 decisions against a shared rollout reference. [Five-point preset PR benchmark](docs/open-sage-local.md#five-point-preset-pr-benchmark)
+- **Theme preparation no longer edits the tracked theme list.** With `NEONDOJO_ALLOW_MISSING_THEMES=1`, `npm run themes:prepare` only writes the untracked catalog and artwork and leaves `shared/configuration-options.json` unchanged, so the backend keeps accepting saved BGBlitz themes. Adding or removing a theme now requires `npm run themes:prepare --prefix web -- --update-options`; a new archive in `themes/` without that flag stops preparation and names it. [Board artwork](docs/reference/settings.md#board-artwork)
+
+### Fixed
+
+- **Analysis time estimates in every language.** The estimated analysis time and the remaining time of a running match analysis appeared in English in Spanish, French, Italian and Polish, and durations always used English unit letters. They are now translated, with localized units such as `1 min 20 s` and Polish plural forms; the Polish count of opening-book score contexts uses its plural forms as well.
+- **Readable Play, Benchmark and history text in all six palettes.** Play match details on light palettes, blunder feedback, the saved Tutor threshold and failed benchmarks on dark palettes fell below the WCAG AA contrast of 4.5:1; they now use the palette's muted, danger and success text colours. Several Play, Match database and game result styles referred to colour variables that did not exist, so their colour or border was dropped: game result boxes in the history now have their border, and feedback tables their row lines. Action tooltips follow the selected palette, and board point numbers keep their light colour on the dark frame.
 
 ## [1.2.0] - 2026-11-21
 

@@ -73,16 +73,16 @@ a.action-button--compact {
   box-sizing: border-box;
   overflow: auto;
   padding: 8px 10px;
-  border: 1px solid #ffffff22;
+  border: 1px solid color-mix(in srgb, var(--ui-surface) 13%, transparent);
   border-radius: 6px;
-  background: #172033;
-  color: #fff;
+  background: var(--ui-text);
+  color: var(--ui-surface);
   font: 400 12px/1.45 var(--font-ui, sans-serif);
   text-align: left;
   text-transform: none;
   letter-spacing: normal;
   white-space: pre-line;
   overflow-wrap: anywhere;
-  box-shadow: 0 5px 20px #0003;
+  box-shadow: 0 5px 20px var(--ui-shadow);
   cursor: default;
 }

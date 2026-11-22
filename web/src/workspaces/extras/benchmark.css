@@ -172,7 +172,7 @@
 }
 .benchmark-history .benchmark-run-error,
 .benchmark-status-failed {
-  color: var(--ui-danger, #bd403c);
+  color: var(--ui-danger-text);
 }
 .benchmark-status-running {
   color: var(--ui-accent);

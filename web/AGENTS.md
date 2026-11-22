@@ -23,7 +23,7 @@ These rules extend the root [AGENTS.md](../AGENTS.md) for the React/TypeScript c
 
 ## Themes and build scripts
 
-- `predev`, `prebuild`, and `pretest` run `npm run themes:prepare` (`tools/prepare_themes.py`), which requires the untracked BGBlitz ZIP archives listed in [configuration-options.json](../shared/configuration-options.json) under `themes/`. In a fresh worktree without those archives, link or copy `themes/*.zip` before building; set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally dropping them.
+- `predev`, `prebuild`, and `pretest` run `npm run themes:prepare` (`tools/prepare_themes.py`), which requires the untracked BGBlitz ZIP archives listed in [configuration-options.json](../shared/configuration-options.json) under `themes/`. In a fresh worktree without those archives, link or copy `themes/*.zip` before building; set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally building without them. Vitest imports the generated catalog, so `pretest` stays. Only `npm run themes:prepare -- --update-options` rewrites the tracked theme list in `configuration-options.json`; commit that change only when adding or removing a theme.
 - `npm run test:themes --prefix web` runs all `tools/test_*.py` Python suites, including worker, probe, and sound tests.
 
 ## Playwright browser tests (`web/e2e/`)
