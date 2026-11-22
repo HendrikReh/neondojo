@@ -98,8 +98,8 @@ fn score_positions(content: &CardContent) -> ApiResult<Vec<Position>> {
         .map_err(|_| ApiError::invalid("This card has no valid cube context"))?;
     let match_id = ids::MatchId::decode(&context.match_id)
         .ok_or_else(|| ApiError::invalid("Invalid cube context"))?;
-    let cube = 1 << match_id.bits(0, 4);
-    let owner = match_id.bits(4, 2);
+    let cube = 1 << match_id.get(ids::Field::CUBE_LOG2);
+    let owner = match_id.get(ids::Field::CUBE_OWNER);
     let away = (cube + 1).max(3);
     let length = away + 3;
     let mut positions = Vec::new();
@@ -113,7 +113,7 @@ fn score_positions(content: &CardContent) -> ApiResult<Vec<Position>> {
             cube,
             owner,
             false,
-            match_id.bits(66, 1) == 0,
+            match_id.get(ids::Field::NO_JACOBY) == 0,
             base.player,
             [0, 0],
         );

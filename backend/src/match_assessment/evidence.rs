@@ -1,7 +1,7 @@
 use super::Assessment;
 use crate::{
     game_plan::{self, GamePlan},
-    import::ids::MatchId,
+    import::ids::{Field, MatchId},
     match_analysis::evaluated_equities,
     play::PlaySession,
 };
@@ -161,16 +161,16 @@ pub(super) fn build(session: &PlaySession, sgf: &str, language: &str) -> Result<
                             topics.push("hit");
                         }
                     }
-                    let owner = match match_id.bits(4, 2) {
+                    let owner = match match_id.get(Field::CUBE_OWNER) {
                         0 => "white",
                         1 => "black",
                         _ => "centered",
                     };
-                    let cube = 1 << match_id.bits(0, 4);
+                    let cube = 1 << match_id.get(Field::CUBE_LOG2);
                     let response = matches!(decision.played.as_str(), "take" | "drop");
                     context = json!({
-                        "score_white_black": [match_id.bits(36, 15), match_id.bits(51, 15)],
-                        "crawford": match_id.bits(7, 1) == 1,
+                        "score_white_black": [match_id.get(Field::SCORE_0), match_id.get(Field::SCORE_1)],
+                        "crawford": match_id.get(Field::CRAWFORD) == 1,
                         "cube_value_before_offer": cube, "cube_owner": owner,
                         "offered_cube": response.then_some(cube * 2),
                         "dice": decision.dice.filter(|_| decision.kind == "checker"),

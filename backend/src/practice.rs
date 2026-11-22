@@ -1,7 +1,9 @@
 //! Rules and engine access shared by interactive exercises.
 use crate::{
-    import::{ids, sgf::apply_checker_turn},
-    learning::decode_decision_board,
+    import::{
+        ids::{self, Field},
+        sgf::apply_checker_turn,
+    },
     model::Position,
     play::PlayStep,
 };
@@ -52,17 +54,17 @@ pub(crate) fn checker_turn(position: &Position, steps: &[PlayStep]) -> Option<[i
 
 fn context(position: &Position) -> Result<ids::MatchId> {
     let id = ids::MatchId::decode(&position.gnubg_match_id).context("Invalid match ID")?;
-    let length = id.bits(21, 15);
+    let length = id.get(Field::LENGTH);
     ensure!(
         matches!(position.player, 0 | 1)
-            && id.bits(8, 3) == 1
-            && id.bits(13, 2) == 0
-            && id.bits(4, 2) != 2
+            && id.get(Field::GAME_STATE) == 1
+            && id.get(Field::RESIGNED) == 0
+            && id.get(Field::CUBE_OWNER) != 2
             && (length == 0
-                || [36, 51]
+                || [Field::SCORE_0, Field::SCORE_1]
                     .into_iter()
-                    .all(|offset| id.bits(offset, 15) < length))
-            && decode_decision_board(&position.position_id, &position.gnubg_match_id)?
+                    .all(|score| id.get(score) < length))
+            && ids::decode_board(&position.position_id, &position.gnubg_match_id)?
                 == position.board
             && position.board.iter().any(|&n| n > 0)
             && position.board.iter().any(|&n| n < 0),
@@ -73,12 +75,12 @@ fn context(position: &Position) -> Result<ids::MatchId> {
 
 pub(crate) fn validate_checker_context(position: &Position) -> Result<()> {
     let id = context(position)?;
-    let first = id.bits(15, 3);
-    let second = id.bits(18, 3);
+    let first = id.get(Field::DIE_0);
+    let second = id.get(Field::DIE_1);
     ensure!(
-        id.bits(6, 1) == position.player
-            && id.bits(11, 1) == position.player
-            && id.bits(12, 1) == 0
+        id.get(Field::ON_ROLL) == position.player
+            && id.get(Field::TURN) == position.player
+            && id.get(Field::DOUBLED) == 0
             && (1..=6).contains(&first)
             && (1..=6).contains(&second)
             && (position.dice == [first, second] || position.dice == [second, first]),
@@ -98,25 +100,25 @@ pub(crate) fn cube_context(position: &Position, response: bool) -> Result<CubeCo
     let id = context(position)?;
     let player = position.player;
     let doubler = if response { 1 - player } else { player };
-    let pending = id.bits(12, 1) == 1;
-    let length = id.bits(21, 15);
-    let scores = [id.bits(36, 15), id.bits(51, 15)];
-    let cube = 1 << id.bits(0, 4);
-    let owner = id.bits(4, 2);
-    let crawford = id.bits(7, 1) == 1;
-    let jacoby = id.bits(66, 1) == 0;
+    let pending = id.get(Field::DOUBLED) == 1;
+    let length = id.get(Field::LENGTH);
+    let scores = [id.get(Field::SCORE_0), id.get(Field::SCORE_1)];
+    let cube = 1 << id.get(Field::CUBE_LOG2);
+    let owner = id.get(Field::CUBE_OWNER);
+    let crawford = id.get(Field::CRAWFORD) == 1;
+    let jacoby = id.get(Field::NO_JACOBY) == 0;
     ensure!(
-        id.bits(11, 1) == player
+        id.get(Field::TURN) == player
             && if pending {
-                response && id.bits(6, 1) == doubler
+                response && id.get(Field::ON_ROLL) == doubler
             } else {
-                id.bits(6, 1) == player
+                id.get(Field::ON_ROLL) == player
             },
         "Stored cube context does not match the decision maker"
     );
     ensure!(
         position.dice == [0, 0]
-            && (!response || id.bits(15, 6) == 0)
+            && (!response || (id.get(Field::DIE_0) == 0 && id.get(Field::DIE_1) == 0))
             && !crawford
             && cube < 32768
             && (owner == 3 || owner == doubler),

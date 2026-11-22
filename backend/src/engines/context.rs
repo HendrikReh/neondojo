@@ -1,5 +1,5 @@
 //! The only absolute/GNU-ID to mover-relative Sage context conversion.
-use crate::import::ids::MatchId;
+use crate::import::ids::{Field, MatchId};
 use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 
@@ -22,22 +22,27 @@ pub(super) struct Context {
 impl Context {
     pub fn decode(match_id: &str) -> Result<Self> {
         let id = MatchId::decode(match_id).context("Invalid GNUbg Match ID")?;
-        let bits = |offset, width| id.bits(offset, width);
-        let player = bits(6, 1);
-        let owner = bits(4, 2);
+        let player = id.get(Field::ON_ROLL);
+        let owner = id.get(Field::CUBE_OWNER);
         ensure!(owner != 2, "Invalid cube owner");
-        ensure!(bits(8, 3) == 1, "NeonGammon requires an active game");
-        ensure!(bits(13, 2) == 0, "Resignation context is unsupported");
-        let length = bits(21, 15);
-        let scores = [bits(36, 15), bits(51, 15)];
+        ensure!(
+            id.get(Field::GAME_STATE) == 1,
+            "NeonGammon requires an active game"
+        );
+        ensure!(
+            id.get(Field::RESIGNED) == 0,
+            "Resignation context is unsupported"
+        );
+        let length = id.get(Field::LENGTH);
+        let scores = [id.get(Field::SCORE_0), id.get(Field::SCORE_1)];
         ensure!(
             length == 0 || scores.iter().all(|score| *score < length),
             "Match has already ended"
         );
-        let dice = [bits(15, 3), bits(18, 3)];
+        let dice = [id.get(Field::DIE_0), id.get(Field::DIE_1)];
         ensure!(dice.iter().all(|die| *die <= 6), "Invalid Match ID dice");
         Ok(Self {
-            cube_value: 1 << bits(0, 4),
+            cube_value: 1 << id.get(Field::CUBE_LOG2),
             cube_owner: if owner == 3 {
                 "centered"
             } else if owner == player {
@@ -55,16 +60,16 @@ impl Context {
             } else {
                 0
             },
-            is_crawford: bits(7, 1) == 1,
-            jacoby: length == 0 && bits(66, 1) == 0,
+            is_crawford: id.get(Field::CRAWFORD) == 1,
+            jacoby: length == 0 && id.get(Field::NO_JACOBY) == 0,
             player,
             dice,
-            pending_double: bits(12, 1) == 1,
+            pending_double: id.get(Field::DOUBLED) == 1,
         })
     }
 
     pub fn board(&self, position_id: &str, match_id: &str) -> Result<[i32; 26]> {
-        let absolute: [i32; 26] = crate::learning::decode_decision_board(position_id, match_id)?
+        let absolute: [i32; 26] = crate::import::ids::decode_board(position_id, match_id)?
             .try_into()
             .ok()
             .context("Invalid board length")?;

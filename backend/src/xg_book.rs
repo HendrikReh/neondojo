@@ -168,7 +168,7 @@ impl Key {
         position: &crate::model::Position,
         beaver: Option<bool>,
     ) -> Result<(Self, String)> {
-        use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
+        use crate::import::ids::{Field, MatchId};
         let (canonical, _) = crate::opening_book::canonical_keys(position)?;
         let mut parts: Vec<String> = canonical.split(':').map(str::to_owned).collect();
         let length = parts[8].parse::<i32>()?;
@@ -186,8 +186,9 @@ impl Key {
                 length - parts[6].parse::<i32>()?,
             ]
         };
-        let bytes = STANDARD_NO_PAD.decode(&position.gnubg_match_id)?;
-        let cube_exp = i32::from(bytes[0] & 15);
+        let cube_exp = MatchId::decode(&position.gnubg_match_id)
+            .context("Invalid GNUbg Match ID")?
+            .get(Field::CUBE_LOG2);
         let cube = 1i32 << cube_exp;
         let board: Vec<i8> = parts[0]
             .bytes()

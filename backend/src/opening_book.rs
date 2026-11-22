@@ -564,12 +564,10 @@ pub async fn lookup_with_rules(
 /// Beaver rules are not encoded by a GNUbg Match ID. Resolve them once from
 /// immutable source metadata rather than treating different money rules alike.
 async fn source_beaver_rule(pool: &sqlx::PgPool, position: &Position) -> Result<Option<bool>> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
-    let bytes = STANDARD_NO_PAD.decode(&position.gnubg_match_id)?;
-    ensure!(bytes.len() == 9, "Invalid GNUbg Match ID");
-    let length: i32 = (0..15)
-        .map(|i| i32::from((bytes[(21 + i) / 8] >> ((21 + i) % 8)) & 1) << i)
-        .sum();
+    use crate::import::ids::{Field, MatchId};
+    let length = MatchId::decode(&position.gnubg_match_id)
+        .context("Invalid GNUbg Match ID")?
+        .get(Field::LENGTH);
     if length > 0 {
         return Ok(Some(false));
     }
@@ -1018,7 +1016,7 @@ fn context_name(key: &str) -> Result<String> {
 }
 
 pub(crate) fn canonical_keys(position: &Position) -> Result<(String, Option<String>)> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
+    use crate::import::ids::{Field, MatchId};
     ensure!(matches!(position.player, 0 | 1), "Invalid player");
     ensure!(
         position.board.len() == 26 && position.board[0] <= 0 && position.board[25] >= 0,
@@ -1035,25 +1033,22 @@ pub(crate) fn canonical_keys(position: &Position) -> Result<(String, Option<Stri
             "Unsupported board variant or finished game"
         );
     }
-    let bytes = STANDARD_NO_PAD
-        .decode(&position.gnubg_match_id)
-        .context("Invalid GNUbg Match ID")?;
-    ensure!(bytes.len() == 9, "GNUbg Match ID must encode 72 bits");
-    let bits = |offset: usize, width: usize| -> i32 {
-        (0..width)
-            .map(|i| i32::from((bytes[(offset + i) / 8] >> ((offset + i) % 8)) & 1) << i)
-            .sum()
-    };
-    ensure!(bits(67, 5) == 0, "Unsupported GNUbg Match ID extension");
+    let id =
+        MatchId::decode(&position.gnubg_match_id).context("GNUbg Match ID must encode 72 bits")?;
+    let bits = |field| id.get(field);
     ensure!(
-        bits(8, 3) == 1 && bits(12, 3) == 0,
+        bits(Field::EXTENSION) == 0,
+        "Unsupported GNUbg Match ID extension"
+    );
+    ensure!(
+        bits(Field::GAME_STATE) == 1 && bits(Field::DOUBLED) == 0 && bits(Field::RESIGNED) == 0,
         "Game is not an ordinary checker decision"
     );
     ensure!(
-        bits(6, 1) == position.player && bits(11, 1) == position.player,
+        bits(Field::ON_ROLL) == position.player && bits(Field::TURN) == position.player,
         "Mover does not match GNUbg Match ID"
     );
-    let mut dice = [bits(15, 3), bits(18, 3)];
+    let mut dice = [bits(Field::DIE_0), bits(Field::DIE_1)];
     ensure!(
         dice.iter().all(|die| (1..=6).contains(die)),
         "Checker dice are not rolled"
@@ -1063,9 +1058,9 @@ pub(crate) fn canonical_keys(position: &Position) -> Result<(String, Option<Stri
     dice.sort_unstable();
     ensure!(stored_dice == dice, "Dice do not match GNUbg Match ID");
     let roll = format!("{}{}", dice[1], dice[0]);
-    let mut length = bits(21, 15);
-    let mut scores = [bits(36, 15), bits(51, 15)];
-    let crawford = bits(7, 1) == 1;
+    let mut length = bits(Field::LENGTH);
+    let mut scores = [bits(Field::SCORE_0), bits(Field::SCORE_1)];
+    let crawford = bits(Field::CRAWFORD) == 1;
     ensure!(
         !crawford
             || (length > 0 && scores.iter().filter(|score| **score == length - 1).count() == 1),
@@ -1089,11 +1084,11 @@ pub(crate) fn canonical_keys(position: &Position) -> Result<(String, Option<Stri
     let flags = if length > 0 {
         i32::from(crawford)
     } else {
-        1 - bits(66, 1)
+        1 - bits(Field::NO_JACOBY)
     };
-    let owner = bits(4, 2);
+    let owner = bits(Field::CUBE_OWNER);
     ensure!(matches!(owner, 0 | 1 | 3), "Invalid cube owner");
-    let mut cube_exp = bits(0, 4);
+    let mut cube_exp = bits(Field::CUBE_LOG2);
     ensure!(
         !crawford || (cube_exp == 0 && owner == 3),
         "Cube is turned in Crawford game"
@@ -1103,22 +1098,10 @@ pub(crate) fn canonical_keys(position: &Position) -> Result<(String, Option<Stri
         cube_exp = 0;
     }
     // Check the redundant Position ID too; never silently normalize inconsistent imports.
-    let mut packed = [0u8; 10];
-    let mut bit = 0;
-    for side in [1 - position.player, position.player] {
-        for point in 1..=25 {
-            let absolute = if side == 0 { point } else { 25 - point };
-            let count = (position.board[absolute] * if side == 0 { 1 } else { -1 }).max(0);
-            for _ in 0..count {
-                ensure!(bit < 80, "Invalid board packing");
-                packed[bit / 8] |= 1 << (bit % 8);
-                bit += 1;
-            }
-            bit += 1;
-        }
-    }
+    // The checks above bound each side to 15 checkers, so the board fits 80 bits.
+    let board: &[i32; 26] = position.board.as_slice().try_into()?;
     ensure!(
-        STANDARD_NO_PAD.encode(packed) == position.position_id,
+        crate::import::ids::position_id(board, position.player) == position.position_id,
         "Board does not match GNUbg Position ID"
     );
     let mover = position.player as usize;

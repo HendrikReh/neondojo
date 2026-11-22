@@ -155,14 +155,8 @@ pub(crate) fn probabilities(values: &[Option<f64>]) -> Value {
 fn base(m: &SourceMove, kind: &str, engine: &str, version: Option<String>) -> ImportedAnalysisData {
     let pre_roll = kind == "cube" && m.kind == "checker";
     let mut match_id = m.match_id.clone();
-    if pre_roll {
-        use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
-        if let Ok(mut bytes) = STANDARD_NO_PAD.decode(&match_id) {
-            for bit in 15..21 {
-                bytes[bit / 8] &= !(1 << (bit % 8));
-            }
-            match_id = STANDARD_NO_PAD.encode(bytes);
-        }
+    if pre_roll && let Some(hidden) = crate::import::ids::hide_dice(&match_id) {
+        match_id = hidden;
     }
     ImportedAnalysisData {
         position_id: Some(m.position_id.clone()),

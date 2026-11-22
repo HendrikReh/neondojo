@@ -2,7 +2,7 @@
 //! dead-cube take point from a match equity table.
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
-use crate::import::ids::MatchId;
+use crate::import::ids::{Field, MatchId};
 use crate::practice::evaluation::CubeChances;
 use axum::{
     Json, Router,
@@ -132,16 +132,16 @@ pub fn cube_context(match_id: &str, doubler: i32) -> Result<CubeContext, String>
         return Err("doubler must be 0 (White) or 1 (Black)".into());
     }
     let id = MatchId::decode(match_id).ok_or("Invalid GNUbg match ID")?;
-    let match_length = id.bits(21, 15);
-    let scores = [id.bits(36, 15), id.bits(51, 15)];
-    let cube_log = id.bits(0, 4);
+    let match_length = id.get(Field::LENGTH);
+    let scores = [id.get(Field::SCORE_0), id.get(Field::SCORE_1)];
+    let cube_log = id.get(Field::CUBE_LOG2);
     let cube_value = 1 << cube_log;
-    let cube_owner = match id.bits(4, 2) {
+    let cube_owner = match id.get(Field::CUBE_OWNER) {
         3 => None,
         owner @ 0..=1 => Some(owner),
         _ => return Err("Invalid cube owner in match ID".into()),
     };
-    let crawford = id.bits(7, 1) == 1;
+    let crawford = id.get(Field::CRAWFORD) == 1;
     if match_length > 0 && scores.iter().any(|score| *score >= match_length) {
         return Err("Match ID describes a finished match".into());
     }
@@ -175,7 +175,7 @@ pub fn cube_context(match_id: &str, doubler: i32) -> Result<CubeContext, String>
         away,
         crawford,
         post_crawford,
-        jacoby: (match_length == 0).then(|| id.bits(66, 1) == 0),
+        jacoby: (match_length == 0).then(|| id.get(Field::NO_JACOBY) == 0),
         cube_value,
         cube_owner,
         doubler,

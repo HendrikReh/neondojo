@@ -3,10 +3,10 @@ use super::{MistakePracticeQuestion, MistakeReference, MistakeSource};
 use crate::{
     api::{ApiError, ApiResult},
     game_plan::{self, GamePlan},
+    import::ids,
     match_analysis::Decision,
     model::Position,
 };
-use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
 use std::collections::{BTreeMap, HashMap};
 use uuid::Uuid;
@@ -321,15 +321,11 @@ fn reconstruct(games: Vec<Game>, rows: Vec<Row>) -> ApiResult<Vec<SourceDecision
             {
                 continue;
             }
-            let Ok(mut state) = STANDARD_NO_PAD.decode(match_state_id) else {
-                continue;
-            };
-            if state.len() != 9 || i32::from((state[0] >> 6) & 1) != d.player {
+            if ids::on_roll(match_state_id) != Some(d.player) {
                 valid = false;
                 break;
             }
-            let Ok(board) = crate::learning::decode_decision_board(position_id, match_state_id)
-            else {
+            let Ok(board) = ids::decode_board(position_id, match_state_id) else {
                 continue;
             };
             let Ok(array) = <&[i32; 26]>::try_from(board.as_slice()) else {
@@ -361,15 +357,22 @@ fn reconstruct(games: Vec<Game>, rows: Vec<Row>) -> ApiResult<Vec<SourceDecision
             } else {
                 plans.black
             };
-            if d.kind == "cube" {
-                for bit in 15..21 {
-                    state[bit / 8] &= !(1 << (bit % 8));
+            let question_match_id = if d.kind == "cube" {
+                ids::hide_dice(match_state_id)
+            } else {
+                Some(match_state_id.clone())
+            }
+            .and_then(|id| {
+                if question_kind == "cube_response" {
+                    ids::with_offer_marker(&id)
+                } else {
+                    Some(id)
                 }
-            }
-            if question_kind == "cube_response" {
-                state[1] |= 0x10;
-            }
-            let question_match_id = STANDARD_NO_PAD.encode(state);
+            });
+            let Some(question_match_id) = question_match_id else {
+                valid = false;
+                break;
+            };
             game_output.push(SourceDecision {
                 plan,
                 original_match_state: Some(match_state_id.clone()),

@@ -629,15 +629,19 @@ pub(crate) fn cube_analysis_available(board: &[i32], match_id: &str, player: i32
     if board == crate::import::sgf::initial_board() {
         return Ok(false);
     }
-    let id = crate::import::ids::MatchId::decode(match_id).context("Invalid imported Match ID")?;
-    let bits = |offset, width| id.bits(offset, width);
-    let owner = bits(4, 2);
-    if bits(7, 1) != 0 || (owner != 3 && owner != player) {
+    use crate::import::ids::{Field, MatchId};
+    let id = MatchId::decode(match_id).context("Invalid imported Match ID")?;
+    let owner = id.get(Field::CUBE_OWNER);
+    if id.get(Field::CRAWFORD) != 0 || (owner != 3 && owner != player) {
         return Ok(false);
     }
-    let length = bits(21, 15);
-    let score = bits(36 + 15 * player as usize, 15);
-    let cube = 1 << bits(0, 4);
+    let length = id.get(Field::LENGTH);
+    let score = id.get(if player == 0 {
+        Field::SCORE_0
+    } else {
+        Field::SCORE_1
+    });
+    let cube = 1 << id.get(Field::CUBE_LOG2);
     Ok(length == 0 || score + cube < length)
 }
 

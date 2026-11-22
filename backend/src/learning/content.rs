@@ -2,11 +2,11 @@ use super::*;
 use crate::{
     analysis_catalog::{self, SelectedAnalysis},
     engine::Analysis,
+    import::ids::{self, decode_board},
     move_assessments::after_play,
     store,
 };
 use anyhow::{Context, ensure};
-use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 use std::collections::BTreeSet;
 
 pub(super) async fn from_source(pool: &PgPool, request: &AddCards) -> ApiResult<Vec<CardContent>> {
@@ -440,9 +440,9 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
                 "cube_offer"
             };
             let board = decode_board(position_id, match_state_id)?;
-            let original_player = (STANDARD_NO_PAD.decode(match_state_id)?[0] >> 6) & 1;
+            let original_player = ids::on_roll(match_state_id).context("Invalid GNU ID length")?;
             ensure!(
-                i32::from(original_player) == d.player,
+                original_player == d.player,
                 "Decision player differs from source GNU ID"
             );
             let position = Position {
@@ -526,40 +526,6 @@ fn prompt(kind: &str) -> &'static str {
         "cube_response" => "The cube has been offered. Take or pass?",
         _ => "What is the best checker play?",
     }
-}
-
-/// Inverse of GNUbg's unary opponent-then-player encoding, returned in absolute colors.
-pub(crate) fn decode_board(position_id: &str, match_id: &str) -> anyhow::Result<Vec<i32>> {
-    let key = STANDARD_NO_PAD.decode(position_id)?;
-    let state = STANDARD_NO_PAD.decode(match_id)?;
-    ensure!(key.len() == 10 && state.len() == 9, "Invalid GNU ID length");
-    let player = i32::from((state[0] >> 6) & 1);
-    let mut board = vec![0; 26];
-    let mut bit = 0usize;
-    for side in [1 - player, player] {
-        let mut total = 0;
-        for point in 1..=25 {
-            let mut count = 0;
-            while bit < 80 && (key[bit / 8] >> (bit % 8)) & 1 == 1 {
-                count += 1;
-                bit += 1;
-            }
-            ensure!(bit < 80, "Invalid unary GNU position ID");
-            bit += 1;
-            total += count;
-            ensure!(total <= 15, "Invalid checker count in GNU position ID");
-            let index = if side == 0 { point } else { 25 - point };
-            if count > 0 {
-                ensure!(board[index] == 0, "Opposing checkers share a point");
-                board[index] = if side == 0 { count } else { -count };
-            }
-        }
-    }
-    ensure!(
-        (bit..80).all(|i| key[i / 8] >> (i % 8) & 1 == 0),
-        "Noncanonical GNU position ID"
-    );
-    Ok(board)
 }
 
 pub(super) async fn answer_on_connection(

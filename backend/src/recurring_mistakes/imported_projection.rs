@@ -60,13 +60,12 @@ pub(crate) fn review_position(
     position_uuid: Option<Uuid>,
     before_roll: bool,
 ) -> Option<Position> {
-    use crate::import::ids::{MatchId, hide_dice};
+    use crate::import::ids::{Field, MatchId, decode_board, hide_dice};
     let state = MatchId::decode(&source.match_id)?;
     let response = !before_roll && matches!(action(&source.notation), Some("take" | "drop"));
-    if state.bits(11, 1) != source.player
-        || (state.bits(12, 1) != 0) != response
-        || crate::learning::decode_decision_board(&source.position_id, &source.match_id).ok()?
-            != source.board
+    if state.get(Field::TURN) != source.player
+        || (state.get(Field::DOUBLED) != 0) != response
+        || decode_board(&source.position_id, &source.match_id).ok()? != source.board
     {
         return None;
     }

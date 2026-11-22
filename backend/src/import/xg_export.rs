@@ -7,7 +7,7 @@
 //! leaves open follow the official XG-written WC2014 file. Only the played line
 //! is written; every analysis field carries XG's "not analysed" markers.
 use super::{
-    ids::MatchId,
+    ids::{Field, MatchId},
     sgf::{self, GameContext, SourceMove},
     xg::{
         ARCHIVE_FOOTER_BYTES, MATCH_MAGIC, RECORD_BYTES, REGISTRY_ENTRY_BYTES, RICH_HEADER_BYTES,
@@ -135,12 +135,12 @@ fn cube_exponent(cube: i32, owner: i32) -> Result<i32> {
 /// Cube value and owner (-1 centered, 0 White, 1 Black) before the event.
 fn cube_before(event: &SourceMove) -> Result<(i32, i32)> {
     let id = MatchId::decode(&event.match_id).context("XG export: invalid stored Match ID")?;
-    let owner = match id.bits(4, 2) {
+    let owner = match id.get(Field::CUBE_OWNER) {
         3 => -1,
         owner @ (0 | 1) => owner,
         _ => bail!("XG export: invalid cube owner in stored Match ID"),
     };
-    Ok((1 << id.bits(0, 4), owner))
+    Ok((1 << id.get(Field::CUBE_LOG2), owner))
 }
 
 fn board_of(values: &[i32]) -> Result<[i32; 26]> {

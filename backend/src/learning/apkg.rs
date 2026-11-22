@@ -305,22 +305,16 @@ impl Labels {
     }
 }
 fn match_fields(id: &str) -> anyhow::Result<[i32; 7]> {
-    use base64::engine::general_purpose::STANDARD_NO_PAD;
-    let bytes = STANDARD_NO_PAD.decode(id)?;
-    anyhow::ensure!(bytes.len() == 9, "Invalid match ID");
-    let get = |offset: usize, width: usize| -> i32 {
-        (0..width)
-            .map(|i| i32::from((bytes[(offset + i) / 8] >> ((offset + i) % 8)) & 1) << i)
-            .sum()
-    };
+    use crate::import::ids::{Field, MatchId};
+    let id = MatchId::decode(id).ok_or_else(|| anyhow::anyhow!("Invalid match ID"))?;
     Ok([
-        1 << get(0, 4),
-        get(4, 2),
-        get(21, 15),
-        get(36, 15),
-        get(51, 15),
-        get(7, 1),
-        1 - get(66, 1),
+        1 << id.get(Field::CUBE_LOG2),
+        id.get(Field::CUBE_OWNER),
+        id.get(Field::LENGTH),
+        id.get(Field::SCORE_0),
+        id.get(Field::SCORE_1),
+        id.get(Field::CRAWFORD),
+        1 - id.get(Field::NO_JACOBY),
     ])
 }
 fn question(c: &CardContent, filename: &str, l: &Labels) -> anyhow::Result<String> {

@@ -32,7 +32,6 @@ use axum::{
     http::{StatusCode, header},
     routing::{get, post},
 };
-use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
@@ -802,9 +801,8 @@ pub(crate) fn build_history_snapshots(
         let after_board: [i32; 26] = event.after_board.as_slice().try_into()?;
         // IDs encode checkers relative to player-on-roll, while the review
         // perspective remains the action's actor (also true for cube replies).
-        let match_bytes =
-            base64::engine::general_purpose::STANDARD_NO_PAD.decode(&event.after_match_id)?;
-        let after_on_roll = i32::from((match_bytes[0] >> 6) & 1);
+        let after_on_roll =
+            crate::import::ids::on_roll(&event.after_match_id).context("Invalid GNUbg Match ID")?;
         let after = Position {
             board: event.after_board,
             position_id: crate::import::ids::position_id(&after_board, after_on_roll),
@@ -1007,10 +1005,10 @@ async fn create_session(
 // Staging does not consume RNG or begin a native game. For later games the
 // previous native checkpoint already contains NextTurn's Crawford transition.
 fn stage_opening(session: &mut PlaySession, next: bool) -> anyhow::Result<()> {
-    let key = base64::engine::general_purpose::STANDARD_NO_PAD
-        .decode(&session.position.gnubg_match_id)
-        .unwrap_or_default();
-    let crawford = next && key.first().is_some_and(|byte| byte & 0x80 != 0);
+    use crate::import::ids::{Field, MatchId};
+    let crawford = next
+        && MatchId::decode(&session.position.gnubg_match_id)
+            .is_some_and(|id| id.get(Field::CRAWFORD) == 1);
     if next {
         session.game_no += 1;
     }

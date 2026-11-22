@@ -563,13 +563,9 @@ mod tests {
             state.analysis_plies = depth;
             state.engine.version = engine.version().await.unwrap();
             state.position.position_id = imported.positions[0].position_id.clone();
-            let mut key = base64::engine::general_purpose::STANDARD_NO_PAD
-                .decode(&imported.positions[0].match_id)
-                .unwrap();
-            key[1] &= 0x7f;
-            key[2] &= 0xe0; // cube decision precedes the rolled checker dice
+            // The cube decision precedes the rolled checker dice.
             state.position.gnubg_match_id =
-                base64::engine::general_purpose::STANDARD_NO_PAD.encode(key);
+                crate::import::ids::hide_dice(&imported.positions[0].match_id).unwrap();
             let feedback = analyze_decision(&state, engine.binary()).await.unwrap();
             let no_double = feedback.iter().find(|a| a.action == "roll").unwrap();
             let double = feedback.iter().find(|a| a.action == "double").unwrap();

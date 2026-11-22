@@ -686,7 +686,7 @@ pub(crate) fn validate_evaluation(equity: f64, probabilities: &[f64]) -> Result<
 /// the rule validation that also checks recorded moves.
 pub(crate) fn forced_pass(position_id: &str, match_id: &str, dice: [i32; 2]) -> Result<bool> {
     let player = context::Context::decode(match_id)?.player;
-    let board: [i32; 26] = crate::learning::decode_decision_board(position_id, match_id)?
+    let board: [i32; 26] = crate::import::ids::decode_board(position_id, match_id)?
         .try_into()
         .ok()
         .context("Invalid board length")?;

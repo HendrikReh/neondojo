@@ -1426,6 +1426,3 @@ async fn build_deck_package(state: &AppState, id: Uuid, query: ExportQuery) -> A
     .await
     .map_err(anyhow::Error::from)??)
 }
-
-// Share the canonical absolute-color GNU ID decoder with read-only practice.
-pub(crate) use content::decode_board as decode_decision_board;
