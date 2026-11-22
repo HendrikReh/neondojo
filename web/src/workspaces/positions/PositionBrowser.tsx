@@ -19,13 +19,12 @@ import {
   useRef,
   useState,
 } from 'react';
-import { request } from '../../shared/api/api';
+import { useDatabases } from '../library/useDatabases';
 import {
   removePositionBookmark,
   savePositionBookmark,
 } from './position-bookmark-api';
 import { useI18n } from '../../shared/i18n/i18n';
-import type { Database } from '../library/library-api';
 import type { Theme } from '../../shared/board/themes';
 import { readPositionPlayed } from './position-table-columns';
 import PositionBrowserControls from './PositionBrowserControls';
@@ -114,8 +113,7 @@ export default function PositionBrowser({
       typeof next === 'function' ? next(previous ?? draft) : next,
     );
   }
-  const [databases, setDatabases] = useState<Database[]>([]),
-    [preview, setPreview] = useState<{ page: number; id: string }>(),
+  const [preview, setPreview] = useState<{ page: number; id: string }>(),
     [selectedHits, setSelectedHits] = useState<PositionBrowserHit[]>([]),
     [transferBusy, setTransferBusy] = useState(false),
     [transferOpen, setTransferOpen] = useState(false),
@@ -124,7 +122,6 @@ export default function PositionBrowser({
     [removedIds, setRemovedIds] = useState<string[]>([]),
     [restoring, setRestoring] = useState(false),
     [restoreError, setRestoreError] = useState<unknown>(),
-    [databaseError, setDatabaseError] = useState<unknown>(),
     [invalid, setInvalid] = useState(false),
     [refresh, setRefresh] = useState(0),
     [showPlayed, setShowPlayed] = useWorkspaceLayout(
@@ -134,20 +131,7 @@ export default function PositionBrowser({
       (value) => (typeof value === 'boolean' ? value : undefined),
     );
   const scope = JSON.stringify(definition);
-  useEffect(() => {
-    const abort = new AbortController();
-    void request<Database[]>('/databases', { signal: abort.signal })
-      .then((data) => {
-        if (!abort.signal.aborted) {
-          setDatabases(data);
-          setDatabaseError(undefined);
-        }
-      })
-      .catch((error) => {
-        if (!abort.signal.aborted) setDatabaseError(error);
-      });
-    return () => abort.abort();
-  }, [revision]);
+  const { databases, error: databaseError } = useDatabases(revision);
   useEffect(() => {
     setPreview(undefined);
     setSelectedHits([]);

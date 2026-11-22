@@ -8,8 +8,7 @@ import ActionButton from '../../../shared/ui/ActionButton';
 import MistakeGroupTable from './MistakeGroupTable';
 import MistakePlayerSelect from './MistakePlayerSelect';
 import RecurringMistakePractice from './RecurringMistakePractice';
-import { request } from '../../../shared/api/api';
-import type { Database } from '../../library/library-api';
+import { useDatabases } from '../../library/useDatabases';
 import type { Theme } from '../../../shared/board/themes';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useGamePlanText } from '../../analysis/game-plans/game-plan-messages';
@@ -62,11 +61,9 @@ export default function RecurringMistakes({
     max: 1000,
   });
   const [page, setPage] = useState<MistakePage>(),
-    [players, setPlayers] = useState<string[]>([]),
-    [databases, setDatabases] = useState<Database[]>([]);
+    [players, setPlayers] = useState<string[]>([]);
   const [loading, setLoading] = useState(false),
     [error, setError] = useState<unknown>(),
-    [databaseError, setDatabaseError] = useState<unknown>(),
     [revision, setRevision] = useState(0);
   const [resultPage, setResultPage] = useState(1);
   const [practice, setPractice] = useState<MistakePracticeRequest>();
@@ -136,19 +133,9 @@ export default function RecurringMistakes({
     revision,
     independentOnly,
   ]);
-  useEffect(() => {
-    if (!visible) return;
-    const abort = new AbortController();
-    setDatabaseError(undefined);
-    void request<Database[]>('/databases', { signal: abort.signal })
-      .then((result) => {
-        if (!abort.signal.aborted) setDatabases(result);
-      })
-      .catch((failure) => {
-        if (!abort.signal.aborted) setDatabaseError(failure);
-      });
-    return () => abort.abort();
-  }, [visible, revision]);
+  const { databases, error: databaseError } = useDatabases(revision, {
+    enabled: visible,
+  });
   function start(group: MistakeGroup, button: HTMLButtonElement) {
     if (!player || !players.includes(player) || !valid) return;
     trigger.current = button;

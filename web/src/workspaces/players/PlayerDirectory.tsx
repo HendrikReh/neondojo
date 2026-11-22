@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import ActionButton from '../../shared/ui/ActionButton';
-import { request, type Match } from '../../shared/api/api';
+import type { Match } from '../../shared/api/api';
+import { useDatabases } from '../library/useDatabases';
 import { SearchResultList } from '../../shared/ui/SearchResultList';
 import { SearchResultPreview } from '../../shared/ui/SearchResultPreview';
 import { useI18n } from '../../shared/i18n/i18n';
@@ -210,27 +211,13 @@ export default function PlayerDirectory({
   const [total, setTotal] = useState(0);
   const [search, setSearch] = useState('');
   const [selection, setSelection] = useState<Selection>();
-  const [databases, setDatabases] = useState<Database[]>([]);
-  const [error, setError] = useState<unknown>();
   const [listRevision, setListRevision] = useState(0);
   const [groups, setGroups] = useState<{
     items?: VirtualPlayerProfile[];
     error?: unknown;
   }>({});
   const [groupAttempt, setGroupAttempt] = useState(0);
-  useEffect(() => {
-    const abort = new AbortController();
-    setError(undefined);
-    request<Database[]>('/databases', { signal: abort.signal }).then(
-      (items) => {
-        if (!abort.signal.aborted) setDatabases(items);
-      },
-      (err: unknown) => {
-        if (!abort.signal.aborted) setError(err);
-      },
-    );
-    return () => abort.abort();
-  }, [revision]);
+  const { databases, error } = useDatabases(revision);
   useEffect(() => {
     const abort = new AbortController();
     loadVirtualPlayers(abort.signal).then(

@@ -17,7 +17,7 @@ import {
   type KeyboardEvent,
   type SetStateAction,
 } from 'react';
-import { request, type Match, type Position } from '../../shared/api/api';
+import type { Match, Position } from '../../shared/api/api';
 import SearchPagination from '../../shared/ui/SearchPagination';
 import { useSearchPages } from '../../shared/hooks/useSearchPages';
 import { useLibraryMatchOpening } from './useLibraryMatchOpening';
@@ -39,12 +39,12 @@ import {
   isOccurrenceSort,
   librarySorts,
   normalizeLibraryFilters,
-  type Database,
   type LibraryMatch,
   type LibrarySort,
   type ActionResponse,
   type LibraryFilters as Filters,
 } from './library-api';
+import { useDatabases } from './useDatabases';
 import DatabaseSidebar from './DatabaseSidebar';
 import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';
 import { useLibraryColumns } from './useLibraryColumns';
@@ -165,11 +165,9 @@ export default function MatchDatabase({
   };
   const showColumn = (id: LibraryColumn) =>
     columns.activeColumns.some((column) => column === id);
-  const [databases, setDatabases] = useState<Database[]>([]),
-    [localRevision, setRevision] = useState(0),
+  const [localRevision, setRevision] = useState(0),
     [duplicateRefresh, setDuplicateRefresh] = useState(0),
     [searchPanel, setSearchPanel] = useState<SearchPanel>(),
-    [databaseError, setDatabaseError] = useState<unknown>(),
     [selectedRows, setSelectedRows] = useState<LibraryMatch[]>([]),
     [dialog, setDialog] = useState<LibraryDialogState>(),
     [result, setResult] = useState<ActionResponse>();
@@ -285,28 +283,15 @@ export default function MatchDatabase({
     setExact(filters.position_id);
     setPositionInputError(false);
   }, [filters.position_id]);
-  const databaseCallback = useRef(onDatabase);
-  databaseCallback.current = onDatabase;
-  const databaseCurrent = useRef(databaseId);
-  databaseCurrent.current = databaseId;
-  useEffect(() => {
-    const abort = new AbortController();
-    void request<Database[]>('/databases', { signal: abort.signal })
-      .then((value) => {
-        if (abort.signal.aborted) return;
-        setDatabases(value);
-        setDatabaseError(undefined);
-        if (
-          databaseCurrent.current &&
-          !value.some((d) => d.id === databaseCurrent.current)
-        )
-          databaseCallback.current('');
-      })
-      .catch((e) => {
-        if (!abort.signal.aborted) setDatabaseError(e);
-      });
-    return () => abort.abort();
-  }, [revision, localRevision]);
+  const { databases, error: databaseError } = useDatabases(
+    `${revision}:${localRevision}`,
+    {
+      onLoad: (list) => {
+        if (databaseId && !list.some((d) => d.id === databaseId))
+          onDatabase('');
+      },
+    },
+  );
   useEffect(() => {
     setSelectedRows([]);
     setResult(undefined);

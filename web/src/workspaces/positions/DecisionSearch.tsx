@@ -1,8 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useDecimalInput } from '../../shared/format/decimal-input';
 import ActionButton from '../../shared/ui/ActionButton';
-import { request } from '../../shared/api/api';
-import type { Database } from '../library/library-api';
+import { useDatabases } from '../library/useDatabases';
 import Board from '../../shared/board/Board';
 import { CubeContextLine } from '../../shared/review/CubeDecisionDetails';
 import { useDecisionSearchText } from './decision-search-messages';
@@ -169,7 +168,6 @@ export default function DecisionSearch({
   const plan = useGamePlanText();
   const { formatDecision, formatError, formatNumber } = useI18n();
   const [players, setPlayers] = useState<string[]>([]);
-  const [databases, setDatabases] = useState<Database[]>([]);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [applied, setApplied] = useState<{
     filters: DecisionFilters;
@@ -215,16 +213,7 @@ export default function DecisionSearch({
     setDraft((current) => ({ ...current, [key]: value }));
   };
 
-  useEffect(() => {
-    if (!visible) return;
-    const abort = new AbortController();
-    void request<Database[]>('/databases', { signal: abort.signal })
-      .then((list) => {
-        if (!abort.signal.aborted) setDatabases(list);
-      })
-      .catch(() => undefined);
-    return () => abort.abort();
-  }, [visible, revision]);
+  const { databases } = useDatabases(revision, { enabled: visible });
 
   useEffect(() => {
     if (!visible) return;
