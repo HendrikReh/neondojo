@@ -1,4 +1,4 @@
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import type { Locale } from '../../../shared/i18n/i18n';
 import type { PlaySession } from '../../play/play-api';
 type Schema = import('../../../generated-api').components['schemas'];

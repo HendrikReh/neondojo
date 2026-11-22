@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import type { Job } from '../api/api';
+import type { Job } from '../http/api';
 import { JOB_POLL_MS, JOB_SAFETY_READ_MS, watchJob } from './job-watch';
 
 class FakeEventSource {

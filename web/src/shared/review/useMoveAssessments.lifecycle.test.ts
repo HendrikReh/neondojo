@@ -34,7 +34,7 @@ vi.mock('react', () => ({
     }
   },
 }));
-vi.mock('../api/api', () => ({ request: hooks.request }));
+vi.mock('../http/api', () => ({ request: hooks.request }));
 import { useMoveAssessments } from './useMoveAssessments';
 
 function commit() {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Job } from '../../../shared/api/api';
+import type { Job } from '../../../shared/http/api';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { formatAnalysisDuration } from './analysis-time-estimate-messages';
 import {

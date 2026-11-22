@@ -34,7 +34,7 @@ import MatchAnalysisPanel, {
 import NotesPanel from './notes/NotesPanel';
 import GameSelector from './GameSelector';
 import { AddCardsPanel } from '../study/flashcards/LearningPanel';
-import { type Job, type Match } from '../../shared/api/api';
+import { type Job, type Match } from '../../shared/http/api';
 import {
   canOpenReviewDecision,
   findCubeDecisionByNumber,

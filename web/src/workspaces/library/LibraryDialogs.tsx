@@ -1,6 +1,6 @@
 import ActionButton from '../../shared/ui/ActionButton';
 import { useState, type FormEvent } from 'react';
-import { request } from '../../shared/api/api';
+import { request } from '../../shared/http/api';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
 import {
   databaseDisplayName,

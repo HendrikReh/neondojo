@@ -1,4 +1,4 @@
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import type { components } from '../../../generated-api';
 
 type Schema = components['schemas'];

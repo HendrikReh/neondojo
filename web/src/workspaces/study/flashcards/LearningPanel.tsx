@@ -8,7 +8,7 @@ import ActionButton from '../../../shared/ui/ActionButton';
 import AnkiAutoSync from './AnkiAutoSync';
 import AnkiSyncOverview from './AnkiSyncOverview';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import { AppError } from '../../../shared/i18n/i18n-core';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useLearningText } from './learning-messages';

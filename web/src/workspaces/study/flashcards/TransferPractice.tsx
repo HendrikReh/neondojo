@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import ActionButton from '../../../shared/ui/ActionButton';
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import { useCardPracticeText } from './card-practice-messages';
 import { useCardSearchText } from './card-search-messages';
 import { useGamePlanText } from '../../analysis/game-plans/game-plan-messages';

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import ActionButton from '../../shared/ui/ActionButton';
-import type { Match } from '../../shared/api/api';
+import type { Match } from '../../shared/http/api';
 import { useDatabases } from '../library/useDatabases';
 import { SearchResultList } from '../../shared/ui/SearchResultList';
 import { SearchResultPreview } from '../../shared/ui/SearchResultPreview';

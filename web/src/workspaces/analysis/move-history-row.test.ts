@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, expect, it, vi } from 'vitest';
-import type { Position } from '../../shared/api/api';
+import type { Position } from '../../shared/http/api';
 import type { Locale } from '../../shared/i18n/i18n-core';
 import { I18nProvider } from '../../shared/i18n/i18n';
 import MoveHistoryRow from './MoveHistoryRow';

@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { jobEngine, mergeJob, type Job } from '../api/api';
+import { jobEngine, mergeJob, type Job } from '../http/api';
 import { positionJobsPath } from './useJobs';
 
 const running: Job = {

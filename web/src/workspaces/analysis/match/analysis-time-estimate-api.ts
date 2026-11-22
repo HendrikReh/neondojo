@@ -1,4 +1,4 @@
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import { isAnalysisDepth } from '../../../shared/engine/analysis-depth';
 
 import type { components } from '../../../generated-api';

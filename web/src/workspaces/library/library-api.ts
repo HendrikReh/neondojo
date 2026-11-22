@@ -1,10 +1,10 @@
-import { numberedSearchParams } from '../../shared/api/cursor-search';
+import { numberedSearchParams } from '../../shared/http/cursor-search';
 import {
   downloadResponse,
   request,
   requestResponse,
   type Position,
-} from '../../shared/api/api';
+} from '../../shared/http/api';
 import type { components } from '../../generated-api';
 import type { PlayMode } from '../play/play-mode-messages';
 type Schema = components['schemas'];

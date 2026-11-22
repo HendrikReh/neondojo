@@ -17,7 +17,7 @@ import {
   type Job,
   type Match,
   type MatchGame,
-} from '../../../shared/api/api';
+} from '../../../shared/http/api';
 import {
   canOpenReviewDecision,
   findReviewNeighbor,

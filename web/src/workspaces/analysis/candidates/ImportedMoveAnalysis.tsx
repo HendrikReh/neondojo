@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { request, type Match } from '../../../shared/api/api';
+import { request, type Match } from '../../../shared/http/api';
 import type { SourceAnalysis } from './source-analysis-api';
 import SourceAnalysisView from './SourceAnalysisView';
 import { useSourceText } from './analysis-source-messages';

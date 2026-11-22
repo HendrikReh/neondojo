@@ -35,7 +35,7 @@ vi.mock('react', async (original) => ({
     }
   },
 }));
-vi.mock('../../shared/api/api', () => ({ request: hooks.request }));
+vi.mock('../../shared/http/api', () => ({ request: hooks.request }));
 import { useDatabases } from './useDatabases';
 
 const database = (id: string) => ({ id, name: id }) as Database;

@@ -1,6 +1,6 @@
 import ActionButton from '../../../shared/ui/ActionButton';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import { useLibraryText } from '../../library/library-messages';
 import {
   annotationPath,

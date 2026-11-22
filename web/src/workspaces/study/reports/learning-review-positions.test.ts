@@ -5,7 +5,7 @@ import {
   type ReviewDecision,
 } from './learning-review-positions';
 import type { PlayReviewHistory, PlaySession } from '../../play/play-api';
-import type { Position } from '../../../shared/api/api';
+import type { Position } from '../../../shared/http/api';
 const position = (player = 0, ply = 1): Position => ({
   id: 's',
   match_uuid: 's',

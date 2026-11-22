@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../../../shared/i18n/i18n';
 import { placeholders as args } from '../../../shared/i18n/i18n-core';
-import type { Job, MatchAnalysisSummary } from '../../../shared/api/api';
+import type { Job, MatchAnalysisSummary } from '../../../shared/http/api';
 import {
   buildStatisticsFilter,
   decisionFilterQuery,

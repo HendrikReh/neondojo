@@ -1,4 +1,4 @@
-import type { Candidate, Position } from '../../../shared/api/api';
+import type { Candidate, Position } from '../../../shared/http/api';
 import type { PositionAnalysisResult } from '../analysis-catalog-api';
 import type { SourceCandidate } from './source-analysis-api';
 import { projectMove } from '../../../shared/board/move-preview';

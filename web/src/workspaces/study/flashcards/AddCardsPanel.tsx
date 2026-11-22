@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useWorkspaceDefaults } from '../../../settings/configuration/ConfigurationProvider';
 import { defaultConfiguration } from '../../../settings/configuration/configuration-model';
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import type { Theme } from '../../../shared/board/themes';
 import { useDecimalInput } from '../../../shared/format/decimal-input';
 import {

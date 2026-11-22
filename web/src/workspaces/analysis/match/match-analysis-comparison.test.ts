@@ -8,7 +8,7 @@ import type {
   MatchAnalysisStatistics,
 } from '../analysis-catalog-api';
 import { entryForJob } from '../analysis-catalog-test-fixtures';
-import type { Job } from '../../../shared/api/api';
+import type { Job } from '../../../shared/http/api';
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());
 const native = entryForJob({

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Board from '../../../shared/board/Board';
-import type { Position } from '../../../shared/api/api';
+import type { Position } from '../../../shared/http/api';
 import type { Theme } from '../../../shared/board/themes';
 import {
   projectMove,

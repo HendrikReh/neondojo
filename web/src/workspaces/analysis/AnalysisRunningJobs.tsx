@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import ActionButton from '../../shared/ui/ActionButton';
-import { cancelJob, jobEngine, type Job } from '../../shared/api/api';
+import { cancelJob, jobEngine, type Job } from '../../shared/http/api';
 import { useI18n } from '../../shared/i18n/i18n';
 import { useStatisticsText } from '../../shared/review/review-statistics-messages';
 

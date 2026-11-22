@@ -1,4 +1,4 @@
-import { request, type Job } from '../api/api';
+import { request, type Job } from '../http/api';
 import type { components } from '../../generated-api';
 import { AppError } from '../i18n/i18n-core';
 

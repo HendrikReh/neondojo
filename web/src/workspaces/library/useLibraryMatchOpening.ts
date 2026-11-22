@@ -4,7 +4,7 @@ import {
   type Match,
   type Page,
   type Position,
-} from '../../shared/api/api';
+} from '../../shared/http/api';
 import { libraryRowKey, type LibraryMatch } from './library-api';
 import { AppError } from '../../shared/i18n/i18n-core';
 

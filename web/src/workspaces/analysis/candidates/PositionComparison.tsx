@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState } from 'react';
-import type { Position } from '../../../shared/api/api';
+import type { Position } from '../../../shared/http/api';
 import { useAnalysisEntryLabel } from '../AnalysisCatalogSelect';
 import { useAnalysisCatalogText } from '../analysis-catalog-messages';
 import { useBoardReviewText } from '../../../shared/board/board-review-messages';

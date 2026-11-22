@@ -5,7 +5,7 @@ import {
   type MatchGame,
   type Position,
   type Page,
-} from '../shared/api/api';
+} from '../shared/http/api';
 import { AppError } from '../shared/i18n/i18n-core';
 
 type Navigation = {

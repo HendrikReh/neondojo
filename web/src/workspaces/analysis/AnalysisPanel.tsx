@@ -13,7 +13,7 @@ import {
   type DiceStats,
   type Match,
   type Position,
-} from '../../shared/api/api';
+} from '../../shared/http/api';
 import type { useJobs } from '../../shared/jobs/useJobs';
 import { useI18n } from '../../shared/i18n/i18n';
 import { useOpeningBook } from './candidates/useOpeningBook';

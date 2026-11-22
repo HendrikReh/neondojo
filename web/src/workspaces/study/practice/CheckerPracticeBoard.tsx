@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import ActionButton from '../../../shared/ui/ActionButton';
 import Board from '../../../shared/board/Board';
-import type { Position } from '../../../shared/api/api';
+import type { Position } from '../../../shared/http/api';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { usePlayText } from '../../play/play-messages';
 import { usePlayModeText } from '../../play/play-mode-messages';

@@ -2,7 +2,7 @@ import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useId, useRef, useState } from 'react';
 import { engineDisplayName } from '../../shared/engine/engine-version';
 import { depthLabel } from '../../shared/engine/analysis-depth';
-import type { Match } from '../../shared/api/api';
+import type { Match } from '../../shared/http/api';
 import { formatBenchmarkDuration } from './benchmark-duration';
 import EngineLabel from '../../shared/engine/EngineLabel';
 import options from '../../../../shared/configuration-options.json' with { type: 'json' };

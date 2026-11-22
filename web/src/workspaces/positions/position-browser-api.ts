@@ -1,5 +1,5 @@
-import { cursorSearchParams } from '../../shared/api/cursor-search';
-import { request } from '../../shared/api/api';
+import { cursorSearchParams } from '../../shared/http/cursor-search';
+import { request } from '../../shared/http/api';
 import { AppError } from '../../shared/i18n/i18n-core';
 import type { GamePlan } from '../analysis/game-plans/game-plan-api';
 import { mistakeGamePlans } from '../study/mistakes/recurring-mistakes-api';

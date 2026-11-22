@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { Match } from '../../shared/api/api';
+import type { Match } from '../../shared/http/api';
 import { useSourceText } from './candidates/analysis-source-messages';
 import { useBoardReviewText } from '../../shared/board/board-review-messages';
 import CubeDecisionDetails, {

@@ -97,7 +97,7 @@ it('offers an explicit action for a completed calculation while keeping the sele
               status: 'completed',
               kind: 'analysis',
               result: null,
-            } as import('../../shared/api/api').Job,
+            } as import('../../shared/http/api').Job,
           },
           run: async () => {},
           refresh: () => {},

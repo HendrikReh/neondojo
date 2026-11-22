@@ -1,4 +1,4 @@
-import type { Position } from '../api/api';
+import type { Position } from '../http/api';
 import { checkerCounts, pipCounts, matchContext } from './boardMath';
 
 import { useEffect, useState } from 'react';

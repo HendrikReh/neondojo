@@ -1,5 +1,5 @@
 import type { KeyboardEvent } from 'react';
-import type { Candidate } from '../api/api';
+import type { Candidate } from '../http/api';
 
 /** A user-selected checker candidate; XG position references and cube verdicts have none. */
 export interface PreviewCandidate {

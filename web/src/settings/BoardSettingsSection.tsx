@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import type { Position } from '../shared/api/api';
+import type { Position } from '../shared/http/api';
 import Board from '../shared/board/Board';
 import { archiveThemes, themes, type Theme } from '../shared/board/themes';
 import { useSettingsText } from './settings-messages';

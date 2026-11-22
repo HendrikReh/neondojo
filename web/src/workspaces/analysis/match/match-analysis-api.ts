@@ -1,4 +1,4 @@
-import { request, type Job } from '../../../shared/api/api';
+import { request, type Job } from '../../../shared/http/api';
 import type { components } from '../../../generated-api';
 
 export type MatchAnalysisEngine = components['schemas']['MatchAnalysisEngine'];

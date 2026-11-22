@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { request, type Position } from '../../../shared/api/api';
+import { request, type Position } from '../../../shared/http/api';
 import type { CheckerTurn } from '../../../shared/board/play-state';
 
 type CheckerContext = Pick<Position, 'board' | 'player' | 'dice'>;

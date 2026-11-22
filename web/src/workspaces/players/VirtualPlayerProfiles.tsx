@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import ActionButton from '../../shared/ui/ActionButton';
-import type { Match } from '../../shared/api/api';
+import type { Match } from '../../shared/http/api';
 import { useI18n } from '../../shared/i18n/i18n';
 import { AppError } from '../../shared/i18n/i18n-core';
 import LibraryDialog from '../../shared/ui/LibraryDialog';

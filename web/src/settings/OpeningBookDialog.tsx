@@ -7,7 +7,7 @@ import ActionButton from '../shared/ui/ActionButton';
 import EngineLabel from '../shared/engine/EngineLabel';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import LibraryDialog from '../shared/ui/LibraryDialog';
-import { request } from '../shared/api/api';
+import { request } from '../shared/http/api';
 import { AppError } from '../shared/i18n/i18n-core';
 import { useI18n } from '../shared/i18n/i18n';
 import {

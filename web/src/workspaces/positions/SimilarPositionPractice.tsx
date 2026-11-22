@@ -13,7 +13,7 @@ import CheckerPracticeBoard, {
   type CheckerDraft,
 } from '../study/practice/CheckerPracticeBoard';
 import PlayBoardDialog from '../../shared/board/PlayBoardDialog';
-import { request } from '../../shared/api/api';
+import { request } from '../../shared/http/api';
 import { useBoardReviewText } from '../../shared/board/board-review-messages';
 import { matchContext } from '../../shared/board/boardMath';
 import type { components } from '../../generated-api';

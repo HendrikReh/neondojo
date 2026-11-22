@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { terminal, mergeJob, type Job } from '../shared/api/api';
+import { terminal, mergeJob, type Job } from '../shared/http/api';
 import { AppError } from '../shared/i18n/i18n-core';
 import { watchJob } from '../shared/jobs/job-watch';
 

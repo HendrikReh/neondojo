@@ -33,7 +33,7 @@ import {
   type Job,
   type Match,
   type Position,
-} from '../shared/api/api';
+} from '../shared/http/api';
 import AnalysisWorkspace, {
   type AnalysisDetail,
 } from '../workspaces/analysis/AnalysisWorkspace';

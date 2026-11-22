@@ -1,4 +1,4 @@
-import type { Job } from '../src/shared/api/api';
+import type { Job } from '../src/shared/http/api';
 import { expect, test, type Page } from './test';
 const timing = (overrides: Record<string, unknown> = {}) => ({
   job_id: 'fixture',

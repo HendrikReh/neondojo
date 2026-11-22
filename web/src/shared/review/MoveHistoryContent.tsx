@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { Position } from '../api/api';
+import type { Position } from '../http/api';
 import { useI18n } from '../i18n/i18n';
 import { useSourceText } from '../../workspaces/analysis/candidates/analysis-source-messages';
 import { clippedTooltipText } from '../format/overflow-title';

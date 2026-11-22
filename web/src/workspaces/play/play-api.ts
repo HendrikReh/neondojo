@@ -1,4 +1,4 @@
-import { request } from '../../shared/api/api';
+import { request } from '../../shared/http/api';
 import type { BearoffDirection } from '../../shared/board/play-state';
 import type { PlayMode } from './play-mode-messages';
 type Schema = import('../../generated-api').components['schemas'];

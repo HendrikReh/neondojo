@@ -7,7 +7,7 @@ import Board from '../../../shared/board/Board';
 import CheckerPracticeBoard, {
   type CheckerDraft,
 } from '../practice/CheckerPracticeBoard';
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import { useBoardReviewText } from '../../../shared/board/board-review-messages';
 import { matchContext } from '../../../shared/board/boardMath';
 import { useI18n } from '../../../shared/i18n/i18n';

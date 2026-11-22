@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Match } from '../../../shared/api/api';
+import type { Match } from '../../../shared/http/api';
 import {
   loadDecisions,
   movePosition,

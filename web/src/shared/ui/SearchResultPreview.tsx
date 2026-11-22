@@ -1,5 +1,5 @@
 import { Children, type ComponentPropsWithoutRef, type ReactNode } from 'react';
-import type { Position } from '../api/api';
+import type { Position } from '../http/api';
 import Board from '../board/Board';
 import type { Theme } from '../board/themes';
 import { usePositionText } from '../../workspaces/positions/position-browser-messages';

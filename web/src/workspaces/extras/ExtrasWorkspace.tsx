@@ -1,5 +1,5 @@
 import { useRef, type KeyboardEvent } from 'react';
-import type { Match } from '../../shared/api/api';
+import type { Match } from '../../shared/http/api';
 import BenchmarkWorkspace from './BenchmarkWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
 import DatabaseBackupWorkspace from './DatabaseBackupWorkspace';

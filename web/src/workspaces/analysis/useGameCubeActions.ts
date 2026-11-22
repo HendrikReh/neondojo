@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { request } from '../../shared/api/api';
+import { request } from '../../shared/http/api';
 import type { components } from '../../generated-api';
 
 type GameDecisions = components['schemas']['GameDecisions'];

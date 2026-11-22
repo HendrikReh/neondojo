@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react';
 import ActionButton from '../../../shared/ui/ActionButton';
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import { useCardPracticeText } from './card-practice-messages';
 import { useI18n } from '../../../shared/i18n/i18n';
 import type { CardTags, EditCardTags } from './learning-api';

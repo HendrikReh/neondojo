@@ -5,7 +5,7 @@ import {
   MatchAnalysisFields,
   useMatchAnalysisOptions,
 } from './MatchAnalysisFields';
-import type { Job } from '../../../shared/api/api';
+import type { Job } from '../../../shared/http/api';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useLibraryText } from '../../library/library-messages';
 import type { LibraryMatch } from '../../library/library-api';

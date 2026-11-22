@@ -1,7 +1,7 @@
 import AnkiCardFace from './AnkiCardFace';
 import { useEffect, useState, type RefObject } from 'react';
 import ActionButton from '../../../shared/ui/ActionButton';
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import Board from '../../../shared/board/Board';
 import { matchContext } from '../../../shared/board/boardMath';
 import { useCardPracticeText } from './card-practice-messages';

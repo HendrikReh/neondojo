@@ -33,7 +33,7 @@ Stored snapshots, settings and HTTP contracts keep the engine ID strings `gnubg`
 | `app/` | `App.tsx` with the workspace order (`views`), header, global shortcuts and background jobs |
 | `styles/` | Global stylesheets imported by `main.tsx` and `index.html` |
 | `settings/` | Settings dialog and its sections; `configuration/`, `profiles/` and `appearance/` |
-| `shared/` | `api/`, `jobs/`, `i18n/`, `format/`, `engine/`, `ui/` (buttons, dialogs, tooltips, search tables), `hooks/`, `board/` (board, checker play state, themes, sounds) and `review/` (decision details shared by Analysis, Play and Study) |
+| `shared/` | `http/` (request helpers), `jobs/`, `i18n/`, `format/`, `engine/`, `ui/` (buttons, dialogs, tooltips, search tables), `hooks/`, `board/` (board, checker play state, themes, sounds) and `review/` (decision details shared by Analysis, Play and Study) |
 | `workspaces/play/` | Playing |
 | `workspaces/analysis/` | Analysis; `match/` (match analysis and statistics), `candidates/` (candidate tables and source analyses), `notes/` and `game-plans/` |
 | `workspaces/study/` | Study; `flashcards/`, `reports/`, `mistakes/` and `practice/` |
@@ -41,7 +41,7 @@ Stored snapshots, settings and HTTP contracts keep the engine ID strings `gnubg`
 | `workspaces/library/` | Match database, its database list (`useDatabases`) and `import/` |
 | `workspaces/players/`, `workspaces/extras/` | Player database; Extras (benchmark, engine matches, backups, version) |
 
-The bundled stylesheet order follows the import order of these modules. Moving an import between features can reorder rules of equal specificity, so compare the built CSS before and after such a change.
+The bundled stylesheet order follows the import order of these modules. Moving an import between features can reorder rules of equal specificity, so compare the built CSS before and after such a change. Keep `/api/` out of module paths: the Vite dev server serves modules under `/src/…`, and browser tests intercept `**/api/**` as backend requests.
 
 ## Database schema
 

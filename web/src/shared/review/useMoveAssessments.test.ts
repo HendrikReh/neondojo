@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Job } from '../api/api';
+import type { Job } from '../http/api';
 import {
   assessmentIdentity,
   assessmentRequestPath,

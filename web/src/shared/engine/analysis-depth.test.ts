@@ -6,7 +6,7 @@ import { PositionAnalysisDepth } from '../../workspaces/analysis/AnalysisPanel';
 import { ANALYSIS_PLIES } from './analysis-depth';
 import MatchAnalysisPanel from '../../workspaces/analysis/match/MatchAnalysisPanel';
 import { I18nProvider } from '../i18n/i18n';
-import type { Match } from '../api/api';
+import type { Match } from '../http/api';
 
 vi.mock('../../workspaces/analysis/match/useMatchAnalysis', () => ({
   useMatchAnalysis: () => ({

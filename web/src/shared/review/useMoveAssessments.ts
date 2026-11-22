@@ -1,6 +1,6 @@
 import { errorGrades } from './move-severity';
 import { useEffect, useRef, useState } from 'react';
-import { request, type Job } from '../api/api';
+import { request, type Job } from '../http/api';
 import type { components } from '../../generated-api';
 import { statisticsRevision } from '../../workspaces/analysis/match/match-statistics-api';
 

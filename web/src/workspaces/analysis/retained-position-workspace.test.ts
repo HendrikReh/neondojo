@@ -1,7 +1,7 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { Match, Position } from '../../shared/api/api';
+import type { Match, Position } from '../../shared/http/api';
 import type { Locale } from '../../shared/i18n/i18n-core';
 
 vi.mock('../../shared/board/Board', () => ({

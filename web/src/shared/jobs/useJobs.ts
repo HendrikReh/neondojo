@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { request, terminal, mergeJob, jobEngine, type Job } from '../api/api';
+import { request, terminal, mergeJob, jobEngine, type Job } from '../http/api';
 import { watchJob } from './job-watch';
 import type { components } from '../../generated-api';
 import type { MatchAnalysisEngine } from '../../workspaces/analysis/match/useMatchAnalysis';

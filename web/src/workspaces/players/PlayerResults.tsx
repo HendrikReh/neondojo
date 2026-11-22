@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import { request } from '../../shared/api/api';
-import { cursorSearchParams } from '../../shared/api/cursor-search';
+import { request } from '../../shared/http/api';
+import { cursorSearchParams } from '../../shared/http/cursor-search';
 import type { components } from '../../generated-api';
 import { useI18n } from '../../shared/i18n/i18n';
 import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';

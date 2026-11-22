@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest';
 import { displayedBoardPosition } from './displayed-board';
-import type { Position } from '../api/api';
+import type { Position } from '../http/api';
 import { projectMove } from './move-preview';
 
 it('shares the actual board and dice calculation for Initial, Arrows and Final', () => {

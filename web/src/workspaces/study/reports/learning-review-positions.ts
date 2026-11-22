@@ -1,4 +1,4 @@
-import type { Position } from '../../../shared/api/api';
+import type { Position } from '../../../shared/http/api';
 import type { PlayReviewHistory, PlaySession } from '../../play/play-api';
 export type ReviewDecision = NonNullable<
   PlaySession['review']

@@ -17,7 +17,7 @@ import {
   type KeyboardEvent,
   type SetStateAction,
 } from 'react';
-import type { Match, Position } from '../../shared/api/api';
+import type { Match, Position } from '../../shared/http/api';
 import SearchPagination from '../../shared/ui/SearchPagination';
 import { useSearchPages } from '../../shared/hooks/useSearchPages';
 import { useLibraryMatchOpening } from './useLibraryMatchOpening';

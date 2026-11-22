@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import { ALL_CARDS } from './card-search-api';
 import type { VersionedDeck } from './deck-management-api';
 import type { Deck } from './learning-api';

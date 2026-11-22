@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from '../../../shared/ui/ActionButton';
-import { request } from '../../../shared/api/api';
+import { request } from '../../../shared/http/api';
 import { useI18n } from '../../../shared/i18n/i18n';
 import type { Deck } from './learning-api';
 import { useLearningText } from './learning-messages';

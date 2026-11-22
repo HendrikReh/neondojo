@@ -5,7 +5,7 @@ import EngineLabel from '../../../shared/engine/EngineLabel';
 import type { PreviewCandidate } from '../../../shared/review/candidate-preview';
 import CandidateTable from './CandidateTable';
 import { candidateEquityRanks } from './candidate-comparison';
-import type { Match, Position } from '../../../shared/api/api';
+import type { Match, Position } from '../../../shared/http/api';
 import { useSourceText } from './analysis-source-messages';
 import { useCandidateText } from './candidate-messages';
 import type { SourceAnalysis, BookLookup } from './source-analysis-api';

@@ -13,7 +13,7 @@ import {
   request,
   terminal,
   type Job,
-} from '../../../shared/api/api';
+} from '../../../shared/http/api';
 import { useI18n } from '../../../shared/i18n/i18n';
 import type { LibraryMatch } from '../../library/library-api';
 import { useLibraryText } from '../../library/library-messages';

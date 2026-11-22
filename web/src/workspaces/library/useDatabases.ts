@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { request } from '../../shared/api/api';
+import { request } from '../../shared/http/api';
 import type { Database } from './library-api';
 
 export interface DatabaseList {

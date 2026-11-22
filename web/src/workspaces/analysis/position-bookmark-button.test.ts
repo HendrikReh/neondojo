@@ -65,7 +65,7 @@ import { positionBookmarkMessages } from '../positions/position-bookmark-message
 import AnalysisWorkspace from './AnalysisWorkspace';
 import AnalysisPanel from './AnalysisPanel';
 import BoardReviewControls from './BoardReviewControls';
-import type { Position } from '../../shared/api/api';
+import type { Position } from '../../shared/http/api';
 
 type Props = Parameters<typeof PositionBookmarkButton>[0];
 type Element = ReactElement<Record<string, unknown>>;

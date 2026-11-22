@@ -1,6 +1,6 @@
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { beforeEach, expect, it, vi } from 'vitest';
-import type { Position } from '../../shared/api/api';
+import type { Position } from '../../shared/http/api';
 
 const hooks = vi.hoisted(() => ({ slots: [] as unknown[], index: 0 }));
 vi.mock('react', async (original) => ({

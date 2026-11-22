@@ -1,4 +1,4 @@
-import type { Position } from '../api/api';
+import type { Position } from '../http/api';
 import type { BoardView, MovePreview } from './move-preview';
 
 /** One source for both checker rendering and board-only contextual information. */

@@ -4,7 +4,7 @@ import SearchPagination from '../../shared/ui/SearchPagination';
 import { SearchResultRow } from '../../shared/ui/SearchResultList';
 import { lastSearchPage } from '../../shared/hooks/useSearchPages';
 import Board from '../../shared/board/Board';
-import { request, type Position } from '../../shared/api/api';
+import { request, type Position } from '../../shared/http/api';
 import { matchContext } from '../../shared/board/boardMath';
 import type { components } from '../../generated-api';
 import { useI18n } from '../../shared/i18n/i18n';

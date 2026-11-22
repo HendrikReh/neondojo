@@ -6,7 +6,7 @@ import {
   sortPositionComparisonRows,
 } from './position-comparison';
 import { entryForJob } from '../analysis-catalog-test-fixtures';
-import type { Job } from '../../../shared/api/api';
+import type { Job } from '../../../shared/http/api';
 
 const candidate = (
   notation: string,

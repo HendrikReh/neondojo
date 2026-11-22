@@ -5,7 +5,7 @@ import {
   downloadResponse,
   request,
   requestResponse,
-} from '../../shared/api/api';
+} from '../../shared/http/api';
 import { databaseBackupMessages } from './database-backup-messages';
 import type { paths } from '../../generated-api';
 import { useI18n } from '../../shared/i18n/i18n';

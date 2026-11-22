@@ -37,7 +37,7 @@ vi.mock('react', async (original) => ({
 import { useAnalysisCatalog, useAnalysisResult } from './useAnalysisCatalog';
 import type { AnalysisCatalogPage } from './analysis-catalog-api';
 import { entryForJob } from './analysis-catalog-test-fixtures';
-import type { Job } from '../../shared/api/api';
+import type { Job } from '../../shared/http/api';
 const fetch = vi.fn<typeof globalThis.fetch>();
 const entry = entryForJob({
   id: 'native',

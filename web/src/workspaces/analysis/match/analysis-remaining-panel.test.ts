@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import MatchAnalysisPanel from './MatchAnalysisPanel';
 import { I18nProvider } from '../../../shared/i18n/i18n';
-import type { Job, Match } from '../../../shared/api/api';
+import type { Job, Match } from '../../../shared/http/api';
 const state = vi.hoisted(() => ({ status: 'running' }));
 vi.mock('./useMatchAnalysis', () => ({
   useMatchAnalysis: () => ({

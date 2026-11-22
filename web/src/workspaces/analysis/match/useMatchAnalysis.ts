@@ -5,7 +5,7 @@ import {
   request,
   terminal,
   type Job,
-} from '../../../shared/api/api';
+} from '../../../shared/http/api';
 import { watchJob } from '../../../shared/jobs/job-watch';
 import {
   submitMatchAnalysis,

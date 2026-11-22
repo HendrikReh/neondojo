@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from '../../shared/ui/ActionButton';
-import { request, type Match } from '../../shared/api/api';
+import { request, type Match } from '../../shared/http/api';
 import { NumberedSearchPagination } from '../../shared/ui/SearchPagination';
 import { SearchResultTable } from '../../shared/ui/SearchResultList';
 import { useI18n } from '../../shared/i18n/i18n';
-import { cursorSearchParams } from '../../shared/api/cursor-search';
+import { cursorSearchParams } from '../../shared/http/cursor-search';
 import type { components } from '../../generated-api';
 import type { Database, LibraryMatch } from '../library/library-api';
 import { canAnalyzeMatch } from '../library/library-match-summary';

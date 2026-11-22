@@ -1,4 +1,4 @@
-import type { Job, MatchAnalysisSummary } from '../../../shared/api/api';
+import type { Job, MatchAnalysisSummary } from '../../../shared/http/api';
 
 import type { components } from '../../../generated-api';
 import { errorGrades } from '../../../shared/review/move-severity';

@@ -1,6 +1,6 @@
 import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { request, type Match } from '../../shared/api/api';
+import { request, type Match } from '../../shared/http/api';
 import type { LibraryMatch } from '../library/library-api';
 import { libraryText } from '../library/library-messages';
 import { useI18n } from '../../shared/i18n/i18n';

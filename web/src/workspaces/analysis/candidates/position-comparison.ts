@@ -2,7 +2,7 @@ import type {
   AnalysisCatalogEntry,
   PositionAnalysisResult,
 } from '../analysis-catalog-api';
-import type { Position } from '../../../shared/api/api';
+import type { Position } from '../../../shared/http/api';
 import { candidatePreviewNotation } from '../../../shared/review/candidate-preview';
 import {
   candidateEquityDifference,

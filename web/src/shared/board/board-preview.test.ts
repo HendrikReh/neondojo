@@ -6,7 +6,7 @@ import { I18nProvider } from '../i18n/i18n';
 import { moveArrowGeometry } from './MoveArrows';
 import { projectMove, type BoardView } from './move-preview';
 import { archiveThemes, stackGeometry } from './themes';
-import type { Position } from '../api/api';
+import type { Position } from '../http/api';
 
 beforeEach(() => vi.stubGlobal('localStorage', { getItem: () => 'en' }));
 afterEach(() => vi.unstubAllGlobals());
