@@ -902,3 +902,34 @@ test('the card preview can be resized and keeps its width after reload', async (
   await expect(handle).toBeHidden();
   await expect(preview.locator('.board')).toBeVisible();
 });
+
+test('transfer practice and saved topics share one folded section above the results', async ({
+  page,
+}) => {
+  const { study } = await setup(page);
+  await expect(study.locator('.learning-card-list tbody tr')).toHaveCount(50);
+  const tools = study.locator('details.learning-extras');
+  await expect(tools).toHaveCount(1);
+  await expect(tools).not.toHaveAttribute('open', '');
+  await expect(tools.locator('> summary')).toHaveText(
+    'Transfer practice and saved topics',
+  );
+  const transfer = study.getByRole('region', { name: 'Transfer practice' });
+  const topics = study.getByRole('region', { name: 'Saved topics' });
+  await expect(transfer).toBeHidden();
+  await expect(topics).toBeHidden();
+  // The folded tools sit between the search and the results.
+  const toolsTop = (await tools.boundingBox())!.y;
+  const resultsTop = (await study.locator('.learning-card-list').boundingBox())!
+    .y;
+  expect(toolsTop).toBeLessThan(resultsTop);
+  await tools.locator('> summary').click();
+  await expect(transfer).toBeVisible();
+  await expect(topics).toBeVisible();
+  await expect(
+    transfer.getByRole('button', { name: 'Baseline', exact: true }),
+  ).toBeDisabled();
+  await expect(
+    topics.getByRole('combobox', { name: 'Saved topics', exact: true }),
+  ).toBeVisible();
+});

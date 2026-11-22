@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import ActionButton from './ActionButton';
 import { request } from './api';
 import { useCardPracticeText } from './card-practice-messages';
@@ -35,6 +35,7 @@ export default function TransferPractice({
   const [player, setPlayer] = useState('');
   const [plan, setPlan] = useState<TransferRequest['game_plan']>('pure_race');
   const [kind, setKind] = useState<TransferRequest['kind']>('cube_offer');
+  const heading = useId();
   const [history, setHistory] = useState<TransferSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
@@ -69,8 +70,8 @@ export default function TransferPractice({
     }
   }
   return (
-    <details>
-      <summary>{t('transfer')}</summary>
+    <section className="learning-extra" aria-labelledby={heading}>
+      <h3 id={heading}>{t('transfer')}</h3>
       <div className="learning-controls">
         <SearchFilterInput
           label={t('exactPlayer')}
@@ -163,6 +164,6 @@ export default function TransferPractice({
           ))}
         </ul>
       )}
-    </details>
+    </section>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import ActionButton from './ActionButton';
 import { request } from './api';
 import { useCardPracticeText } from './card-practice-messages';
@@ -24,6 +24,7 @@ export default function CardTopics({
 }) {
   const t = useCardPracticeText();
   const { formatError } = useI18n();
+  const heading = useId();
   const [topics, setTopics] = useState<CardTopic[]>([]);
   const [selected, setSelected] = useState('');
   const [name, setName] = useState('');
@@ -100,8 +101,8 @@ export default function CardTopics({
     }
   }
   return (
-    <details>
-      <summary>{t('topics')}</summary>
+    <section className="learning-extra" aria-labelledby={heading}>
+      <h3 id={heading}>{t('topics')}</h3>
       <div className="learning-controls">
         <SearchFilterSelect
           label={t('topics')}
@@ -140,6 +141,6 @@ export default function CardTopics({
         </ActionButton>
       </div>
       {!!error && <p role="alert">{formatError(error)}</p>}
-    </details>
+    </section>
   );
 }

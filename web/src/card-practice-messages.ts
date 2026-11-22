@@ -174,6 +174,14 @@ const rows = {
     'Zastosuj tagi',
     'Applica tag',
   ],
+  studyTools: [
+    'Transfer practice and saved topics',
+    'Transfertraining und gespeicherte Themen',
+    'Práctica de transferencia y temas guardados',
+    'Exercices de transfert et thèmes enregistrés',
+    'Trening transferowy i zapisane tematy',
+    'Allenamento di trasferimento e temi salvati',
+  ],
   transfer: [
     'Transfer practice',
     'Transfertraining',

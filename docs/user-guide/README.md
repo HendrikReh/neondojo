@@ -412,6 +412,7 @@ Details: [Study](../reference/study.md#study)
 - **Study now** opens the next due card of the deck.
 - **Practice results** starts a shuffled round of up to 10 or 20 cards from the current filters. **Retry errors and marked cards** repeats the ones you missed or marked. These rounds never change your review schedule.
 - **Timed preview** shows the filtered cards with separate question and answer times.
+- Expand **Transfer practice and saved topics** below the search for these two tools:
 - **Transfer practice** checks whether a lesson transfers to new positions. It offers a baseline and a follow-up round of unseen decisions. Repeat the same topic after 7 to 14 days.
 - **Saved topics** stores a set of card filters for later.
 - **Find duplicates** finds cards that are stored more than once.

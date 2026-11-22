@@ -1394,22 +1394,26 @@ export default function LearningWorkspace({
             {deckSelector}
           </CardSearchControls>
           {deckPanel}
-          <TransferPractice
-            onStart={(round) => {
-              rememberRound(round.id);
-              setPracticeRound(round);
-            }}
-          />
-          <CardTopics
-            filters={filters}
-            deck={deckId}
-            onSelect={(deck, nextFilters) => {
-              chooseDeck(deck);
-              setDraftFilters(nextFilters);
-              setFilters(nextFilters);
-              setSearchRun((value) => value + 1);
-            }}
-          />
+          {/* Secondary study tools stay folded so the cards follow the search. */}
+          <details className="learning-extras">
+            <summary>{practiceT('studyTools')}</summary>
+            <TransferPractice
+              onStart={(round) => {
+                rememberRound(round.id);
+                setPracticeRound(round);
+              }}
+            />
+            <CardTopics
+              filters={filters}
+              deck={deckId}
+              onSelect={(deck, nextFilters) => {
+                chooseDeck(deck);
+                setDraftFilters(nextFilters);
+                setFilters(nextFilters);
+                setSearchRun((value) => value + 1);
+              }}
+            />
+          </details>
           <LearningCardBrowser
             key={listKey}
             visible={visible}

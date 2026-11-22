@@ -367,7 +367,9 @@ After an answer, **Mark for review** adds that card to the optional second
 pass alongside incorrect answers. **Resume practice** reopens the latest
 round. Practice rounds leave FSRS reviews and due dates untouched.
 
-**Saved topics** restores applied card filters and their deck scope. Edit
+**Transfer practice and saved topics**, folded between the search and the
+results, holds both tools. **Saved topics** restores applied card filters
+and their deck scope. Edit
 **Card tags** from selected rows or after revealing a solution. Use the
 transfer panel for baseline and follow-up sessions. Select one card for pip
 count practice, or a cube card for score variants. The timed preview uses
