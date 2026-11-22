@@ -475,16 +475,20 @@ export default function MatchAnalysisPanel({
       awaitingCubeSelection.current = false;
       return;
     }
+    // An empty page keeps waiting: the decisions of a just-finished analysis
+    // arrive with a later revision, and the first page can precede it.
     if (
       !showDecisions ||
       loading ||
       pageError ||
       boardReview?.busy ||
-      !decisions.result
+      currentJump?.busy ||
+      !decisions.result ||
+      decisions.total === 0
     )
       return;
     awaitingCubeSelection.current = false;
-    if (decisions.total > 0) void navigateReview('next');
+    void navigateReview('next');
     // The loaded page and the selection decide; the callbacks are current.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -494,7 +498,9 @@ export default function MatchAnalysisPanel({
     loading,
     pageError,
     boardReview?.busy,
+    currentJump?.busy,
     decisions.result,
+    decisions.total,
   ]);
   const narrowed = !!(player || severity || filteredGame !== scopeGame);
   const emptyPage =
