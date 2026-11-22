@@ -11,8 +11,11 @@ import {
 } from './profile-messages';
 import { themes } from '../../shared/board/themes';
 import { languages } from '../../shared/i18n/i18n-core';
-import { ALL_CARDS, CARDS_WITHOUT_DECK } from '../../card-search-api';
-import { useCardSearchText } from '../../card-search-messages';
+import {
+  ALL_CARDS,
+  CARDS_WITHOUT_DECK,
+} from '../../workspaces/study/flashcards/card-search-api';
+import { useCardSearchText } from '../../workspaces/study/flashcards/card-search-messages';
 import { useSettingsText } from '../settings-messages';
 import { LIBRARY_COLUMNS } from '../../library-columns';
 import { useEffect, useId, useState } from 'react';

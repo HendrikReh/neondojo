@@ -27,8 +27,8 @@ import { SearchResultRow } from './shared/ui/SearchResultList';
 import { useGamePlanText } from './workspaces/analysis/game-plans/game-plan-messages';
 import type { GamePlan } from './workspaces/analysis/game-plans/game-plan-api';
 import { useI18n } from './shared/i18n/i18n';
-import MistakePlayerSelect from './MistakePlayerSelect';
-import RecurringMistakePractice from './RecurringMistakePractice';
+import MistakePlayerSelect from './workspaces/study/mistakes/MistakePlayerSelect';
+import RecurringMistakePractice from './workspaces/study/mistakes/RecurringMistakePractice';
 import {
   loadMistakes,
   mistakeGamePlans,
@@ -38,12 +38,12 @@ import {
   type DecisionSearchPage,
   type MistakeKind,
   type MistakeQuestion,
-} from './recurring-mistakes-api';
-import { useMistakeText } from './recurring-mistakes-messages';
+} from './workspaces/study/mistakes/recurring-mistakes-api';
+import { useMistakeText } from './workspaces/study/mistakes/recurring-mistakes-messages';
 import {
   mistakeProvenance,
   mistakeReferenceKey,
-} from './recurring-mistakes-provenance';
+} from './workspaces/study/mistakes/recurring-mistakes-provenance';
 import {
   SearchFilterInput,
   SearchFilterSelect,

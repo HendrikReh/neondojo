@@ -1,4 +1,4 @@
-import type { CardPage } from '../src/learning-api';
+import type { CardPage } from '../src/workspaces/study/flashcards/learning-api';
 import { expect, test, type Locator, type Page } from './test';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 5000 });

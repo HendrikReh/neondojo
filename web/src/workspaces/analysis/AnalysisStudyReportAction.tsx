@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import ActionButton from '../../shared/ui/ActionButton';
-import LearningReviewDialog from '../../LearningReviewDialog';
-import { loadStudyReport } from '../../study-api';
+import LearningReviewDialog from '../study/reports/LearningReviewDialog';
+import { loadStudyReport } from '../study/study-api';
 import type { PlaySession } from '../play/play-api';
 import type { Theme } from '../../shared/board/themes';
 import { usePlayModeText } from '../play/play-mode-messages';

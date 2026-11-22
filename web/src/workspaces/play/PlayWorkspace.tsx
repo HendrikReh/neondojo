@@ -31,12 +31,12 @@ import PlayFeedback from './PlayFeedback';
 import PlayCoachFeedback from './PlayCoachFeedback';
 import PlayHintView from './PlayHintView';
 import { hasPlayMovePreview } from './PlayMovePreview';
-import LearningReviewDialog from '../../LearningReviewDialog';
+import LearningReviewDialog from '../study/reports/LearningReviewDialog';
 import {
   matchAssessmentReportId,
   studyAssessment,
-} from '../../match-assessment-api';
-import { useMatchAssessmentText } from '../../match-assessment-messages';
+} from '../study/reports/match-assessment-api';
+import { useMatchAssessmentText } from '../study/reports/match-assessment-messages';
 import {
   playModes,
   usePlayModeText,

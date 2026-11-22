@@ -42,8 +42,8 @@ import { usePlayerText } from '../player-directory-messages';
 import MatchDatabase, { type PositionSearchRequest } from '../MatchDatabase';
 import MatchAnalysisDialog from '../workspaces/analysis/match/MatchAnalysisDialog';
 import BulkMatchAnalysisDialog from '../workspaces/analysis/match/BulkMatchAnalysisDialog';
-import StudyWorkspace from '../StudyWorkspace';
-import type { AssessmentEntry } from '../match-assessment-api';
+import StudyWorkspace from '../workspaces/study/StudyWorkspace';
+import type { AssessmentEntry } from '../workspaces/study/reports/match-assessment-api';
 import PositionBrowser from '../PositionBrowser';
 import SimilarPositions from '../SimilarPositions';
 import { usePositionText } from '../position-browser-messages';
@@ -56,7 +56,7 @@ import { useJobs } from '../shared/jobs/useJobs';
 import { useBackgroundJobs } from './useBackgroundJobs';
 import { useI18n } from '../shared/i18n/i18n';
 import { useWorkspaceText } from '../shared/i18n/workspace-messages';
-import { useLearningText } from '../learning-messages';
+import { useLearningText } from '../workspaces/study/flashcards/learning-messages';
 import {
   decodeBulkAnalysisSession,
   readSelection,

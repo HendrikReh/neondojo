@@ -11,7 +11,7 @@ import {
   emptyCardFilters,
   normalizeCardFilters,
   type CardFilters,
-} from '../../card-search-api';
+} from '../../workspaces/study/flashcards/card-search-api';
 import {
   DEFAULT_LIBRARY_COLUMNS,
   LIBRARY_DATA_COLUMNS,

@@ -4,7 +4,7 @@ import {
   annotationText,
 } from '../../workspaces/analysis/notes/annotation-messages';
 import { placeholders as args } from './i18n-core';
-import { learningMessages } from '../../learning-messages';
+import { learningMessages } from '../../workspaces/study/flashcards/learning-messages';
 
 it('retains every dynamic message argument in each annotation and learning language', () => {
   for (const messages of [annotationMessages, learningMessages]) {

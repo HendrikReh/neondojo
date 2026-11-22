@@ -14,7 +14,7 @@ import {
 } from '../appearance/ui-appearance';
 import { readPlaySounds, savePlaySounds } from '../../shared/board/play-audio';
 import { readVisibleColumns } from '../../library-column-preferences';
-import { isCollectionScope } from '../../card-search-api';
+import { isCollectionScope } from '../../workspaces/study/flashcards/card-search-api';
 import { LIBRARY_RESIZABLE_LAYOUT as LIBRARY_COLUMN_LAYOUT } from '../../library-columns';
 import {
   POSITION_COLUMN_LAYOUT,

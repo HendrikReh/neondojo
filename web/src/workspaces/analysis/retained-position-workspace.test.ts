@@ -18,7 +18,7 @@ vi.mock('./notes/NotesPanel', () => ({
 vi.mock('../../PositionBookmarkButton', () => ({
   default: () => createElement('div', { 'data-retained-bookmark': true }),
 }));
-vi.mock('../../LearningPanel', () => ({
+vi.mock('../study/flashcards/LearningPanel', () => ({
   AddCardsPanel: vi.fn(() =>
     createElement('div', { 'data-retained-cards': true }),
   ),
@@ -35,7 +35,7 @@ vi.mock('../../shared/review/useMoveAssessments', () => ({
 }));
 import AnalysisWorkspace from './AnalysisWorkspace';
 import AnalysisPanel from './AnalysisPanel';
-import { AddCardsPanel } from '../../LearningPanel';
+import { AddCardsPanel } from '../study/flashcards/LearningPanel';
 import { I18nProvider } from '../../shared/i18n/i18n';
 import { useMoveAssessments } from '../../shared/review/useMoveAssessments';
 
