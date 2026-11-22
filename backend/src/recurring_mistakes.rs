@@ -28,6 +28,8 @@ mod history;
 mod imported;
 pub(crate) mod imported_projection;
 mod index;
+#[doc(hidden)]
+pub mod query_plans;
 mod search;
 pub(crate) mod source;
 use source::{SourceDecision, load, players};

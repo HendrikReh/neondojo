@@ -15,12 +15,15 @@ use axum::{
     extract::{Query, State, rejection::QueryRejection},
 };
 use serde::{Deserialize, Serialize};
+use sqlx::{PgConnection, PgPool, Postgres, postgres::PgArguments, query::QueryScalar};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 100;
-const MAX_PAGE: usize = 100_000;
+/// Decisions a page may skip: far more than one player has in a large
+/// library, so every page the result list offers stays reachable.
+const MAX_OFFSET: usize = 1_000_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
@@ -79,11 +82,15 @@ pub enum LossDirection {
 
 impl LossDirection {
     /// Both orders follow decision_index_player_loss: descending reads it
-    /// forward, ascending reverses every key so it is read backward.
+    /// forward, ascending reverses every key so it is read backward. The row
+    /// number within the match only orders otherwise equal decisions, such as
+    /// a checker play and a cube action at the same imported move.
     fn order_by(self) -> &'static str {
         match self {
-            Self::Desc => "d.equity_loss DESC,d.match_id,d.game_no,d.decision_no",
-            Self::Asc => "d.equity_loss,d.match_id DESC,d.game_no DESC,d.decision_no DESC",
+            Self::Desc => "d.equity_loss DESC,d.match_id,d.game_no,d.decision_no,d.seq",
+            Self::Asc => {
+                "d.equity_loss,d.match_id DESC,d.game_no DESC,d.decision_no DESC,d.seq DESC"
+            }
         }
     }
 }
@@ -188,11 +195,11 @@ impl DecisionHit {
     }
 }
 
-/// Shared WHERE clause; $1 player, $2 database, $3 kind, $4 mistake kind,
-/// $5 game plan, $6/$7 loss range, $8/$9 away scores, $10/$11 cube.
-const FILTER: &str = "d.player_name=ANY($1)
-   AND ($2::uuid IS NULL OR m.database_id=$2)
-   AND ($3::text IS NULL OR d.question_kind=$3)
+/// Filters on the indexed decision; $3 kind, $4 mistake kind, $5 game plan,
+/// $6/$7 loss range, $8/$9 away scores, $10/$11 cube. Every column is a key
+/// or an included column of decision_index_player_loss, so the filters are
+/// evaluated on index entries.
+const FILTER: &str = "($3::text IS NULL OR d.question_kind=$3)
    AND ($4::text IS NULL OR (d.equity_loss>0 AND d.mistake_kind=$4))
    AND ($5::text IS NULL OR d.game_plan=$5)
    AND d.equity_loss>=$6
@@ -202,6 +209,183 @@ const FILTER: &str = "d.player_name=ANY($1)
    AND ($10::int IS NULL OR d.cube_value=$10)
    AND ($11::text IS NULL OR d.cube_owner=$11)";
 
+type Scalar<'q, O> = QueryScalar<'q, Postgres, O, PgArguments>;
+
+/// One validated decision search: $1 the player's lowercase names, $2 the
+/// database, then the filters.
+pub(super) struct Search {
+    player: Vec<String>,
+    database: Option<Uuid>,
+    kind: Option<&'static str>,
+    mistake: Option<&'static str>,
+    plan: Option<&'static str>,
+    min_loss: f64,
+    max_loss: Option<f64>,
+    away: Option<i32>,
+    opponent_away: Option<i32>,
+    cube_value: Option<i32>,
+    owner: Option<&'static str>,
+    direction: LossDirection,
+    page: usize,
+    limit: usize,
+}
+
+impl Search {
+    /// Validate a request and resolve its player to the profile's names.
+    pub(super) async fn new(pool: &PgPool, q: DecisionSearchQuery) -> ApiResult<Self> {
+        let (player, min_loss) = validate(Some(q.player.clone()), q.min_loss.or(Some(0.0)))?;
+        let player = crate::player_scope::names(pool, &player.unwrap_or_default()).await?;
+        if q.max_loss
+            .is_some_and(|max| !max.is_finite() || max < min_loss)
+        {
+            return Err(ApiError::invalid(
+                "max_loss must be finite and at least min_loss",
+            ));
+        }
+        if [q.away, q.opponent_away]
+            .into_iter()
+            .flatten()
+            .any(|away| !(1..=64).contains(&away))
+            || q.cube_value
+                .is_some_and(|value| !(1..=4096).contains(&value) || value.count_ones() != 1)
+        {
+            return Err(ApiError::invalid(
+                "Away scores must be 1 to 64 and the cube value a power of two up to 4096",
+            ));
+        }
+        let limit = q.limit.unwrap_or(DEFAULT_LIMIT);
+        let page = q.page.unwrap_or(1);
+        let skipped = page
+            .checked_sub(1)
+            .and_then(|index| index.checked_mul(limit));
+        if !(1..=MAX_LIMIT).contains(&limit) || skipped.is_none_or(|skipped| skipped > MAX_OFFSET) {
+            return Err(ApiError::invalid(format!(
+                "limit must be 1 to {MAX_LIMIT} and page must start within the first {MAX_OFFSET} decisions"
+            )));
+        }
+        if let Some(id) = q.database_id {
+            super::source::require_database(pool, id).await?;
+        }
+        Ok(Self {
+            player,
+            database: q.database_id,
+            kind: q.kind.map(DecisionKind::name),
+            mistake: q.mistake_kind.map(super::history::kind_name),
+            plan: q.game_plan.map(crate::position_game_plans::label),
+            min_loss,
+            max_loss: q.max_loss,
+            away: q.away,
+            opponent_away: q.opponent_away,
+            cube_value: q.cube_value,
+            owner: q.cube_owner.map(CubeOwnerFilter::name),
+            direction: q.direction.unwrap_or_default(),
+            page,
+            limit,
+        })
+    }
+
+    pub(super) fn player(&self) -> &[String] {
+        &self.player
+    }
+
+    pub(super) fn database(&self) -> Option<Uuid> {
+        self.database
+    }
+
+    fn offset(&self) -> usize {
+        (self.page - 1) * self.limit
+    }
+
+    /// A database filter joins the match. Without one, no join is needed:
+    /// every indexed decision belongs to an existing match.
+    fn scope(&self) -> (&'static str, &'static str) {
+        if self.database.is_some() {
+            ("JOIN matches m ON m.id=d.match_id", "m.database_id=$2")
+        } else {
+            ("", "$2::uuid IS NULL")
+        }
+    }
+
+    pub(super) fn count_sql(&self) -> String {
+        let (join, scope) = self.scope();
+        format!(
+            "SELECT count(*) FROM decision_index d {join}
+             WHERE d.player_name=ANY($1) AND {scope} AND {FILTER}"
+        )
+    }
+
+    /// $12 limit, $13 offset. Each of the player's names is read in index
+    /// order up to the end of the page, so only those entries are sorted, and
+    /// only the hits of the chosen page are read from the table.
+    pub(super) fn page_sql(&self) -> String {
+        let (join, scope) = self.scope();
+        let order = self.direction.order_by();
+        format!(
+            "WITH page AS MATERIALIZED (
+                 SELECT d.* FROM (SELECT DISTINCT unnest($1::text[]) AS name) names
+                 CROSS JOIN LATERAL (
+                     SELECT d.match_id,d.seq,d.equity_loss,d.game_no,d.decision_no
+                     FROM decision_index d {join}
+                     WHERE d.player_name=names.name AND {scope} AND {FILTER}
+                     ORDER BY {order} LIMIT $12+$13
+                 ) d
+                 ORDER BY {order} LIMIT $12 OFFSET $13
+             )
+             SELECT x.hit FROM page d JOIN decision_index x ON x.match_id=d.match_id AND x.seq=d.seq
+             ORDER BY {order}"
+        )
+    }
+
+    /// Bind $1 to $11. Which filters are set changes the best plan, so each
+    /// request is planned for its own values.
+    pub(super) fn bind<'q, O>(&'q self, query: Scalar<'q, O>) -> Scalar<'q, O> {
+        query
+            .bind(&self.player)
+            .bind(self.database)
+            .bind(self.kind)
+            .bind(self.mistake)
+            .bind(self.plan)
+            .bind(self.min_loss)
+            .bind(self.max_loss)
+            .bind(self.away)
+            .bind(self.opponent_away)
+            .bind(self.cube_value)
+            .bind(self.owner)
+            .persistent(false)
+    }
+
+    /// Bind $1 to $13 of the page query.
+    pub(super) fn bind_page<'q, O>(&'q self, query: Scalar<'q, O>) -> ApiResult<Scalar<'q, O>> {
+        Ok(self
+            .bind(query)
+            .bind(i64::try_from(self.limit).map_err(anyhow::Error::from)?)
+            .bind(i64::try_from(self.offset()).map_err(anyhow::Error::from)?))
+    }
+
+    /// The page and the total. Read both in one snapshot so they agree.
+    pub(super) async fn read(
+        &self,
+        connection: &mut PgConnection,
+    ) -> ApiResult<(Vec<serde_json::Value>, usize)> {
+        let total: i64 = self
+            .bind(sqlx::query_scalar(&self.count_sql()))
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(anyhow::Error::from)?;
+        let total = usize::try_from(total).unwrap_or(0);
+        // A page after the last result is empty; skip reading it.
+        if self.offset() >= total {
+            return Ok((Vec::new(), total));
+        }
+        let items = self
+            .bind_page(sqlx::query_scalar(&self.page_sql()))?
+            .fetch_all(&mut *connection)
+            .await
+            .map_err(anyhow::Error::from)?;
+        Ok((items, total))
+    }
+}
+
 #[utoipa::path(get, path = "/api/study/decisions", params(DecisionSearchQuery),
     responses((status = 200, body = DecisionSearchPage), (status = 422, body = ErrorBody)),
     tag = "Study")]
@@ -210,88 +394,108 @@ pub(super) async fn search(
     input: Result<Query<DecisionSearchQuery>, QueryRejection>,
 ) -> ApiResult<Json<DecisionSearchPage>> {
     let q = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
-    let (player, min_loss) = validate(Some(q.player.clone()), q.min_loss.or(Some(0.0)))?;
-    let player = crate::player_scope::names(&s.pool, &player.unwrap_or_default()).await?;
-    if q.max_loss
-        .is_some_and(|max| !max.is_finite() || max < min_loss)
-    {
-        return Err(ApiError::invalid(
-            "max_loss must be finite and at least min_loss",
-        ));
-    }
-    if [q.away, q.opponent_away]
-        .into_iter()
-        .flatten()
-        .any(|away| !(1..=64).contains(&away))
-        || q.cube_value
-            .is_some_and(|value| !(1..=4096).contains(&value) || value.count_ones() != 1)
-    {
-        return Err(ApiError::invalid(
-            "Away scores must be 1 to 64 and the cube value a power of two up to 4096",
-        ));
-    }
-    let limit = q.limit.unwrap_or(DEFAULT_LIMIT);
-    let page = q.page.unwrap_or(1);
-    if !(1..=MAX_LIMIT).contains(&limit) || !(1..=MAX_PAGE).contains(&page) {
-        return Err(ApiError::invalid(
-            "limit must be 1 to 100 and page between 1 and 100000",
-        ));
-    }
-    if let Some(id) = q.database_id {
-        super::source::require_database(&s.pool, id).await?;
-    }
-    super::index::ensure(&s.pool, q.database_id, &player).await?;
-    let kind = q.kind.map(DecisionKind::name);
-    let mistake = q.mistake_kind.map(super::history::kind_name);
-    let plan = q.game_plan.map(crate::position_game_plans::label);
-    let owner = q.cube_owner.map(CubeOwnerFilter::name);
-    // The order matches decision_index_player_loss, so a page is read in index order.
-    let order = q.direction.unwrap_or_default().order_by();
-    let page_sql = format!(
-        "SELECT d.hit FROM decision_index d JOIN matches m ON m.id=d.match_id
-         WHERE {FILTER}
-         ORDER BY {order}
-         LIMIT $12 OFFSET $13"
-    );
-    let items: Vec<serde_json::Value> = sqlx::query_scalar(&page_sql)
-        .bind(&player)
-        .bind(q.database_id)
-        .bind(kind)
-        .bind(mistake)
-        .bind(plan)
-        .bind(min_loss)
-        .bind(q.max_loss)
-        .bind(q.away)
-        .bind(q.opponent_away)
-        .bind(q.cube_value)
-        .bind(owner)
-        .bind(i64::try_from(limit).map_err(anyhow::Error::from)?)
-        .bind(i64::try_from((page - 1) * limit).map_err(anyhow::Error::from)?)
-        .fetch_all(&s.pool)
-        .await
-        .map_err(anyhow::Error::from)?;
-    let count_sql = format!(
-        "SELECT count(*) FROM decision_index d JOIN matches m ON m.id=d.match_id WHERE {FILTER}"
-    );
-    let total: i64 = sqlx::query_scalar(&count_sql)
-        .bind(&player)
-        .bind(q.database_id)
-        .bind(kind)
-        .bind(mistake)
-        .bind(plan)
-        .bind(min_loss)
-        .bind(q.max_loss)
-        .bind(q.away)
-        .bind(q.opponent_away)
-        .bind(q.cube_value)
-        .bind(owner)
-        .fetch_one(&s.pool)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let search = Search::new(&s.pool, q).await?;
+    super::index::ensure(&s.pool, search.database(), search.player()).await?;
+    let mut tx = super::source::read_snapshot(&s.pool).await?;
+    let (items, total) = search.read(&mut tx).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(DecisionSearchPage {
         items,
-        total: usize::try_from(total).unwrap_or(0),
-        page,
-        limit,
+        total,
+        page: search.page,
+        limit: search.limit,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SOURCE: &str =
+        "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])";
+
+    fn ok<T>(result: ApiResult<T>) -> T {
+        result.unwrap_or_else(|ApiError(status, message)| panic!("{status}: {message}"))
+    }
+
+    fn search(database: Option<Uuid>, limit: usize) -> Search {
+        Search {
+            player: vec!["alice".into()],
+            database,
+            kind: None,
+            mistake: None,
+            plan: None,
+            min_loss: 0.0,
+            max_loss: None,
+            away: None,
+            opponent_away: None,
+            cube_value: None,
+            owner: None,
+            direction: LossDirection::Desc,
+            page: 1,
+            limit,
+        }
+    }
+
+    async fn add_decision(pool: &PgPool, id: Uuid, seq: i32, loss: f64) {
+        sqlx::query(
+            "INSERT INTO decision_index(match_id,seq,game_no,decision_no,player_name,question_kind,
+                 game_plan,mistake_kind,equity_loss,match_length,cube_value,cube_owner,played_on,hit)
+             VALUES($1,$2,1,$2+1,'alice','checker','racing','checker',$3,7,1,'centered',
+                    current_date,jsonb_build_object('seq',$2))",
+        )
+        .bind(id)
+        .bind(seq)
+        .bind(loss)
+        .execute(pool)
+        .await
+        .unwrap();
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn page_and_total_come_from_one_snapshot(pool: PgPool) {
+        let id = crate::store::import_match(
+            &pool,
+            "snapshot.sgf",
+            "sgf",
+            SOURCE.as_bytes(),
+            SOURCE,
+            &crate::import::parse_sgf(SOURCE).unwrap(),
+        )
+        .await
+        .unwrap()
+        .r#match
+        .id;
+        let database: Uuid = sqlx::query_scalar("SELECT database_id FROM matches WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO decision_index_matches(match_id,fingerprint) VALUES($1,'test')")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        add_decision(&pool, id, 0, 0.1).await;
+        for scope in [None, Some(database)] {
+            let search = search(scope, 1);
+            let mut tx = ok(super::super::source::read_snapshot(&pool).await);
+            let before = ok(search.read(&mut tx).await);
+            assert_eq!(before.1, 1);
+            // A rebuild publishes a larger loss between the total and the page.
+            add_decision(&pool, id, 1, 0.2).await;
+            let during = ok(search.read(&mut tx).await);
+            assert_eq!(during, before, "the snapshot must hide the new decision");
+            tx.commit().await.unwrap();
+            let mut tx = ok(super::super::source::read_snapshot(&pool).await);
+            let after = ok(search.read(&mut tx).await);
+            assert_eq!(after.1, 2);
+            assert_eq!(after.0, vec![serde_json::json!({"seq": 1})]);
+            sqlx::query("DELETE FROM decision_index WHERE match_id=$1 AND seq=1")
+                .bind(id)
+                .execute(&pool)
+                .await
+                .unwrap();
+        }
+    }
 }

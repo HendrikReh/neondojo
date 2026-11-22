@@ -61,9 +61,12 @@ struct Row {
     equity_loss: f64,
     data: serde_json::Value,
 }
-// Pick a job for the entire game, including when its best saved decisions are
-// unavailable. A lower-depth job must never fill holes or replace smaller losses.
-pub(super) const CHOSEN: &str = r#"
+/// The library matches a request covers: `$1` database, `$2` match, `$3`
+/// lowercase player names; each may be NULL. Matches in a live competition
+/// session are left out until it ends.
+macro_rules! eligible {
+    () => {
+        r#"
 WITH eligible AS (
     SELECT m.* FROM matches m
     WHERE NOT m.collection_only
@@ -77,7 +80,17 @@ WITH eligible AS (
             AND live.state->>'phase'<>'match_over'
             AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over')
       )
-), chosen AS (
+)"#
+    };
+}
+/// Only `eligible`. A query that reads no other CTE of `CHOSEN` uses this, so
+/// PostgreSQL can inline it and apply the query's own filters to `matches`.
+pub(super) const ELIGIBLE: &str = eligible!();
+// Pick a job for the entire game, including when its best saved decisions are
+// unavailable. A lower-depth job must never fill holes or replace smaller losses.
+pub(super) const CHOSEN: &str = concat!(
+    eligible!(),
+    r#", chosen AS (
     SELECT
         j.id AS job_id,m.id AS match_id,c.game_no,j.plies,
         catalog.engine
@@ -100,7 +113,8 @@ WITH eligible AS (
       AND (j.game_no IS NULL OR j.game_no=c.game_no)
     ORDER BY m.id,c.game_no
 )
-"#;
+"#
+);
 
 pub(crate) async fn load(
     pool: &PgPool,

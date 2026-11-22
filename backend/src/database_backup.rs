@@ -41,9 +41,9 @@ const DERIVED_TABLES: &[&str] = &[
     "review_hit_sets",
 ];
 // These migrations leave the backed-up table layout and format compatible
-// with earlier archives. They only affect derived data, notifications or
-// indexes.
-const ARCHIVE_COMPATIBLE_MIGRATIONS: &[i64] = &[89, 90, 91, 92];
+// with earlier archives. They only affect derived data, notifications,
+// indexes or views.
+const ARCHIVE_COMPATIBLE_MIGRATIONS: &[i64] = &[89, 90, 91, 92, 93];
 
 // Parent tables precede their children so foreign keys remain enforced. Host
 // installations and the benchmark machine identity belong to the destination.

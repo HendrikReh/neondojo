@@ -74,7 +74,17 @@ const CANDIDATES: &str = "SELECT m.id,
          LEFT JOIN decision_index_matches x ON x.match_id=m.id
          WHERE NOT m.collection_only";
 
-fn version() -> String {
+/// The candidates of one player's scope: `$2` database or NULL, `$3` the
+/// player's lowercase names. The name filter matches the expression indexes
+/// `matches_library_white_player` and `matches_library_black_player`.
+pub(super) fn scope_candidates_sql() -> String {
+    format!(
+        "{CANDIDATES} AND ($2::uuid IS NULL OR m.database_id=$2)
+           AND (lower(btrim(m.white))=ANY($3) OR lower(btrim(m.black))=ANY($3))"
+    )
+}
+
+pub(super) fn version() -> String {
     format!("{INDEX_VERSION}:{}", crate::game_plan::CLASSIFIER)
 }
 
@@ -87,16 +97,13 @@ pub(super) async fn ensure(
     // Older imports gain their displayed analysis only once they are cataloged.
     // This is bounded per request and reports when a retry is needed.
     super::imported::catalog_legacy(pool, database, None, Some(player)).await?;
-    let candidates: Vec<Candidate> = sqlx::query_as(&format!(
-        "{CANDIDATES} AND ($2::uuid IS NULL OR m.database_id=$2)
-           AND (lower(btrim(m.white))=ANY($3) OR lower(btrim(m.black))=ANY($3))"
-    ))
-    .bind(version())
-    .bind(database)
-    .bind(player)
-    .fetch_all(pool)
-    .await
-    .map_err(anyhow::Error::from)?;
+    let candidates: Vec<Candidate> = sqlx::query_as(&scope_candidates_sql())
+        .bind(version())
+        .bind(database)
+        .bind(player)
+        .fetch_all(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
     let stale: Vec<Uuid> = candidates
         .into_iter()
         .filter(|candidate| !candidate.is_current())
@@ -109,6 +116,20 @@ pub(super) async fn ensure(
         publish(pool, id).await?;
     }
     Ok(())
+}
+
+/// Record the current fingerprint for every match that already has an index
+/// entry, without loading its decisions. Only the ignored performance test
+/// uses this, to mark synthetic decision rows as current.
+pub(super) async fn adopt_current_fingerprints(pool: &PgPool) -> sqlx::Result<u64> {
+    Ok(sqlx::query(&format!(
+        "UPDATE decision_index_matches target SET fingerprint=current.fingerprint
+         FROM ({CANDIDATES}) current WHERE current.id=target.match_id"
+    ))
+    .bind(version())
+    .execute(pool)
+    .await?
+    .rows_affected())
 }
 
 /// What `store` found under the match lock.
