@@ -233,11 +233,11 @@ def run_worker(skip_platform=False, levels=None):
         report['import_seconds'] = time.perf_counter() - import_start
         report['identity'] = identity(sage, native)
         validate_versions(report['identity'])
-        for name in ('checker_play', 'cube_action', 'post_move_analytics'):
+        for name in ('checker_play', 'cube_action', 'cube_decision', 'post_move_analytics'):
             require(callable(getattr(sage.BgBotAnalyzer, name, None)), f'Missing API {name}')
         require('force_boards' in inspect.signature(sage.BgBotAnalyzer.checker_play).parameters,
                 'Missing force_boards capability; this build cannot evaluate filtered played moves.')
-        report['capabilities'] = ['checker_play', 'cube_action', 'post_move_analytics', 'force_boards']
+        report['capabilities'] = ['checker_play', 'cube_action', 'cube_decision', 'post_move_analytics', 'force_boards']
 
         def check(name, function):
             start = time.perf_counter()

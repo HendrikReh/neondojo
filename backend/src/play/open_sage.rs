@@ -158,7 +158,7 @@ pub(super) async fn choose(
         }
         PlayPhase::Roll => {
             if snapshot.can_double {
-                let (cube, measured) = bot.cube_costed(position, context).await?;
+                let (cube, measured) = bot.cube_decision_costed(position, context).await?;
                 cost = measured;
                 let (best, _, _) = crate::match_analysis::cube_options(
                     "no double",
@@ -173,7 +173,7 @@ pub(super) async fn choose(
             }
         }
         PlayPhase::DoubleResponse => {
-            let (cube, measured) = bot.cube_costed(position, context).await?;
+            let (cube, measured) = bot.cube_decision_costed(position, context).await?;
             cost = measured;
             crate::match_analysis::cube_options("take", -cube.no_double, -cube.take, -cube.pass)
                 .context("Missing cube response options")?
@@ -548,6 +548,49 @@ mod tests {
                 .await
                 .unwrap();
             assert!(cube.should_double && cube.should_take);
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires locked NeonGammon; no database"]
+    async fn bot_cube_decision_equals_the_full_cube_evaluation() {
+        use crate::import::ids::{match_id, position_id};
+
+        let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
+        let mut profile = SageEngine::probe_profile(python, 2, 2).await.unwrap();
+        // The 5-away/4-away contact position of the Full Strength test.
+        let cube_board = [
+            0, -1, 0, 2, -1, 0, 4, 2, 2, 0, 0, 0, -4, 3, 0, 0, 0, -3, 2, -4, -2, 0, 0, 0, 0, 0,
+        ];
+        let position = position_id(&cube_board, 0);
+        let offer = match_id(5, [0, 1], 1, 3, false, false, 0, [0, 0]);
+        for plies in [2, 3] {
+            profile.plies = plies;
+            let bot = SageEngine::for_play(profile.clone()).unwrap();
+            // Warm the worker so neither side pays its start-up.
+            bot.cube(&position, &offer).await.unwrap();
+            let (mut full_us, mut decision_us) = (Vec::new(), Vec::new());
+            for _ in 0..5 {
+                let started = std::time::Instant::now();
+                let full = bot.cube(&position, &offer).await.unwrap();
+                full_us.push(started.elapsed().as_micros());
+                let started = std::time::Instant::now();
+                let (decision, _) = bot.cube_decision_costed(&position, &offer).await.unwrap();
+                decision_us.push(started.elapsed().as_micros());
+                for (alone, evaluated) in [
+                    (decision.no_double, full.no_double),
+                    (decision.take, full.take),
+                    (decision.pass, full.pass),
+                ] {
+                    assert!((alone - evaluated).abs() < 1e-9, "{plies}-ply");
+                }
+            }
+            full_us.sort_unstable();
+            decision_us.sort_unstable();
+            eprintln!(
+                "{plies}-ply cube request median: full {} us, decision only {} us",
+                full_us[2], decision_us[2]
+            );
         }
     }
 

@@ -194,6 +194,51 @@ class BatchTests(unittest.TestCase):
         self.runtime.profile = {'plies': 3}
         with self.assertRaisesRegex(ValueError, 'below the requested depth'):
             self.runtime.dispatch(self.cube)
+        with self.assertRaisesRegex(ValueError, 'below the requested depth'):
+            self.runtime.analyzer.cube_decision = lambda *args, **kwargs: self.decision()
+            self.runtime.dispatch(dict(self.cube, decision_only=True))
+
+    @staticmethod
+    def decision(**overrides):
+        return SimpleNamespace(**dict(eval_level='2-ply', equity_nd=.2, equity_dt=.3, equity_dp=1,
+                                      optimal_equity=.3, should_double=True, should_take=True) | overrides)
+
+    def test_decision_only_cube_skips_probabilities_with_the_same_context(self):
+        self.runtime.analyzer.cube_action = Mock(wraps=self.runtime.analyzer.cube_action)
+        self.runtime.analyzer.cube_decision = Mock(return_value=self.decision())
+        decision, cost = self.runtime.dispatch(dict(self.cube, decision_only=True))
+        self.assertEqual(decision, {'no_double': .2, 'take': .3, 'pass': 1})
+        self.assertEqual(set(cost), {'cpu_us', 'wall_us'})
+        self.runtime.analyzer.cube_action.assert_not_called()
+        self.runtime.analyzer.cube_decision.assert_called_once_with([0] * 26, beaver=False, **self.cube['context'])
+        # The default, and an explicit false, keep the full evaluation.
+        for request in (self.cube, dict(self.cube, decision_only=False)):
+            full, _ = self.runtime.dispatch(request)
+            self.assertEqual(set(full), {'no_double', 'take', 'pass', 'probabilities'})
+        self.assertEqual(self.runtime.analyzer.cube_action.call_count, 2)
+        self.runtime.analyzer.cube_decision.assert_called_once()
+
+    def test_decision_only_cube_rejects_invalid_scope_and_values(self):
+        self.runtime.analyzer.cube_decision = Mock(return_value=self.decision())
+        for scope in (1, 'true', None):
+            with self.subTest(scope=scope), self.assertRaisesRegex(ValueError, 'Invalid cube decision scope'):
+                self.runtime.dispatch(dict(self.cube, decision_only=scope))
+        for field in ('equity_nd', 'equity_dt', 'equity_dp', 'optimal_equity'):
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'Invalid cube decision'):
+                self.runtime.analyzer.cube_decision.return_value = self.decision(**{field: float('nan')})
+                self.runtime.dispatch(dict(self.cube, decision_only=True))
+        self.runtime.cubeless = True
+        with self.assertRaisesRegex(ValueError, 'no cube decisions'):
+            self.runtime.dispatch(dict(self.cube, decision_only=True))
+
+    def test_pre_roll_resignation_uses_the_cube_decision_alone(self):
+        self.runtime.analyzer.cube_action = Mock(side_effect=AssertionError('probabilities are unused'))
+        self.runtime.analyzer.cube_decision = Mock(return_value=self.decision(equity_nd=-.4))
+        self.runtime.analyzer.post_move_analytics = Mock(return_value=SimpleNamespace(
+            cubeful_equity=-1.0, probs=SimpleNamespace(to_list=lambda: [0, 0, 0, 0, 0])))
+        result, _ = self.runtime.dispatch(dict(self.cube, operation='resignation', dice=[0, 0], level=1))
+        self.assertEqual(result, {'accept': True, 'continuation': -.4, 'offered': -1.0})
+        self.runtime.analyzer.cube_decision.assert_called_once_with([0] * 26, beaver=False, **self.cube['context'])
 
     def test_batch_checks_only_boundaries_and_later_single_request_is_protected(self):
         self.assertEqual(self.runtime.dispatch({'operation': 'begin_batch'}), (self.runtime.identity, None))

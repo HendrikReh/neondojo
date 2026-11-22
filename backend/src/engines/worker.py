@@ -72,6 +72,8 @@ class Runtime:
         self.identity = self.check_identity()
         if self.identity['package_version'] == '3.1.0' and not callable(getattr(self.sage, 'DifficultyPolicy', None)):
             raise ValueError('NeonGammon 3.1.0 did not export DifficultyPolicy')
+        if not callable(getattr(self.sage.BgBotAnalyzer, 'cube_decision', None)):
+            raise ValueError('NeonGammon did not export BgBotAnalyzer.cube_decision; install the locked wheels')
         expected = profile.get('artifact_fingerprint')
         if expected and expected != self.identity['artifact_fingerprint']:
             raise ValueError('NeonGammon assets changed since submission; restore the saved installation')
@@ -278,7 +280,8 @@ class Runtime:
                 if dice[0] and dice[1]:
                     continuation = self.analyzer.checker_play(before, *dice, **kwargs).moves[0].equity
                 else:
-                    continuation = self.analyzer.cube_action(before, **kwargs).equity_nd
+                    # Only the no-double equity matters; skip cube_action's probability search.
+                    continuation = self.analyzer.cube_decision(before, **kwargs).equity_nd
                 # Independent terminal outcome for the offered single/gammon/
                 # backgammon. Sage performs its own match-equity conversion.
                 terminal = [0] * 26
@@ -292,15 +295,30 @@ class Runtime:
             elif request['operation'] == 'cube':
                 if self.cubeless:
                     raise ValueError('A cubeless NeonGammon profile makes no cube decisions')
-                result = self.analyzer.cube_action(before, **kwargs)
-                try:
-                    self.integrity['validate_result'](result, probabilities)
-                    if result.eval_level != f"{self.profile['plies']}-ply":
+                decision_only = request.get('decision_only', False)
+                if type(decision_only) is not bool:
+                    raise ValueError('Invalid cube decision scope')
+                depth = f"{self.profile['plies']}-ply"
+                if decision_only:
+                    # Same equities as cube_action, without its second, cubeless
+                    # search for probabilities the caller does not use.
+                    result = self.analyzer.cube_decision(before, **kwargs)
+                    equities = (result.equity_nd, result.equity_dt, result.equity_dp, result.optimal_equity)
+                    if not all(math.isfinite(value) for value in equities):
+                        raise ValueError(f'Invalid cube decision: board={before}, context={context}')
+                    if result.eval_level != depth:
                         raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
-                except Exception as error:
-                    raise ValueError(f'Invalid cube evaluation: probabilities={result.probs.to_list()}, board={before}, context={context}; {error}') from error
-                result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp,
-                          'probabilities': probabilities(result.probs.to_list())}
+                    result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp}
+                else:
+                    result = self.analyzer.cube_action(before, **kwargs)
+                    try:
+                        self.integrity['validate_result'](result, probabilities)
+                        if result.eval_level != depth:
+                            raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
+                    except Exception as error:
+                        raise ValueError(f'Invalid cube evaluation: probabilities={result.probs.to_list()}, board={before}, context={context}; {error}') from error
+                    result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp,
+                              'probabilities': probabilities(result.probs.to_list())}
             else:
                 raise ValueError('Unsupported sidecar operation')
         cost = {'cpu_us': process_cpu_us() - cpu_before,

@@ -431,6 +431,11 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
             }
             Ok(())
         }
+        Some("cube") if request.get("decision_only") == Some(&Value::Bool(true)) => {
+            serde_json::from_value::<super::SageCubeDecision>(result.clone())
+                .context("Invalid NeonGammon cube decision response")?
+                .validate()
+        }
         Some("cube") => {
             let cube: super::SageCubeEvaluation = serde_json::from_value(result.clone())
                 .context("Invalid NeonGammon cube response")?;
@@ -789,6 +794,31 @@ for line in sys.stdin:
                 "Cached worker after invalid {operation} payload"
             );
         }
+    }
+
+    #[test]
+    fn only_decision_only_cube_responses_may_omit_probabilities() {
+        let profile = FakeWorker::new("clean").profile;
+        let decision = json!({"no_double":0.2,"take":0.3,"pass":1.0});
+        let full = json!({"no_double":0.2,"take":0.3,"pass":1.0,
+                          "probabilities":[0.6,0.1,0.01,0.4,0.1,0.01]});
+        let scoped = json!({"operation":"cube","decision_only":true});
+        for request in [
+            json!({"operation":"cube"}),
+            json!({"operation":"cube","decision_only":false}),
+        ] {
+            validate_payload(&profile, &request, &full).unwrap();
+            assert!(validate_payload(&profile, &request, &decision).is_err());
+        }
+        validate_payload(&profile, &scoped, &decision).unwrap();
+        assert!(
+            validate_payload(
+                &profile,
+                &scoped,
+                &json!({"no_double":0.2,"take":null,"pass":1.0})
+            )
+            .is_err()
+        );
     }
 
     #[tokio::test]

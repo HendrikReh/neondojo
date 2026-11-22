@@ -17,7 +17,7 @@ As a result, "GNUbg 3-ply vs. NeonGammon 3-ply" says little about which engine i
 
 | Aspect | GNUbg | NeonGammon |
 |---|---|---|
-| How a decision is made | Inside a GNUbg process via the native adapter: `set player N gnubg; nextturn` ([native.py](../backend/src/play/native.py)) | Persistent Python worker, `BgBotAnalyzer.checker_play` / `cube_action` ([worker.py](../backend/src/engines/worker.py)) |
+| How a decision is made | Inside a GNUbg process via the native adapter: `set player N gnubg; nextturn` ([native.py](../backend/src/play/native.py)) | Persistent Python worker, `BgBotAnalyzer.checker_play` / `cube_decision` ([worker.py](../backend/src/engines/worker.py)) |
 | Process lifetime | New process per native step; with SGF replay. Against Sage: one process per Sage decision | Worker reused while the profile is unchanged. A Sage-vs-Sage duel at different depths restarts it on every switch |
 | Settings | NeonDojo 1–5-ply (GNUbg-native 0–4), cubeful (`cubeful off` with cube and Jacoby off for `money_cubeless`), deterministic, noise 0, default move filter | `eval_level`, `parallel_threads`, `cubeful` (`False` for `money_cubeless`); `filter_max_moves` and `filter_threshold` are supported by the library but not exposed |
 | Time limit | None. Only the 180 s timeout per call, which aborts | None. Only the 180 s timeout per call, which aborts and terminates the worker |
@@ -30,7 +30,7 @@ Neither engine offers a native time limit or an anytime search. A hard CPU limit
 **Recommendation: CPU time per turn, measured inside the engine process.**
 
 - **CPU time instead of wall time.** It counts the work of all threads, as in "CPU cycles". It is largely unaffected by other load such as analysis jobs, and it makes engines with different thread counts comparable. Wall time is recorded alongside it because it is what the user waits for.
-- **Per turn instead of per individual decision.** One GNUbg `nextturn` covers the cube decision and the checker play of a turn and cannot be split cleanly. For NeonGammon, the turn consists of the `cube_action` call (if a double is possible) plus `checker_play`. A take/pass response counts as its own turn of the responding side.
+- **Per turn instead of per individual decision.** One GNUbg `nextturn` covers the cube decision and the checker play of a turn and cannot be split cleanly. For NeonGammon, the turn consists of the `cube_decision` call (if a double is possible) plus `checker_play`. A take/pass response counts as its own turn of the responding side.
 - **Measuring point:** `resource.getrusage(RUSAGE_SELF)` (user + system time) and `time.perf_counter_ns()` (converted to microseconds), both directly around `gnubg.nextturn()` in `native.py` and around the analyzer calls in `worker.py`. Process start, SGF loading, replay, `verify()` and version checks stay outside.
 - **Implemented denominator:** all measured work of a side, including cube decisions, divided by its checker moves, including forced moves and passes. Turns without a choice cost almost nothing, and because paired dice give both sides similar forced turns, the step 1 implementation keeps them in the count. Excluding them would need a legal-move count for every GNUbg turn and remains possible later.
 
