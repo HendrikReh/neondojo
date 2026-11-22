@@ -1,12 +1,12 @@
-import OpenSageInstallation, {
-  useOpenSageInstallation,
-} from './OpenSageInstallation';
+import { useOpenSageInstallation } from './OpenSageInstallation';
 import configurationOptions from '../../../shared/configuration-options.json' with { type: 'json' };
 import { ConfigurationApiError } from './configuration/configuration-api';
 import { useOptionalConfiguration } from './configuration/ConfigurationProvider';
 import OpeningBookDialog from './OpeningBookDialog';
+import LocalEngineSettings, { type CheckState } from './LocalEngineSettings';
+import PlaySettingsSection from './PlaySettingsSection';
+import BoardSettingsSection from './BoardSettingsSection';
 import ProfileSettingsPanel from './profiles/ProfileSettingsPanel';
-import EngineLabel from '../shared/engine/EngineLabel';
 import LibraryDialog from '../shared/ui/LibraryDialog';
 import { useProfileText } from './profiles/profile-messages';
 import {
@@ -28,9 +28,7 @@ import ActionButton from '../shared/ui/ActionButton';
 import {
   ANALYSIS_PLIES,
   isAnalysisDepth,
-  PLAY_PLIES,
   preferredDepth,
-  TOP_TWO_PLAY_STRENGTH,
 } from '../shared/engine/analysis-depth';
 import {
   useEffect,
@@ -41,18 +39,10 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import Board from '../shared/board/Board';
 import { readPlaySounds, savePlaySounds } from '../shared/board/play-audio';
-import { usePlayText } from '../workspaces/play/play-messages';
-import {
-  playModes,
-  usePlayModeText,
-  type PlayMode,
-} from '../workspaces/play/play-mode-messages';
-import type { Position } from '../shared/api/api';
 import { useI18n, languages, type Locale } from '../shared/i18n/i18n';
 import { saveLocale } from '../shared/i18n/i18n-core';
-import { archiveThemes, themes, type Theme } from '../shared/board/themes';
+import type { Theme } from '../shared/board/themes';
 import {
   checkGnubg,
   loadEngines,
@@ -64,7 +54,6 @@ import {
 } from './settings-api';
 import {
   depthOptionLabel,
-  playStrengthLabel,
   useSettingsText,
   type SettingsMessageKey,
 } from './settings-messages';
@@ -107,30 +96,9 @@ export interface SettingsDialogProps {
   }) => void;
 }
 
-// A fixed, legal GNUbg position with checkers on the bar and borne off on both
-// sides. It belongs only to the preview; it never enters the match library.
-const previewPosition: Position = {
-  id: '00000000-0000-0000-0000-000000000001',
-  match_uuid: '00000000-0000-0000-0000-000000000002',
-  board: [
-    -1, -1, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -4, 4, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0,
-    1, 1,
-  ],
-  dice: [3, 2],
-  player: 0,
-  game_no: 1,
-  ordinal: 0,
-  ply: 0,
-  position_id: '4HPwACjwOXgAFA',
-  gnubg_match_id: 'EYHpACAAGAAE',
-  notation: '',
-};
-
 type Category =
   'general' | 'appearance' | 'analysis' | 'play' | 'board' | 'profiles';
 type GuardedDestination = 'close' | 'profiles' | 'book' | 'benchmark';
-type CheckState =
-  { path: string; version: string } | { path: string; error: unknown } | null;
 
 function profilePreferences(current: ProfileConfiguration) {
   return {
@@ -142,63 +110,6 @@ function profilePreferences(current: ProfileConfiguration) {
     },
     sounds: current.general.play_sounds,
   };
-}
-
-function ParallelJobsField({
-  id,
-  value,
-  onChange,
-  t,
-}: {
-  id: string;
-  value: number | null;
-  onChange: (value: number | null) => void;
-  t: ReturnType<typeof useSettingsText>;
-}) {
-  const { min, max } = configurationOptions.parallel_analysis_jobs;
-  const retained = value != null && (value < min || value > max);
-  const labelId = `${id}-parallel-jobs-label`;
-  const helpId = `${id}-parallel-jobs-help`;
-  return (
-    <>
-      <label className="settings-field settings-parallel-jobs">
-        <span className="settings-thread-label">
-          <span id={labelId}>{t('parallelAnalysisJobs')}</span>
-          <span className="settings-help">
-            {t('configurableThreadRange', { min, max })}
-            {retained && <> {t('retainedThreadCount', { count: value })}</>}
-          </span>
-        </span>
-        <select
-          value={value ?? ''}
-          aria-labelledby={labelId}
-          aria-describedby={helpId}
-          onChange={(event) =>
-            onChange(
-              event.target.value === '' ? null : Number(event.target.value),
-            )
-          }
-        >
-          <option value="">{t('defaultParallelJobs')}</option>
-          {retained && (
-            <option value={value} disabled>
-              {value}
-            </option>
-          )}
-          {Array.from({ length: max - min + 1 }, (_, index) => min + index).map(
-            (jobs) => (
-              <option key={jobs} value={jobs}>
-                {jobs}
-              </option>
-            ),
-          )}
-        </select>
-      </label>
-      <p className="settings-help" id={helpId}>
-        {t('parallelAnalysisJobsHelp')}
-      </p>
-    </>
-  );
 }
 
 function parseThreshold(value: string): number {
@@ -242,8 +153,6 @@ export default function SettingsDialog({
   if (configuration) categories.push('profiles');
   const t = useSettingsText();
   const applyLabel = configuration ? profileT('apply') : t('save');
-  const playT = usePlayText();
-  const modeT = usePlayModeText();
   const sourceT = useSourceText();
   const benchmarkT = useBenchmarkText();
   const appearanceT = useUiAppearanceText();
@@ -440,7 +349,6 @@ export default function SettingsDialog({
     else if (item.bottom > bottom)
       gallery.scrollTop += Math.ceil(item.bottom - bottom);
   }, [boardGalleryVisible]);
-  const engine = engines.find(({ id }) => id === 'gnubg');
   const gnubgEdited = !!(
     draft &&
     initial &&
@@ -448,14 +356,10 @@ export default function SettingsDialog({
       field.startsWith('gnubg_'),
     )
   );
-  const selectedTheme = themes.find(({ id }) => id === draftTheme) ?? themes[0];
   const analysisPlies =
     engines
       .find((e) => e.id === draft?.analysis_engine)
       ?.plies.filter(isAnalysisDepth) ?? [];
-  const playPlies = draft
-    ? configurationOptions.engine_profiles[draft.play_engine].play
-    : [];
   const rememberedDepths = useRef<Record<string, number>>({});
 
   function resetThresholds(values: ErrorThresholds, language: Locale) {
@@ -1136,197 +1040,20 @@ export default function SettingsDialog({
                       onClick={() => requestDestination('book')}
                     />
                   </div>
-                  <details className="settings-engine-setup">
-                    <summary>
-                      <span>{t('localEngines')}</span>
-                      <span className="settings-engine-summary">
-                        {(
-                          [
-                            ['gnubg', t('installation')],
-                            ['bgsage', t('planned')],
-                          ] as const
-                        ).map(([provider, label]) => {
-                          const available = engines.find(
-                            ({ id }) => id === provider,
-                          )?.available;
-                          return (
-                            <span
-                              key={provider}
-                              className={
-                                available ? 'settings-success' : undefined
-                              }
-                            >
-                              {label} ·{' '}
-                              {t(available ? 'available' : 'unavailable')}
-                            </span>
-                          );
-                        })}
-                      </span>
-                    </summary>
-                    <div className="settings-engine-details">
-                      <fieldset className="settings-section settings-engine">
-                        <legend>{t('installation')}</legend>
-                        <div className="settings-engine-path">
-                          <label
-                            className="settings-field"
-                            htmlFor={`${id}-path`}
-                          >
-                            <span>{t('path')}</span>
-                            <input
-                              id={`${id}-path`}
-                              required
-                              value={draft.gnubg_path}
-                              spellCheck={false}
-                              autoComplete="off"
-                              aria-describedby={`${id}-path-help ${id}-check-status`}
-                              aria-invalid={Boolean(check && 'error' in check)}
-                              onChange={(event) => {
-                                resetInstallationCheck();
-                                update({ gnubg_path: event.target.value });
-                              }}
-                            />
-                          </label>
-                          <ActionButton
-                            icon="confirm"
-                            label={t('check')}
-                            type="button"
-                            disabled={checking || !draft.gnubg_path.trim()}
-                            onClick={checkInstallation}
-                          />
-                        </div>
-                        <p id={`${id}-path-help`} className="settings-help">
-                          {t('pathHelp')}
-                        </p>
-                        <div
-                          className="settings-engine-status"
-                          id={`${id}-check-status`}
-                        >
-                          {engine?.version && !check && !gnubgEdited && (
-                            <p>
-                              <EngineLabel
-                                details={engine.version}
-                                format={(version) =>
-                                  t('engineVersion', { version })
-                                }
-                              />
-                            </p>
-                          )}
-                          {!engine?.available && <p>{t('unavailable')}</p>}
-                          {check && 'version' in check && (
-                            <p role="status" className="settings-success">
-                              <EngineLabel
-                                details={check.version}
-                                format={(version) =>
-                                  t('checkSuccess', { version })
-                                }
-                              />
-                            </p>
-                          )}
-                          {check && 'error' in check && (
-                            <p role="alert" className="settings-error">
-                              {t('checkError')} {diagnostic(check.error)}
-                            </p>
-                          )}
-                          {!check && gnubgEdited && <p>{t('checkNeeded')}</p>}
-                          {checking && <p role="status">{t('checking')}</p>}
-                        </div>
-                        <p className="settings-help">{t('checkHelp')}</p>
-                      </fieldset>
-                      <OpenSageInstallation
-                        setup={sage}
-                        onVerified={refreshEngines}
-                      />
-                      <p className="settings-help">{t('localEnginesHelp')}</p>
-                      <div className="settings-field-pair">
-                        {(
-                          [
-                            ['gnubg', 'gnubg_threads', 'gnubgAnalysisThreads'],
-                            ['gnubg', 'gnubg_play_threads', 'gnubgPlayThreads'],
-                            [
-                              'bgsage',
-                              'open_sage_threads',
-                              'sageAnalysisThreads',
-                            ],
-                            [
-                              'bgsage',
-                              'open_sage_play_threads',
-                              'sagePlayThreads',
-                            ],
-                          ] as const
-                        ).map(([provider, field, label]) => {
-                          const { min } =
-                            configurationOptions.engine_threads[provider];
-                          const max = engines.find(
-                            (engine) => engine.id === provider,
-                          )?.max_parallel_threads;
-                          const count = draft[field];
-                          const validRange = max != null && max >= min;
-                          const retained =
-                            count != null &&
-                            (!validRange || count < min || count > max);
-                          const labelId = `${id}-${field}-label`;
-                          const limitsId = `${id}-${field}-limits`;
-                          return (
-                            <label className="settings-field" key={field}>
-                              <span className="settings-thread-label">
-                                <span id={labelId}>{t(label)}</span>
-                                <span className="settings-help" id={limitsId}>
-                                  {validRange
-                                    ? t('configurableThreadRange', { min, max })
-                                    : t('threadRangeUnavailable')}
-                                  {retained && (
-                                    <> {t('retainedThreadCount', { count })}</>
-                                  )}
-                                </span>
-                              </span>
-                              <select
-                                value={count ?? ''}
-                                disabled={!validRange && count == null}
-                                aria-labelledby={labelId}
-                                aria-describedby={`${limitsId} ${id}-threads-help`}
-                                onChange={(event) => {
-                                  if (provider === 'gnubg')
-                                    resetInstallationCheck();
-                                  const value = event.target.value;
-                                  update({
-                                    [field]:
-                                      value === '' ? null : Number(value),
-                                  });
-                                }}
-                              >
-                                <option value="">{t('defaultThreads')}</option>
-                                {retained && (
-                                  <option value={count} disabled>
-                                    {count}
-                                  </option>
-                                )}
-                                {validRange &&
-                                  Array.from(
-                                    { length: max - min + 1 },
-                                    (_, index) => min + index,
-                                  ).map((threads) => (
-                                    <option key={threads} value={threads}>
-                                      {threads}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                          );
-                        })}
-                      </div>
-                      <p className="settings-help" id={`${id}-threads-help`}>
-                        {t('threadsHelp')}
-                      </p>
-                      <ParallelJobsField
-                        id={id}
-                        value={draft.parallel_analysis_jobs ?? null}
-                        onChange={(parallel_analysis_jobs) =>
-                          update({ parallel_analysis_jobs })
-                        }
-                        t={t}
-                      />
-                    </div>
-                  </details>
+                  <LocalEngineSettings
+                    id={id}
+                    draft={draft}
+                    update={update}
+                    engines={engines}
+                    check={check}
+                    checking={checking}
+                    gnubgEdited={gnubgEdited}
+                    onCheck={checkInstallation}
+                    onInstallationEdited={resetInstallationCheck}
+                    diagnostic={diagnostic}
+                    sage={sage}
+                    onVerified={refreshEngines}
+                  />
                   {Boolean(engineCatalogError) && (
                     <div className="settings-error" role="alert">
                       <p>
@@ -1353,262 +1080,23 @@ export default function SettingsDialog({
                     </div>
                   )}
                 </fieldset>
-                <fieldset
-                  className="settings-section"
+                <PlaySettingsSection
+                  id={id}
+                  draft={draft}
+                  update={update}
                   disabled={saving}
                   hidden={category !== 'play'}
-                >
-                  <legend>{t('play')}</legend>
-                  <div className="settings-field-pair">
-                    {engineSelect('playEngine', 'play-engine')}
-                    <label
-                      className="settings-field"
-                      htmlFor={`${id}-play-strength`}
-                    >
-                      <span>{t('playStrength')}</span>
-                      <select
-                        id={`${id}-play-strength`}
-                        aria-label={t('playStrength')}
-                        value={
-                          draft.play_top_two
-                            ? TOP_TWO_PLAY_STRENGTH
-                            : draft.play_plies
-                        }
-                        onChange={(event) => {
-                          const topTwo =
-                            event.target.value === TOP_TWO_PLAY_STRENGTH;
-                          update({
-                            play_plies: topTwo ? 2 : Number(event.target.value),
-                            play_top_two: topTwo,
-                          });
-                        }}
-                      >
-                        {PLAY_PLIES.map((ply) => (
-                          <option
-                            key={ply}
-                            value={ply}
-                            disabled={!playPlies.includes(ply)}
-                          >
-                            {playStrengthLabel(t, ply, draft.play_engine)}
-                          </option>
-                        ))}
-                        {draft.play_engine === 'bgsage' &&
-                          playPlies.includes(2) && (
-                            <option value={TOP_TWO_PLAY_STRENGTH}>
-                              {playStrengthLabel(t, 2, draft.play_engine, true)}
-                            </option>
-                          )}
-                      </select>
-                    </label>
-                  </div>
-                  <p className="settings-help">{playT('playHelp')}</p>
-                  <section
-                    className="settings-play-group"
-                    role="group"
-                    aria-labelledby={`${id}-play-feedback`}
-                  >
-                    <h3 id={`${id}-play-feedback`}>{t('playFeedbackGroup')}</h3>
-                    <div className="settings-field-pair">
-                      <div>
-                        <label className="settings-field">
-                          <span>{modeT('defaultMode')}</span>
-                          <select
-                            aria-label={modeT('defaultMode')}
-                            aria-describedby={`${id}-play-mode-help`}
-                            value={draft.default_play_mode ?? 'coach'}
-                            onChange={(event) =>
-                              update({
-                                default_play_mode: event.target
-                                  .value as PlayMode,
-                              })
-                            }
-                          >
-                            {playModes.map((mode) => (
-                              <option key={mode} value={mode}>
-                                {modeT(mode)}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <p
-                          className="settings-help"
-                          id={`${id}-play-mode-help`}
-                        >
-                          {modeT(`${draft.default_play_mode ?? 'coach'}Help`)}
-                        </p>
-                      </div>
-                      <div className="settings-play-wide">
-                        <label className="settings-play-toggle">
-                          <input
-                            type="checkbox"
-                            aria-describedby={`${id}-play-automatic-help`}
-                            checked={draft.training_auto_analysis ?? true}
-                            onChange={(event) =>
-                              update({
-                                training_auto_analysis: event.target.checked,
-                              })
-                            }
-                          />
-                          <span>{modeT('automatic')}</span>
-                        </label>
-                        <p
-                          className="settings-help"
-                          id={`${id}-play-automatic-help`}
-                        >
-                          {modeT('automaticHelp')}
-                        </p>
-                      </div>
-                    </div>
-                  </section>
-                  <section
-                    className="settings-play-group"
-                    role="group"
-                    aria-labelledby={`${id}-play-preferences`}
-                  >
-                    <h3 id={`${id}-play-preferences`}>
-                      {t('playPreferencesGroup')}
-                    </h3>
-                    <div className="settings-field-pair">
-                      <div>
-                        <label className="settings-play-toggle">
-                          <input
-                            type="checkbox"
-                            aria-describedby={`${id}-play-sounds-help`}
-                            checked={draftSounds}
-                            onChange={(event) =>
-                              setDraftSounds(event.target.checked)
-                            }
-                          />
-                          <span>{playT('sounds')}</span>
-                        </label>
-                        <p
-                          className="settings-help"
-                          id={`${id}-play-sounds-help`}
-                        >
-                          {playT('soundsHelp')}
-                        </p>
-                      </div>
-                      <div>
-                        <label
-                          className="settings-field"
-                          htmlFor={`${id}-bearoff`}
-                        >
-                          <span>{playT('direction')}</span>
-                          <select
-                            id={`${id}-bearoff`}
-                            aria-label={playT('direction')}
-                            aria-describedby={`${id}-play-direction-help`}
-                            value={draft.bearoff_direction ?? 'right'}
-                            onChange={(event) =>
-                              update({
-                                bearoff_direction: event.target.value as
-                                  'left' | 'right',
-                              })
-                            }
-                          >
-                            <option value="right">{playT('right')}</option>
-                            <option value="left">{playT('left')}</option>
-                          </select>
-                        </label>
-                        <p
-                          className="settings-help"
-                          id={`${id}-play-direction-help`}
-                        >
-                          {playT('directionHelp')}
-                        </p>
-                      </div>
-                    </div>
-                  </section>
-                </fieldset>
-                <fieldset
-                  className="settings-section settings-board-section"
+                  engineField={engineSelect('playEngine', 'play-engine')}
+                  sounds={draftSounds}
+                  onSounds={setDraftSounds}
+                />
+                <BoardSettingsSection
+                  galleryRef={boardGallery}
                   disabled={saving}
                   hidden={category !== 'board'}
-                >
-                  <legend>{t('board')}</legend>
-                  <p className="settings-help settings-intro">
-                    {t('boardHelp')}
-                  </p>
-                  <div className="settings-preview-layout">
-                    <div
-                      ref={boardGallery}
-                      className="settings-theme-gallery"
-                      role="group"
-                      tabIndex={0}
-                      aria-label={t('gallery')}
-                    >
-                      {themes.map((entry) => {
-                        const archive = archiveThemes.find(
-                          ({ id }) => id === entry.id,
-                        );
-                        return (
-                          <button
-                            key={entry.id}
-                            type="button"
-                            className="settings-theme-choice"
-                            aria-label={entry.name}
-                            aria-pressed={draftTheme === entry.id}
-                            onClick={() => setDraftTheme(entry.id)}
-                          >
-                            <span
-                              className="settings-theme-thumbnail"
-                              aria-hidden="true"
-                            >
-                              {archive ? (
-                                <>
-                                  <img
-                                    src={archive.background.src}
-                                    alt=""
-                                    loading="lazy"
-                                  />
-                                  <img
-                                    className="settings-thumb-checker settings-thumb-light"
-                                    src={archive.checkers.white[0].src}
-                                    alt=""
-                                    loading="lazy"
-                                  />
-                                  <img
-                                    className="settings-thumb-checker settings-thumb-dark"
-                                    src={archive.checkers.black[0].src}
-                                    alt=""
-                                    loading="lazy"
-                                  />
-                                </>
-                              ) : (
-                                <Board
-                                  position={previewPosition}
-                                  theme={entry.id}
-                                  white=""
-                                  black=""
-                                />
-                              )}
-                              {draftTheme === entry.id && (
-                                <span className="settings-selected">
-                                  ✓ {t('selected')}
-                                </span>
-                              )}
-                            </span>
-                            <span className="settings-theme-name">
-                              {entry.name}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <section
-                      className="settings-preview"
-                      aria-label={t('preview', { theme: selectedTheme.name })}
-                    >
-                      <h3>{t('preview', { theme: selectedTheme.name })}</h3>
-                      <Board
-                        position={previewPosition}
-                        theme={draftTheme}
-                        white={t('light')}
-                        black={t('dark')}
-                      />
-                    </section>
-                  </div>
-                </fieldset>
+                  theme={draftTheme}
+                  onTheme={setDraftTheme}
+                />
               </>
             )}
           </div>
