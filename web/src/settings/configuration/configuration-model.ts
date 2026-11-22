@@ -31,7 +31,10 @@ import {
 } from '../../position-browser-api';
 import type { AnnotationFilters } from '../../annotation-api';
 import { isLocale, type Locale } from '../../shared/i18n/i18n-core';
-import { isPlayMode, type PlayMode } from '../../play-mode-messages';
+import {
+  isPlayMode,
+  type PlayMode,
+} from '../../workspaces/play/play-mode-messages';
 import {
   uiThemes,
   type UiTheme,

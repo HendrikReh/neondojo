@@ -7,7 +7,7 @@ import { useLearningReviewPositions } from './useLearningReviewPositions';
 import { studyAssessment, type AssessmentState } from './match-assessment-api';
 import { useMatchAssessmentText } from './match-assessment-messages';
 import { useI18n } from './shared/i18n/i18n';
-import type { PlaySession } from './play-api';
+import type { PlaySession } from './workspaces/play/play-api';
 import { useStudyText } from './study-messages';
 import type { Theme } from './shared/board/themes';
 

@@ -23,7 +23,7 @@ import { useSearchPages } from './shared/hooks/useSearchPages';
 import { useLibraryMatchOpening } from './useLibraryMatchOpening';
 import AnnotationSearch, { type AnnotationHit } from './AnnotationSearch';
 import { useI18n } from './shared/i18n/i18n';
-import { usePlayModeText } from './play-mode-messages';
+import { usePlayModeText } from './workspaces/play/play-mode-messages';
 import { useWorkspaceText } from './shared/i18n/workspace-messages';
 import {
   databaseDisplayName,

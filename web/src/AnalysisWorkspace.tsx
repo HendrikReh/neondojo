@@ -50,7 +50,7 @@ import type { AnnotationKind } from './annotation-api';
 import { useMoveAssessments } from './shared/review/useMoveAssessments';
 import { errorGrades } from './shared/review/move-severity';
 import MoveHistoryRow from './MoveHistoryRow';
-import GameResultSummary from './GameResultSummary';
+import GameResultSummary from './workspaces/play/GameResultSummary';
 import AnalysisMatchHeader from './AnalysisMatchHeader';
 import { hasMatchSource } from './match-source';
 import { useAnalysisMatchHeaderText } from './analysis-match-header-messages';

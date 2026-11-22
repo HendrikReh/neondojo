@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import ActionButton from './shared/ui/ActionButton';
 import LearningReviewDialog from './LearningReviewDialog';
 import { loadStudyReport } from './study-api';
-import type { PlaySession } from './play-api';
+import type { PlaySession } from './workspaces/play/play-api';
 import type { Theme } from './shared/board/themes';
-import { usePlayModeText } from './play-mode-messages';
+import { usePlayModeText } from './workspaces/play/play-mode-messages';
 import { AppError } from './shared/i18n/i18n-core';
 
 /** A header-scoped, read-only report. Parent keys it by match and report identity. */

@@ -9,7 +9,7 @@ import {
   type RefObject,
   type PointerEvent,
 } from 'react';
-import { usePlayText } from '../../play-messages';
+import { usePlayText } from '../../workspaces/play/play-messages';
 type Center = { x: number; y: number };
 
 /**

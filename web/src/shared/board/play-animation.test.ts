@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import type { PlaySession } from '../../play-api';
+import type { PlaySession } from '../../workspaces/play/play-api';
 import { actionFrames, checkerFrame, reverseFrame } from './play-animation';
 const board = () => Array<number>(26).fill(0);
 function session(values: Partial<PlaySession> = {}): PlaySession {

@@ -8,8 +8,8 @@ import {
 import { useLearningReviewPositions } from './useLearningReviewPositions';
 import LearningDecisionPreview from './LearningDecisionPreview';
 import { useStudyText } from './study-messages';
-import type { PlaySession } from './play-api';
-import { usePlayModeText } from './play-mode-messages';
+import type { PlaySession } from './workspaces/play/play-api';
+import { usePlayModeText } from './workspaces/play/play-mode-messages';
 import { useI18n } from './shared/i18n/i18n';
 import { prDigits } from './shared/format/pr-format';
 export default function PlayLearningReview({

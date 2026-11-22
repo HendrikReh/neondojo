@@ -43,12 +43,12 @@ import {
 } from 'react';
 import Board from '../shared/board/Board';
 import { readPlaySounds, savePlaySounds } from '../shared/board/play-audio';
-import { usePlayText } from '../play-messages';
+import { usePlayText } from '../workspaces/play/play-messages';
 import {
   playModes,
   usePlayModeText,
   type PlayMode,
-} from '../play-mode-messages';
+} from '../workspaces/play/play-mode-messages';
 import type { Position } from '../shared/api/api';
 import { useI18n, languages, type Locale } from '../shared/i18n/i18n';
 import { saveLocale } from '../shared/i18n/i18n-core';

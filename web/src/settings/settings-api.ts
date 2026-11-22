@@ -1,7 +1,10 @@
 import configurationOptions from '../../../shared/configuration-options.json' with { type: 'json' };
 import type { components } from '../generated-api';
 import type { DepthEngine } from '../shared/engine/analysis-depth';
-import { isPlayMode, type PlayMode } from '../play-mode-messages';
+import {
+  isPlayMode,
+  type PlayMode,
+} from '../workspaces/play/play-mode-messages';
 
 type Schema = components['schemas'];
 export type AppSettings = Omit<

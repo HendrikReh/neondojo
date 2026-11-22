@@ -1,4 +1,4 @@
-import type { PlayAction, PlaySession } from '../../play-api';
+import type { PlayAction, PlaySession } from '../../workspaces/play/play-api';
 import { applySteps, type CheckerStep } from './play-state';
 import { checkerSound, nativeSteps, type PlaySound } from './play-sound-events';
 export interface CheckerMotion extends CheckerStep {

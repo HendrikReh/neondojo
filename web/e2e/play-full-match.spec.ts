@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { PlaySession } from '../src/play-api';
+import type { PlaySession } from '../src/workspaces/play/play-api';
 import type { LibraryMatch } from '../src/library-api';
 const archivedMatches = new Map<string, string>();
 async function archivedMatch(page: Page, session: PlaySession) {

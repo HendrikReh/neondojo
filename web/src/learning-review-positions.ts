@@ -1,5 +1,8 @@
 import type { Position } from './shared/api/api';
-import type { PlayReviewHistory, PlaySession } from './play-api';
+import type {
+  PlayReviewHistory,
+  PlaySession,
+} from './workspaces/play/play-api';
 export type ReviewDecision = NonNullable<
   PlaySession['review']
 >['games'][number]['decisions'][number];

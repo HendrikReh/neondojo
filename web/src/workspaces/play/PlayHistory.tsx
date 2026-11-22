@@ -1,15 +1,15 @@
-import { ActionLink } from './shared/ui/ActionButton';
+import { ActionLink } from '../../shared/ui/ActionButton';
 import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { playSeverity, type PlaySession, type PlayDecision } from './play-api';
 import { usePlayText } from './play-messages';
-import { useI18n } from './shared/i18n/i18n';
+import { useI18n } from '../../shared/i18n/i18n';
 import MoveHistoryContent, {
   moveHistoryTooltip,
-} from './shared/review/MoveHistoryContent';
-import Tooltip from './shared/ui/Tooltip';
+} from '../../shared/review/MoveHistoryContent';
+import Tooltip from '../../shared/ui/Tooltip';
 import { usePlayModeText } from './play-mode-messages';
 import GameResultSummary, { type PlayGameResult } from './GameResultSummary';
-import { shortEngineLabel } from './shared/engine/engine-version';
+import { shortEngineLabel } from '../../shared/engine/engine-version';
 
 export default memo(function PlayHistory({
   history,

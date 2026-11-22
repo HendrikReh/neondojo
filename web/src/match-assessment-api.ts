@@ -1,6 +1,6 @@
 import { request } from './shared/api/api';
 import type { Locale } from './shared/i18n/i18n';
-import type { PlaySession } from './play-api';
+import type { PlaySession } from './workspaces/play/play-api';
 type Schema = import('./generated-api').components['schemas'];
 export type AssessmentState = Schema['AssessmentState'];
 export type AssessmentEntry = { id: string; token: number };

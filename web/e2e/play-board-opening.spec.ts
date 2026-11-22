@@ -1,5 +1,5 @@
 import { test, expect } from './test';
-import type { PlaySession } from '../src/play-api';
+import type { PlaySession } from '../src/workspaces/play/play-api';
 import { readFileSync } from 'node:fs';
 import type { BgBlitzTheme } from '../src/shared/board/themes';
 const archiveThemes = JSON.parse(

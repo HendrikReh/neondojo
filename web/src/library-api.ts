@@ -6,7 +6,7 @@ import {
   type Position,
 } from './shared/api/api';
 import type { components } from './generated-api';
-import type { PlayMode } from './play-mode-messages';
+import type { PlayMode } from './workspaces/play/play-mode-messages';
 type Schema = components['schemas'];
 
 export type Database = Schema['Database'];

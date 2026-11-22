@@ -3,7 +3,7 @@ import {
   loadLearningReviewHistory,
   type PlaySession,
   type PlayReviewHistory,
-} from './play-api';
+} from './workspaces/play/play-api';
 import { AppError } from './shared/i18n/i18n-core';
 import { buildLearningReviewPositions } from './learning-review-positions';
 export function useLearningReviewPositions(

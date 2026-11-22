@@ -1,4 +1,4 @@
-import type { PlayAction, PlaySession } from '../../play-api';
+import type { PlayAction, PlaySession } from '../../workspaces/play/play-api';
 import { applySteps, type CheckerStep } from './play-state';
 export type PlaySound = 'move' | 'roll' | 'hit' | 'bear_off' | 'cube';
 export type SoundState = Pick<

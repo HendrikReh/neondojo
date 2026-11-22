@@ -3,8 +3,8 @@ import ActionButton from './shared/ui/ActionButton';
 import Board from './shared/board/Board';
 import type { Position } from './shared/api/api';
 import { useI18n } from './shared/i18n/i18n';
-import { usePlayText } from './play-messages';
-import { usePlayModeText } from './play-mode-messages';
+import { usePlayText } from './workspaces/play/play-messages';
+import { usePlayModeText } from './workspaces/play/play-mode-messages';
 import {
   applySteps,
   matchingMoves,

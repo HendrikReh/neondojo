@@ -1,7 +1,7 @@
 import { useId, useState, type ReactNode, type RefObject } from 'react';
-import ActionButton from './shared/ui/ActionButton';
-import PlayBoardDialog from './shared/board/PlayBoardDialog';
-import { useI18n } from './shared/i18n/i18n';
+import ActionButton from '../../shared/ui/ActionButton';
+import PlayBoardDialog from '../../shared/board/PlayBoardDialog';
+import { useI18n } from '../../shared/i18n/i18n';
 import { gameResultText } from './game-result-messages';
 import { usePlayResignText } from './play-resign-messages';
 export type ResignLevel = 1 | 2 | 3;

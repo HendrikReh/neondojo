@@ -2,7 +2,7 @@ import { checkerPath, eitherOrder } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { rollDice } from './play-board-actions';
 import { test, expect, type Page } from './test';
-import type { PlaySession } from '../src/play-api';
+import type { PlaySession } from '../src/workspaces/play/play-api';
 declare global {
   interface Window {
     __playAudio: { duration: number; power: number }[];

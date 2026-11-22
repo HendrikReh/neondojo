@@ -1,9 +1,12 @@
 import type { StudyReportSummary } from './study-api';
 import ActionButton from './shared/ui/ActionButton';
 import { useI18n } from './shared/i18n/i18n';
-import { usePlayText } from './play-messages';
+import { usePlayText } from './workspaces/play/play-messages';
 import { useStudyText } from './study-messages';
-import { isPlayMode, usePlayModeText } from './play-mode-messages';
+import {
+  isPlayMode,
+  usePlayModeText,
+} from './workspaces/play/play-mode-messages';
 import { prDigits } from './shared/format/pr-format';
 
 export default function StudyReportTable({

@@ -1,7 +1,7 @@
-import { useI18n } from './shared/i18n/i18n';
+import { useI18n } from '../../shared/i18n/i18n';
 import { gameResultText } from './game-result-messages';
 import './game-result.css';
-type Schema = import('./generated-api').components['schemas'];
+type Schema = import('../../generated-api').components['schemas'];
 export type GameResult = Schema['GameResult'];
 export type PlayGameResult = Schema['PlayGameResult'];
 export default function GameResultSummary({

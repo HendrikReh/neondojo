@@ -16,9 +16,9 @@ import ExtrasWorkspace, {
 } from '../ExtrasWorkspace';
 import { useBenchmarkText } from '../benchmark-messages';
 import ActionButton from '../shared/ui/ActionButton';
-import PlayWorkspace from '../PlayWorkspace';
+import PlayWorkspace from '../workspaces/play/PlayWorkspace';
 import MatchDropZone from '../MatchDropZone';
-import { usePlayText } from '../play-messages';
+import { usePlayText } from '../workspaces/play/play-messages';
 import {
   useCallback,
   useEffect,
@@ -87,7 +87,7 @@ import {
 } from '../match-import';
 
 import { isUnfinishedCompetition } from '../library-match-summary';
-import type { PlaySession } from '../play-api';
+import type { PlaySession } from '../workspaces/play/play-api';
 import { DEFAULT_ANALYSIS_PLIES } from '../shared/engine/analysis-depth';
 import MoveNotesDialog, { type MoveNotesTarget } from '../MoveNotesDialog';
 import { useUiAppearance } from '../settings/appearance/useUiAppearance';

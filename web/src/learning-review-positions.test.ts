@@ -4,7 +4,10 @@ import {
   reviewDecisionKey,
   type ReviewDecision,
 } from './learning-review-positions';
-import type { PlayReviewHistory, PlaySession } from './play-api';
+import type {
+  PlayReviewHistory,
+  PlaySession,
+} from './workspaces/play/play-api';
 import type { Position } from './shared/api/api';
 const position = (player = 0, ply = 1): Position => ({
   id: 's',

@@ -3,7 +3,7 @@ import ActionButton from './shared/ui/ActionButton';
 import type { PracticeAnswer } from './learning-api';
 import { useI18n } from './shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
-import { usePlayText } from './play-messages';
+import { usePlayText } from './workspaces/play/play-messages';
 
 const cubeOfferChoices = [
   {

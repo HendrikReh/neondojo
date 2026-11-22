@@ -12,8 +12,8 @@ import {
   loadStudyReport,
   type StudyReportPage,
 } from './study-api';
-import type { PlaySession } from './play-api';
-import { usePlayText } from './play-messages';
+import type { PlaySession } from './workspaces/play/play-api';
+import { usePlayText } from './workspaces/play/play-messages';
 import { useStudyText } from './study-messages';
 export default function StudyReports({
   visible,

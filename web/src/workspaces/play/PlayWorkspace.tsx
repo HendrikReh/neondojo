@@ -1,21 +1,21 @@
-import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
-import { useDecimalInput } from './shared/format/decimal-input';
-import { engineDisplayName } from './shared/engine/engine-version';
+import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
+import { useDecimalInput } from '../../shared/format/decimal-input';
+import { engineDisplayName } from '../../shared/engine/engine-version';
 import {
   playStrengthLabel,
   useSettingsText,
-} from './settings/settings-messages';
-import { loadEngines, type EngineInfo } from './settings/settings-api';
+} from '../../settings/settings-messages';
+import { loadEngines, type EngineInfo } from '../../settings/settings-api';
 import {
   preferredDepth,
   TOP_TWO_PLAY_STRENGTH,
   type DepthEngine,
-} from './shared/engine/analysis-depth';
-import EngineLabel from './shared/engine/EngineLabel';
-import Tooltip from './shared/ui/Tooltip';
-import { useConfirmedConfiguration } from './settings/configuration/ConfigurationProvider';
-import { defaultConfiguration } from './settings/configuration/configuration-model';
-import ActionButton from './shared/ui/ActionButton';
+} from '../../shared/engine/analysis-depth';
+import EngineLabel from '../../shared/engine/EngineLabel';
+import Tooltip from '../../shared/ui/Tooltip';
+import { useConfirmedConfiguration } from '../../settings/configuration/ConfigurationProvider';
+import { defaultConfiguration } from '../../settings/configuration/configuration-model';
+import ActionButton from '../../shared/ui/ActionButton';
 import {
   useEffect,
   useId,
@@ -25,36 +25,36 @@ import {
   type CSSProperties,
   type FormEvent,
 } from 'react';
-import Board from './shared/board/Board';
+import Board from '../../shared/board/Board';
 import PlayHistory from './PlayHistory';
 import PlayFeedback from './PlayFeedback';
 import PlayCoachFeedback from './PlayCoachFeedback';
 import PlayHintView from './PlayHintView';
 import { hasPlayMovePreview } from './PlayMovePreview';
-import LearningReviewDialog from './LearningReviewDialog';
+import LearningReviewDialog from '../../LearningReviewDialog';
 import {
   matchAssessmentReportId,
   studyAssessment,
-} from './match-assessment-api';
-import { useMatchAssessmentText } from './match-assessment-messages';
+} from '../../match-assessment-api';
+import { useMatchAssessmentText } from '../../match-assessment-messages';
 import {
   playModes,
   usePlayModeText,
   type PlayMode,
 } from './play-mode-messages';
-import type { AppSettings } from './settings/settings-api';
+import type { AppSettings } from '../../settings/settings-api';
 import { usePlayReview } from './usePlayReview';
 import {
   projectMove,
   type MovePreview,
   type BoardView,
-} from './shared/board/move-preview';
-import { useBoardReviewText } from './shared/board/board-review-messages';
-import type { Theme } from './shared/board/themes';
-import { useI18n } from './shared/i18n/i18n';
-import { AppError } from './shared/i18n/i18n-core';
+} from '../../shared/board/move-preview';
+import { useBoardReviewText } from '../../shared/board/board-review-messages';
+import type { Theme } from '../../shared/board/themes';
+import { useI18n } from '../../shared/i18n/i18n';
+import { AppError } from '../../shared/i18n/i18n-core';
 import { usePlayText } from './play-messages';
-import { useLibraryText } from './library-messages';
+import { useLibraryText } from '../../library-messages';
 import {
   nextCheckerSteps,
   applySteps,
@@ -62,7 +62,7 @@ import {
   matchingCheckerTurns,
   relativePoint,
   type CheckerStepWithDie,
-} from './shared/board/play-state';
+} from '../../shared/board/play-state';
 import {
   actInPlaySession,
   createPlaySession,
@@ -78,11 +78,11 @@ import {
   playSounds,
   stopPlaySounds,
   unlockPlayAudio,
-} from './shared/board/play-audio';
-import { isNewCubeOffer } from './shared/board/play-sound-events';
-import { matchContext } from './shared/board/boardMath';
+} from '../../shared/board/play-audio';
+import { isNewCubeOffer } from '../../shared/board/play-sound-events';
+import { matchContext } from '../../shared/board/boardMath';
 import PlayCubeDecision from './PlayCubeDecision';
-import PlayBoardDialog from './shared/board/PlayBoardDialog';
+import PlayBoardDialog from '../../shared/board/PlayBoardDialog';
 import PlayResignDialog, { type ResignLevel } from './PlayResignDialog';
 import { usePlayResignText } from './play-resign-messages';
 import GameResultSummary from './GameResultSummary';
@@ -90,7 +90,7 @@ import {
   actionFrames,
   checkerFrame,
   reverseFrame,
-} from './shared/board/play-animation';
+} from '../../shared/board/play-animation';
 import { usePlayAnimation, useRollingFaces } from './usePlayAnimation';
 import './play.css';
 const storageKey = 'neondojo.play-session';

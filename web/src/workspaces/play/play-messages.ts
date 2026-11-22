@@ -1,4 +1,4 @@
-import { useI18n } from './shared/i18n/i18n';
+import { useI18n } from '../../shared/i18n/i18n';
 const en = {
   hintError: 'The hint could not be loaded.',
   closeDialog: 'Close',

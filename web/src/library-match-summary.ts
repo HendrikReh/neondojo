@@ -1,5 +1,5 @@
 import type { LibraryMatch } from './library-api';
-import { playModeText } from './play-mode-messages';
+import { playModeText } from './workspaces/play/play-mode-messages';
 import type { Locale } from './shared/i18n/i18n-core';
 import { libraryText, type LibraryMessageKey } from './library-messages';
 import { workspaceText } from './shared/i18n/workspace-messages';

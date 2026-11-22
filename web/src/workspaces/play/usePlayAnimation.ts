@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PlaybackFrame, PlayFrame } from './shared/board/play-animation';
-import { playSounds } from './shared/board/play-audio';
+import type {
+  PlaybackFrame,
+  PlayFrame,
+} from '../../shared/board/play-animation';
+import { playSounds } from '../../shared/board/play-audio';
 
 /** Queue presentation only. Cancellation never changes the saved engine state. */
 export function usePlayAnimation(visible: boolean) {
