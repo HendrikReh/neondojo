@@ -314,9 +314,8 @@ test('similar search opens from a saved position with the current match excluded
     });
   await expect(include).not.toBeChecked();
   await include.check();
-  await expect(
-    results.getByRole('button', { name: 'Same match' }),
-  ).toBeVisible();
+  const row = results.getByRole('row', { name: /^Same match/ });
+  await expect(row).toBeVisible();
   expect(Object.fromEntries(requests.at(-1) ?? [])).toEqual({
     same_dice: 'true',
     same_score: 'true',
@@ -324,9 +323,11 @@ test('similar search opens from a saved position with the current match excluded
     include_current_match: 'true',
   });
   await expect(results.getByRole('img')).toBeVisible();
-  await results
-    .getByRole('button', { name: 'Open analysis', exact: true })
-    .click();
+  // Rows share the keyboard model of the other position tables.
+  await row.click();
+  await expect(row).toHaveAttribute('aria-selected', 'true');
+  await expect(row).toBeFocused();
+  await page.keyboard.press('Enter');
   await expect(
     page.getByRole('tab', { name: 'Analysis', exact: true }),
   ).toHaveAttribute('aria-selected', 'true');
@@ -390,7 +391,7 @@ test('practice uses the latest filtered similar positions in result order', asyn
   });
   await openSimilarSearch(page, position.id);
   await expect(
-    page.getByRole('button', { name: unfiltered.match_name }),
+    page.getByRole('row', { name: new RegExp(`^${unfiltered.match_name}`) }),
   ).toBeVisible();
   const practice = page.getByRole('button', {
     name: 'Practice results',

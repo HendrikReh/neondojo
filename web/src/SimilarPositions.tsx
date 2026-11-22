@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import ActionButton from './ActionButton';
 import SearchPagination from './SearchPagination';
+import { SearchResultRow } from './SearchResultList';
 import { lastSearchPage } from './useSearchPages';
 import Board from './Board';
 import { request, type Position } from './api';
@@ -51,6 +52,7 @@ export default function SimilarPositions({
   const [practiceItems, setPracticeItems] =
     useState<SimilarResponse['items']>();
   const [selected, setSelected] = useState<string>();
+  const rowPrefix = `${useId()}-`;
   const [resultPage, setResultPage] = useState({ key: '', number: 1 });
   const params = new URLSearchParams(
     Object.entries(filters)
@@ -92,6 +94,7 @@ export default function SimilarPositions({
   const pageSize = 25;
   const page = resultPage.key === searchKey ? resultPage.number : 1;
   const rows = hits.slice((page - 1) * pageSize, page * pageSize);
+  const rowIds = rows.map((hit) => hit.position.id);
   const preview = hits.find((hit) => hit.position.id === selected) ?? hits[0];
   const context = preview && matchContext(preview.position.gnubg_match_id);
   // Score from the mover's side, so equal boards at different scores stand out.
@@ -189,24 +192,20 @@ export default function SimilarPositions({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((hit) => (
-                    <tr
+                  {rows.map((hit, index) => (
+                    <SearchResultRow
                       key={hit.position.id}
-                      className={
-                        hit === preview
-                          ? 'similar-position-selected'
-                          : undefined
-                      }
+                      ids={rowIds}
+                      index={index}
+                      idPrefix={rowPrefix}
+                      active={hit === preview}
+                      selectedClassName="similar-position-selected"
+                      aria-selected={hit === preview}
+                      onPreview={setSelected}
+                      onOpen={onOpen}
+                      jumpToEdges
                     >
-                      <td>
-                        <button
-                          type="button"
-                          aria-pressed={hit === preview}
-                          onClick={() => setSelected(hit.position.id)}
-                        >
-                          {hit.match_name}
-                        </button>
-                      </td>
+                      <td>{hit.match_name}</td>
                       <td>
                         {hit.position.player === 0 ? hit.white : hit.black}
                       </td>
@@ -224,7 +223,7 @@ export default function SimilarPositions({
                             })}
                       </td>
                       <td>{hit.distance}</td>
-                    </tr>
+                    </SearchResultRow>
                   ))}
                 </tbody>
               </table>
