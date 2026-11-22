@@ -112,7 +112,7 @@
 }
 .play-header p,
 .play-engine {
-  color: var(--text-muted, #8d998f);
+  color: var(--ui-muted);
   font-size: 0.9rem;
 }
 .play-actions {
@@ -268,7 +268,7 @@
   cursor: pointer;
 }
 .play-point-number {
-  fill: var(--text, #d6ddca);
+  fill: var(--board-point-number);
   font-weight: 600;
   pointer-events: none;
 }
@@ -556,7 +556,7 @@
 .play-mode-help {
   max-width: 60ch;
   margin: 0;
-  color: var(--text-muted);
+  color: var(--ui-muted);
 }
 .play-setup .play-mode-checkbox {
   display: flex;
@@ -566,11 +566,9 @@
 }
 .play-feedback,
 .play-learning-review {
-  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;
   margin: 0 0 16px;
-  background: var(--surface);
 }
 .play-feedback h3,
 .play-learning-review h3 {
@@ -579,7 +577,7 @@
 .play-feedback small {
   display: block;
   margin-top: 12px;
-  color: var(--text-muted);
+  color: var(--ui-muted);
 }
 .play-feedback-results {
   overflow-x: auto;
@@ -604,7 +602,7 @@
 .play-learning-review th,
 .play-learning-review td {
   padding: 7px 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--ui-border);
   white-space: nowrap;
 }
 .play-feedback th:first-child,
@@ -614,7 +612,7 @@
 .play-feedback-result[data-severity='bad'],
 .play-feedback-result[data-severity='blunder'],
 .play-feedback-result[data-severity='very_bad'] {
-  color: var(--danger, #be6958);
+  color: var(--ui-danger-text);
 }
 .play-hint {
   margin-bottom: 12px;
@@ -655,7 +653,7 @@
   row-gap: 12px;
 }
 .play-threshold-status[data-state='saved'] {
-  color: var(--ui-success, #39785b);
+  color: var(--ui-success-text);
 }
 .play-mode-control small {
   flex-basis: 100%;
@@ -676,7 +674,7 @@
   border: 2px solid var(--ui-accent, #3158c9);
   border-radius: 16px;
   background: var(--ui-surface, white);
-  color: var(--text);
+  color: var(--ui-text);
   box-shadow: 0 20px 80px #0007;
   text-align: center;
 }
@@ -708,7 +706,7 @@
   color: var(--ui-accent-text, #fff);
 }
 .play-cube-offer span {
-  color: var(--text-muted);
+  color: var(--ui-muted);
   font-size: 0.85rem;
 }
 .play-cube-choices {
@@ -744,7 +742,7 @@
 }
 .play-dialog-preferences summary {
   cursor: pointer;
-  color: var(--text-muted);
+  color: var(--ui-muted);
   font-size: 0.85rem;
 }
 .play-dialog-preferences .play-mode-control {
@@ -764,7 +762,7 @@
 }
 .play-dialog-grip {
   flex-shrink: 0;
-  color: var(--text-muted);
+  color: var(--ui-muted);
 }
 .play-interruption-dialog[data-dragging='true'] .play-dialog-drag-handle {
   cursor: grabbing;
@@ -772,7 +770,7 @@
 
 .play-board-toolbar .play-double-unavailable {
   margin: 6px 0 0;
-  color: var(--text-muted);
+  color: var(--ui-muted);
   font-size: var(--font-size-meta);
 }
 
@@ -927,7 +925,7 @@
 }
 .play-board-toolbar > .play-turn-help {
   margin: 0;
-  color: var(--text-muted);
+  color: var(--ui-muted);
   font-size: var(--font-size-meta);
 }
 .play-coach-summary {

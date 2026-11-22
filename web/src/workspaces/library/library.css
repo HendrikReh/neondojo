@@ -801,6 +801,6 @@ ul.import-warnings {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: inherit;
-  color: var(--text-muted);
+  color: var(--ui-muted);
   font-weight: 400;
 }

@@ -14,6 +14,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 ### Fixed
 
 - **Analysis time estimates in every language.** The estimated analysis time and the remaining time of a running match analysis appeared in English in Spanish, French, Italian and Polish, and durations always used English unit letters. They are now translated, with localized units such as `1 min 20 s` and Polish plural forms; the Polish count of opening-book score contexts uses its plural forms as well.
+- **Readable Play, Benchmark and history text in all six palettes.** Play match details on light palettes, blunder feedback, the saved Tutor threshold and failed benchmarks on dark palettes fell below the WCAG AA contrast of 4.5:1; they now use the palette's muted, danger and success text colours. Several Play, Match database and game result styles referred to colour variables that did not exist, so their colour or border was dropped: game result boxes in the history now have their border, and feedback tables their row lines. Action tooltips follow the selected palette, and board point numbers keep their light colour on the dark frame.
 
 ## [1.2.0] - 2026-11-21
 
