@@ -435,7 +435,10 @@ pub async fn worker(state: AppState) {
 }
 
 async fn run_once(state: &AppState) -> ApiResult<()> {
-    let Ok(_access) = state.backup.requests.try_read() else {
+    let Some(_access) = state
+        .backup
+        .try_background(crate::database_backup::BackgroundWork::AnkiSync)
+    else {
         return Ok(());
     };
     let linked: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM anki_auto_sync)")

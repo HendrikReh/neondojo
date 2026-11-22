@@ -65,6 +65,7 @@ The backend reads these settings from its environment or from `.env` in its work
 | `DATABASE_URL` | `postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo` | PostgreSQL database |
 | `NEONDOJO_BIND` | `127.0.0.1:8787` | Listen address for the API and the built frontend. Requests must address a loopback host name ([Local access](docs/development/api.md#local-access)) |
 | `NEONDOJO_WEB_DIR` | unset | Serve the built frontend from this directory, usually `web/dist` |
+| `NEONDOJO_DB_MAX_CONNECTIONS` | `32` | Largest number of PostgreSQL connections the backend opens (`1–1000`). Keep the sum over all backends on one server below its `max_connections` (PostgreSQL default `100`). A query waits up to 15 seconds for a free connection. |
 | `GNUBG_BIN` | `gnubg` | GNUbg executable until a path is saved in **Settings** |
 | `RUST_LOG` | `neondojo=info,tower_http=info` | Log filter |
 | `NEONDOJO_ANKI_PYTHON` | `python3` | Python with the Anki package for importing third-party Anki decks. See [Flashcards and Anki](docs/reference/study.md#flashcards-and-anki). |

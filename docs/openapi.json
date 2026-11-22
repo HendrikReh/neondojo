@@ -9239,7 +9239,37 @@
               }
             }
           },
+          "429": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "500": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "504": {
             "description": "",
             "content": {
               "application/json": {
@@ -14770,38 +14800,52 @@
         "additionalProperties": false
       },
       "CheckerPracticeScore": {
-        "allOf": [
-          {
-            "$ref": "#/components/schemas/CheckerPracticeAnswer"
+        "type": "object",
+        "description": "A checker move graded like a Study answer: by the configured analysis\nengine at no more than its practice depth. A forced pass is not evaluated\nand has no engine, depth or equities.",
+        "required": [
+          "best",
+          "played",
+          "equity_loss"
+        ],
+        "properties": {
+          "best": {
+            "type": "string"
           },
-          {
-            "type": "object",
-            "required": [
-              "played",
-              "best_equity",
-              "played_equity",
-              "equity_loss"
+          "best_equity": {
+            "type": [
+              "number",
+              "null"
             ],
-            "properties": {
-              "best_equity": {
-                "type": "number",
-                "format": "double"
-              },
-              "equity_loss": {
-                "type": "number",
-                "format": "double",
-                "description": "Best minus played normalized cubeful equity, from the mover's perspective."
-              },
-              "played": {
-                "type": "string"
-              },
-              "played_equity": {
-                "type": "number",
-                "format": "double"
-              }
-            }
+            "format": "double"
+          },
+          "depth": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "engine": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "equity_loss": {
+            "type": "number",
+            "format": "double",
+            "description": "Best minus played normalized cubeful equity, from the mover's perspective."
+          },
+          "played": {
+            "type": "string"
+          },
+          "played_equity": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
           }
-        ]
+        }
       },
       "CheckerTurn": {
         "type": "object",

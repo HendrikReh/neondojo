@@ -74,6 +74,15 @@ impl AppState {
         self.job_heartbeat = interval;
         self
     }
+
+    /// Sets how long a database restore waits for background work it cannot
+    /// stop (`preflight`) and then for running requests and stopped analysis
+    /// jobs to release the database (`drain`). Call it before sharing the state.
+    #[cfg(test)]
+    pub(crate) fn with_restore_waits(mut self, preflight: Duration, drain: Duration) -> Self {
+        self.backup = Arc::new(crate::database_backup::Access::with_waits(preflight, drain));
+        self
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]

@@ -350,7 +350,6 @@ async fn similar_practice_scores_complete_moves_outside_the_hint_list(pool: PgPo
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL and native GNUbg"]
 async fn similar_practice_scores_a_forced_pass(pool: PgPool) {
     let source = "(;GM[6]PW[Alice]PB[Bob]MI[length:7]AE[a:x]AW[y]AB[x][x][w][w];W[12])";
     let imported = store::import_match(
@@ -368,8 +367,8 @@ async fn similar_practice_scores_a_forced_pass(pool: PgPool) {
         .fetch_one(&pool)
         .await
         .unwrap();
-    let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
-    let app = api::router(AppState::new(pool, engine));
+    // As in Study, a forced pass is graded without starting an engine.
+    let app = api::router(AppState::new(pool, Engine::new("/missing/gnubg".into())));
     let (status, score) = call(
         app,
         "POST",
@@ -379,7 +378,62 @@ async fn similar_practice_scores_a_forced_pass(pool: PgPool) {
     .await;
     assert_eq!(status, 200, "{score}");
     assert_eq!(score["equity_loss"], 0.0);
-    assert_eq!(score["played"], score["best"]);
+    assert_eq!(score["played"], "Cannot move");
+    assert_eq!(score["best"], "Cannot move");
+    assert_eq!(score["best_equity"], Value::Null);
+    assert_eq!(score["engine"], Value::Null);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn similar_practice_scores_with_neongammon_and_never_falls_back_to_gnubg(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+    let (_, _, positions) = setup(&pool).await;
+    // A GNUbg stand-in that records whether anything starts it.
+    let directory = tempfile::tempdir().unwrap();
+    let started = directory.path().join("started");
+    let gnubg = directory.path().join("gnubg");
+    std::fs::write(
+        &gnubg,
+        format!("#!/bin/sh\ntouch '{}'\nexit 1\n", started.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&gnubg, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let gnubg = gnubg.display().to_string();
+    sqlx::query("INSERT INTO app_settings(singleton,gnubg_path,analysis_engine,analysis_plies) VALUES(true,$1,'bgsage',2)")
+        .bind(&gnubg)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let app = api::router(AppState::new(pool, Engine::new(gnubg)));
+    let uri = format!("/api/positions/{}/practice-score", positions[0].id);
+    // This test database has no verified NeonGammon installation. Practice
+    // evaluations run one at a time per process; wait for other tests' turns.
+    let (status, error) = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        loop {
+            let (status, body) = call(
+                app.clone(),
+                "POST",
+                &uri,
+                Some(json!({"steps":[{"from":8,"to":5},{"from":6,"to":5}]})),
+            )
+            .await;
+            if status != 429 {
+                break (status, body);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("another practice evaluation kept the engine busy");
+    assert_eq!(status, 503, "{error}");
+    assert_eq!(error["error"], "Exercise evaluation is unavailable");
+    // A forced-pass check needs no engine; this position has a legal move.
+    let (status, invalid) = call(app, "POST", &uri, Some(json!({"steps":[]}))).await;
+    assert_eq!(status, 422, "{invalid}");
+    assert!(
+        !started.exists(),
+        "scoring with NeonGammon selected must never start GNUbg"
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

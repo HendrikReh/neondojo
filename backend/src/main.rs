@@ -20,8 +20,10 @@ async fn main() -> anyhow::Result<()> {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| "postgres://neondojo:neondojo_local@127.0.0.1:54329/neondojo".into());
     let pool = database_pool::options()
-        .max_connections(10)
-        .acquire_timeout(std::time::Duration::from_secs(5))
+        .max_connections(database_pool::max_connections(
+            std::env::var("NEONDOJO_DB_MAX_CONNECTIONS").ok().as_deref(),
+        )?)
+        .acquire_timeout(database_pool::ACQUIRE_TIMEOUT)
         .connect(&url)
         .await?;
     if let Ok(expected) = std::env::var("NEONDOJO_E2E_DATABASE_NAME") {

@@ -141,6 +141,28 @@ impl PracticeEvaluation {
         matches!(self.provenance.kind, PracticeProvenanceKind::Recomputed)
     }
 
+    pub(crate) fn chosen(&self) -> &str {
+        &self.chosen
+    }
+
+    pub(crate) fn best(&self) -> &str {
+        &self.best
+    }
+
+    /// Equities of the chosen and the best answer; missing for a forced pass.
+    pub(crate) fn equities(&self) -> (Option<f64>, Option<f64>) {
+        (self.chosen_equity, self.best_equity)
+    }
+
+    pub(crate) fn equity_loss(&self) -> f64 {
+        self.equity_loss
+    }
+
+    /// Engine and depth that produced the grade; missing for a forced pass.
+    pub(crate) fn source(&self) -> (Option<&str>, Option<i32>) {
+        (self.provenance.engine.as_deref(), self.provenance.plies)
+    }
+
     fn scored(
         chosen: &str,
         best: &str,
@@ -497,6 +519,21 @@ pub(crate) async fn evaluate(
     }
     if let Some(result) = stored_evaluation(position, &solution, &checked) {
         return Ok(result);
+    }
+    evaluate_fresh(state, position, checked, None).await
+}
+
+/// Grade an answer with a fresh evaluation by the practice engine, for
+/// exercises without a saved solution.
+pub(crate) async fn evaluate_now(
+    state: &AppState,
+    kind: &str,
+    position: &Position,
+    answer: &PracticeAnswer,
+) -> ApiResult<PracticeEvaluation> {
+    let checked = validate(kind, position, answer)?;
+    if matches!(checked, CheckedAnswer::ForcedPass) {
+        return Ok(PracticeEvaluation::forced_pass());
     }
     evaluate_fresh(state, position, checked, None).await
 }

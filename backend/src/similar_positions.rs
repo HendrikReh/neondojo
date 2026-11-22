@@ -2,9 +2,8 @@
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::Position,
-    move_assessments::after_play,
     play::PlayStep,
-    practice::{EVALUATION, checker_turn},
+    practice::evaluation::{PracticeAnswer, evaluate_now},
     store,
 };
 use axum::{
@@ -86,13 +85,17 @@ struct CheckerPracticeMove {
     steps: Vec<PlayStep>,
 }
 
+/// A checker move graded like a Study answer: by the configured analysis
+/// engine at no more than its practice depth. A forced pass is not evaluated
+/// and has no engine, depth or equities.
 #[derive(Serialize, ToSchema)]
 struct CheckerPracticeScore {
-    #[serde(flatten)]
-    answer: CheckerPracticeAnswer,
+    best: String,
+    engine: Option<String>,
+    depth: Option<String>,
     played: String,
-    best_equity: f64,
-    played_equity: f64,
+    best_equity: Option<f64>,
+    played_equity: Option<f64>,
     /// Best minus played normalized cubeful equity, from the mover's perspective.
     equity_loss: f64,
 }
@@ -228,7 +231,7 @@ async fn practice_position(state: &AppState, id: Uuid) -> ApiResult<Position> {
 #[utoipa::path(post, path="/api/positions/{id}/practice-score",
     params(("id"=Uuid, Path, description="Checker occurrence to score")),
     request_body=CheckerPracticeMove,
-    responses((status=200,body=CheckerPracticeScore),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=500,body=ErrorBody)),
+    responses((status=200,body=CheckerPracticeScore),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=500,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),
     tag="Positions")]
 async fn score(
     State(state): State<AppState>,
@@ -237,41 +240,24 @@ async fn score(
 ) -> ApiResult<Json<CheckerPracticeScore>> {
     let Json(input) = input.map_err(|error| ApiError::invalid(error.body_text()))?;
     let position = practice_position(&state, id).await?;
-    let after = checker_turn(&position, &input.steps)
-        .ok_or_else(|| ApiError::invalid("Play a complete legal checker move"))?;
-
-    let _evaluation = EVALUATION.lock().await;
+    let evaluation = evaluate_now(
+        &state,
+        "checker",
+        &position,
+        &PracticeAnswer::Checker { steps: input.steps },
+    )
+    .await?;
     crate::play::require_review_available(&state.pool, position.match_uuid).await?;
-    let settings = crate::settings::load(&state).await?;
-    let analysis = settings
-        .gnubg()
-        .analyze_checker_choices(
-            &position.position_id,
-            &position.gnubg_match_id,
-            settings.analysis_plies,
-            input.steps.is_empty(),
-        )
-        .await?;
-    let best = analysis
-        .candidates
-        .first()
-        .ok_or_else(|| anyhow::anyhow!("GNUbg returned no checker choice"))?;
-    let played = analysis
-        .candidates
-        .iter()
-        .find(|candidate| after_play(&position, &candidate.notation) == Some(after))
-        .ok_or_else(|| anyhow::anyhow!("GNUbg did not evaluate the submitted checker choice"))?;
-    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
+    let (engine, plies) = evaluation.source();
+    let (played_equity, best_equity) = evaluation.equities();
     Ok(Json(CheckerPracticeScore {
-        answer: CheckerPracticeAnswer {
-            best: best.notation.clone(),
-            engine: analysis.engine,
-            depth: Some(format!("{}-ply", analysis.plies)),
-        },
-        played: played.notation.clone(),
-        best_equity: best.equity,
-        played_equity: played.equity,
-        equity_loss: crate::match_analysis::normalized_loss(played.equity, best.equity),
+        best: evaluation.best().to_owned(),
+        engine: engine.map(str::to_owned),
+        depth: plies.map(|plies| format!("{plies}-ply")),
+        played: evaluation.chosen().to_owned(),
+        best_equity,
+        played_equity,
+        equity_loss: evaluation.equity_loss(),
     }))
 }
 
