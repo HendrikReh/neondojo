@@ -1019,3 +1019,34 @@ test('the independent-play choice filters the statistics and practice and is sha
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await expect(overviewToggle).toBeChecked();
 });
+
+test('the loss threshold uses the app language decimal separator', async ({
+  page,
+}) => {
+  const calls: URL[] = [];
+  await page.route('**/api/study/mistakes?*', (r) => {
+    calls.push(new URL(r.request().url()));
+    return r.fulfill({ json: { ...result, groups: [] } });
+  });
+  await open(page, 'de');
+  const loss = page.getByRole('spinbutton', {
+    name: 'Equity-Verlust ab',
+    exact: true,
+  });
+  // Native number inputs would follow the operating system instead.
+  await expect(loss).toHaveValue('0,08');
+  await loss.fill('0,1');
+  await expect(loss).toHaveValue('0,1');
+  await expect
+    .poll(() => calls.at(-1)?.searchParams.get('min_loss'))
+    .toBe('0.1');
+  await loss.press('ArrowUp');
+  await expect(loss).toHaveValue('0,11');
+  await expect(loss).toHaveAttribute('aria-valuenow', '0.11');
+  // A dot is accepted too and shown in the app language.
+  await loss.fill('0.2');
+  await expect(loss).toHaveValue('0,2');
+  await expect
+    .poll(() => calls.at(-1)?.searchParams.get('min_loss'))
+    .toBe('0.2');
+});

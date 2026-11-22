@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useDecimalInput } from './decimal-input';
 import ActionButton from './ActionButton';
 import { request } from './api';
 import type { Database } from './library-api';
@@ -151,6 +152,20 @@ export default function DecisionSearch({
   const practiceButton = useRef<HTMLButtonElement>(null);
   // "My player profile" fills the player until one is chosen here.
   const playerChosen = useRef(false);
+  const minLoss = useDecimalInput({
+    value: draft.minLoss,
+    onChange: (value) => set('minLoss')(value),
+    step: 0.005,
+    min: 0,
+    max: 1000,
+  });
+  const maxLoss = useDecimalInput({
+    value: draft.maxLoss,
+    onChange: (value) => set('maxLoss')(value),
+    step: 0.005,
+    min: 0,
+    max: 1000,
+  });
   const set = (key: keyof Draft) => (value: string) => {
     if (key === 'player') playerChosen.current = true;
     setDraft((current) => ({ ...current, [key]: value }));
@@ -325,21 +340,13 @@ export default function DecisionSearch({
             <div className="position-filter-pair">
               <SearchFilterInput
                 label={t('minLoss')}
-                type="number"
-                min={0}
-                max={1000}
-                step={0.005}
-                value={draft.minLoss}
-                onChange={set('minLoss')}
+                {...minLoss.inputProps}
+                onChange={minLoss.change}
               />
               <SearchFilterInput
                 label={t('maxLoss')}
-                type="number"
-                min={0}
-                max={1000}
-                step={0.005}
-                value={draft.maxLoss}
-                onChange={set('maxLoss')}
+                {...maxLoss.inputProps}
+                onChange={maxLoss.change}
               />
             </div>
             <ActionButton

@@ -1,4 +1,5 @@
 import IndependentOnlyToggle from './IndependentOnlyToggle';
+import { useDecimalInput } from './decimal-input';
 import UnanalyzedMatches from './UnanalyzedMatches';
 import SearchPagination from './SearchPagination';
 import { lastSearchPage } from './useSearchPages';
@@ -50,6 +51,16 @@ export default function RecurringMistakes({
     [database, setDatabase] = useState(''),
     [plan, setPlan] = useState<GamePlan | ''>(''),
     [loss, setLoss] = useState('0.08');
+  const lossInput = useDecimalInput({
+    value: loss,
+    onChange: (value) => {
+      setPractice(undefined);
+      setLoss(value);
+    },
+    step: 0.01,
+    min: 0,
+    max: 1000,
+  });
   const [page, setPage] = useState<MistakePage>(),
     [players, setPlayers] = useState<string[]>([]),
     [databases, setDatabases] = useState<Database[]>([]);
@@ -211,16 +222,9 @@ export default function RecurringMistakes({
         <label>
           <span>{t('minLoss')}</span>
           <input
-            type="number"
-            step="any"
-            min="0"
-            max="1000"
-            value={loss}
+            {...lossInput.inputProps}
             aria-invalid={!valid}
-            onChange={(event) => {
-              setPractice(undefined);
-              setLoss(event.target.value);
-            }}
+            onChange={(event) => lossInput.change(event.target.value)}
           />
         </label>
         <IndependentOnlyToggle

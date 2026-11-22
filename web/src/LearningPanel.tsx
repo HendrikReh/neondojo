@@ -1,4 +1,5 @@
 import { useWorkspaceDefaults } from './ConfigurationProvider';
+import { useDecimalInput } from './decimal-input';
 import { defaultConfiguration } from './configuration-model';
 import {
   sessionFields,
@@ -193,6 +194,13 @@ export function AddCardsPanel({
     String(defaultConfiguration.learning.generation.min_loss),
     sessionString,
   );
+  const minLossInput = useDecimalInput({
+    value: minLoss,
+    onChange: setMinLoss,
+    step: 0.01,
+    min: 0,
+    max: 10,
+  });
   const [player, setPlayer] = useWorkspaceSession(
     'analysis.card-player',
     legacy?.learning.generation.player,
@@ -316,12 +324,8 @@ export function AddCardsPanel({
             {t('minLoss')}{' '}
             <input
               aria-label={t('minLoss')}
-              type="number"
-              min={0}
-              max={10}
-              step="0.01"
-              value={minLoss}
-              onChange={(e) => setMinLoss(e.target.value)}
+              {...minLossInput.inputProps}
+              onChange={(e) => minLossInput.change(e.target.value)}
             />
           </label>
           <label>

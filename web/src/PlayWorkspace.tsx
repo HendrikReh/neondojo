@@ -1,4 +1,5 @@
 import configurationOptions from '../../shared/configuration-options.json' with { type: 'json' };
+import { useDecimalInput } from './decimal-input';
 import { engineDisplayName } from './engine-version';
 import { playStrengthLabel, useSettingsText } from './settings-messages';
 import { loadEngines, type EngineInfo } from './settings-api';
@@ -338,6 +339,22 @@ export default function PlayWorkspace({
     return () => abort.abort();
   }, [setupOpen]);
   const [liveThreshold, setLiveThreshold] = useState('0.04');
+  const thresholdInput = useDecimalInput({
+    value: liveThreshold,
+    onChange: (value) => {
+      setThresholdStatus('idle');
+      setLiveThreshold(value);
+    },
+    step: 0.01,
+    min: 0,
+    max: 1,
+    onKeyDown: (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        event.currentTarget.blur();
+      }
+    },
+  });
   const [thresholdStatus, setThresholdStatus] = useState<
     'idle' | 'saving' | 'saved'
   >('idle');
@@ -1175,29 +1192,16 @@ export default function PlayWorkspace({
               as="input"
               aria-label={modeT('threshold')}
               text={modeT('liveThresholdHelp')}
-              type="number"
-              min="0"
-              max="1"
-              step="any"
+              {...thresholdInput.inputProps}
               required
-              value={liveThreshold}
               disabled={
                 uiBusy ||
                 paused ||
                 session.phase === 'match_over' ||
                 moneyFinished
               }
-              onChange={(event) => {
-                setThresholdStatus('idle');
-                setLiveThreshold(event.target.value);
-              }}
+              onChange={(event) => thresholdInput.change(event.target.value)}
               onBlur={saveThreshold}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  event.currentTarget.blur();
-                }
-              }}
             />
           </label>
           <span
