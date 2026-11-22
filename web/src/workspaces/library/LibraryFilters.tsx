@@ -6,6 +6,7 @@ import type { LibraryFilters as Filters } from './library-api';
 import { useLibraryText, type LibraryMessageKey } from './library-messages';
 import { useI18n } from '../../shared/i18n/i18n';
 import { usePositionText } from '../positions/position-browser-messages';
+import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 
 export type LibraryFilterKey = Exclude<keyof Filters, 'date_field'>;
 const labels = {
@@ -50,7 +51,7 @@ export function LibraryFilterChips({
   const l = useLibraryText();
   const p = usePositionText();
   const { t, locale, formatNumber } = useI18n();
-  const formatDate = new Intl.DateTimeFormat(locale, { dateStyle: 'medium' });
+  const formatDate = dateTimeFormat(locale, { dateStyle: 'medium' });
   const keys: LibraryFilterKey[] = [
     'q',
     ...(Object.keys(labels) as (keyof typeof labels)[]),

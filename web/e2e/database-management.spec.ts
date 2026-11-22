@@ -24,9 +24,12 @@ test('import target can differ from the active library collection', async ({
     .locator('.database-collections')
     .getByRole('button', { name: new RegExp(source.name) });
   const destination = page.getByRole('combobox', {
-    name: 'Import destination',
+    name: 'Import into',
     exact: true,
   });
+  await expect(page.locator('.library-import-destination')).toContainText(
+    'Into:',
+  );
   await expect(destination).toHaveValue(source.id);
   await expect(
     destination.getByRole('option', { name: 'Paused Matches', exact: true }),

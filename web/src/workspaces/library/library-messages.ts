@@ -461,6 +461,15 @@ const rows = {
     'Data importu',
     'Data importazione',
   ],
+  // Column header; the sort button and its tooltip keep the full name.
+  importedColumn: [
+    'Imported on',
+    'Importiert am',
+    'Importación',
+    'Date d’import',
+    'Data importu',
+    'Importata il',
+  ],
   dateField: [
     'Date type',
     'Datumsart',
@@ -951,6 +960,15 @@ const rows = {
     'Aucun match correspondant.',
     'Brak pasujących meczów.',
     'Nessun match corrispondente.',
+  ],
+  importInto: ['Into:', 'Nach:', 'En:', 'Dans :', 'Do:', 'In:'],
+  importIntoName: [
+    'Import into',
+    'Importieren nach',
+    'Importar en',
+    'Importer dans',
+    'Importuj do',
+    'Importa in',
   ],
   importDestination: [
     'Import destination',

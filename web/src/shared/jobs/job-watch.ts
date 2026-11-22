@@ -240,3 +240,35 @@ export function watchJob(
     watches.delete(id);
   };
 }
+
+export type WatchedJobState = Pick<Job, 'id' | 'status' | 'progress'>;
+
+/**
+ * Follow the jobs a list shows and report each change of their status or
+ * progress, or `undefined` once a job no longer exists. Running jobs follow
+ * the event stream; queued ones are read with the global display's periodic
+ * batch, so a long queue never opens one connection per job.
+ */
+export function watchJobChanges(
+  jobs: readonly WatchedJobState[],
+  onChange: (job: Job | undefined, id: string) => void,
+): () => void {
+  const stops = jobs.map(({ id, status, progress }) => {
+    let last = { status, progress };
+    return watchJob(
+      id,
+      (job) => {
+        if (job.status === last.status && job.progress === last.progress)
+          return;
+        last = { status: job.status, progress: job.progress };
+        onChange(job, id);
+      },
+      (error) => {
+        if (error instanceof AppError && error.params.status === '404')
+          onChange(undefined, id);
+      },
+      status === 'running',
+    );
+  });
+  return () => stops.forEach((stop) => stop());
+}

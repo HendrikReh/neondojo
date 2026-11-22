@@ -9,6 +9,7 @@ import {
 } from './library-api';
 import { databaseDisplayName, useLibraryText } from './library-messages';
 import { libraryAnalysisStatus } from './library-match-summary';
+import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 
 const SELECTION_LIMIT = 100;
 
@@ -90,9 +91,7 @@ export default function DuplicateMatchFinder({
     return database ? databaseDisplayName(database, l) : '—';
   };
   const date = (value: string) =>
-    new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
-      new Date(value),
-    );
+    dateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(value));
   return (
     <div
       className="library-duplicates"

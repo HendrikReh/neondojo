@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useCardPracticeText } from './card-practice-messages';
 import { useI18n } from '../../../shared/i18n/i18n';
-import { AppError } from '../../../shared/i18n/i18n-core';
+import { AppError, dateTimeFormat } from '../../../shared/i18n/i18n-core';
 import {
   loadAnkiAutoSync,
   setAnkiAutoSync,
@@ -84,7 +84,7 @@ export default function AnkiAutoSync({
       ? t('ankiAutoNoMatches')
       : lastSync
         ? t('ankiAutoLastSync', {
-            date: new Intl.DateTimeFormat(locale, {
+            date: dateTimeFormat(locale, {
               dateStyle: 'short', timeStyle: 'short',
             }).format(new Date(lastSync)),
           })

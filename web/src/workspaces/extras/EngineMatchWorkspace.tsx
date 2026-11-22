@@ -27,6 +27,7 @@ import { useI18n } from '../../shared/i18n/i18n';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
 import { loadEngines, type EngineInfo } from '../../settings/settings-api';
 import './engine-match.css';
+import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 
 type Competitor = CreateSeries['a'];
 type Mode = NonNullable<CreateSeries['mode']>;
@@ -344,7 +345,7 @@ export default function EngineMatchWorkspace({
 
   const profile = (side: Competitor) =>
     `${engineName(side.engine_id)} ${formatNumber(side.plies)}-ply`;
-  const date = new Intl.DateTimeFormat(locale, {
+  const date = dateTimeFormat(locale, {
     dateStyle: 'short',
     timeStyle: 'short',
   });

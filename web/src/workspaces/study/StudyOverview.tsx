@@ -28,6 +28,7 @@ import {
   recommendStudyAction,
 } from './study-overview';
 import type { Theme } from '../../shared/board/themes';
+import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 
 type Props = {
   visible: boolean;
@@ -392,7 +393,7 @@ function Overview({
               <p>
                 {summary.data.next_due_at
                   ? t('nextDue', {
-                      date: new Intl.DateTimeFormat(locale, {
+                      date: dateTimeFormat(locale, {
                         dateStyle: 'medium',
                         timeStyle: 'short',
                       }).format(new Date(summary.data.next_due_at)),

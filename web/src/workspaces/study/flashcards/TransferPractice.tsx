@@ -14,6 +14,7 @@ import {
   SearchFilterInput,
   SearchFilterSelect,
 } from '../../../shared/ui/SearchFilterForm';
+import { dateTimeFormat } from '../../../shared/i18n/i18n-core';
 
 const plans = [
   'opening',
@@ -131,7 +132,7 @@ export default function TransferPractice({
         <ul>
           {history.map((entry) => (
             <li key={entry.id}>
-              {new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(
+              {dateTimeFormat(locale, { dateStyle: 'medium' }).format(
                 new Date(entry.completed_at),
               )}{' '}
               · {entry.scope.player} · {gamePlan(entry.scope.game_plan)} ·{' '}

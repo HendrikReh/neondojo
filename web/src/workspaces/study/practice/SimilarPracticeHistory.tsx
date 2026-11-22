@@ -9,6 +9,7 @@ import {
   retryPendingPracticeSummaries,
   type PracticeHistoryPage,
 } from './similar-practice-history-api';
+import { dateTimeFormat } from '../../../shared/i18n/i18n-core';
 
 export default function SimilarPracticeHistory() {
   const p = usePositionText();
@@ -19,7 +20,7 @@ export default function SimilarPracticeHistory() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>();
   const [saveFailed, setSaveFailed] = useState(false);
-  const dateFormat = new Intl.DateTimeFormat(locale, {
+  const dateFormat = dateTimeFormat(locale, {
     dateStyle: 'medium',
     timeStyle: 'short',
   });
