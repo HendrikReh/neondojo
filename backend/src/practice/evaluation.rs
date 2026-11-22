@@ -117,9 +117,7 @@ fn proven_checker_depth(solution: &SavedEvaluation<'_>) -> Option<i32> {
     // verifies each returned candidate depth.
     let plies = solution.plies?;
     if solution.native
-        && (plies == 1
-            || solution.engine.starts_with("NeonGammon ")
-                && solution.engine.contains(&format!("; {plies}ply cubeful;")))
+        && (plies == 1 || crate::engines::sage_version_has_cubeful_depth(solution.engine, plies))
     {
         Some(plies)
     } else {
@@ -445,29 +443,9 @@ async fn cube_equities(
     plies: i32,
     context: &CubeContext,
 ) -> Result<(String, i32, CubeEquities)> {
-    Ok(match engine {
-        AnalysisEngine::Gnubg(engine) => {
-            engine
-                .analyze_cube_choices(&context.position_id, &context.match_id, plies)
-                .await?
-        }
-        AnalysisEngine::OpenSage(engine) => {
-            let cube = engine.cube(&context.position_id, &context.match_id).await?;
-            let name = engine
-                .saved_version()
-                .context("NeonGammon did not report its version")?;
-            (
-                name.to_owned(),
-                plies,
-                CubeEquities {
-                    no_double: cube.no_double,
-                    take: cube.take,
-                    pass: cube.pass,
-                    probabilities: cube.probabilities.as_slice().try_into().ok(),
-                },
-            )
-        }
-    })
+    engine
+        .cube_equities(&context.position_id, &context.match_id, plies)
+        .await
 }
 
 async fn fresh_cube(

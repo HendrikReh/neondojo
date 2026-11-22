@@ -97,7 +97,9 @@ pub enum GnubgMoveFilter {
 impl GnubgMoveFilter {
     /// Pruned analysis at GNUbg's native 2- and 4-ply levels.
     pub(crate) fn for_analysis(engine_id: &str, plies: i32) -> Option<Self> {
-        (engine_id == "gnubg" && matches!(gnubg_plies(plies), Ok(2 | 4))).then_some(Self::Top14)
+        (crate::engines::EngineId::parse(engine_id) == Some(crate::engines::EngineId::Gnubg)
+            && matches!(gnubg_plies(plies), Ok(2 | 4)))
+        .then_some(Self::Top14)
     }
 }
 
@@ -383,7 +385,7 @@ impl Engine {
         let commands_path = directory.join("commands.txt");
         if let Some(threads) = self.threads {
             ensure!(
-                threads >= crate::configuration::engine_min_threads("gnubg"),
+                threads >= crate::engines::EngineId::Gnubg.min_threads(),
                 "Unsupported GNUbg thread count: {threads}"
             );
             tokio::fs::write(

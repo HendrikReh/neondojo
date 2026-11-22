@@ -1,6 +1,6 @@
 //! Persisted preferences and immutable engine configuration for new work.
 pub(crate) mod open_sage;
-use crate::engines::{AnalysisEngine, EngineFork, SageEngine, SageSnapshot};
+use crate::engines::{AnalysisEngine, EngineFork, EngineId, SageEngine, SageSnapshot};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::Engine,
@@ -182,20 +182,23 @@ impl EngineSnapshot {
         let value = serde_json::to_vec(self).expect("engine snapshot is serializable");
         format!("{:x}", Sha256::digest(value))
     }
+    pub(crate) fn provider(&self) -> Option<EngineId> {
+        EngineId::parse(&self.engine_id)
+    }
     pub fn engine(&self) -> anyhow::Result<AnalysisEngine> {
-        match self.engine_id.as_str() {
-            "gnubg" => Ok(AnalysisEngine::Gnubg(
+        match self.provider() {
+            Some(EngineId::Gnubg) => Ok(AnalysisEngine::Gnubg(
                 Engine::new(self.gnubg_path.clone())
                     .with_threads(self.gnubg_threads)
                     .with_move_filter(self.gnubg_move_filter)
                     .with_expected_version(self.engine_version.clone()),
             )),
-            "bgsage" => Ok(AnalysisEngine::OpenSage(SageEngine::new(
+            Some(EngineId::NeonGammon) => Ok(AnalysisEngine::OpenSage(SageEngine::new(
                 self.open_sage
                     .clone()
                     .ok_or_else(|| anyhow::anyhow!("Missing saved NeonGammon installation"))?,
             )?)),
-            _ => anyhow::bail!("Unsupported saved job engine"),
+            None => anyhow::bail!("Unsupported saved job engine"),
         }
     }
 }
@@ -259,14 +262,9 @@ pub(crate) async fn snapshot_for_practice(
     state: &AppState,
 ) -> anyhow::Result<(i32, EngineSnapshot)> {
     let settings = load(state).await?;
-    // Practice answers stay quick: at most GNUbg 3-ply (its native 2-ply) or
-    // NeonGammon 2-ply.
-    let cap = if settings.analysis_engine == "gnubg" {
-        3
-    } else {
-        2
-    };
-    let plies = settings.analysis_plies.min(cap);
+    let plies = settings
+        .analysis_plies
+        .min(EngineId::require(&settings.analysis_engine)?.practice_max_plies());
     Ok((
         plies,
         analysis_snapshot(state, &settings, None, plies).await?,
@@ -314,12 +312,12 @@ pub(crate) async fn snapshot_for(
     sage_threads: u32,
     plies: i32,
 ) -> anyhow::Result<EngineSnapshot> {
-    let open_sage = if id == "bgsage" {
+    let provider = EngineId::parse(id).ok_or_else(|| anyhow::anyhow!("Unsupported engine"))?;
+    let open_sage = if provider.requires_verified_profile() {
         Some(open_sage::verified_profile(&state.pool, plies, sage_threads).await?)
     } else {
         None
     };
-    anyhow::ensure!(matches!(id, "gnubg" | "bgsage"), "Unsupported engine");
     let engine_version = match &open_sage {
         Some(snapshot) => Some(SageEngine::new(snapshot.clone())?.version().await?),
         None => {
@@ -336,7 +334,8 @@ pub(crate) async fn snapshot_for(
         engine_id: id.into(),
         gnubg_path: gnubg_path.into(),
         engine_version,
-        gnubg_threads: gnubg_threads.filter(|&threads| id == "gnubg" && threads != 1),
+        gnubg_threads: gnubg_threads
+            .filter(|&threads| provider.uses_gnubg_threads() && threads != 1),
         gnubg_move_filter: None,
         open_sage,
     })
@@ -354,13 +353,14 @@ fn validate_path(path: &str) -> ApiResult<()> {
 pub(crate) const TOP_TWO_PROFILE_ERROR: &str = "Top-2 play requires NeonGammon 2-ply";
 
 pub(crate) fn supports_top_two(engine: &str, plies: i32) -> bool {
-    engine == "bgsage" && plies == 2
+    EngineId::parse(engine).is_some_and(|engine| engine.supports_top_two(plies))
 }
-fn validate_threads(engine: &str, threads: Option<i32>) -> ApiResult<()> {
+fn validate_threads(engine: EngineId, threads: Option<i32>) -> ApiResult<()> {
     let Some(threads) = threads else {
         return Ok(());
     };
-    let minimum = crate::configuration::engine_min_threads(engine);
+    let minimum = engine.min_threads();
+    let engine = engine.id();
     let maximum = crate::configuration::available_cpu_threads()
         .filter(|&maximum| maximum >= minimum)
         .ok_or_else(|| {
@@ -469,19 +469,23 @@ async fn put_settings(
     }
     // Existing settings and submitted jobs can outlive a change in CPU availability.
     for (engine, proposed, saved) in [
-        ("gnubg", settings.gnubg_threads, current.gnubg_threads),
         (
-            "gnubg",
+            EngineId::Gnubg,
+            settings.gnubg_threads,
+            current.gnubg_threads,
+        ),
+        (
+            EngineId::Gnubg,
             settings.gnubg_play_threads,
             current.gnubg_play_threads,
         ),
         (
-            "bgsage",
+            EngineId::NeonGammon,
             settings.open_sage_threads,
             current.open_sage_threads,
         ),
         (
-            "bgsage",
+            EngineId::NeonGammon,
             settings.open_sage_play_threads,
             current.open_sage_play_threads,
         ),
@@ -579,9 +583,10 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
         .as_ref()
         .is_some_and(|snapshot| snapshot.one_ply_verified)
     {
-        crate::configuration::engine_depths("bgsage", "analysis")
+        EngineId::NeonGammon.depths("analysis")
     } else {
-        crate::configuration::engine_depths("bgsage", "analysis")
+        EngineId::NeonGammon
+            .depths("analysis")
             .into_iter()
             .filter(|&depth| depth != 1)
             .collect()
@@ -600,18 +605,18 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
     };
     Ok(Json(vec![
         EngineInfo {
-            id: "gnubg".into(),
-            name: "GNUbg".into(),
+            id: EngineId::Gnubg.id().into(),
+            name: EngineId::Gnubg.display_name().into(),
             available: version.is_some(),
             version,
             fork: None,
-            plies: crate::configuration::engine_depths("gnubg", "analysis"),
+            plies: EngineId::Gnubg.depths("analysis"),
             difficulty_presets: None,
             max_parallel_threads: gnubg_parallel_limit,
         },
         EngineInfo {
-            id: "bgsage".into(),
-            name: "NeonGammon".into(),
+            id: EngineId::NeonGammon.id().into(),
+            name: EngineId::NeonGammon.display_name().into(),
             available: sage_version.is_some(),
             version: sage_version,
             fork: sage.as_ref().and_then(SageSnapshot::known_fork),
@@ -630,7 +635,7 @@ async fn check_engine(
 ) -> ApiResult<Json<EngineCheckResponse>> {
     let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     validate_path(&request.path)?;
-    validate_threads("gnubg", request.threads)?;
+    validate_threads(EngineId::Gnubg, request.threads)?;
     let version = Engine::new(request.path)
         .with_threads(request.threads)
         .check_installation()

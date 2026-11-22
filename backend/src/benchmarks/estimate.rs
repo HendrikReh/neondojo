@@ -6,6 +6,7 @@ use super::{
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::{Engine, GnubgMoveFilter, resolve_binary},
+    engines::EngineId,
     store,
 };
 use axum::{
@@ -129,14 +130,18 @@ async fn estimate(
     .fetch_optional(&state.pool)
     .await
     .map_err(anyhow::Error::from)?
-    .unwrap_or_else(|| ("gnubg".into(), 2, state.engine.binary().to_owned(), None, None));
+    .unwrap_or_else(|| {
+        (EngineId::Gnubg.id().into(), 2, state.engine.binary().to_owned(), None, None)
+    });
     let engine_id = query.engine_id.unwrap_or(default_engine);
     let plies = query.plies.unwrap_or(default_plies);
-    if !crate::configuration::engine_depths(&engine_id, "analysis").contains(&plies) {
+    let Some(provider) =
+        EngineId::parse(&engine_id).filter(|provider| provider.depths("analysis").contains(&plies))
+    else {
         return Err(ApiError::invalid(
             "Depth is not verified for the selected engine",
         ));
-    }
+    };
     if let Some(game_no) = query.game_no {
         let mut games: Vec<i32> =
             sqlx::query_scalar("SELECT game_no FROM match_games WHERE match_uuid=$1")
@@ -175,52 +180,59 @@ async fn estimate(
     if count == 0 {
         return Ok(result.unavailable(EstimateUnavailableReason::NoCheckerMoves));
     }
-    let identity = if result.engine_id == "bgsage" {
-        if let Some(engine) = crate::settings::open_sage::load(&state.pool)
-            .await
-            .ok()
-            .and_then(|i| i.snapshot)
-            .and_then(|mut snapshot| {
-                snapshot.plies = plies;
-                snapshot.threads = crate::settings::sage_threads(
-                    open_sage_threads,
-                    crate::settings::SAGE_ANALYSIS_THREADS,
-                );
-                crate::engines::SageEngine::new(snapshot).ok()
-            })
-        {
-            let version = match running_engine_version(&state.pool, engine.binary()).await? {
-                Some(_) => engine.saved_version().map(str::to_owned),
-                None => tokio::time::timeout(Duration::from_secs(2), engine.version())
+    let identity = match provider {
+        EngineId::NeonGammon => {
+            if let Some(engine) = crate::settings::open_sage::load(&state.pool)
+                .await
+                .ok()
+                .and_then(|i| i.snapshot)
+                .and_then(|mut snapshot| {
+                    snapshot.plies = plies;
+                    snapshot.threads = crate::settings::sage_threads(
+                        open_sage_threads,
+                        crate::settings::SAGE_ANALYSIS_THREADS,
+                    );
+                    crate::engines::SageEngine::new(snapshot).ok()
+                })
+            {
+                let version = match running_engine_version(&state.pool, engine.binary()).await? {
+                    Some(_) => engine.saved_version().map(str::to_owned),
+                    None => tokio::time::timeout(Duration::from_secs(2), engine.version())
+                        .await
+                        .ok()
+                        .and_then(Result::ok),
+                };
+                version.map(|v| (engine.binary().to_owned(), v))
+            } else {
+                None
+            }
+        }
+        EngineId::Gnubg => {
+            if let Ok(path) = resolve_binary(&binary) {
+                let version = match running_engine_version(&state.pool, &path).await? {
+                    Some(version) => Some(version),
+                    None => tokio::time::timeout(
+                        Duration::from_secs(2),
+                        Engine::new(path.clone()).version(),
+                    )
                     .await
                     .ok()
                     .and_then(Result::ok),
-            };
-            version.map(|v| (engine.binary().to_owned(), v))
-        } else {
-            None
-        }
-    } else if let Ok(path) = resolve_binary(&binary) {
-        let version = match running_engine_version(&state.pool, &path).await? {
-            Some(version) => Some(version),
-            None => {
-                tokio::time::timeout(Duration::from_secs(2), Engine::new(path.clone()).version())
-                    .await
-                    .ok()
-                    .and_then(Result::ok)
+                };
+                version
+                    .filter(|v| v.starts_with("GNU Backgammon "))
+                    .map(|v| (path, v))
+            } else {
+                None
             }
-        };
-        version
-            .filter(|v| v.starts_with("GNU Backgammon "))
-            .map(|v| (path, v))
-    } else {
-        None
+        }
     };
     let Some((path, version)) = identity else {
         return Ok(result.unavailable(EstimateUnavailableReason::EngineUnavailable));
     };
     result.engine_version = Some(version.clone());
-    if result.engine_id == "gnubg" && gnubg_threads.unwrap_or(1) != 1 {
+    // Benchmarks measure GNUbg single-threaded.
+    if provider.uses_gnubg_threads() && gnubg_threads.unwrap_or(1) != 1 {
         return Ok(result.unavailable(EstimateUnavailableReason::NoMatchingBenchmark));
     }
     let move_filter = GnubgMoveFilter::for_analysis(&result.engine_id, plies);

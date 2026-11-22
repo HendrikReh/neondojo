@@ -120,7 +120,8 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             "Error thresholds must increase strictly, be greater than zero, and be at most one",
         ));
     }
-    if !engine_depths(&enum_string(&config.analysis.engine), "analysis")
+    if !crate::engines::EngineId::from(&config.analysis.engine)
+        .depths("analysis")
         .contains(&config.analysis.plies)
     {
         return Err(ConfigurationError::invalid(
@@ -128,14 +129,17 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             "Analysis depth is not verified for the selected engine",
         ));
     }
-    if !engine_depths(&enum_string(&config.play.engine), "play").contains(&config.play.plies) {
+    if !crate::engines::EngineId::from(&config.play.engine)
+        .depths("play")
+        .contains(&config.play.plies)
+    {
         return Err(ConfigurationError::invalid(
             "play.plies",
             "Play depth is not verified for the selected engine",
         ));
     }
     if config.play.top_two
-        && !crate::settings::supports_top_two(&enum_string(&config.play.engine), config.play.plies)
+        && !crate::engines::EngineId::from(&config.play.engine).supports_top_two(config.play.plies)
     {
         return Err(ConfigurationError::invalid(
             "play.top_two",
@@ -575,7 +579,7 @@ pub(crate) async fn resources(
                 settings.sage_play_threads(),
             ),
         ] {
-            if *selected == ConfigurationEngine::OpenSage
+            if crate::engines::EngineId::from(selected).requires_verified_profile()
                 && crate::settings::open_sage::verified_profile(&state.pool, plies, threads)
                     .await
                     .is_err()

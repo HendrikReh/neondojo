@@ -2,6 +2,7 @@
 //! are immutable snapshots that the user may delete once they are finished.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use crate::engine::{GnubgMoveFilter, resolve_binary};
+use crate::engines::EngineId;
 use axum::{
     Json, Router,
     extract::{Path, State},
@@ -65,18 +66,26 @@ fn reference_for(
 ) -> BenchmarkReference {
     let mut reference = reference();
     let value = &mut reference.protocol;
-    if engine == "bgsage" {
-        value.id = format!("bgsage-match-v3-{plies}ply-4threads");
-        value.process_strategy = "persistent-worker-atomic-game-verified-at-both-boundaries".into();
-        value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
-        value.move_filter = format!("all-cubeful-{plies}ply-candidates-played-board-included");
-    } else if let Some(GnubgMoveFilter::Top14) = move_filter
-        && let Ok(native) = crate::engine::gnubg_plies(plies)
-    {
-        // Protocol ids name GNUbg's native filter level, so saved runs keep
-        // their identity: NeonDojo 3-ply is gnubg-match-v3-2ply-top14.
-        value.id = format!("gnubg-match-v3-{native}ply-top14");
-        value.move_filter = format!("gnubg-{native}ply-top14");
+    match EngineId::parse(engine) {
+        Some(EngineId::NeonGammon) => {
+            value.id = format!("bgsage-match-v3-{plies}ply-4threads");
+            value.process_strategy =
+                "persistent-worker-atomic-game-verified-at-both-boundaries".into();
+            value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
+            value.move_filter = format!("all-cubeful-{plies}ply-candidates-played-board-included");
+        }
+        Some(EngineId::Gnubg) => {
+            if let Some(GnubgMoveFilter::Top14) = move_filter
+                && let Ok(native) = crate::engine::gnubg_plies(plies)
+            {
+                // Protocol ids name GNUbg's native filter level, so saved runs keep
+                // their identity: NeonDojo 3-ply is gnubg-match-v3-2ply-top14.
+                value.id = format!("gnubg-match-v3-{native}ply-top14");
+                value.move_filter = format!("gnubg-{native}ply-top14");
+            }
+        }
+        // Unsupported engine IDs keep the base protocol, which no run of theirs records.
+        None => {}
     }
     reference
 }
@@ -90,7 +99,9 @@ fn known_protocol_id(
     id: &str,
 ) -> bool {
     id == reference_for(engine, plies, move_filter).protocol.id
-        || (engine == "gnubg" && move_filter.is_none() && id == "gnubg-match-v1")
+        || (EngineId::parse(engine) == Some(EngineId::Gnubg)
+            && move_filter.is_none()
+            && id == "gnubg-match-v1")
 }
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct PlayBenchmarkRequest {
@@ -360,18 +371,14 @@ async fn enqueue(
         .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
         snapshot.gnubg_move_filter = move_filter;
         let engine = snapshot.engine()?;
-        let path = if engine_id == "bgsage" {
-            engine.binary().to_owned()
-        } else {
-            resolve_binary(engine.binary())
-                .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?
-        };
-        let version = match &engine {
-            crate::engines::AnalysisEngine::Gnubg(engine) => engine.check_installation().await,
-            crate::engines::AnalysisEngine::OpenSage(engine) => engine.version().await,
-        }
-        .map_err(|e| ApiError::invalid(format!("Engine check failed: {e:#}")))?;
-        let rules_version = if engine_id == "gnubg" {
+        let path = engine
+            .resolved_binary()
+            .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
+        let version = engine
+            .check_installation()
+            .await
+            .map_err(|e| ApiError::invalid(format!("Engine check failed: {e:#}")))?;
+        let rules_version = if engine.id().is_rules_engine() {
             Some(version.clone())
         } else if play.is_some() {
             Some(
@@ -397,7 +404,7 @@ async fn enqueue(
             .bind(Uuid::new_v4()).bind(SqlJson(&machine)).bind(&version).bind(&path).bind(plies)
             .bind(analysis.as_ref().map(SqlJson)).bind(analysis.as_ref().map(|reference| SqlJson(&reference.protocol)))
             .bind(analysis.as_ref().map(|_| REFERENCE_SGF)).bind(play.as_ref().map(SqlJson))
-            .bind(engine_id).bind(crate::engines::display_name(engine_id).unwrap_or("GNUbg")).bind(&saved_snapshot)
+            .bind(engine_id).bind(EngineId::require(engine_id)?.display_name()).bind(&saved_snapshot)
             .fetch_one(&mut *tx).await.map_err(anyhow::Error::from)?;
         runs.push(run);
     }
@@ -470,7 +477,7 @@ mod tests {
 
     #[test]
     fn every_supported_analysis_depth_has_a_runnable_protocol() {
-        for engine in ["gnubg", "bgsage"] {
+        for engine in [EngineId::Gnubg.id(), EngineId::NeonGammon.id()] {
             let depths = crate::configuration::engine_depths(engine, "analysis");
             assert!(!depths.is_empty(), "{engine} has analysis depths");
             for plies in depths {

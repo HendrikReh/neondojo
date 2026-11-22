@@ -211,8 +211,10 @@ pub(super) async fn saved_engine(
         );
         snapshot.engine()
     } else {
+        // Only GNUbg runs predate saved engine snapshots.
         ensure!(
-            run.engine_id == "gnubg",
+            crate::engines::EngineId::parse(&run.engine_id)
+                == Some(crate::engines::EngineId::Gnubg),
             "Missing benchmark engine snapshot"
         );
         Ok(Engine::new(run.engine_path.clone())
@@ -227,9 +229,8 @@ pub(super) async fn prepare(
     token: Uuid,
     engine: &crate::engines::AnalysisEngine,
 ) -> Result<f64> {
-    if let crate::engines::AnalysisEngine::OpenSage(engine) = engine {
-        let start = Instant::now();
-        engine.restart().await?;
+    let start = Instant::now();
+    if engine.restart_persistent_worker().await? {
         let elapsed = start.elapsed().as_secs_f64() * 1000.0;
         let updated = sqlx::query("UPDATE benchmark_runs SET startup_elapsed_ms=$3 WHERE id=$1 AND worker_token=$2 AND status='running' AND lease_until>now()")
             .bind(run.id).bind(token).bind(elapsed).execute(pool).await?;

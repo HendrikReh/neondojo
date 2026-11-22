@@ -23,6 +23,7 @@ pub use library::{
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::{Engine, resolve_binary},
+    engines::EngineId,
     model::Position,
 };
 use anyhow::{Context, ensure};
@@ -229,10 +230,7 @@ pub struct PlayEngineSnapshots {
 impl PlaySession {
     fn rules_engine(&self, path: &str) -> anyhow::Result<Engine> {
         match &self.engine_snapshots {
-            Some(snapshots) => match snapshots.rules.engine()? {
-                crate::engines::AnalysisEngine::Gnubg(engine) => Ok(engine),
-                _ => anyhow::bail!("Saved play rules engine must be GNUbg"),
-            },
+            Some(snapshots) => snapshots.rules.engine()?.into_rules_engine(),
             None => {
                 Ok(Engine::new(path.into())
                     .with_expected_version(Some(self.engine.version.clone())))
@@ -302,9 +300,10 @@ impl CreatePlaySession {
             .play_engine
             .clone()
             .unwrap_or_else(|| settings.play_engine.clone());
-        let depths = crate::configuration::engine_depths(&engine, "play");
+        let provider = EngineId::parse(&engine);
+        let depths = provider.map_or_else(Vec::new, |provider| provider.depths("play"));
         if let Some(difficulty) = self.play_difficulty
-            && (engine != "bgsage"
+            && (!provider.is_some_and(EngineId::has_difficulty_presets)
                 || self.play_top_two == Some(true)
                 || self
                     .play_plies
@@ -317,9 +316,15 @@ impl CreatePlaySession {
         let plies = match (self.play_plies, self.play_difficulty) {
             (_, Some(difficulty)) => difficulty.checker_plies(),
             (Some(plies), None) => plies,
-            (None, None) if engine == "bgsage" && engine != settings.play_engine => 2,
-            (None, None) if depths.contains(&settings.play_plies) => settings.play_plies,
-            (None, None) => depths.first().copied().unwrap_or_default(),
+            (None, None) => provider
+                .and_then(EngineId::play_plies_for_override)
+                .filter(|_| engine != settings.play_engine)
+                .or_else(|| {
+                    depths
+                        .contains(&settings.play_plies)
+                        .then_some(settings.play_plies)
+                })
+                .unwrap_or_else(|| depths.first().copied().unwrap_or_default()),
         };
         // A named preset pins its own depth independently of the manual picker.
         if self.play_difficulty.is_none() && !depths.contains(&plies) {
@@ -851,12 +856,13 @@ async fn create_session(
     let engine = Engine::new(pinned_path.clone());
     let rules_version = engine.version().await.map_err(native_error)?;
     let rules = crate::settings::EngineSnapshot {
-        engine_id: "gnubg".into(),
+        engine_id: EngineId::Gnubg.id().into(),
         gnubg_path: pinned_path.clone(),
         engine_version: Some(rules_version),
-        gnubg_threads: settings
-            .gnubg_play_threads
-            .filter(|_| settings.play_engine == "gnubg"),
+        // The rules process plays the bot's turns itself when the bot is GNUbg.
+        gnubg_threads: settings.gnubg_play_threads.filter(|_| {
+            EngineId::parse(&settings.play_engine).is_some_and(EngineId::is_rules_engine)
+        }),
         gnubg_move_filter: None,
         open_sage: None,
     };

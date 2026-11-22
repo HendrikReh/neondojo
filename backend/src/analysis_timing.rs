@@ -187,40 +187,22 @@ pub(crate) async fn initialize(
     total_moves: i32,
     completed_moves: i32,
 ) -> Result<()> {
-    let snapshot: Option<serde_json::Value> =
-        sqlx::query_scalar("SELECT engine_snapshot FROM jobs WHERE id=$1")
-            .bind(job.id)
-            .fetch_one(pool)
-            .await?;
-    let engine_id = snapshot
-        .as_ref()
-        .and_then(|s| s["engine_id"].as_str())
-        .unwrap_or("gnubg");
-    let path = if engine_id == "bgsage" {
-        Ok(engine.binary().to_owned())
-    } else {
-        crate::engine::resolve_binary(engine.binary())
-    };
-    let benchmark = match (engine, path) {
-        (crate::engines::AnalysisEngine::Gnubg(engine), _) if engine.calculation_threads() != 1 => {
-            None
-        }
-        (_, Ok(path)) => {
-            let move_filter = match engine {
-                crate::engines::AnalysisEngine::Gnubg(engine) => engine.move_filter(),
-                crate::engines::AnalysisEngine::OpenSage(_) => None,
-            };
+    // The engine is the job's own snapshot engine (GNUbg for legacy jobs).
+    let engine_id = engine.id().id();
+    // Benchmarks measure GNUbg single-threaded.
+    let benchmark = match engine.resolved_binary() {
+        Ok(path) if engine.gnubg_threads().is_none_or(|threads| threads == 1) => {
             crate::benchmarks::estimate::matching_benchmark(
                 pool,
                 engine_id,
                 &path,
                 version,
                 job.plies,
-                move_filter,
+                engine.move_filter(),
             )
             .await?
         }
-        (_, Err(_)) => None,
+        _ => None,
     };
     let mut tx = pool.begin().await?;
     crate::match_jobs::assert_lease(&mut tx, job.id, token).await?;

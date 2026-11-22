@@ -19,6 +19,10 @@
 
 The Rust backend runs independently of the browser. A future Tauri shell could start it as a sidecar and reuse the HTTP API.
 
+### Engine providers
+
+Stored snapshots, settings and HTTP contracts keep the engine ID strings `gnubg` and `bgsage` (NeonGammon). [`engines/provider.rs`](../../backend/src/engines/provider.rs) parses them into `EngineId`, which owns the display and product names, the verified depths and thread minimums from [configuration options](../../shared/configuration-options.json), and every capability that differs between engines: GNUbg as the rules engine, use of the GNUbg thread settings, verified sidecar profiles, difficulty presets, top-2 play and practice depth caps. Unknown IDs parse to nothing and fail; nothing falls back to another engine. `AnalysisEngine` in [`engines/mod.rs`](../../backend/src/engines/mod.rs) dispatches the operations both engines share (analysis, cube equities, installation checks, benchmark binary identity, cold-worker restart). Feature modules that need an engine-specific implementation, such as play feedback, duel turns, the play benchmark and practice checker scoring, match `AnalysisEngine` exhaustively, so a new engine is a compile error at each of them.
+
 ## Database schema
 
 [`0001_schema.sql`](../../backend/migrations/0001_schema.sql) is the schema baseline. It consolidates the former migrations 0001–0084 and seeds the system databases, the NeonGammon installation record and the learning preferences. Add each schema change as a new sequential migration after the latest file in [`backend/migrations/`](../../backend/migrations/) and leave the baseline unchanged. Sequential migrations currently run from `0085` through `0089` (`0085_bot_match_players.sql`, `0086_played_record_fingerprint.sql`, `0087_match_import_warnings.sql`, `0088_play_top_two.sql`, and `0089_decision_source_revisions.sql`).

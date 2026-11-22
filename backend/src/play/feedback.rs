@@ -348,12 +348,11 @@ pub(super) async fn analyze_decision(
     session: &PlaySession,
     path: &str,
 ) -> anyhow::Result<Vec<PlayAlternative>> {
-    let engine = session.analysis_engine(path)?;
-    if let crate::engines::AnalysisEngine::OpenSage(engine) = &engine {
-        return super::open_sage::alternatives(session, engine).await;
-    }
-    let crate::engines::AnalysisEngine::Gnubg(engine) = engine else {
-        unreachable!()
+    let engine = match session.analysis_engine(path)? {
+        crate::engines::AnalysisEngine::OpenSage(engine) => {
+            return super::open_sage::alternatives(session, &engine).await;
+        }
+        crate::engines::AnalysisEngine::Gnubg(engine) => engine,
     };
     let directory = tempfile::tempdir()?;
     let mut commands = crate::engine::decision_hint_commands(

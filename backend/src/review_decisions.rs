@@ -879,12 +879,12 @@ fn project(row: Row, match_id: Uuid, format: &str, job: Option<&Job>) -> Option<
         let saved_engine = job
             .engine_snapshot
             .as_ref()
-            .map(|s| match s.engine_id.as_str() {
-                "bgsage" => "NeonGammon",
-                "gnubg" => "GNU Backgammon",
-                _ => s.engine_id.as_str(),
+            .map(|s| {
+                s.provider()
+                    .map_or(s.engine_id.as_str(), |engine| engine.product_name())
             })
-            .unwrap_or("GNU Backgammon");
+            // Legacy jobs without a snapshot ran on GNUbg.
+            .unwrap_or(crate::engines::EngineId::Gnubg.product_name());
         let engine = job
             .result
             .as_ref()

@@ -2,6 +2,9 @@
 mod context;
 mod game;
 mod process;
+mod provider;
+
+pub(crate) use provider::{EngineId, display_name};
 
 use crate::{
     engine::{Analysis, Candidate, Engine},
@@ -17,16 +20,6 @@ use utoipa::ToSchema;
 /// HendrikReh/neongammon). The sidecar checks the same list in
 /// `SUPPORTED_VERSIONS` of `tools/probe_open_sage.py`.
 pub const SUPPORTED_SAGE_PACKAGE_VERSIONS: [&str; 2] = ["3.0.0", "3.1.0"];
-
-/// User-facing short name for a stored engine ID. The internal NeonGammon ID
-/// remains `bgsage`; this is the one place that maps it to the display name.
-pub(crate) fn display_name(engine_id: &str) -> Option<&'static str> {
-    match engine_id {
-        "gnubg" => Some("GNUbg"),
-        "bgsage" => Some("NeonGammon"),
-        _ => None,
-    }
-}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct SageSnapshot {
@@ -143,13 +136,18 @@ pub struct SageCubeEvaluation {
     pub probabilities: Vec<f64>,
 }
 
+/// Whether a saved NeonGammon engine version names a cubeful profile at
+/// `plies`, in the format [`SageEngine::new`] writes.
+pub(crate) fn sage_version_has_cubeful_depth(version: &str, plies: i32) -> bool {
+    version.starts_with("NeonGammon ") && version.contains(&format!("; {plies}ply cubeful;"))
+}
+
 pub(crate) fn valid_sage_depth(plies: i32) -> bool {
     (1..=4).contains(&plies)
 }
 
 fn valid_sage_threads(threads: u32) -> bool {
-    i32::try_from(threads)
-        .is_ok_and(|threads| threads >= crate::configuration::engine_min_threads("bgsage"))
+    i32::try_from(threads).is_ok_and(|threads| threads >= EngineId::NeonGammon.min_threads())
 }
 
 impl SageEngine {
@@ -693,12 +691,98 @@ pub(crate) fn forced_pass(position_id: &str, match_id: &str, dice: [i32; 2]) -> 
     Ok(crate::import::sgf::apply_checker_turn(&board, player, dice, &[]).is_ok())
 }
 
+/// A configured engine instance. Shared operations dispatch here; callers
+/// that need an engine-specific implementation match exhaustively, so a new
+/// variant is a compile error at each of them.
 #[derive(Clone)]
 pub enum AnalysisEngine {
     Gnubg(Engine),
     OpenSage(SageEngine),
 }
 impl AnalysisEngine {
+    pub(crate) fn id(&self) -> EngineId {
+        match self {
+            Self::Gnubg(_) => EngineId::Gnubg,
+            Self::OpenSage(_) => EngineId::NeonGammon,
+        }
+    }
+    /// The GNUbg rules engine of a saved rules snapshot; any other engine fails.
+    pub(crate) fn into_rules_engine(self) -> Result<Engine> {
+        match self {
+            Self::Gnubg(engine) => Ok(engine),
+            Self::OpenSage(_) => anyhow::bail!("Saved play rules engine must be GNUbg"),
+        }
+    }
+    /// The executable identity benchmarks are keyed by: GNUbg's resolved
+    /// binary, or NeonGammon's absolute Python path as saved in its profile.
+    pub(crate) fn resolved_binary(&self) -> Result<String> {
+        match self {
+            Self::Gnubg(engine) => crate::engine::resolve_binary(engine.binary()),
+            Self::OpenSage(engine) => Ok(engine.binary().to_owned()),
+        }
+    }
+    /// Full installation check: a real position evaluation for GNUbg, the
+    /// verified worker identity for NeonGammon.
+    pub(crate) async fn check_installation(&self) -> Result<String> {
+        match self {
+            Self::Gnubg(engine) => engine.check_installation().await,
+            Self::OpenSage(engine) => engine.version().await,
+        }
+    }
+    /// GNUbg's saved checker move filter; other engines have none.
+    pub(crate) fn move_filter(&self) -> Option<crate::engine::GnubgMoveFilter> {
+        match self {
+            Self::Gnubg(engine) => engine.move_filter(),
+            Self::OpenSage(_) => None,
+        }
+    }
+    /// GNUbg's `set threads` count; NeonGammon threads belong to its profile.
+    pub(crate) fn gnubg_threads(&self) -> Option<i32> {
+        match self {
+            Self::Gnubg(engine) => Some(engine.calculation_threads()),
+            Self::OpenSage(_) => None,
+        }
+    }
+    /// Restart a persistent worker so a benchmark measures a cold start.
+    /// Returns false for engines that start a fresh process per request.
+    pub(crate) async fn restart_persistent_worker(&self) -> Result<bool> {
+        match self {
+            Self::Gnubg(_) => Ok(false),
+            Self::OpenSage(engine) => engine.restart().await.map(|()| true),
+        }
+    }
+    /// Cube equities and chances from the doubler's view, with the engine
+    /// name and depth that produced them.
+    pub(crate) async fn cube_equities(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        plies: i32,
+    ) -> Result<(String, i32, crate::engine::CubeEquities)> {
+        match self {
+            Self::Gnubg(engine) => {
+                engine
+                    .analyze_cube_choices(position_id, match_id, plies)
+                    .await
+            }
+            Self::OpenSage(engine) => {
+                let cube = engine.cube(position_id, match_id).await?;
+                let name = engine
+                    .saved_version()
+                    .context("NeonGammon did not report its version")?;
+                Ok((
+                    name.to_owned(),
+                    plies,
+                    crate::engine::CubeEquities {
+                        no_double: cube.no_double,
+                        take: cube.take,
+                        pass: cube.pass,
+                        probabilities: cube.probabilities.as_slice().try_into().ok(),
+                    },
+                ))
+            }
+        }
+    }
     pub async fn version(&self) -> Result<String> {
         match self {
             Self::Gnubg(engine) => engine.version().await,

@@ -70,7 +70,9 @@ pub(super) async fn verify_settings(
             proposed.sage_play_threads(),
         ),
     ] {
-        if engine == "bgsage" {
+        if crate::engines::EngineId::parse(engine)
+            .is_some_and(crate::engines::EngineId::requires_verified_profile)
+        {
             profiles.push((plies, threads));
         }
     }

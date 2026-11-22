@@ -179,16 +179,14 @@ async fn exists(tx: &mut Transaction<'_, Postgres>, table: &str, id: &str) -> Re
 }
 pub(crate) fn apply_app(config: &mut ProfileConfiguration, app: &crate::settings::AppSettings) {
     config.general.player_name = app.player_name.clone();
-    config.analysis.engine = if app.analysis_engine == "bgsage" {
-        ConfigurationEngine::OpenSage
-    } else {
-        ConfigurationEngine::Gnubg
+    // Saved settings hold verified engine IDs; an unknown one reads as GNUbg.
+    let engine = |id: &str| {
+        ConfigurationEngine::from(
+            crate::engines::EngineId::parse(id).unwrap_or(crate::engines::EngineId::Gnubg),
+        )
     };
-    config.play.engine = if app.play_engine == "bgsage" {
-        ConfigurationEngine::OpenSage
-    } else {
-        ConfigurationEngine::Gnubg
-    };
+    config.analysis.engine = engine(&app.analysis_engine);
+    config.play.engine = engine(&app.play_engine);
     config.analysis.plies = app.analysis_plies;
     config.play.plies = app.play_plies;
     config.play.top_two = app.play_top_two;

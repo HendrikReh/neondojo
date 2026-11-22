@@ -108,7 +108,8 @@ pub(crate) async fn play(
     let mut outcomes = cubeless.then_some([[0; 3]; 2]);
     let mut previous_scores = [0; 2];
     let match_bots = Some(std::array::from_fn(|side| {
-        matches!(bots[side], AnalysisEngine::Gnubg(_)).then_some(depths[side])
+        // The rules engine plays its own turns; other bots yield to it.
+        bots[side].id().is_rules_engine().then_some(depths[side])
     }));
     let native_bots = match_bots.map_or([false; 2], |bots| bots.map(|depth| depth.is_some()));
     let mut saved: Option<(super::NativeSnapshot, String)> = None;

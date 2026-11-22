@@ -704,9 +704,15 @@ pub(crate) enum MatchAnalysisEngine {
 
 impl MatchAnalysisEngine {
     pub(crate) fn id(&self) -> &'static str {
-        match self {
-            Self::Gnubg => "gnubg",
-            Self::Bgsage => "bgsage",
+        crate::engines::EngineId::from(self).id()
+    }
+}
+
+impl From<&MatchAnalysisEngine> for crate::engines::EngineId {
+    fn from(engine: &MatchAnalysisEngine) -> Self {
+        match engine {
+            MatchAnalysisEngine::Gnubg => Self::Gnubg,
+            MatchAnalysisEngine::Bgsage => Self::NeonGammon,
         }
     }
 }

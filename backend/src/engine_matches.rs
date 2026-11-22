@@ -10,6 +10,7 @@ pub use runner::worker;
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::{Engine, resolve_binary},
+    engines::EngineId,
     model::MatchSummary,
     settings::{self, EngineSnapshot},
     store,
@@ -327,7 +328,9 @@ async fn create(
     }
     let cubeless = request.format == DuelFormat::MoneyCubeless;
     for side in [&request.a, &request.b] {
-        if !crate::configuration::engine_depths(&side.engine_id, "duel").contains(&side.plies) {
+        if !EngineId::parse(&side.engine_id)
+            .is_some_and(|engine| engine.depths("duel").contains(&side.plies))
+        {
             return Err(ApiError::invalid("Unsupported playing engine or strength"));
         }
     }
@@ -359,7 +362,9 @@ async fn create(
         let plies = side.plies;
         let state = &state;
         async move {
-            if id == "gnubg" {
+            // The rules engine side reuses the installation checked above;
+            // other engines (IDs checked against their duel depths) verify theirs.
+            if EngineId::parse(&id).is_some_and(EngineId::is_rules_engine) {
                 Ok::<_, ApiError>(EngineSnapshot {
                     engine_id: id,
                     gnubg_path: path,

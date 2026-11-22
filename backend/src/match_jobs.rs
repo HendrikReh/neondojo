@@ -87,7 +87,8 @@ pub(crate) async fn execute(
                     .await
                     .with_context(|| {
                         format!(
-                            "GNUbg analysis failed in game {game_no}/{}",
+                            "{} analysis failed in game {game_no}/{}",
+                            engine.id().display_name(),
                             job.total_games
                         )
                     })?;
