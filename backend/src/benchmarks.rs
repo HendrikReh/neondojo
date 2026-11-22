@@ -48,7 +48,7 @@ pub struct BenchmarkProtocol {
 }
 fn protocol() -> BenchmarkProtocol {
     BenchmarkProtocol {
-        id: "gnubg-match-v2-unlimited".into(),
+        id: "gnubg-match-v4-unlimited".into(),
         game_timeout_seconds: None,
         cubeful: true,
         deterministic: true,
@@ -79,8 +79,8 @@ fn reference_for(
                 && let Ok(native) = crate::engine::gnubg_plies(plies)
             {
                 // Protocol ids name GNUbg's native filter level, so saved runs keep
-                // their identity: NeonDojo 3-ply is gnubg-match-v3-2ply-top14.
-                value.id = format!("gnubg-match-v3-{native}ply-top14");
+                // their identity: NeonDojo 3-ply is gnubg-match-v4-2ply-top14.
+                value.id = format!("gnubg-match-v4-{native}ply-top14");
                 value.move_filter = format!("gnubg-{native}ply-top14");
             }
         }
@@ -90,8 +90,9 @@ fn reference_for(
     reference
 }
 /// Whether a saved analysis protocol id is the one measured for this engine,
-/// depth and move filter, or GNUbg's legacy unlimited protocol. Runs and
-/// estimates share this rule so a newly supported depth never needs a list.
+/// depth and move filter. Older GNUbg ids (v1–v3) timed a slower pinned-version
+/// check inside every game and stay historical. Runs and estimates share this
+/// rule so a newly supported depth never needs a list.
 fn known_protocol_id(
     engine: &str,
     plies: i32,
@@ -99,9 +100,6 @@ fn known_protocol_id(
     id: &str,
 ) -> bool {
     id == reference_for(engine, plies, move_filter).protocol.id
-        || (EngineId::parse(engine) == Some(EngineId::Gnubg)
-            && move_filter.is_none()
-            && id == "gnubg-match-v1")
 }
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct PlayBenchmarkRequest {
@@ -511,6 +509,24 @@ mod tests {
                 .protocol_id,
             "bgsage-checker-turn-v4-2ply-2threads-gnubg-rules"
         );
-        assert!(known_protocol_id("gnubg", 2, None, "gnubg-match-v1"));
+        // v1 play timings include the slower pinned-version check.
+        assert_eq!(
+            play_latency::reference_for("gnubg", 2).unwrap().protocol_id,
+            "gnubg-checker-turn-v2"
+        );
+        // Earlier GNUbg analysis timings include the slower pinned-version check.
+        for legacy in [
+            (2, None, "gnubg-match-v1"),
+            (2, None, "gnubg-match-v2-unlimited"),
+            (3, Some(GnubgMoveFilter::Top14), "gnubg-match-v3-2ply-top14"),
+        ] {
+            assert!(!known_protocol_id("gnubg", legacy.0, legacy.1, legacy.2));
+        }
+        assert!(known_protocol_id(
+            "gnubg",
+            3,
+            Some(GnubgMoveFilter::Top14),
+            "gnubg-match-v4-2ply-top14"
+        ));
     }
 }
