@@ -1,4 +1,5 @@
 import { ConfigurationApiError } from './configuration-api';
+import { openingBookConfigurationKey } from './configuration-model';
 import ProfileActionDialog from './ProfileActionDialog';
 import { useOptionalConfiguration } from './ConfigurationProvider';
 import { useProfileText } from './profile-messages';
@@ -23,10 +24,10 @@ import {
 } from './source-analysis-api';
 export default function OpeningBookDialog({
   onClose,
-  onSaved,
+  onRefresh,
 }: {
   onClose: () => void;
-  onSaved: () => void;
+  onRefresh: () => void;
 }) {
   const configuration = useOptionalConfiguration();
   const profileT = useProfileText();
@@ -131,16 +132,24 @@ export default function OpeningBookDialog({
     setBusy(true);
     setError(undefined);
     try {
+      let refresh = true;
       if (configuration) {
-        await configuration.applyCurrent((c) => ({
-          ...c,
-          opening_book: {
-            provider: draft.provider as
-              'off' | 'automatic' | 'backgammondb' | 'xg',
-            path: draft.path,
-            xg_path: draft.xg_path,
-          },
-        }));
+        let previousBookKey: string | undefined;
+        const applied = await configuration.applyCurrent((current) => {
+          previousBookKey = openingBookConfigurationKey(current.opening_book);
+          return {
+            ...current,
+            opening_book: {
+              provider: draft.provider as
+                'off' | 'automatic' | 'backgammondb' | 'xg',
+              path: draft.path,
+              xg_path: draft.xg_path,
+            },
+          };
+        });
+        // Changed book settings already refresh through the configuration provider.
+        refresh =
+          previousBookKey === openingBookConfigurationKey(applied.opening_book);
       } else {
         await request<BookSettings>('/opening-book', {
           method: 'PUT',
@@ -150,7 +159,7 @@ export default function OpeningBookDialog({
         });
       }
       if (!abort.signal.aborted) {
-        onSaved();
+        if (refresh) onRefresh();
         onClose();
       }
     } catch (e) {

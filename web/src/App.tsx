@@ -4,6 +4,7 @@ import {
 } from './ConfigurationProvider';
 import { sessionString, useWorkspaceSession } from './useWorkspaceSession';
 import ProfileSelector from './ProfileSelector';
+import { openingBookConfigurationKey } from './configuration-model';
 import { settingsFromConfiguration } from './configuration-settings';
 import { loadBenchmarkStatus } from './benchmark-api';
 import ExtrasWorkspace, {
@@ -216,6 +217,9 @@ export default function App() {
   const [settingsRevision, setSettingsRevision] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [bookRevision, setBookRevision] = useState(0);
+  const bookConfigurationKey = openingBookConfigurationKey(
+    confirmed?.opening_book,
+  );
   const [health, setHealth] = useState<'checking' | 'ok' | 'degraded'>(
     'checking',
   );
@@ -323,12 +327,8 @@ export default function App() {
     setLocale(current.general.locale);
   }, [confirmed?.general.locale, setLocale]);
   useEffect(() => {
-    if (confirmed) setBookRevision((n) => n + 1);
-  }, [
-    confirmed?.opening_book.provider,
-    confirmed?.opening_book.path,
-    confirmed?.opening_book.xg_path,
-  ]);
+    if (bookConfigurationKey !== undefined) setBookRevision((n) => n + 1);
+  }, [bookConfigurationKey]);
   useEffect(() => {
     Object.values(jobs.jobs).forEach(track);
   }, [jobs.jobs, track]);
@@ -1335,7 +1335,7 @@ export default function App() {
         initialCategory={settingsCategory}
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onBookSaved={() => setBookRevision((n) => n + 1)}
+        onBookRefresh={() => setBookRevision((n) => n + 1)}
         onBenchmark={() => {
           cancelRestoration();
           setSettingsOpen(false);

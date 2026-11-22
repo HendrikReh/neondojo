@@ -1,4 +1,5 @@
-import { expect, test, type Page } from './test';
+import { profileBackend } from './profile-backend';
+import { backendTest, expect, test, type Page } from './test';
 
 function analysisWorkspace(page: Page) {
   return page.locator('#workspace-panel-analysis');
@@ -180,9 +181,8 @@ test('observed rolls load on demand and stay scoped to the selected game', async
   }
 });
 
-test('saving opening-book settings keeps the selected game rolls and analysis catalog', async ({
-  page,
-}) => {
+backendTest('saving opening-book settings fetches once', async ({ page }) => {
+  const backend = await profileBackend(page, { initialized: false });
   const matchId = await openMatch(page);
   const rolls = diceRequests(page, matchId);
   const workspace = analysisWorkspace(page);
@@ -192,15 +192,34 @@ test('saving opening-book settings keeps the selected game rolls and analysis ca
   expect(rolls).toEqual(['1']);
   const table = await observed.innerText();
 
-  const nextBook = page.waitForResponse((response) =>
-    /^\/api\/positions\/[^/]+\/opening-book$/.test(
-      new URL(response.url()).pathname,
-    ),
-  );
+  const nextPosition = await workspace
+    .locator('.moves-list .move-history-row.current ~ .move-history-row')
+    .first()
+    .getAttribute('data-position-id');
+  if (!nextPosition) throw new Error('Next move has no position ID');
+  const bookPath = `/api/positions/${nextPosition}/opening-book`;
+  const catalogPath = `/api/matches/${matchId}/analyses`;
+  const waitForBook = () =>
+    page.waitForResponse(
+      (response) => new URL(response.url()).pathname === bookPath,
+    );
+  const nextBook = waitForBook();
+  const nextCatalog = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      url.pathname === catalogPath &&
+      url.searchParams.get('position_id') === nextPosition
+    );
+  });
   await workspace
     .getByRole('button', { name: 'Nächster Zug', exact: true })
     .click();
-  const bookPath = new URL((await nextBook).url()).pathname;
+  await expect(workspace.locator('.move-history-row.current')).toHaveAttribute(
+    'data-position-id',
+    nextPosition,
+  );
+  expect((await nextBook).ok()).toBe(true);
+  expect((await nextCatalog).ok()).toBe(true);
   await page.waitForLoadState('networkidle');
   await expect(observed).toHaveText(table, { useInnerText: true });
   expect(rolls).toEqual(['1']);
@@ -222,7 +241,26 @@ test('saving opening-book settings keeps the selected game rolls and analysis ca
     .click();
   await settings.getByRole('button', { name: 'Analyse', exact: true }).click();
 
-  const catalogPath = `/api/matches/${matchId}/analyses`;
+  const manageBooks = settings.getByRole('button', {
+    name: 'Eröffnungsbücher verwalten',
+    exact: true,
+  });
+  // Count requests from effects scheduled by the committed settings render.
+  const afterRender = () =>
+    page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+  async function applyBookSettings() {
+    const refreshed = waitForBook();
+    await books.getByRole('button', { name: 'Anwenden', exact: true }).click();
+    await expect(books).not.toBeVisible();
+    expect((await refreshed).ok()).toBe(true);
+    await afterRender();
+  }
+
   let bookReads = 0;
   let catalogReads = 0;
   page.on('request', (request) => {
@@ -232,26 +270,34 @@ test('saving opening-book settings keeps the selected game rolls and analysis ca
   });
   rolls.length = 0;
   for (let save = 0; save < 5; save++) {
-    await settings
-      .getByRole('button', { name: 'Eröffnungsbücher verwalten', exact: true })
-      .click();
+    await manageBooks.click();
     const previous = await provider.inputValue();
     await provider.selectOption(previous === 'off' ? 'automatic' : 'off');
-    const refreshed = page.waitForResponse(
-      (response) => new URL(response.url()).pathname === bookPath,
-    );
-    await books.getByRole('button', { name: 'Anwenden', exact: true }).click();
-    await expect(books).not.toBeVisible();
-    expect((await refreshed).ok()).toBe(true);
-    await page.waitForLoadState('networkidle');
+    await applyBookSettings();
   }
+  console.log(
+    `Opening book, 5 changed saves: ${bookReads} book lookups, ${rolls.length} dice reads, ${catalogReads} catalog reads`,
+  );
+  expect.soft(bookReads).toBe(5);
+
+  const beforeReapply = bookReads;
+  await manageBooks.click();
+  await expect(provider).toBeVisible();
+  await applyBookSettings();
+  expect(bookReads - beforeReapply).toBe(1);
+
   await page.keyboard.press('Escape');
   await expect(settings).not.toBeVisible();
+  const beforeRemote = bookReads;
+  const remote = structuredClone(backend.state.current_configuration);
+  remote.opening_book.xg_path = '/books/changed-in-another-window.ob';
+  backend.updateRemote(remote);
+  const remoteBook = waitForBook();
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  expect((await remoteBook).ok()).toBe(true);
+  await afterRender();
+  expect(bookReads - beforeRemote).toBe(1);
   await expect(observed).toHaveText(table, { useInnerText: true });
-  console.log(
-    `Opening book, 5 saves: ${bookReads} book lookups, ${rolls.length} dice reads, ${catalogReads} catalog reads`,
-  );
-  expect(bookReads).toBeGreaterThanOrEqual(5);
   expect.soft(rolls).toEqual([]);
   expect(catalogReads).toBe(0);
 });

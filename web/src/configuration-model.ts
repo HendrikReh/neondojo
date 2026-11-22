@@ -133,6 +133,12 @@ export interface ProfileConfiguration {
   };
 }
 
+export function openingBookConfigurationKey(
+  book?: ProfileConfiguration['opening_book'],
+) {
+  return book && JSON.stringify([book.provider, book.path, book.xg_path]);
+}
+
 export const defaultConfiguration: ProfileConfiguration = {
   schema_version: 1,
   general: { player_name: '', locale: 'en', play_sounds: true },

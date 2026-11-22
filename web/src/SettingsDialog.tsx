@@ -93,7 +93,7 @@ export interface SettingsDialogProps {
   open: boolean;
   initialCategory?: 'general' | 'play' | 'profiles';
   onClose: () => void;
-  onBookSaved: () => void;
+  onBookRefresh: () => void;
   onBenchmark?: () => void;
   theme: Theme;
   appearance: UiAppearance;
@@ -214,7 +214,7 @@ export default function SettingsDialog({
   theme,
   appearance,
   onApply,
-  onBookSaved,
+  onBookRefresh,
   onBenchmark,
   initialCategory = 'general',
 }: SettingsDialogProps) {
@@ -1656,7 +1656,7 @@ export default function SettingsDialog({
       {open && bookOpen && (
         <OpeningBookDialog
           onClose={() => setBookOpen(false)}
-          onSaved={onBookSaved}
+          onRefresh={onBookRefresh}
         />
       )}
       {open && destination && (
