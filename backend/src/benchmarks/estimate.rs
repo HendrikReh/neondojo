@@ -195,14 +195,15 @@ async fn estimate(
                     crate::engines::SageEngine::new(snapshot).ok()
                 })
             {
-                let version = match running_engine_version(&state.pool, engine.binary()).await? {
-                    Some(_) => engine.saved_version().map(str::to_owned),
-                    None => tokio::time::timeout(Duration::from_secs(2), engine.version())
-                        .await
-                        .ok()
-                        .and_then(Result::ok),
-                };
-                version.map(|v| (engine.binary().to_owned(), v))
+                // The verified snapshot fixes the version string, as for jobs.
+                // Starting a worker here would replace the cached one and, at
+                // 4-ply, run an evaluation longer than this read may take; the
+                // worker rechecks the installation when the analysis starts.
+                std::path::Path::new(engine.binary())
+                    .is_file()
+                    .then(|| engine.saved_version().map(str::to_owned))
+                    .flatten()
+                    .map(|v| (engine.binary().to_owned(), v))
             } else {
                 None
             }
@@ -299,3 +300,124 @@ pub(crate) async fn matching_benchmark(
     components(schemas(AnalysisTimeEstimate, EstimateBenchmark, EstimateUnavailableReason))
 )]
 pub struct EstimateDoc;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::engines::{SageEngine, SageSnapshot};
+    use http_body_util::BodyExt;
+    use std::os::unix::fs::PermissionsExt;
+    use tower::ServiceExt;
+
+    async fn get_estimate(state: &AppState, id: Uuid) -> serde_json::Value {
+        let response = crate::api::router(state.clone())
+            .oneshot(
+                axum::http::Request::get(format!(
+                    "/api/matches/{id}/analysis/estimate?engine_id=bgsage&plies=4"
+                ))
+                .body(axum::body::Body::empty())
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
+    /// Opening a 4-ply worker runs a real evaluation that outlasts any
+    /// interactive timeout, so the estimate must not start one.
+    #[sqlx::test(migrations = "./migrations")]
+    async fn neongammon_estimate_uses_the_verified_identity_without_starting_a_worker(
+        pool: sqlx::PgPool,
+    ) {
+        let dir = std::env::temp_dir().join(format!("neondojo-estimate-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let python = dir.join("python");
+        let started = dir.join("started");
+        std::fs::write(
+            &python,
+            format!("#!/bin/sh\ntouch '{}'\nexit 1\n", started.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&python, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let installed = SageSnapshot {
+            python: python.to_str().unwrap().into(),
+            package_version: "3.1.0".into(),
+            artifact_fingerprint:
+                "26e7701c27c6c5e0cd3cc864768e27675f0d72149c2ad545ffb0c5293ff705d5".into(),
+            threads: 2,
+            plies: 2,
+            adapter_version: 1,
+            one_ply_verified: true,
+            cubeless: false,
+        };
+        sqlx::query(
+            "UPDATE engine_installations SET python_path=$1,snapshot=$2 WHERE engine_id='bgsage'",
+        )
+        .bind(&installed.python)
+        .bind(sqlx::types::Json(&installed))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let measured = SageEngine::new(SageSnapshot {
+            plies: 4,
+            threads: crate::settings::SAGE_ANALYSIS_THREADS,
+            ..installed.clone()
+        })
+        .unwrap();
+        let reference = reference_for("bgsage", 4, None);
+        sqlx::query("INSERT INTO benchmark_runs(id,status,started_at,finished_at,machine,engine_id,engine_name,engine_version,engine_path,plies,reference,protocol,reference_sgf,completed_games,analyzed_moves,total_elapsed_ms,average_move_ms) VALUES($1,'completed',now(),now(),$2,'bgsage','NeonGammon',$3,$4,4,$5,$6,$7,10,460,$8,$9)")
+            .bind(Uuid::new_v4())
+            .bind(sqlx::types::Json(machine::snapshot(&pool).await.unwrap()))
+            .bind(measured.saved_version().unwrap())
+            .bind(&installed.python)
+            .bind(sqlx::types::Json(&reference))
+            .bind(sqlx::types::Json(&reference.protocol))
+            .bind(super::super::REFERENCE_SGF)
+            .bind(1260.0 * 460.0)
+            .bind(1260.0)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let source = super::super::REFERENCE_SGF;
+        let id = store::import_match(
+            &pool,
+            "estimate.sgf",
+            "sgf",
+            source.as_bytes(),
+            source,
+            &crate::import::parse_sgf(source).unwrap(),
+        )
+        .await
+        .unwrap()
+        .r#match
+        .id;
+        let state = AppState::new(pool.clone(), Engine::new("/unused".into()));
+
+        let estimate = get_estimate(&state, id).await;
+        assert_eq!(
+            estimate["unavailable_reason"],
+            serde_json::Value::Null,
+            "{estimate}"
+        );
+        assert_eq!(estimate["estimated_ms"], 1260.0 * 460.0, "{estimate}");
+        assert_eq!(
+            estimate["engine_version"],
+            measured.saved_version().unwrap()
+        );
+        assert!(
+            !started.exists(),
+            "the estimate started a NeonGammon worker"
+        );
+
+        // A removed interpreter still makes the engine unavailable.
+        std::fs::remove_file(&python).unwrap();
+        let estimate = get_estimate(&state, id).await;
+        assert_eq!(
+            estimate["unavailable_reason"], "engine_unavailable",
+            "{estimate}"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
