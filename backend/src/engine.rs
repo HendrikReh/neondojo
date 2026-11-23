@@ -61,6 +61,13 @@ pub(crate) fn resolve_binary(binary: &str) -> Result<String> {
         .to_owned())
 }
 
+/// [`resolve_binary`] for async callers. The `$PATH` search and
+/// canonicalization query the file system, so they run on the blocking pool.
+pub(crate) async fn resolve_binary_async(binary: &str) -> Result<String> {
+    let binary = binary.to_owned();
+    tokio::task::spawn_blocking(move || resolve_binary(&binary)).await?
+}
+
 fn reported_threads(output: &str) -> Option<i32> {
     output.lines().find_map(|line| {
         let line = line.trim();
@@ -298,7 +305,8 @@ impl Engine {
 
     pub async fn version(&self) -> Result<String> {
         let _permit = engine_permit().await;
-        self.version_unlocked(&resolve_binary(&self.binary)?).await
+        self.version_unlocked(&resolve_binary_async(&self.binary).await?)
+            .await
     }
 
     /// Keep the health check responsive when a benchmark owns the engine.
@@ -307,7 +315,8 @@ impl Engine {
         let _permit = tokio::time::timeout(Duration::from_millis(300), engine_permit())
             .await
             .context("GNUbg is busy")?;
-        self.version_unlocked(&resolve_binary(&self.binary)?).await
+        self.version_unlocked(&resolve_binary_async(&self.binary).await?)
+            .await
     }
 
     async fn version_unlocked(&self, binary: &str) -> Result<String> {
@@ -376,8 +385,9 @@ impl Engine {
         mut observe: impl FnMut(&[u8]) + Send,
     ) -> Result<String> {
         let _permit = engine_permit().await;
-        let binary =
-            resolve_binary(&self.binary).context("Could not start GNUbg; check GNUBG_BIN")?;
+        let binary = resolve_binary_async(&self.binary)
+            .await
+            .context("Could not start GNUbg; check GNUBG_BIN")?;
         // A job may outlive an upgrade at the same path. Fence every native
         // invocation, including later games, dice batches and forced-pass calls.
         let installation = match self.expected_version {

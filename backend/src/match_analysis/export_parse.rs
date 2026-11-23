@@ -121,14 +121,30 @@ pub(super) fn cube_decision(block: &str, player: i32, played: &str) -> Result<De
     Ok(result)
 }
 
+#[cfg(test)]
 pub(super) fn parse_game(
     sgf: &str,
     game_no: i32,
     native: &str,
     text: &str,
 ) -> Result<Vec<Decision>> {
-    let original = parse_trees(sgf)?;
-    let selected = original
+    parse_source_game(
+        &AnalysisSource::for_game(sgf, game_no)?,
+        game_no,
+        native,
+        text,
+    )
+}
+
+/// Check GNUbg's analysis of one game against the played match it was given.
+pub(super) fn parse_source_game(
+    source: &AnalysisSource,
+    game_no: i32,
+    native: &str,
+    text: &str,
+) -> Result<Vec<Decision>> {
+    let selected = source
+        .trees
         .get(usize::try_from(game_no - 1)?)
         .context("Game number outside match")?;
     let (native_match, native_contexts) =
@@ -150,12 +166,12 @@ pub(super) fn parse_game(
             "GNUbg changed the played move sequence"
         );
     }
-    let (imported, source_contexts) = crate::import::sgf::parse_sgf_with_context(sgf)?;
     ensure!(
-        source_contexts.get(usize::try_from(game_no - 1)?) == native_contexts.first(),
+        source.contexts.get(usize::try_from(game_no - 1)?) == native_contexts.first(),
         "GNUbg changed the game score, rules, or checker/cube decision context"
     );
-    let positions: Vec<_> = imported
+    let positions: Vec<_> = source
+        .imported
         .positions
         .iter()
         .filter(|p| p.game_no == game_no)
