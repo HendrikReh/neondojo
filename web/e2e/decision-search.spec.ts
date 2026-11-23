@@ -123,13 +123,16 @@ test('all analyzed decisions are filtered on the server, previewed and practiced
     'Played: Take · Best: Pass · Loss: 0.125',
   );
   // A cube decision has no saved checker position: it opens in its game by
-  // its number and cannot be bookmarked.
+  // its number and cannot be bookmarked, but it can still join a deck.
   await expect(
     preview.getByRole('button', { name: 'Open in Analysis' }),
   ).toBeVisible();
   await expect(
+    preview.getByRole('button', { name: 'Add to deck', exact: true }),
+  ).toBeVisible();
+  await expect(
     preview.locator('.saved-position-preview-actions button'),
-  ).toHaveCount(1);
+  ).toHaveCount(2);
 
   // The whole row selects, and the arrow keys move the preview.
   const second = table.getByRole('row').nth(2);
@@ -350,7 +353,7 @@ test('decision search has a visible heading, a column picker and resizable colum
     .toBe(Math.round(before));
 });
 
-test('a pre-filled player names the next step and a checker hit can join a deck', async ({
+test('a pre-filled player lists its decisions at once and hits join a deck one by one or by page', async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1800, height: 1169 });
@@ -368,6 +371,8 @@ test('a pre-filled player names the next step and a checker hit can join a deck'
   );
   const searches: URLSearchParams[] = [];
   const jobId = '33333333-3333-4333-8333-333333333333';
+  const checker = { job_id: jobId, game_no: 1, decision_no: 4 };
+  const cube = { job_id: jobId, game_no: 1, decision_no: 7 };
   await page.route('**/api/study/decisions?*', (route) => {
     searches.push(new URL(route.request().url()).searchParams);
     return route.fulfill({
@@ -375,15 +380,16 @@ test('a pre-filled player names the next step and a checker hit can join a deck'
         items: [
           {
             ...hit(4, 0.091),
-            reference: { job_id: jobId, game_no: 1, decision_no: 4 },
+            reference: checker,
             kind: 'checker',
             position: { ...position, dice: [3, 1] },
             mistake_kind: 'checker',
             played: '24/23 13/10',
             best: '8/5 6/5',
           },
+          { ...hit(7, 0.06), reference: cube },
         ],
-        total: 1,
+        total: 2,
         page: 1,
         limit: 50,
       },
@@ -406,10 +412,25 @@ test('a pre-filled player names the next step and a checker hit can join a deck'
       : route.fallback(),
   );
   const added: unknown[] = [];
-  await page.route(`**/api/decks/${deck.id}/cards`, (route) => {
+  await page.route(`**/api/decks/${deck.id}/decisions`, (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
-    added.push(route.request().postDataJSON());
-    return route.fulfill({ json: { added: 1, updated: 0, total: 4 } });
+    const body = route.request().postDataJSON() as {
+      decisions: (typeof checker)[];
+    };
+    added.push(body);
+    const first = added.length === 1;
+    return route.fulfill({
+      json: {
+        added: 1,
+        updated: 0,
+        total: first ? 4 : 5,
+        items: body.decisions.map((reference, index) => ({
+          reference,
+          status: first || index === 1 ? 'added' : 'duplicate',
+          card_id: `55555555-5555-4555-8555-55555555555${index}`,
+        })),
+      },
+    });
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Positions', exact: true }).click();
@@ -421,15 +442,14 @@ test('a pre-filled player names the next step and a checker hit can join a deck'
   await expect(
     search.getByRole('combobox', { name: 'Player', exact: true }),
   ).toHaveValue('Alice');
-  // The workspace names the next step and does not search on its own.
-  await expect(search.getByRole('status')).toHaveText(
-    'Select “Search decisions” to list the analyzed decisions of Alice that match the filters above.',
-  );
-  expect(searches).toHaveLength(0);
-  await page.screenshot({ path: testInfo.outputPath('decision-idle.png') });
-  await search.getByRole('button', { name: 'Search decisions' }).click();
-  await expect(search).toContainText('1 decision found');
+  // My player profile's decisions are listed without a click, once.
+  await expect(search).toContainText('2 decisions found');
+  expect(searches).toHaveLength(1);
+  expect(searches[0].get('player')).toBe('Alice');
+  expect(searches[0].get('page')).toBe('1');
   await expect(search).not.toContainText('Select “Search decisions”');
+  await page.screenshot({ path: testInfo.outputPath('decision-auto.png') });
+
   const preview = search.getByRole('complementary', {
     name: 'Decision preview',
   });
@@ -444,15 +464,35 @@ test('a pre-filled player names the next step and a checker hit can join a deck'
   ).toHaveValue(deck.id);
   await expect(dialog).toContainText('3 cards in deck');
   await dialog
-    .getByRole('button', { name: 'Add 1 position', exact: true })
+    .getByRole('button', { name: 'Add 1 decision', exact: true })
     .click();
   await expect(dialog).toBeHidden();
-  expect(added).toEqual([
-    { position_id: position.id, analysis_id: `job:${jobId}` },
-  ]);
+  expect(added).toEqual([{ decisions: [checker] }]);
   await expect(preview.getByRole('status')).toHaveText(
     'Added · Openings · 4 cards in deck',
   );
   await expect(addToDeck).toBeFocused();
+
+  // The whole page, cube decisions included, joins a deck in one request.
+  const addPage = search.getByRole('button', {
+    name: 'Add page to deck',
+    exact: true,
+  });
+  await addPage.click();
+  const pageDialog = page.getByRole('dialog', {
+    name: 'Add page to deck',
+    exact: true,
+  });
+  await pageDialog
+    .getByRole('button', { name: 'Add 2 decisions', exact: true })
+    .click();
+  await expect(pageDialog).toBeHidden();
+  expect(added[1]).toEqual({ decisions: [checker, cube] });
+  await expect(
+    search.getByRole('status').filter({ hasText: 'Added 1' }),
+  ).toHaveText(
+    'Added 1 · updated 0 · already in deck 1 · not available 0 · Openings · 5 cards in deck',
+  );
+  await expect(addPage).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath('decision-added.png') });
 });
