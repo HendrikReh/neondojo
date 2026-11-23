@@ -19,7 +19,7 @@ use utoipa::ToSchema;
 /// NeonGammon package versions NeonDojo accepts (`neongammon` releases of
 /// HendrikReh/neongammon). The sidecar checks the same list in
 /// `SUPPORTED_VERSIONS` of `tools/probe_open_sage.py`.
-pub const SUPPORTED_SAGE_PACKAGE_VERSIONS: [&str; 2] = ["3.0.0", "3.1.0"];
+pub const SUPPORTED_SAGE_PACKAGE_VERSIONS: [&str; 3] = ["3.0.0", "3.1.0", "3.1.1"];
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct SageSnapshot {
@@ -45,12 +45,16 @@ pub struct EngineFork {
 
 impl SageSnapshot {
     pub(crate) fn supports_difficulty_presets(&self) -> bool {
-        self.package_version == "3.1.0"
+        matches!(self.package_version.as_str(), "3.1.0" | "3.1.1")
     }
 
     pub fn known_fork(&self) -> Option<EngineFork> {
         // Identify the documented releases by their full runtime fingerprints.
         let revision = match self.artifact_fingerprint.as_str() {
+            // Release v3.1.1, official GitHub cp312 wheel.
+            "eaa6f2a81b42320a80dc8ed2114dd84fc18239ce1f9cfcc1ca31b503e66bfebe" => {
+                "abaedf9799d442fb4d53b83f2e3079cf17d8b6ce"
+            }
             // Release v3.1.0, official GitHub cp312 wheel.
             "26e7701c27c6c5e0cd3cc864768e27675f0d72149c2ad545ffb0c5293ff705d5" => {
                 "04e0bb702c3f7549a05f91af4e862fdef2af954f"
@@ -974,6 +978,12 @@ mod tests {
             .expect("release v3.1.0 is recognized");
         assert_eq!(fork.repository, "HendrikReh/neongammon");
         assert_eq!(fork.revision, "04e0bb702c3f7549a05f91af4e862fdef2af954f");
+
+        let fork = snapshot("eaa6f2a81b42320a80dc8ed2114dd84fc18239ce1f9cfcc1ca31b503e66bfebe")
+            .known_fork()
+            .expect("release v3.1.1 is recognized");
+        assert_eq!(fork.repository, "HendrikReh/neongammon");
+        assert_eq!(fork.revision, "abaedf9799d442fb4d53b83f2e3079cf17d8b6ce");
     }
 
     #[test]

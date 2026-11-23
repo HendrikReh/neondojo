@@ -70,8 +70,8 @@ class Runtime:
         self.top_two_pool = None
         self.opponent_policies = {}
         self.identity = self.check_identity()
-        if self.identity['package_version'] == '3.1.0' and not callable(getattr(self.sage, 'DifficultyPolicy', None)):
-            raise ValueError('NeonGammon 3.1.0 did not export DifficultyPolicy')
+        if self.identity['package_version'] != '3.0.0' and not callable(getattr(self.sage, 'DifficultyPolicy', None)):
+            raise ValueError(f"NeonGammon {self.identity['package_version']} did not export DifficultyPolicy")
         if not callable(getattr(self.sage.BgBotAnalyzer, 'cube_decision', None)):
             raise ValueError('NeonGammon did not export BgBotAnalyzer.cube_decision; install the locked wheels')
         expected = profile.get('artifact_fingerprint')
@@ -173,7 +173,7 @@ class Runtime:
         if policy is None:
             factory = getattr(self.sage, 'DifficultyPolicy', None)
             if factory is None:
-                raise ValueError('NeonGammon difficulty presets require the 3.1.0 wheel')
+                raise ValueError('NeonGammon difficulty presets require NeonGammon 3.1.0 or newer')
             policy = factory(difficulty, seed=seed, parallel_threads=self.profile['threads'])
             self.opponent_policies[difficulty] = policy
         else:

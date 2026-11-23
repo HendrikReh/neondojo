@@ -141,7 +141,7 @@ pub(super) async fn create_session(
             .is_some_and(crate::engines::SageSnapshot::supports_difficulty_presets)
     {
         return Err(ApiError::invalid(
-            "NeonGammon difficulty presets require the 3.1.0 wheel",
+            "NeonGammon difficulty presets require NeonGammon 3.1.0 or newer",
         ));
     }
     let analysis = crate::settings::snapshot_for(

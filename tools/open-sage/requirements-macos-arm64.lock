@@ -1,9 +1,9 @@
 # CPython 3.12, native Apple Silicon; macOS >= 14 (NumPy wheel minimum).
 # Install with --only-binary=:all: --require-hashes. No source builds.
 # NeonGammon is published only as GitHub release assets, not on PyPI:
-# HendrikReh/neongammon v3.1.0, tag commit 04e0bb702c3f7549a05f91af4e862fdef2af954f.
-neongammon @ https://github.com/HendrikReh/neongammon/releases/download/v3.1.0/neongammon-3.1.0-cp312-cp312-macosx_11_0_arm64.whl \
-    --hash=sha256:7286e418e53d3211feb10d50b483976e28b42d0abd2a4833023ea8d3dc8ccf79
+# HendrikReh/neongammon v3.1.1, tag commit abaedf9799d442fb4d53b83f2e3079cf17d8b6ce.
+neongammon @ https://github.com/HendrikReh/neongammon/releases/download/v3.1.1/neongammon-3.1.1-cp312-cp312-macosx_11_0_arm64.whl \
+    --hash=sha256:43ff3ad7c9fc168bf0ec4bd1566a82b635d486f588a791c0b328b9e881f30e51
 # numpy-2.5.4-cp312-cp312-macosx_14_0_arm64.whl
 numpy==2.5.4 \
     --hash=sha256:9cb18a327b49c5c337f972b03682f6a49855525faaf3c0d3e9c96cd0fd8880a8
