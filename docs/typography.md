@@ -1,7 +1,7 @@
 # UI typography
 
 All workspaces share the tokens in `web/src/styles/typography.css`, which
-`web/src/main.tsx` imports globally. Use the same token for the same text role,
+`web/src/styles/stylesheets.ts` loads for the whole app. Use the same token for the same text role,
 including dialogs and previews. Workspace-specific CSS can adjust spacing
 without introducing a different type scale.
 

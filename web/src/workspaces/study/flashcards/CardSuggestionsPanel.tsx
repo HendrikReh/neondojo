@@ -13,6 +13,7 @@ import {
 } from './learning-api';
 import { useMistakeText } from '../mistakes/recurring-mistakes-messages';
 import type { Theme } from '../../../shared/board/themes';
+import './card-suggestions.css';
 
 type Props = {
   deckId: string;
