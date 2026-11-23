@@ -1,8 +1,9 @@
-import { useI18n, type Locale } from '../../shared/i18n/i18n';
 import {
-  interpolate,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../shared/i18n/messages';
+
 const entries = {
   scope: [
     'Position source',
@@ -334,19 +335,8 @@ const entries = {
     'Niedostępne jako fiszka',
     'Non disponibile come scheda',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-type Key = keyof typeof entries;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const decisionSearchMessages = Object.fromEntries(
-  locales.map((locale, i) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(entries).map(([key, values]) => [key, values[i]]),
-    ),
-  ]),
-) as Record<Locale, Record<Key, string>>;
-export function useDecisionSearchText() {
-  const { locale } = useI18n();
-  return (key: Key, params: TranslationParams = {}) =>
-    interpolate(decisionSearchMessages[locale][key], params, locale);
-}
+} satisfies Record<string, MessageRow>;
+
+const messages = defineMessages('decision-search', fromRows(entries));
+export const decisionSearchMessages = messages.catalogs;
+export const useDecisionSearchText = messages.useText;

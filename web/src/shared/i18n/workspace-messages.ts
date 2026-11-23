@@ -1,5 +1,4 @@
-import { useI18n, type Locale } from './i18n';
-import { interpolate, type TranslationParams } from './i18n-core';
+import { defineMessages } from './messages';
 
 const en = {
   analysis: 'Analysis',
@@ -213,16 +212,7 @@ const it: Catalog = {
     'Impossibile caricare questa parte di NeonDojo. Se NeonDojo è stato appena aggiornato, ricarica la pagina.',
   reloadPage: 'Ricarica la pagina',
 };
-export const workspaceMessages = { en, de, es, fr, pl, it };
-export function workspaceText(
-  locale: Locale,
-  key: Key,
-  params: TranslationParams = {},
-) {
-  return interpolate(workspaceMessages[locale][key], params);
-}
-export function useWorkspaceText() {
-  const { locale } = useI18n();
-  return (key: Key, params?: TranslationParams) =>
-    workspaceText(locale, key, params);
-}
+const messages = defineMessages('workspace', { en, de, es, fr, pl, it });
+export const workspaceMessages = messages.catalogs;
+export const workspaceText = messages.text;
+export const useWorkspaceText = messages.useText;
