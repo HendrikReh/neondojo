@@ -423,7 +423,8 @@ pub async fn import_rendered_package(
     );
     ensure!(!manifest.decks.is_empty(), "No Anki decks");
     let mut tx = pool.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('neondojo-anki-import',0))")
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(crate::advisory_locks::ANKI_PACKAGE_IMPORT)
         .execute(&mut *tx)
         .await?;
     let mut decks = BTreeMap::new();

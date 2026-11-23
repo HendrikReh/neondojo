@@ -53,8 +53,9 @@ pub(super) async fn build_hits(
         .await
         .map_err(anyhow::Error::from)?;
     // Concurrent builds for the same analysis must not interleave their rows.
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 73))")
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, $2))")
         .bind(format!("{match_id}:{analysis_id}"))
+        .bind(crate::advisory_locks::REVIEW_HIT_SET_SEED)
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;

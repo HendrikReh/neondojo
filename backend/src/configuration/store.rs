@@ -20,15 +20,10 @@ pub(crate) async fn error_thresholds<'e>(
     Ok(ErrorThresholds::default())
 }
 
-pub(crate) const LOCK_ID: i64 = 0x424754_50524f4649;
 pub(crate) async fn lock(
     tx: &mut Transaction<'_, Postgres>,
 ) -> std::result::Result<(), sqlx::Error> {
-    sqlx::query("SELECT pg_advisory_xact_lock($1)")
-        .bind(LOCK_ID)
-        .execute(&mut **tx)
-        .await?;
-    Ok(())
+    crate::advisory_locks::xact_lock(tx, crate::advisory_locks::CONFIGURATION_PROFILES).await
 }
 pub(crate) async fn begin(state: &AppState) -> Result<Transaction<'_, Postgres>> {
     crate::settings::load(state).await?;
