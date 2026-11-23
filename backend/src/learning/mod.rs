@@ -174,6 +174,71 @@ pub struct AddPositionsResult {
     /// Outcomes in the same order as the request, including repeated UUIDs.
     pub items: Vec<PositionAddItem>,
 }
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AddDecisions {
+    /// Analysed decisions in selection order, as decision search and recurring
+    /// mistakes return them. Every occurrence receives an outcome.
+    #[schema(min_items = 1, max_items = 200)]
+    pub decisions: Vec<crate::recurring_mistakes::MistakeReference>,
+}
+impl AddDecisions {
+    pub(crate) fn validated(self) -> ApiResult<Vec<crate::recurring_mistakes::MistakeReference>> {
+        if !(1..=200).contains(&self.decisions.len()) {
+            return Err(ApiError::invalid(
+                "decisions must contain 1..200 references",
+            ));
+        }
+        if self
+            .decisions
+            .iter()
+            .any(|r| r.job_id.is_some() == r.imported_analysis_id.is_some())
+        {
+            return Err(ApiError::invalid(
+                "Supply exactly one of job_id or imported_analysis_id per decision",
+            ));
+        }
+        if self
+            .decisions
+            .iter()
+            .any(|r| r.game_no < 1 || r.decision_no < 1)
+        {
+            return Err(ApiError::invalid(
+                "game_no and decision_no must be positive",
+            ));
+        }
+        Ok(self.decisions)
+    }
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum DecisionAddStatus {
+    Added,
+    Updated,
+    /// The same card as an earlier decision of this request, or a card the
+    /// deck already holds unchanged.
+    Duplicate,
+    /// The analysis has no supported card for this decision.
+    Unavailable,
+    NotFound,
+}
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct DecisionAddItem {
+    pub reference: crate::recurring_mistakes::MistakeReference,
+    pub status: DecisionAddStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub card_id: Option<Uuid>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+}
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct AddDecisionsResult {
+    pub added: i64,
+    pub updated: i64,
+    pub total: i64,
+    /// Outcomes in the same order as the request, including repeated references.
+    pub items: Vec<DecisionAddItem>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CardSource {
     pub kind: String,

@@ -1792,3 +1792,97 @@ async fn decision_search_pages_cover_the_total_once_and_bound_the_offset(pool: P
         }
     }
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn decision_search_hits_become_cards_in_one_request(pool: PgPool) {
+    let match_id = source(&pool).await;
+    let mut decisions = game1(0.12);
+    decisions.extend([
+        (2, decision(1, 1, "double", "no double", 0.25)),
+        (2, decision(2, 0, "drop", "take", 0.35)),
+    ]);
+    let job_id = job(&pool, match_id, 2, None, &decisions).await;
+    let router = app(&pool);
+    let (status, page) = call(
+        &router,
+        "GET",
+        "/api/study/decisions?player=Alice",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    let hits: Vec<Value> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|hit| hit["reference"].clone())
+        .collect();
+    let kinds: std::collections::BTreeSet<String> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|hit| hit["kind"].as_str().unwrap().to_owned())
+        .collect();
+    assert!(kinds.contains("checker") && kinds.len() > 1, "{page}");
+    let (_, deck) = call(&router, "POST", "/api/decks", json!({"name":"Hits"})).await;
+    let path = format!("/api/decks/{}/decisions", deck["id"].as_str().unwrap());
+    let missing = json!({"job_id": job_id, "game_no": 1, "decision_no": 99});
+    let unknown = json!({"job_id": Uuid::new_v4(), "game_no": 1, "decision_no": 1});
+    let mut body = hits.clone();
+    body.extend([hits[0].clone(), missing.clone(), unknown]);
+    let (status, result) = call(&router, "POST", &path, json!({"decisions": body})).await;
+    assert_eq!(status, 200, "{result}");
+    let statuses: Vec<&str> = result["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["status"].as_str().unwrap())
+        .collect();
+    let mut expected = vec!["added"; hits.len()];
+    expected.extend(["duplicate", "not_found", "not_found"]);
+    assert_eq!(statuses, expected, "{result}");
+    assert_eq!(result["added"], hits.len());
+    assert_eq!(result["total"], hits.len());
+    assert_eq!(
+        result["items"][hits.len()]["card_id"],
+        result["items"][0]["card_id"]
+    );
+    assert_eq!(result["items"][hits.len() + 1]["reference"], missing);
+    let cubes: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM learning_cards WHERE payload->>'kind' IN ('cube_offer','cube_response')",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert!(cubes > 0);
+
+    // The cards are the ones Analysis adds for the same match analysis.
+    let (status, again) = call(
+        &router,
+        "POST",
+        &format!("/api/decks/{}/cards", deck["id"].as_str().unwrap()),
+        json!({"job_id": job_id, "player": 0}),
+    )
+    .await;
+    assert_eq!(status, 200, "{again}");
+    assert_eq!(again["added"], 0, "{again}");
+
+    for invalid in [
+        json!({"decisions": []}),
+        json!({"decisions": [{"game_no": 1, "decision_no": 1}]}),
+        json!({"decisions": [{"job_id": job_id, "imported_analysis_id": job_id, "game_no": 1, "decision_no": 1}]}),
+        json!({"decisions": [{"job_id": job_id, "game_no": 0, "decision_no": 1}]}),
+        json!({"decisions": vec![hits[0].clone(); 201]}),
+    ] {
+        let (status, error) = call(&router, "POST", &path, invalid.clone()).await;
+        assert_eq!(status, 422, "{invalid} {error}");
+    }
+    let (status, _) = call(
+        &router,
+        "POST",
+        &format!("/api/decks/{}/decisions", Uuid::new_v4()),
+        json!({"decisions": [hits[0].clone()]}),
+    )
+    .await;
+    assert_eq!(status, 404);
+}

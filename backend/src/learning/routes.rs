@@ -22,6 +22,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/decks/{id}", put(rename_deck).delete(delete_deck))
         .route("/api/decks/{id}/cards", get(cards).post(add_cards))
         .route("/api/decks/{id}/positions", post(add_positions))
+        .route("/api/decks/{id}/decisions", post(add_decisions))
         .route(
             "/api/decks/{id}/card-suggestions",
             get(suggestions::preview).post(suggestions::save),
@@ -76,6 +77,7 @@ pub fn routes() -> Router<AppState> {
         management::delete_cards,
         add_cards,
         add_positions,
+        add_decisions,
         suggestions::preview,
         suggestions::save,
         export_deck,
@@ -135,6 +137,10 @@ pub fn routes() -> Router<AppState> {
         management::ResolveDuplicate,
         AddPositions,
         AddPositionsResult,
+        AddDecisions,
+        AddDecisionsResult,
+        DecisionAddItem,
+        DecisionAddStatus,
         PositionAddItem,
         PositionAddStatus,
         suggestions::SuggestionReference,
@@ -349,6 +355,63 @@ pub(super) async fn add_positions(
         }
     }
     Ok(Json(AddPositionsResult {
+        added,
+        updated,
+        total: written.total,
+        items,
+    }))
+}
+
+#[utoipa::path(post,path="/api/decks/{id}/decisions",params(("id"=Uuid,Path)),request_body=AddDecisions,responses((status=200,body=AddDecisionsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
+pub(super) async fn add_decisions(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    crate::json_errors::Json(body): crate::json_errors::Json<AddDecisions>,
+) -> ApiResult<Json<AddDecisionsResult>> {
+    require_deck(&state.pool, id).await?;
+    let references = body.validated()?;
+    let sources = content::decision_cards(&state.pool, &references).await?;
+    let mut unique = BTreeMap::new();
+    let mut items = Vec::with_capacity(references.len());
+    let mut resolved = Vec::with_capacity(references.len());
+    for reference in references {
+        let (status, message, source) = match sources.get(&reference) {
+            Some(Ok(content)) => {
+                let signature = card_signature(content);
+                let first = !unique.contains_key(&signature);
+                unique
+                    .entry(signature.clone())
+                    .or_insert_with(|| content.clone());
+                (DecisionAddStatus::Duplicate, None, Some((signature, first)))
+            }
+            Some(Err(message)) => (DecisionAddStatus::Unavailable, Some(message.clone()), None),
+            None => (DecisionAddStatus::NotFound, Some("Not found".into()), None),
+        };
+        items.push(DecisionAddItem {
+            reference,
+            status,
+            card_id: None,
+            message,
+        });
+        resolved.push(source);
+    }
+    let written = write_cards(&state.pool, id, unique, &BTreeSet::new()).await?;
+    let mut added = 0;
+    let mut updated = 0;
+    for (item, source) in items.iter_mut().zip(resolved) {
+        if let Some((signature, first)) = source {
+            let card = &written.cards[&signature];
+            item.card_id = Some(card.id);
+            if first && card.added {
+                item.status = DecisionAddStatus::Added;
+                added += 1;
+            } else if first && card.changed {
+                item.status = DecisionAddStatus::Updated;
+                updated += 1;
+            }
+        }
+    }
+    Ok(Json(AddDecisionsResult {
         added,
         updated,
         total: written.total,

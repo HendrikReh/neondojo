@@ -638,6 +638,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/decks/{id}/decisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["add_decisions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/decks/{id}/export.apkg": {
         parameters: {
             query?: never;
@@ -2740,6 +2756,23 @@ export interface components {
             /** Format: int64 */
             updated: number;
         };
+        AddDecisions: {
+            /**
+             * @description Analysed decisions in selection order, as decision search and recurring
+             *     mistakes return them. Every occurrence receives an outcome.
+             */
+            decisions: components["schemas"]["MistakeReference"][];
+        };
+        AddDecisionsResult: {
+            /** Format: int64 */
+            added: number;
+            /** @description Outcomes in the same order as the request, including repeated references. */
+            items: components["schemas"]["DecisionAddItem"][];
+            /** Format: int64 */
+            total: number;
+            /** Format: int64 */
+            updated: number;
+        };
         AddDeckCards: {
             card_ids: string[];
             /** Format: int64 */
@@ -3970,6 +4003,15 @@ export interface components {
             /** @description Saved decision severity. Analysis views can reclassify the stored equity loss. */
             severity: string;
         };
+        DecisionAddItem: {
+            /** Format: uuid */
+            card_id?: string | null;
+            message?: string | null;
+            reference: components["schemas"]["MistakeReference"];
+            status: components["schemas"]["DecisionAddStatus"];
+        };
+        /** @enum {string} */
+        DecisionAddStatus: "added" | "updated" | "duplicate" | "unavailable" | "not_found";
         DecisionHit: components["schemas"]["MistakePracticeQuestion"] & {
             /** @description Points still needed by the deciding player and the opponent. */
             away?: number[] | null;
@@ -8529,6 +8571,47 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AddCardsResult"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    add_decisions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddDecisions"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddDecisionsResult"];
                 };
             };
             404: {

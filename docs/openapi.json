@@ -3091,6 +3091,67 @@
         }
       }
     },
+    "/api/decks/{id}/decisions": {
+      "post": {
+        "tags": [
+          "Learning"
+        ],
+        "operationId": "add_decisions",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDecisions"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddDecisionsResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/decks/{id}/export.apkg": {
       "get": {
         "tags": [
@@ -12258,6 +12319,54 @@
           }
         }
       },
+      "AddDecisions": {
+        "type": "object",
+        "required": [
+          "decisions"
+        ],
+        "properties": {
+          "decisions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MistakeReference"
+            },
+            "description": "Analysed decisions in selection order, as decision search and recurring\nmistakes return them. Every occurrence receives an outcome.",
+            "maxItems": 200,
+            "minItems": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "AddDecisionsResult": {
+        "type": "object",
+        "required": [
+          "added",
+          "updated",
+          "total",
+          "items"
+        ],
+        "properties": {
+          "added": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DecisionAddItem"
+            },
+            "description": "Outcomes in the same order as the request, including repeated references."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "AddDeckCards": {
         "type": "object",
         "required": [
@@ -16462,6 +16571,44 @@
             "description": "Saved decision severity. Analysis views can reclassify the stored equity loss."
           }
         }
+      },
+      "DecisionAddItem": {
+        "type": "object",
+        "required": [
+          "reference",
+          "status"
+        ],
+        "properties": {
+          "card_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "$ref": "#/components/schemas/MistakeReference"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DecisionAddStatus"
+          }
+        }
+      },
+      "DecisionAddStatus": {
+        "type": "string",
+        "enum": [
+          "added",
+          "updated",
+          "duplicate",
+          "unavailable",
+          "not_found"
+        ]
       },
       "DecisionHit": {
         "allOf": [
