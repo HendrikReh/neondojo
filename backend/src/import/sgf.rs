@@ -748,12 +748,20 @@ pub(crate) fn parse_native_sgf_source_moves(
 }
 
 pub fn parse_sgf(input: &str) -> Result<ImportedMatch> {
-    let (result, _) = parse_sgf_with_context(input)?;
+    let (result, _) = parse_importable_sgf_with_context(input)?;
+    Ok(result)
+}
+
+/// [`parse_sgf`] that keeps each game's decision context.
+pub(crate) fn parse_importable_sgf_with_context(
+    input: &str,
+) -> Result<(ImportedMatch, Vec<GameContext>)> {
+    let (result, contexts) = parse_sgf_with_context(input)?;
     ensure!(
         !result.positions.is_empty(),
         "SGF contains no checker-play decisions"
     );
-    Ok(result)
+    Ok((result, contexts))
 }
 
 /// Internal analysis accepts an individual empty or cube-only game exported

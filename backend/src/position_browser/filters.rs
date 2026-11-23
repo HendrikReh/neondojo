@@ -55,8 +55,7 @@ pub(super) async fn create_filter(
     let definition = input.definition.validate()?;
     database_exists(&s.pool, definition.database_id).await?;
     let mut tx = s.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SELECT pg_advisory_xact_lock(74619781644280)")
-        .execute(&mut *tx)
+    crate::advisory_locks::xact_lock(&mut tx, crate::advisory_locks::POSITION_FILTER_LIMIT)
         .await
         .map_err(anyhow::Error::from)?;
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM position_filters")

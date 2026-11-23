@@ -19,15 +19,15 @@ impl Engine {
         timeout: Option<std::time::Duration>,
     ) -> Result<AnalyzedGame> {
         let native = crate::engine::gnubg_plies(plies)?;
-        ensure!(
-            (1..=game_count(sgf)?).contains(&game_no),
-            "Game number outside match"
-        );
-        // Validate the entire played match before handing it to the native loader,
-        // which can otherwise continue with a valid prefix of a malformed game.
-        parse_sgf(sgf)?;
+        let source = sgf.to_owned();
+        let (source, input) = tokio::task::spawn_blocking(move || {
+            let source = AnalysisSource::for_game(&source, game_no)?;
+            let input = analysis_input(&source);
+            anyhow::Ok((source, input))
+        })
+        .await??;
         let temp = tempfile::tempdir()?;
-        tokio::fs::write(temp.path().join("input.sgf"), analysis_input(sgf)?).await?;
+        tokio::fs::write(temp.path().join("input.sgf"), input).await?;
         let mut commands = String::from(
             "set confirm default yes\nset confirm new no\nset display off\nset analysis moves on\nset analysis cube on\nset analysis luck off\nset analysis player 0 analyse on\nset analysis player 1 analyse on\nset output mwc off\nset output digits 6\nset export moves number 10000\nset export include statistics on\n",
         );
@@ -60,8 +60,12 @@ impl Engine {
         }
         let native = read_analysis_artifact(&temp.path().join("analyzed.sgf")).await?;
         let export = read_analysis_artifact(&temp.path().join("analyzed.txt")).await?;
-        let decisions = parse_game(sgf, game_no, &native, &export)?;
-        let statistics = parse_native_statistics(&export, game_no, &decisions);
+        let (decisions, statistics) = tokio::task::spawn_blocking(move || {
+            let decisions = parse_source_game(&source, game_no, &native, &export)?;
+            let statistics = parse_native_statistics(&export, game_no, &decisions);
+            anyhow::Ok((decisions, statistics))
+        })
+        .await??;
         let engine = output
             .lines()
             .find(|l| l.starts_with("GNU Backgammon "))
@@ -163,16 +167,40 @@ pub(crate) async fn retain_hint_paths(
     }
 }
 
+/// The played match of one native game analysis, parsed once for both the
+/// GNUbg input and the check of GNUbg's result.
+pub(super) struct AnalysisSource {
+    pub(super) trees: Vec<Vec<Node>>,
+    pub(super) imported: ImportedMatch,
+    pub(super) contexts: Vec<GameContext>,
+}
+
+impl AnalysisSource {
+    /// Validate the entire played match before handing it to the native loader,
+    /// which can otherwise continue with a valid prefix of a malformed game.
+    pub(super) fn for_game(sgf: &str, game_no: i32) -> Result<Self> {
+        let trees = parse_trees(sgf)?;
+        ensure!(
+            (1..=tree_game_count(&trees)?).contains(&game_no),
+            "Game number outside match"
+        );
+        let (imported, contexts) = parse_importable_sgf_with_context(sgf)?;
+        Ok(Self {
+            trees,
+            imported,
+            contexts,
+        })
+    }
+}
+
 /// Keep all game state, but exclude imported analysis and arbitrary annotations.
 /// Fixed names also prevent player-name newlines from resembling export headers.
-pub(super) fn analysis_input(sgf: &str) -> Result<String> {
-    let trees = parse_trees(sgf)?;
-    let (_, contexts) = crate::import::sgf::parse_sgf_with_context(sgf)?;
+pub(super) fn analysis_input(source: &AnalysisSource) -> String {
     let mut out = String::new();
-    for (game_index, nodes) in trees.into_iter().enumerate() {
-        let context = &contexts[game_index];
+    for (game_index, nodes) in source.trees.iter().enumerate() {
+        let context = &source.contexts[game_index];
         out.push('(');
-        for (index, node) in nodes.into_iter().enumerate() {
+        for (index, node) in nodes.iter().enumerate() {
             if index == 0 {
                 out.push(';');
                 for key in ["FF", "GM", "CA", "RU", "RE"] {
@@ -236,5 +264,5 @@ pub(super) fn analysis_input(sgf: &str) -> Result<String> {
         }
         out.push_str(")\n");
     }
-    Ok(out)
+    out
 }

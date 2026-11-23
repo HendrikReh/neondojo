@@ -163,8 +163,10 @@ pub(super) async fn save_topic(
         return Err(ApiError::invalid("Saved topics cannot contain pagination"));
     }
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("LOCK TABLE card_topics IN SHARE ROW EXCLUSIVE MODE")
-        .execute(&mut *tx)
+    // Concurrent saves must not both pass the limit. Deletes only lower the
+    // count and the unique name index rejects duplicates, so nothing else
+    // waits for this lock.
+    crate::advisory_locks::xact_lock(&mut tx, crate::advisory_locks::CARD_TOPIC_LIMIT)
         .await
         .map_err(anyhow::Error::from)?;
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM card_topics")

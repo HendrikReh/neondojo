@@ -5,8 +5,8 @@ use anyhow::{Context, Result, ensure};
 use axum::extract::{DefaultBodyLimit, Multipart};
 use axum::response::Response;
 use sqlx::{PgConnection, Postgres, Transaction};
-use std::{io::BufRead, path::Path as FilePath, process::Stdio, time::Duration};
-use tokio::io::AsyncWriteExt;
+use std::{path::Path as FilePath, process::Stdio, time::Duration};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 
 const MAX_UPLOAD: usize = 128 * 1024 * 1024;
 static PACKAGE_IMPORT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
@@ -412,7 +412,7 @@ pub async fn import_rendered_package(
     directory: &FilePath,
 ) -> Result<Vec<(String, usize)>> {
     let manifest: PackageImport =
-        serde_json::from_slice(&std::fs::read(directory.join("manifest.json"))?)?;
+        serde_json::from_slice(&tokio::fs::read(directory.join("manifest.json")).await?)?;
     ensure!(
         manifest.package.len() == 64
             && manifest
@@ -423,7 +423,8 @@ pub async fn import_rendered_package(
     );
     ensure!(!manifest.decks.is_empty(), "No Anki decks");
     let mut tx = pool.begin().await?;
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended('neondojo-anki-import',0))")
+    sqlx::query("SELECT pg_advisory_xact_lock($1)")
+        .bind(crate::advisory_locks::ANKI_PACKAGE_IMPORT)
         .execute(&mut *tx)
         .await?;
     let mut decks = BTreeMap::new();
@@ -442,9 +443,9 @@ pub async fn import_rendered_package(
         );
     }
 
-    for file in std::fs::read_dir(directory.join("media"))? {
-        let file = file?;
-        ensure!(file.file_type()?.is_file(), "Invalid media entry");
+    let mut media = tokio::fs::read_dir(directory.join("media")).await?;
+    while let Some(file) = media.next_entry().await? {
+        ensure!(file.file_type().await?.is_file(), "Invalid media entry");
         let name = file
             .file_name()
             .into_string()
@@ -453,7 +454,7 @@ pub async fn import_rendered_package(
             !name.chars().any(char::is_control) && name.len() <= 255,
             "Invalid media filename"
         );
-        let bytes = std::fs::read(file.path())?;
+        let bytes = tokio::fs::read(file.path()).await?;
         ensure!(bytes.len() <= 32 * 1024 * 1024, "Anki media is too large");
         let content_type = media_type(&name, &bytes)?;
         sqlx::query("INSERT INTO anki_media(package,name,content_type,content) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING")
@@ -465,10 +466,12 @@ pub async fn import_rendered_package(
             .await?;
     }
 
-    let cards = std::io::BufReader::new(std::fs::File::open(directory.join("cards.jsonl"))?);
+    let mut cards =
+        tokio::io::BufReader::new(tokio::fs::File::open(directory.join("cards.jsonl")).await?)
+            .lines();
     let mut imported = BTreeSet::new();
-    for line in cards.lines() {
-        let input: ImportedCard = serde_json::from_str(&line?)?;
+    while let Some(line) = cards.next_line().await? {
+        let input: ImportedCard = serde_json::from_str(&line)?;
         let (deck_id, expected, seen, added) =
             decks.get_mut(&input.deck).context("Unknown source deck")?;
         *seen += 1;

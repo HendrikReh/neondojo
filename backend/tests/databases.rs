@@ -437,6 +437,138 @@ async fn deletion_guards_active_jobs_and_nonempty_database(pool: PgPool) {
         404
     );
 }
+#[sqlx::test(migrations = "./migrations")]
+async fn active_job_guard_covers_match_and_position_jobs(pool: PgPool) {
+    let idle = target(&pool, "Idle").await;
+    let by_match = target(&pool, "Match job").await;
+    let by_position = target(&pool, "Position job").await;
+    let position = async |match_id: Uuid| -> Uuid {
+        sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1")
+            .bind(match_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap()
+    };
+    // Finished jobs of either kind never block; queued and running ones do.
+    for (status, plies) in [("completed", 1), ("failed", 2)] {
+        sqlx::query(
+            "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',$3,$4)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(idle)
+        .bind(plies)
+        .bind(status)
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO jobs(id,position_uuid,kind,plies,status) VALUES($1,$2,'analysis',$3,$4)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(position(idle).await)
+        .bind(plies)
+        .bind(status)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    sqlx::query(
+        "INSERT INTO jobs(id,match_uuid,kind,plies,status) VALUES($1,$2,'match',1,'running')",
+    )
+    .bind(Uuid::new_v4())
+    .bind(by_match)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let position_job = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO jobs(id,position_uuid,kind,plies,status) VALUES($1,$2,'dice',1,'queued')",
+    )
+    .bind(position_job)
+    .bind(position(by_position).await)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    // Deleting a whole database checks all its matches at once.
+    let db = database(&pool, "Guarded").await;
+    let (status, moved) = request(
+        &pool,
+        "POST",
+        "/api/library/actions",
+        Some(json!({"action":"move","match_ids":[idle,by_position],"target_database_id":db})),
+    )
+    .await;
+    assert_eq!(status, 200, "{moved}");
+    let version = async || -> i64 {
+        let (_, list) = request(&pool, "GET", "/api/databases", None).await;
+        list.as_array()
+            .unwrap()
+            .iter()
+            .find(|d| d["id"] == db.to_string())
+            .unwrap()["version"]
+            .as_i64()
+            .unwrap()
+    };
+    let (status, body) = request(
+        &pool,
+        "DELETE",
+        &format!(
+            "/api/databases/{db}?version={}&delete_matches=true",
+            version().await
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(status, 409, "{body}");
+    assert_eq!(body["error"], "Database has queued or running analyses");
+
+    let (status, deleted) = request(
+        &pool,
+        "POST",
+        "/api/library/actions",
+        Some(json!({"action":"delete","match_ids":[idle,by_match,by_position]})),
+    )
+    .await;
+    assert_eq!(status, 200, "{deleted}");
+    let results: Vec<(String, String)> = deleted["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| {
+            (
+                r["match_id"].as_str().unwrap().to_owned(),
+                r["status"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    assert_eq!(
+        results,
+        [
+            (idle.to_string(), "deleted".to_owned()),
+            (by_match.to_string(), "busy".to_owned()),
+            (by_position.to_string(), "busy".to_owned()),
+        ]
+    );
+
+    // Once the position job finished, the database and its last match go.
+    sqlx::query("UPDATE jobs SET status='failed' WHERE id=$1")
+        .bind(position_job)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, body) = request(
+        &pool,
+        "DELETE",
+        &format!(
+            "/api/databases/{db}?version={}&delete_matches=true",
+            version().await
+        ),
+        None,
+    )
+    .await;
+    assert_eq!(status, 204, "{body}");
+}
 #[test]
 fn source_metadata_uses_explicit_sgf_context_and_rejects_guesses() {
     let m = neondojo::databases::source_metadata(

@@ -696,12 +696,17 @@ pub async fn create_match_job_scoped_with_snapshot(
             .bind(match_id)
             .fetch_one(&mut *tx)
             .await?;
-        games = crate::import::sgf::parse_sgf_with_context(&source)?
-            .0
-            .games
-            .into_iter()
-            .map(|game| game.game_no)
-            .collect();
+        // Parse the source read under the lock, but off the async worker.
+        games = tokio::task::spawn_blocking(move || {
+            crate::import::sgf::parse_sgf_with_context(&source).map(|(imported, _)| {
+                imported
+                    .games
+                    .into_iter()
+                    .map(|game| game.game_no)
+                    .collect()
+            })
+        })
+        .await??;
     }
     let total_games = if let Some(game_no) = game_no {
         ensure!(games.contains(&game_no), "Game not found");

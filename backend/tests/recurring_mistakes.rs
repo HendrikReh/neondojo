@@ -58,14 +58,15 @@ fn game1(loss: f64) -> Vec<(i32, Value)> {
     ]
 }
 
-#[sqlx::test(migrations = "./migrations")]
-async fn transfer_balances_unseen_cube_responses_and_records_first_pass(pool: PgPool) {
+/// Two analyzed cube responses for Alice, one take and one drop: exactly one
+/// balanced transfer round.
+async fn transfer_sources(pool: &PgPool) {
     for (index, best) in ["take", "drop"].into_iter().enumerate() {
         let sgf = format!(
             "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:{index}][bs:3]AE[a:y]AW[e]AB[s]PL[B]CV[2]CO[b];B[double];W[{best}])"
         );
         let imported = store::import_match(
-            &pool,
+            pool,
             "transfer.sgf",
             "sgf",
             sgf.as_bytes(),
@@ -75,7 +76,7 @@ async fn transfer_balances_unseen_cube_responses_and_records_first_pass(pool: Pg
         .await
         .unwrap();
         job(
-            &pool,
+            pool,
             imported.r#match.id,
             1,
             None,
@@ -86,9 +87,20 @@ async fn transfer_balances_unseen_cube_responses_and_records_first_pass(pool: Pg
         )
         .await;
     }
+}
+
+const TRANSFER_PATH: &str = "/api/study/transfer-rounds";
+
+fn transfer_scope() -> Value {
+    json!({"player":"Alice", "game_plan":"pure_race", "kind":"cube_response"})
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn transfer_balances_unseen_cube_responses_and_records_first_pass(pool: PgPool) {
+    transfer_sources(&pool).await;
     let router = app(&pool);
-    let path = "/api/study/transfer-rounds";
-    let scope = json!({"player":"Alice", "game_plan":"pure_race", "kind":"cube_response"});
+    let path = TRANSFER_PATH;
+    let scope = transfer_scope();
     let (status, mut round) = call(&router, "POST", path, scope.clone()).await;
     assert_eq!(status, 201, "{round}");
     assert_eq!(round["total"], 2);
@@ -120,6 +132,70 @@ async fn transfer_balances_unseen_cube_responses_and_records_first_pass(pool: Pg
     assert_eq!(history[0]["revealed"], 2);
     assert_eq!(history[0]["scored"], 0);
     assert!(history[0]["mean_loss"].is_null());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn concurrent_transfer_starts_never_pick_the_same_unseen_positions(pool: PgPool) {
+    transfer_sources(&pool).await;
+    let router = app(&pool);
+    // Hold both starts before they record what they picked, so that both
+    // reach their selection with the same seen list unless they serialize.
+    let mut gate = pool.begin().await.unwrap();
+    sqlx::query("LOCK TABLE transfer_practice_seen IN SHARE MODE")
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let starts: Vec<_> = (0..2)
+        .map(|_| {
+            let router = router.clone();
+            tokio::spawn(
+                async move { call(&router, "POST", TRANSFER_PATH, transfer_scope()).await },
+            )
+        })
+        .collect();
+    support::wait_for_lock_waiters(&pool, "%", 2).await;
+    gate.commit().await.unwrap();
+    let mut statuses = Vec::new();
+    for start in starts {
+        let (status, body) = start.await.unwrap();
+        assert!(status == 201 || status == 422, "{status}: {body}");
+        statuses.push(status);
+    }
+    statuses.sort();
+    // The only balanced round goes to one start; the other finds nothing unseen.
+    assert_eq!(statuses, [201, 422]);
+    let seen: i64 = sqlx::query_scalar("SELECT count(*) FROM transfer_practice_seen")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(seen, 2);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn a_waiting_transfer_start_leaves_its_seen_list_open_to_vacuum(pool: PgPool) {
+    transfer_sources(&pool).await;
+    let router = app(&pool);
+    // Pause the start after its selection, while it creates the round.
+    let mut gate = pool.begin().await.unwrap();
+    sqlx::query("LOCK TABLE card_practice_rounds IN SHARE MODE")
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let start = tokio::spawn({
+        let router = router.clone();
+        async move { call(&router, "POST", TRANSFER_PATH, transfer_scope()).await }
+    });
+    support::wait_for_lock_waiters(&pool, "INSERT INTO card_practice_rounds%", 1).await;
+    // VACUUM and autovacuum take this mode.
+    let mut vacuum = pool.begin().await.unwrap();
+    sqlx::query("LOCK TABLE transfer_practice_seen IN SHARE UPDATE EXCLUSIVE MODE NOWAIT")
+        .execute(&mut *vacuum)
+        .await
+        .expect("a transfer start must not block VACUUM on its seen list");
+    vacuum.rollback().await.unwrap();
+    gate.commit().await.unwrap();
+    let (status, body) = start.await.unwrap();
+    assert_eq!(status, 201, "{body}");
 }
 
 #[sqlx::test(migrations = "./migrations")]

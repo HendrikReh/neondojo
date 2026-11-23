@@ -258,6 +258,7 @@ async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool)
     let imported = store::import_match(&pool, "two-games.mat", "mat", mat, &sgf, &parsed)
         .await
         .unwrap();
+    crate::support::keep_finished_job_progress(&pool).await;
     let state = api::AppState::new(pool.clone(), engine);
     let app = api::router(state.clone());
     let endpoint = format!("/api/matches/{}/analysis", imported.r#match.id);

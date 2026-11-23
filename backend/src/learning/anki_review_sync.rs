@@ -463,8 +463,7 @@ async fn reconcile(
 
     // Exports use collection-wide Anki IDs, including when different decks
     // are synchronized through two NeonDojo processes.
-    sqlx::query("SELECT pg_advisory_xact_lock(73270182800161)")
-        .execute(&mut *tx)
+    crate::advisory_locks::xact_lock(&mut tx, crate::advisory_locks::ANKI_REVIEW_EXPORT_IDS)
         .await
         .map_err(anyhow::Error::from)?;
     let mut occupied = remote.keys().copied().collect::<BTreeSet<_>>();

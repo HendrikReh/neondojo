@@ -241,6 +241,29 @@ struct Claimed {
     token: Uuid,
 }
 
+/// Requeue or fail the jobs whose worker lease expired.
+const RECOVER_EXPIRED: &str = "UPDATE jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END, error=CASE WHEN attempts>=3 THEN 'Worker lease expired after 3 attempts' ELSE NULL END, lease_token=NULL, lease_until=NULL, progress=CASE WHEN kind='match' THEN progress ELSE 0 END, updated_at=now() WHERE status='running' AND lease_until<now() RETURNING id";
+/// Claim the oldest queued job with lease token `$1`. NeonGammon analyses
+/// share one sidecar process and run one at a time.
+const CLAIM_NEXT: &str = "UPDATE jobs SET status='running',lease_token=$1,lease_until=now()+interval '120 seconds',attempts=attempts+1,updated_at=now() WHERE id=(SELECT id FROM jobs WHERE status='queued' AND (coalesce(engine_snapshot->>'engine_id','gnubg')<>'bgsage' OR NOT EXISTS(SELECT 1 FROM jobs WHERE status='running' AND engine_snapshot->>'engine_id'='bgsage')) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *";
+
+/// Support for the ignored large-library performance test: the plans of lease
+/// recovery and of the claim, executed in a transaction that is rolled back.
+#[doc(hidden)]
+pub async fn explain_claim(pool: &PgPool) -> Result<Vec<(&'static str, Value)>> {
+    const EXPLAIN: &str = "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ";
+    let mut tx = pool.begin().await?;
+    let recover = sqlx::query_scalar(&format!("{EXPLAIN}{RECOVER_EXPIRED}"))
+        .fetch_one(&mut *tx)
+        .await?;
+    let claim = sqlx::query_scalar(&format!("{EXPLAIN}{CLAIM_NEXT}"))
+        .bind(Uuid::new_v4())
+        .fetch_one(&mut *tx)
+        .await?;
+    tx.rollback().await?;
+    Ok(vec![("recover", recover), ("claim", claim)])
+}
+
 async fn claim(state: &AppState) -> Result<Option<Claimed>> {
     let token = Uuid::new_v4();
     let mut tx = state.pool.begin().await?;
@@ -249,8 +272,9 @@ async fn claim(state: &AppState) -> Result<Option<Claimed>> {
         .bind(crate::advisory_locks::ANALYSIS_JOB_CLAIM)
         .execute(&mut *tx)
         .await?;
-    let expired: Vec<Uuid> = sqlx::query_scalar("UPDATE jobs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END, error=CASE WHEN attempts>=3 THEN 'Worker lease expired after 3 attempts' ELSE NULL END, lease_token=NULL, lease_until=NULL, progress=CASE WHEN kind='match' THEN progress ELSE 0 END, updated_at=now() WHERE status='running' AND lease_until<now() RETURNING id")
-        .fetch_all(&mut *tx).await?;
+    let expired: Vec<Uuid> = sqlx::query_scalar(RECOVER_EXPIRED)
+        .fetch_all(&mut *tx)
+        .await?;
     for id in expired {
         sqlx::query("UPDATE match_analysis_timing SET active_started_at=NULL,active_elapsed_ms=0 WHERE job_id=$1")
             .bind(id)
@@ -261,8 +285,10 @@ async fn claim(state: &AppState) -> Result<Option<Claimed>> {
     }
     // NeonGammon analyses share one sidecar process; run them one at a time
     // and let GNUbg jobs use the remaining slots.
-    let job = sqlx::query_as::<_, Job>("UPDATE jobs SET status='running',lease_token=$1,lease_until=now()+interval '120 seconds',attempts=attempts+1,updated_at=now() WHERE id=(SELECT id FROM jobs WHERE status='queued' AND (coalesce(engine_snapshot->>'engine_id','gnubg')<>'bgsage' OR NOT EXISTS(SELECT 1 FROM jobs WHERE status='running' AND engine_snapshot->>'engine_id'='bgsage')) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")
-        .bind(token).fetch_optional(&mut *tx).await?;
+    let job = sqlx::query_as::<_, Job>(CLAIM_NEXT)
+        .bind(token)
+        .fetch_optional(&mut *tx)
+        .await?;
     if let Some(ref job) = job {
         sqlx::query("UPDATE match_analysis_timing SET active_started_at=NULL,active_elapsed_ms=0 WHERE job_id=$1")
             .bind(job.id)
@@ -973,5 +999,68 @@ mod tests {
         .unwrap_err();
         assert_eq!(error.to_string(), "Job lease was lost");
         busy.close().await;
+    }
+
+    async fn event_names(pool: &PgPool, id: Uuid) -> Vec<String> {
+        sqlx::query_scalar("SELECT event FROM job_events WHERE job_id=$1 ORDER BY id")
+            .bind(id)
+            .fetch_all(pool)
+            .await
+            .unwrap()
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn finishing_a_job_prunes_only_its_progress_events(pool: PgPool) {
+        let state = AppState::new(pool.clone(), crate::engine::Engine::new("/unused".into()));
+        let cancelled = queued_position_job(&pool).await;
+        let expiring = Uuid::new_v4();
+        sqlx::query("INSERT INTO jobs(id,position_uuid,kind,plies,status,created_at) SELECT $1,position_uuid,'analysis',2,'queued',created_at+interval '1 second' FROM jobs WHERE id=$2")
+            .bind(expiring)
+            .bind(cancelled)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let first = claim(&state).await.unwrap().unwrap();
+        let second = claim(&state).await.unwrap().unwrap();
+        assert_eq!((first.job.id, second.job.id), (cancelled, expiring));
+        for claimed in [&first, &second] {
+            for percent in [25, 50] {
+                progress(&pool, claimed.job.id, claimed.token, percent)
+                    .await
+                    .unwrap();
+            }
+        }
+        // A finished job keeps its lifecycle events; a running job keeps everything.
+        cancel(&state, cancelled).await.unwrap().unwrap();
+        assert_eq!(event_names(&pool, cancelled).await, ["running", "failed"]);
+        assert_eq!(
+            event_names(&pool, expiring).await,
+            ["running", "progress", "progress"]
+        );
+        // A lease that expires before the last attempt requeues the job with
+        // its progress; the worker claims it again at once.
+        sqlx::query("UPDATE jobs SET lease_until=now()-interval '1 second' WHERE id=$1")
+            .bind(expiring)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let again = claim(&state).await.unwrap().unwrap();
+        assert_eq!(again.job.id, expiring);
+        assert_eq!(
+            event_names(&pool, expiring).await,
+            ["running", "progress", "progress", "queued", "running"]
+        );
+        // The third expired lease fails the job and prunes its progress.
+        sqlx::query("UPDATE jobs SET attempts=3,lease_until=now()-interval '1 second' WHERE id=$1")
+            .bind(expiring)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert!(claim(&state).await.unwrap().is_none());
+        assert_eq!(status(&pool, expiring).await.0, "failed");
+        assert_eq!(
+            event_names(&pool, expiring).await,
+            ["running", "queued", "running", "failed"]
+        );
     }
 }
