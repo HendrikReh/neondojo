@@ -1,9 +1,4 @@
-import { useI18n } from '../../shared/i18n/i18n';
-import {
-  interpolate,
-  type Locale,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+import { defineMessages } from '../../shared/i18n/messages';
 
 const en = {
   appearance: 'Appearance',
@@ -29,8 +24,7 @@ const en = {
   error: 'Blunder',
 };
 export type UiAppearanceMessageKey = keyof typeof en;
-type Messages = Record<UiAppearanceMessageKey, string>;
-export const uiAppearanceMessages: Record<Locale, Messages> = {
+const messages = defineMessages('ui-appearance', {
   en,
   de: {
     appearance: 'Darstellung',
@@ -149,16 +143,7 @@ export const uiAppearanceMessages: Record<Locale, Messages> = {
     warning: 'Niedokładność',
     error: 'Poważny błąd',
   },
-};
-export function uiAppearanceText(
-  locale: Locale,
-  key: UiAppearanceMessageKey,
-  params?: TranslationParams,
-) {
-  return interpolate(uiAppearanceMessages[locale][key], params);
-}
-export function useUiAppearanceText() {
-  const { locale } = useI18n();
-  return (key: UiAppearanceMessageKey, params?: TranslationParams) =>
-    uiAppearanceText(locale, key, params);
-}
+});
+export const uiAppearanceMessages = messages.catalogs;
+export const uiAppearanceText = messages.text;
+export const useUiAppearanceText = messages.useText;

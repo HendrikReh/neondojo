@@ -8,16 +8,8 @@ import EngineMatchWorkspace from './EngineMatchWorkspace';
 import { engineMatchText } from './engine-match-messages';
 import { useI18n } from '../../shared/i18n/i18n';
 import VersionInfo from './VersionInfo';
+import { versionInfoText } from './version-info-messages';
 import { extrasTools as tools, type ExtrasTool } from './extras-tool';
-
-const versionTabs = {
-  en: 'Versions',
-  de: 'Versionen',
-  es: 'Versiones',
-  fr: 'Versions',
-  it: 'Versioni',
-  pl: 'Wersje',
-};
 
 export default function ExtrasWorkspace({
   visible,
@@ -48,7 +40,7 @@ export default function ExtrasWorkspace({
     benchmark: benchmark('benchmark'),
     matches: engineMatchText(locale, 'title'),
     backup: databaseBackupMessages[locale].title,
-    versions: versionTabs[locale],
+    versions: versionInfoText(locale, 'tab'),
   };
   const panels = {
     benchmark: (

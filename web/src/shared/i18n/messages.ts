@@ -76,8 +76,13 @@ export function defineMessages<K extends string>(
 ): Messages<K> {
   // Set, not add: a module re-evaluated by hot reload defines its catalog again.
   registry.set(name, catalogs);
-  const text = (locale: Locale, key: K, params: TranslationParams = {}) =>
-    formatMessage(locale, catalogs[locale][key], params);
+  const text = (locale: Locale, key: K, params: TranslationParams = {}) => {
+    const template: string | undefined = catalogs[locale][key];
+    // A key from outside the type system, such as an unexpected API value,
+    // shows itself instead of failing the whole view.
+    if (template === undefined) return String(key);
+    return formatMessage(locale, template, params);
+  };
   return {
     name,
     catalogs,

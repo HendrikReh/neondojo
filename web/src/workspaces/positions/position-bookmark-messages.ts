@@ -1,4 +1,8 @@
-import { useI18n, type Locale } from '../../shared/i18n/i18n';
+import {
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../shared/i18n/messages';
 
 const entries = {
   save: [
@@ -73,19 +77,8 @@ const entries = {
     'Spróbuj ponownie',
     'Riprova',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-type Key = keyof typeof entries;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const positionBookmarkMessages = Object.fromEntries(
-  locales.map((locale, i) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(entries).map(([key, values]) => [key, values[i]]),
-    ),
-  ]),
-) as Record<Locale, Record<Key, string>>;
+} satisfies Record<string, MessageRow>;
 
-export function usePositionBookmarkText() {
-  const { locale } = useI18n();
-  return (key: Key) => positionBookmarkMessages[locale][key];
-}
+const messages = defineMessages('position-bookmark', fromRows(entries));
+export const positionBookmarkMessages = messages.catalogs;
+export const usePositionBookmarkText = messages.useText;

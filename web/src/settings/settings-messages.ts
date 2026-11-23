@@ -1,9 +1,4 @@
-import { useI18n } from '../shared/i18n/i18n';
-import {
-  interpolate,
-  type Locale,
-  type TranslationParams,
-} from '../shared/i18n/i18n-core';
+import { defineMessages, type MessageText } from '../shared/i18n/messages';
 import { depthLabel } from '../shared/engine/analysis-depth';
 
 const en = {
@@ -101,9 +96,8 @@ const en = {
 };
 
 export type SettingsMessageKey = keyof typeof en;
-type Messages = Record<SettingsMessageKey, string>;
 
-export const settingsMessages: Record<Locale, Messages> = {
+const messages = defineMessages('settings', {
   en,
   de: {
     title: 'Einstellungen',
@@ -587,23 +581,13 @@ export const settingsMessages: Record<Locale, Messages> = {
     loadLatest: 'Wczytaj najnowszą wersję i odrzuć szkic',
     invalidResponse: 'Backend zwrócił niekompletne ustawienia.',
   },
-};
+});
 
-export function settingsText(
-  locale: Locale,
-  key: SettingsMessageKey,
-  params: TranslationParams = {},
-) {
-  return interpolate(settingsMessages[locale][key], params);
-}
+export const settingsMessages = messages.catalogs;
+export const settingsText = messages.text;
+export const useSettingsText = messages.useText;
 
-export function useSettingsText() {
-  const { locale } = useI18n();
-  return (key: SettingsMessageKey, params?: TranslationParams) =>
-    settingsText(locale, key, params);
-}
-
-export type SettingsText = ReturnType<typeof useSettingsText>;
+export type SettingsText = MessageText<SettingsMessageKey>;
 
 /** GNUbg's three named profiles are its 1- to 3-ply searches. */
 export function depthOptionLabel(

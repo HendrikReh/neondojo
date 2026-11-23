@@ -1,8 +1,5 @@
-import { useI18n, type Locale } from '../../shared/i18n/i18n';
-import {
-  formatMessage,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+import { defineMessages } from '../../shared/i18n/messages';
+
 const en = {
   forfeitMatch: 'Forfeit match',
   forfeitHelp:
@@ -25,8 +22,7 @@ const en = {
   declined:
     'The bot declined this resignation. Offer a higher level or continue playing. Your game is unchanged.',
 };
-type Key = keyof typeof en;
-const messages: Record<Locale, Record<Key, string>> = {
+const messages = defineMessages('play-resign', {
   en,
   de: {
     forfeitMatch: 'Match aufgeben',
@@ -138,9 +134,5 @@ const messages: Record<Locale, Record<Key, string>> = {
     declined:
       'Bot odrzucił poddanie. Zaproponuj wyższą wartość lub graj dalej. Stan gry się nie zmienił.',
   },
-};
-export function usePlayResignText() {
-  const { locale } = useI18n();
-  return (key: Key, values: TranslationParams = {}) =>
-    formatMessage(locale, messages[locale][key], values);
-}
+});
+export const usePlayResignText = messages.useText;

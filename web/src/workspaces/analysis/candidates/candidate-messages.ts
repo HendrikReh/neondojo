@@ -1,9 +1,10 @@
 import { useI18n } from '../../../shared/i18n/i18n';
 import {
-  interpolate,
-  type Locale,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../../shared/i18n/messages';
+
 const rows = {
   compareMoves: [
     'Compare moves',
@@ -163,21 +164,12 @@ const rows = {
     '{value} pp',
     '{value} pp',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const candidateMessages = Object.fromEntries(
-  locales.map((locale, index) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(rows).map(([key, values]) => [key, values[index]]),
-    ),
-  ]),
-) as Record<Locale, Record<keyof typeof rows, string>>;
-export function useCandidateText() {
-  const { locale } = useI18n();
-  return (key: keyof typeof rows, params: TranslationParams = {}) =>
-    interpolate(candidateMessages[locale][key], params);
-}
+} satisfies Record<string, MessageRow>;
+
+const messages = defineMessages('candidate', fromRows(rows));
+
+export const candidateMessages = messages.catalogs;
+export const useCandidateText = messages.useText;
 
 export function useCandidateLossText() {
   const { formatNumber } = useI18n();

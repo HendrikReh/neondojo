@@ -1,9 +1,9 @@
-import { useI18n } from '../../../shared/i18n/i18n';
 import {
-  formatMessage,
-  type Locale,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../../shared/i18n/messages';
+
 const rows = {
   resizePreview: [
     'Resize card preview',
@@ -150,18 +150,9 @@ const rows = {
     'Nauka i eksport używają wybranej talii.',
     'Studia ora ed esporta usano il mazzo selezionato.',
   ],
-} as const;
+} satisfies Record<string, MessageRow>;
 export type CardSearchMessage = keyof typeof rows;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export function cardSearchText(
-  locale: Locale,
-  key: CardSearchMessage,
-  params: TranslationParams = {},
-) {
-  return formatMessage(locale, rows[key][locales.indexOf(locale)], params);
-}
-export function useCardSearchText() {
-  const { locale } = useI18n();
-  return (key: CardSearchMessage, params: TranslationParams = {}) =>
-    cardSearchText(locale, key, params);
-}
+
+const messages = defineMessages('card-search', fromRows(rows));
+export const cardSearchText = messages.text;
+export const useCardSearchText = messages.useText;

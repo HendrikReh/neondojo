@@ -1,4 +1,5 @@
-import type { Locale } from '../../shared/i18n/i18n';
+import { defineMessages } from '../../shared/i18n/messages';
+
 const en = {
   heading: 'Game result',
   winner: '{player} wins {points} points',
@@ -14,8 +15,7 @@ const en = {
   resignation: 'Resignation',
   recorded: 'Recorded result',
 };
-type Key = keyof typeof en;
-const messages: Record<Locale, Record<Key, string>> = {
+const messages = defineMessages('game-result', {
   en,
   de: {
     heading: 'Spielergebnis',
@@ -92,13 +92,5 @@ const messages: Record<Locale, Record<Key, string>> = {
     resignation: 'Poddanie',
     recorded: 'Zapisany wynik',
   },
-};
-export function gameResultText(
-  locale: Locale,
-  key: Key,
-  values: Record<string, string | number> = {},
-) {
-  return messages[locale][key].replace(/\{(\w+)\}/g, (_, name: string) =>
-    String(values[name] ?? `{${name}}`),
-  );
-}
+});
+export const gameResultText = messages.text;

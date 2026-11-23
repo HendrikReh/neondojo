@@ -1,8 +1,4 @@
-import { useI18n, type Locale } from '../../shared/i18n/i18n';
-import {
-  formatMessage,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+import { defineMessages } from '../../shared/i18n/messages';
 
 const en = {
   title: 'Virtual profiles',
@@ -47,8 +43,7 @@ const en = {
   myProfileUnavailable: 'Virtual profiles could not be loaded.',
   applyMyProfile: 'My player profile is saved with the player database.',
 };
-type Key = keyof typeof en;
-const words: Record<Locale, Record<Key, string>> = {
+const messages = defineMessages('virtual-player', {
   en,
   de: {
     title: 'Virtuelle Profile',
@@ -271,10 +266,5 @@ const words: Record<Locale, Record<Key, string>> = {
     myProfileUnavailable: 'Nie udało się wczytać profili wirtualnych.',
     applyMyProfile: 'Mój profil gracza jest zapisywany w bazie graczy.',
   },
-};
-
-export function useVirtualPlayerText() {
-  const { locale } = useI18n();
-  return (key: Key, params?: TranslationParams) =>
-    formatMessage(locale, words[locale][key], params);
-}
+});
+export const useVirtualPlayerText = messages.useText;

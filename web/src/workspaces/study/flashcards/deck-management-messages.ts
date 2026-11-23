@@ -1,9 +1,4 @@
-import { useI18n } from '../../../shared/i18n/i18n';
-import {
-  formatMessage,
-  type Locale,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
+import { defineMessages } from '../../../shared/i18n/messages';
 
 const en = {
   rename: 'Rename deck',
@@ -114,16 +109,6 @@ const pl: Catalog = {
   working: 'Zapisywanie…',
   refreshed: 'Wczytano aktualne dane. Sprawdź je przed potwierdzeniem.',
 };
-export const deckManagementMessages: Record<Locale, Catalog> = {
-  en,
-  de,
-  es,
-  fr,
-  it,
-  pl,
-};
-export function useDeckManagementText() {
-  const { locale } = useI18n();
-  return (key: Key, params: TranslationParams = {}) =>
-    formatMessage(locale, deckManagementMessages[locale][key], params);
-}
+const messages = defineMessages('deck-management', { en, de, es, fr, pl, it });
+export const deckManagementMessages = messages.catalogs;
+export const useDeckManagementText = messages.useText;

@@ -6,7 +6,12 @@ import {
   validatePluralForms,
   type Locale,
 } from './i18n-core';
-import { definedMessages, fromRows, rowLocales } from './messages';
+import {
+  defineMessages,
+  definedMessages,
+  fromRows,
+  rowLocales,
+} from './messages';
 
 // Load every feature catalog, so each one registers itself.
 const sources = import.meta.glob<string>('../../**/*-messages.ts', {
@@ -46,6 +51,19 @@ it('builds catalogs from rows in the row order', () => {
   const catalogs = fromRows({ greeting: ['en', 'de', 'es', 'fr', 'pl', 'it'] });
   for (const locale of rowLocales)
     expect(catalogs[locale].greeting).toBe(locale);
+});
+
+it('shows an unknown key instead of failing', () => {
+  const messages = defineMessages('test-unknown-key', {
+    en: { known: 'Known' },
+    de: { known: 'Bekannt' },
+    es: { known: 'Conocido' },
+    fr: { known: 'Connu' },
+    pl: { known: 'Znany' },
+    it: { known: 'Noto' },
+  });
+  expect(messages.text('de', 'known')).toBe('Bekannt');
+  expect(messages.text('de', 'unexpected' as 'known')).toBe('unexpected');
 });
 
 describe.each([...definedMessages])('%s', (_name, catalogs) => {

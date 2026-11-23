@@ -1,8 +1,4 @@
-import { useI18n } from '../../../shared/i18n/i18n';
-import {
-  formatMessage,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
+import { defineMessages } from '../../../shared/i18n/messages';
 
 const de = {
   cardPreview: 'Kartenvorschau',
@@ -474,9 +470,6 @@ const it: Messages = {
   cardAnalysis: 'Analisi della scheda',
   newVersion: 'La scheda è cambiata. Carica la successiva.',
 };
-export const learningMessages = { de, en, es, fr, pl, it };
-export function useLearningText() {
-  const { locale } = useI18n();
-  return (key: Key, params: TranslationParams = {}) =>
-    formatMessage(locale, learningMessages[locale][key], params);
-}
+const messages = defineMessages('learning', { en, de, es, fr, pl, it });
+export const learningMessages = messages.catalogs;
+export const useLearningText = messages.useText;

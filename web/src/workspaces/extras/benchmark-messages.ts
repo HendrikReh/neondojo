@@ -1,8 +1,5 @@
-import { useI18n, type Locale } from '../../shared/i18n/i18n';
-import {
-  formatMessage,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+import { defineMessages } from '../../shared/i18n/messages';
+
 const en = {
   globalBusy:
     'Benchmark running or waiting. Other engine actions wait until measurement finishes.',
@@ -53,62 +50,112 @@ const en = {
   status: 'Status',
   cpus: '{count, plural, one {# logical CPU} other {# logical CPUs}}',
   open: 'Open benchmark',
+  matchAnalysis: 'Match analysis',
+  depthFallback:
+    '{ply}-ply selected because the requested depth is unavailable.',
+  mode: 'Measurement type',
+  playPly: 'Playing depth',
+  details: 'Details',
+  methodology: 'Reference and methodology',
+  threads: '{count, plural, one {# thread} other {# threads}}',
+  recordedEngineVersion: 'Engine version',
+  rulesVersion: 'GNUbg rules version',
+  description:
+    'Measure full-match analysis time and play-turn latency on this backend machine.',
+  playLatency: 'Play-turn latency',
+  playAverage: 'Ø play-turn latency',
+  startPlay: 'Measure play-turn latency',
+  playDepth: 'Default playing depth from Settings · {ply}-ply',
+  playProgress: '{completed} / {total} checker turns',
+  playTiming:
+    'Measures reference checker turns with the selected engine, from loading the game state to producing the next state. Includes process startup.',
+  actions: 'Actions',
+  deleteRun: 'Delete run',
+  deleteQuestion: 'Delete this run permanently?',
+  confirmDelete: 'Delete',
+  keepRun: 'Keep',
+  deleting: 'Deleting …',
 };
-type Key = keyof typeof en;
-const de: Record<Key, string> = {
-  globalBusy:
-    'Benchmark läuft oder wartet. Andere Engine-Aktionen warten, bis die Messung abgeschlossen ist.',
-  extras: 'Extras',
-  benchmark: 'Benchmark',
-  navigation: 'Zusatzwerkzeuge',
-  title: 'Engine-Benchmark',
-  reference: 'Feste Referenz',
-  referenceFacts:
-    '{points, plural, one {# Punkt} other {# Punkte}} · {games, plural, one {# Spiel} other {# Spiele}} · {moves, plural, one {# Checkerzug} other {# Checkerzüge}}',
-  referenceVersion: 'Referenzversion {version}',
-  protocol: 'Protokoll',
-  timeout:
-    'Zeitlimit: {seconds, plural, one {# Sekunde} other {# Sekunden}} pro Spiel',
-  noTimeout: 'Ohne Zeitlimit',
-  engine: 'Benchmark-Engine',
-  plies: 'Analysetiefe',
-  start: 'Benchmark starten',
-  starting: 'Wird gestartet …',
-  noEngine:
-    'Keine Benchmark-Engine verfügbar. Prüfe die Installation in den Einstellungen.',
-  timing:
-    'Die Gesamtzeit umfasst Engine-Starts, Laden, Checker- und Cube-Analyse sowie Ergebnisaufbereitung. Wartezeit und Datenbankzugriffe liegen außerhalb der Messung. Für den Durchschnitt wird die Gesamtzeit durch die Zahl analysierter Checkerzüge geteilt.',
-  serial:
-    'Die Messung läuft von der niedrigsten zur höchsten gewählten Tiefe. Läufe werden beim Verlassen der Ansicht fortgesetzt.',
-  engineBusy:
-    'Andere Engine-Arbeit wartet, bis die Benchmark-Warteschlange abgeschlossen ist.',
-  active: 'Aktuelle Läufe',
-  history: 'Historie',
-  empty: 'Noch keine Benchmarkläufe.',
-  loading: 'Wird geladen …',
-  retry: 'Erneut versuchen',
-  queued: 'Wartend',
-  running: 'Läuft',
-  completed: 'Abgeschlossen',
-  failed: 'Fehlgeschlagen',
-  cancelled: 'Abgebrochen',
-  waiting:
-    'Wartet auf die Engine; andere Engine-Arbeit muss zunächst abgeschlossen werden.',
-  progress: '{completed} / {total} Spiele · {moves} / {totalMoves} Checkerzüge',
-  cancel: 'Lauf abbrechen',
-  cancelling: 'Wird abgebrochen …',
-  date: 'Datum',
-  engineColumn: 'Engine',
-  depth: 'Ply',
-  total: 'Gesamtanalysezeit',
-  average: 'Ø Analysezeit / Zug',
-  status: 'Status',
-  cpus: '{count, plural, one {# logische CPU} other {# logische CPUs}}',
-  open: 'Benchmark öffnen',
-};
-const base: Record<Locale, Record<Key, string>> = {
+
+const messages = defineMessages('benchmark', {
   en,
-  de,
+  de: {
+    globalBusy:
+      'Benchmark läuft oder wartet. Andere Engine-Aktionen warten, bis die Messung abgeschlossen ist.',
+    extras: 'Extras',
+    benchmark: 'Benchmark',
+    navigation: 'Zusatzwerkzeuge',
+    title: 'Engine-Benchmark',
+    reference: 'Feste Referenz',
+    referenceFacts:
+      '{points, plural, one {# Punkt} other {# Punkte}} · {games, plural, one {# Spiel} other {# Spiele}} · {moves, plural, one {# Checkerzug} other {# Checkerzüge}}',
+    referenceVersion: 'Referenzversion {version}',
+    protocol: 'Protokoll',
+    timeout:
+      'Zeitlimit: {seconds, plural, one {# Sekunde} other {# Sekunden}} pro Spiel',
+    noTimeout: 'Ohne Zeitlimit',
+    engine: 'Benchmark-Engine',
+    plies: 'Analysetiefe',
+    start: 'Benchmark starten',
+    starting: 'Wird gestartet …',
+    noEngine:
+      'Keine Benchmark-Engine verfügbar. Prüfe die Installation in den Einstellungen.',
+    timing:
+      'Die Gesamtzeit umfasst Engine-Starts, Laden, Checker- und Cube-Analyse sowie Ergebnisaufbereitung. Wartezeit und Datenbankzugriffe liegen außerhalb der Messung. Für den Durchschnitt wird die Gesamtzeit durch die Zahl analysierter Checkerzüge geteilt.',
+    serial:
+      'Die Messung läuft von der niedrigsten zur höchsten gewählten Tiefe. Läufe werden beim Verlassen der Ansicht fortgesetzt.',
+    engineBusy:
+      'Andere Engine-Arbeit wartet, bis die Benchmark-Warteschlange abgeschlossen ist.',
+    active: 'Aktuelle Läufe',
+    history: 'Historie',
+    empty: 'Noch keine Benchmarkläufe.',
+    loading: 'Wird geladen …',
+    retry: 'Erneut versuchen',
+    queued: 'Wartend',
+    running: 'Läuft',
+    completed: 'Abgeschlossen',
+    failed: 'Fehlgeschlagen',
+    cancelled: 'Abgebrochen',
+    waiting:
+      'Wartet auf die Engine; andere Engine-Arbeit muss zunächst abgeschlossen werden.',
+    progress:
+      '{completed} / {total} Spiele · {moves} / {totalMoves} Checkerzüge',
+    cancel: 'Lauf abbrechen',
+    cancelling: 'Wird abgebrochen …',
+    date: 'Datum',
+    engineColumn: 'Engine',
+    depth: 'Ply',
+    total: 'Gesamtanalysezeit',
+    average: 'Ø Analysezeit / Zug',
+    status: 'Status',
+    cpus: '{count, plural, one {# logische CPU} other {# logische CPUs}}',
+    open: 'Benchmark öffnen',
+    matchAnalysis: 'Matchanalyse',
+    depthFallback:
+      '{ply} Ply gewählt, da die gewünschte Tiefe nicht verfügbar ist.',
+    mode: 'Messart',
+    playPly: 'Spieltiefe',
+    details: 'Details',
+    methodology: 'Referenz und Methodik',
+    threads: '{count, plural, one {# Thread} other {# Threads}}',
+    recordedEngineVersion: 'Engine-Version',
+    rulesVersion: 'Version der GNUbg-Regel-Engine',
+    description:
+      'Matchanalysezeit und Spielzuglatenz auf diesem Backend-Rechner messen.',
+    playLatency: 'Spielzuglatenz',
+    playAverage: 'Ø Spielzuglatenz',
+    startPlay: 'Spielzuglatenz messen',
+    playDepth: 'Standard-Spieltiefe aus den Einstellungen · {ply}-ply',
+    playProgress: '{completed} / {total} Checkerzüge',
+    playTiming:
+      'Misst Referenzzüge mit der gewählten Engine. Die Zeit umfasst den Prozessstart und reicht bis zum neuen Spielstand.',
+    actions: 'Aktionen',
+    deleteRun: 'Lauf löschen',
+    deleteQuestion: 'Diesen Lauf endgültig löschen?',
+    confirmDelete: 'Löschen',
+    keepRun: 'Behalten',
+    deleting: 'Wird gelöscht …',
+  },
   es: {
     globalBusy:
       'Hay una medición en curso o en espera. Las demás tareas del motor esperan a que termine.',
@@ -159,6 +206,31 @@ const base: Record<Locale, Record<Key, string>> = {
     status: 'Estado',
     cpus: '{count, plural, one {# CPU lógica} other {# CPU lógicas}}',
     open: 'Abrir benchmark',
+    matchAnalysis: 'Análisis del encuentro',
+    depthFallback:
+      'Se seleccionó {ply} ply porque la profundidad solicitada no está disponible.',
+    mode: 'Tipo de medición',
+    playPly: 'Profundidad de juego',
+    details: 'Detalles',
+    methodology: 'Referencia y metodología',
+    threads: '{count, plural, one {# hilo} other {# hilos}}',
+    recordedEngineVersion: 'Versión del motor',
+    rulesVersion: 'Versión de las reglas de GNUbg',
+    description:
+      'Mide el tiempo de análisis de una partida completa y la latencia por jugada en este equipo servidor.',
+    playLatency: 'Latencia por jugada',
+    playAverage: 'Latencia media por jugada',
+    startPlay: 'Medir latencia por jugada',
+    playDepth: 'Profundidad de juego configurada · {ply} ply',
+    playProgress: '{completed} / {total} jugadas de fichas',
+    playTiming:
+      'Mide jugadas de referencia con el motor seleccionado, desde la carga hasta el nuevo estado de la partida. Incluye el arranque del proceso.',
+    actions: 'Acciones',
+    deleteRun: 'Eliminar medición',
+    deleteQuestion: '¿Eliminar esta medición definitivamente?',
+    confirmDelete: 'Eliminar',
+    keepRun: 'Conservar',
+    deleting: 'Eliminando…',
   },
   fr: {
     globalBusy:
@@ -210,6 +282,31 @@ const base: Record<Locale, Record<Key, string>> = {
     status: 'État',
     cpus: '{count, plural, one {# processeur logique} other {# processeurs logiques}}',
     open: 'Ouvrir le benchmark',
+    matchAnalysis: 'Analyse de match',
+    depthFallback:
+      '{ply} ply sélectionné, car la profondeur demandée est indisponible.',
+    mode: 'Type de mesure',
+    playPly: 'Profondeur de jeu',
+    details: 'Détails',
+    methodology: 'Référence et méthode',
+    threads: '{count, plural, one {# thread} other {# threads}}',
+    recordedEngineVersion: 'Version du moteur',
+    rulesVersion: 'Version des règles GNUbg',
+    description:
+      'Mesurez le temps d’analyse d’un match complet et la latence par coup sur cet ordinateur serveur.',
+    playLatency: 'Latence par coup',
+    playAverage: 'Latence moyenne par coup',
+    startPlay: 'Mesurer la latence par coup',
+    playDepth: 'Profondeur de jeu configurée · {ply} ply',
+    playProgress: '{completed} / {total} coups de pions',
+    playTiming:
+      'Mesure des coups de référence avec le moteur sélectionné, du chargement au nouvel état de la partie. Le démarrage du processus est inclus.',
+    actions: 'Actions',
+    deleteRun: 'Supprimer la mesure',
+    deleteQuestion: 'Supprimer définitivement cette mesure ?',
+    confirmDelete: 'Supprimer',
+    keepRun: 'Conserver',
+    deleting: 'Suppression…',
   },
   it: {
     globalBusy:
@@ -261,6 +358,31 @@ const base: Record<Locale, Record<Key, string>> = {
     status: 'Stato',
     cpus: '{count, plural, one {# CPU logica} other {# CPU logiche}}',
     open: 'Apri benchmark',
+    matchAnalysis: 'Analisi del match',
+    depthFallback:
+      'Selezionati {ply} ply perché la profondità richiesta non è disponibile.',
+    mode: 'Tipo di misurazione',
+    playPly: 'Profondità di gioco',
+    details: 'Dettagli',
+    methodology: 'Riferimento e metodologia',
+    threads: '{count, plural, one {# thread} other {# thread}}',
+    recordedEngineVersion: 'Versione del motore',
+    rulesVersion: 'Versione delle regole GNUbg',
+    description:
+      'Misura il tempo di analisi di un match completo e la latenza per mossa su questo computer server.',
+    playLatency: 'Latenza per mossa',
+    playAverage: 'Latenza media per mossa',
+    startPlay: 'Misura la latenza per mossa',
+    playDepth: 'Profondità di gioco impostata · {ply} ply',
+    playProgress: '{completed} / {total} mosse di pedine',
+    playTiming:
+      'Misura mosse di riferimento con il motore selezionato, dal caricamento al nuovo stato della partita. Include l’avvio del processo.',
+    actions: 'Azioni',
+    deleteRun: 'Elimina misurazione',
+    deleteQuestion: 'Eliminare definitivamente questa misurazione?',
+    confirmDelete: 'Elimina',
+    keepRun: 'Mantieni',
+    deleting: 'Eliminazione…',
   },
   pl: {
     globalBusy:
@@ -311,147 +433,6 @@ const base: Record<Locale, Record<Key, string>> = {
     status: 'Stan',
     cpus: '{count, plural, one {# procesor logiczny} few {# procesory logiczne} many {# procesorów logicznych}}',
     open: 'Otwórz benchmark',
-  },
-};
-const playEn = {
-  matchAnalysis: 'Match analysis',
-  depthFallback:
-    '{ply}-ply selected because the requested depth is unavailable.',
-  mode: 'Measurement type',
-  playPly: 'Playing depth',
-  details: 'Details',
-  methodology: 'Reference and methodology',
-  threads: '{count, plural, one {# thread} other {# threads}}',
-  recordedEngineVersion: 'Engine version',
-  rulesVersion: 'GNUbg rules version',
-  description:
-    'Measure full-match analysis time and play-turn latency on this backend machine.',
-  playLatency: 'Play-turn latency',
-  playAverage: 'Ø play-turn latency',
-  startPlay: 'Measure play-turn latency',
-  playDepth: 'Default playing depth from Settings · {ply}-ply',
-  playProgress: '{completed} / {total} checker turns',
-  playTiming:
-    'Measures reference checker turns with the selected engine, from loading the game state to producing the next state. Includes process startup.',
-  actions: 'Actions',
-  deleteRun: 'Delete run',
-  deleteQuestion: 'Delete this run permanently?',
-  confirmDelete: 'Delete',
-  keepRun: 'Keep',
-  deleting: 'Deleting …',
-};
-type PlayKey = keyof typeof playEn;
-const play: Record<Locale, Record<PlayKey, string>> = {
-  en: playEn,
-  de: {
-    matchAnalysis: 'Matchanalyse',
-    depthFallback:
-      '{ply} Ply gewählt, da die gewünschte Tiefe nicht verfügbar ist.',
-    mode: 'Messart',
-    playPly: 'Spieltiefe',
-    details: 'Details',
-    methodology: 'Referenz und Methodik',
-    threads: '{count, plural, one {# Thread} other {# Threads}}',
-    recordedEngineVersion: 'Engine-Version',
-    rulesVersion: 'Version der GNUbg-Regel-Engine',
-    description:
-      'Matchanalysezeit und Spielzuglatenz auf diesem Backend-Rechner messen.',
-    playLatency: 'Spielzuglatenz',
-    playAverage: 'Ø Spielzuglatenz',
-    startPlay: 'Spielzuglatenz messen',
-    playDepth: 'Standard-Spieltiefe aus den Einstellungen · {ply}-ply',
-    playProgress: '{completed} / {total} Checkerzüge',
-    playTiming:
-      'Misst Referenzzüge mit der gewählten Engine. Die Zeit umfasst den Prozessstart und reicht bis zum neuen Spielstand.',
-    actions: 'Aktionen',
-    deleteRun: 'Lauf löschen',
-    deleteQuestion: 'Diesen Lauf endgültig löschen?',
-    confirmDelete: 'Löschen',
-    keepRun: 'Behalten',
-    deleting: 'Wird gelöscht …',
-  },
-  es: {
-    matchAnalysis: 'Análisis del encuentro',
-    depthFallback:
-      'Se seleccionó {ply} ply porque la profundidad solicitada no está disponible.',
-    mode: 'Tipo de medición',
-    playPly: 'Profundidad de juego',
-    details: 'Detalles',
-    methodology: 'Referencia y metodología',
-    threads: '{count, plural, one {# hilo} other {# hilos}}',
-    recordedEngineVersion: 'Versión del motor',
-    rulesVersion: 'Versión de las reglas de GNUbg',
-    description:
-      'Mide el tiempo de análisis de una partida completa y la latencia por jugada en este equipo servidor.',
-    playLatency: 'Latencia por jugada',
-    playAverage: 'Latencia media por jugada',
-    startPlay: 'Medir latencia por jugada',
-    playDepth: 'Profundidad de juego configurada · {ply} ply',
-    playProgress: '{completed} / {total} jugadas de fichas',
-    playTiming:
-      'Mide jugadas de referencia con el motor seleccionado, desde la carga hasta el nuevo estado de la partida. Incluye el arranque del proceso.',
-    actions: 'Acciones',
-    deleteRun: 'Eliminar medición',
-    deleteQuestion: '¿Eliminar esta medición definitivamente?',
-    confirmDelete: 'Eliminar',
-    keepRun: 'Conservar',
-    deleting: 'Eliminando…',
-  },
-  fr: {
-    matchAnalysis: 'Analyse de match',
-    depthFallback:
-      '{ply} ply sélectionné, car la profondeur demandée est indisponible.',
-    mode: 'Type de mesure',
-    playPly: 'Profondeur de jeu',
-    details: 'Détails',
-    methodology: 'Référence et méthode',
-    threads: '{count, plural, one {# thread} other {# threads}}',
-    recordedEngineVersion: 'Version du moteur',
-    rulesVersion: 'Version des règles GNUbg',
-    description:
-      'Mesurez le temps d’analyse d’un match complet et la latence par coup sur cet ordinateur serveur.',
-    playLatency: 'Latence par coup',
-    playAverage: 'Latence moyenne par coup',
-    startPlay: 'Mesurer la latence par coup',
-    playDepth: 'Profondeur de jeu configurée · {ply} ply',
-    playProgress: '{completed} / {total} coups de pions',
-    playTiming:
-      'Mesure des coups de référence avec le moteur sélectionné, du chargement au nouvel état de la partie. Le démarrage du processus est inclus.',
-    actions: 'Actions',
-    deleteRun: 'Supprimer la mesure',
-    deleteQuestion: 'Supprimer définitivement cette mesure ?',
-    confirmDelete: 'Supprimer',
-    keepRun: 'Conserver',
-    deleting: 'Suppression…',
-  },
-  it: {
-    matchAnalysis: 'Analisi del match',
-    depthFallback:
-      'Selezionati {ply} ply perché la profondità richiesta non è disponibile.',
-    mode: 'Tipo di misurazione',
-    playPly: 'Profondità di gioco',
-    details: 'Dettagli',
-    methodology: 'Riferimento e metodologia',
-    threads: '{count, plural, one {# thread} other {# thread}}',
-    recordedEngineVersion: 'Versione del motore',
-    rulesVersion: 'Versione delle regole GNUbg',
-    description:
-      'Misura il tempo di analisi di un match completo e la latenza per mossa su questo computer server.',
-    playLatency: 'Latenza per mossa',
-    playAverage: 'Latenza media per mossa',
-    startPlay: 'Misura la latenza per mossa',
-    playDepth: 'Profondità di gioco impostata · {ply} ply',
-    playProgress: '{completed} / {total} mosse di pedine',
-    playTiming:
-      'Misura mosse di riferimento con il motore selezionato, dal caricamento al nuovo stato della partita. Include l’avvio del processo.',
-    actions: 'Azioni',
-    deleteRun: 'Elimina misurazione',
-    deleteQuestion: 'Eliminare definitivamente questa misurazione?',
-    confirmDelete: 'Elimina',
-    keepRun: 'Mantieni',
-    deleting: 'Eliminazione…',
-  },
-  pl: {
     matchAnalysis: 'Analiza meczu',
     depthFallback:
       'Wybrano {ply} ply, ponieważ żądana głębokość jest niedostępna.',
@@ -478,22 +459,7 @@ const play: Record<Locale, Record<PlayKey, string>> = {
     keepRun: 'Zachowaj',
     deleting: 'Usuwanie…',
   },
-};
-function isPlayKey(key: Key | PlayKey): key is PlayKey {
-  return Object.hasOwn(playEn, key);
-}
-export const benchmarkText = (
-  locale: Locale,
-  key: Key | PlayKey,
-  values?: TranslationParams,
-) =>
-  formatMessage(
-    locale,
-    isPlayKey(key) ? play[locale][key] : base[locale][key],
-    values,
-  );
-export function useBenchmarkText() {
-  const { locale } = useI18n();
-  return (key: Key | PlayKey, values?: TranslationParams) =>
-    benchmarkText(locale, key, values);
-}
+});
+export const benchmarkMessages = messages.catalogs;
+export const benchmarkText = messages.text;
+export const useBenchmarkText = messages.useText;

@@ -1,8 +1,9 @@
-import { useI18n, type Locale } from '../../shared/i18n/i18n';
 import {
-  formatMessage,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../shared/i18n/messages';
+
 const en = {
   moneySession: 'Money-game session',
   totalScore: 'Total score',
@@ -229,18 +230,8 @@ const it: Record<Key, string> = {
   depth: 'Profondità di analisi',
   pr: 'PR del primo tentativo',
 };
-const messages: Record<Locale, Record<Key, string>> = {
-  en,
-  de,
-  es,
-  fr,
-  pl,
-  it,
-};
-export function useStudyText() {
-  const { locale } = useI18n();
-  return (key: Key) => messages[locale][key];
-}
+const messages = defineMessages('study', { en, de, es, fr, pl, it });
+export const useStudyText = messages.useText;
 
 const overview = {
   tab: [
@@ -388,8 +379,8 @@ const overview = {
     'Copertura: {decisions, plural, one {# decisione} other {# decisioni}} in {matches, plural, one {# partita} other {# partite}}',
   ],
   unanalyzed: [
-    '{missing} of {total, plural, one {# match} other {# matches}} of this player {missing, plural, one {is} other {are}} not analyzed and missing here.',
-    '{missing} von {total, plural, one {# Match} other {# Matches}} dieses Spielers {missing, plural, one {ist} other {sind}} nicht analysiert und {missing, plural, one {fehlt} other {fehlen}} hier.',
+    '{missing} of {total, plural, one {# match} other {# matches}} of this player {missing, plural, one {is not analyzed} other {are not analyzed}} and missing here.',
+    '{missing} von {total, plural, one {# Match} other {# Matches}} dieses Spielers {missing, plural, one {ist nicht analysiert und fehlt} other {sind nicht analysiert und fehlen}} hier.',
     '{missing} de {total, plural, one {# partida} other {# partidas}} de este jugador no {missing, plural, one {está analizada y falta} other {están analizadas y faltan}} aquí.',
     '{missing} sur {total, plural, one {# partie} other {# parties}} de ce joueur {missing, plural, one {n’est pas analysée et manque} other {ne sont pas analysées et manquent}} ici.',
     '{missing} z {total, plural, one {# meczu} few {# meczów} many {# meczów}} tego gracza {missing, plural, one {nie jest przeanalizowany i tu go brakuje} few {nie są przeanalizowane i tu ich brakuje} many {nie jest przeanalizowanych i tu ich brakuje}}.',
@@ -435,16 +426,7 @@ const overview = {
     'Ta talia nie jest już dostępna.',
     'Questo mazzo non è più disponibile.',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
+} satisfies Record<string, MessageRow>;
 
-const overviewLocales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-
-export function useStudyOverviewText() {
-  const { locale } = useI18n();
-  return (key: keyof typeof overview, params?: TranslationParams) =>
-    formatMessage(
-      locale,
-      overview[key][overviewLocales.indexOf(locale)],
-      params,
-    );
-}
+const overviewMessages = defineMessages('study-overview', fromRows(overview));
+export const useStudyOverviewText = overviewMessages.useText;

@@ -1,9 +1,5 @@
 import { useI18n } from '../../../shared/i18n/i18n';
-import {
-  formatMessage,
-  type Locale,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
+import { defineMessages } from '../../../shared/i18n/messages';
 
 const en = {
   eyebrow: 'Your notes',
@@ -67,9 +63,8 @@ const en = {
 };
 
 export type AnnotationMessageKey = keyof typeof en;
-type AnnotationMessages = Record<AnnotationMessageKey, string>;
 
-export const annotationMessages: Record<Locale, AnnotationMessages> = {
+const messages = defineMessages('annotation', {
   en,
   de: {
     eyebrow: 'Deine Notizen',
@@ -391,21 +386,13 @@ export const annotationMessages: Record<Locale, AnnotationMessages> = {
     openPosition: 'Apri posizione',
     filterByTag: 'Cerca il tag «{tag}»',
   },
-};
+});
 
-export function annotationText(
-  locale: Locale,
-  key: AnnotationMessageKey,
-  params: TranslationParams = {},
-) {
-  return formatMessage(locale, annotationMessages[locale][key], params);
-}
+export const annotationMessages = messages.catalogs;
+export const annotationText = messages.text;
 
 export function useAnnotationI18n() {
   const i18n = useI18n();
-  return {
-    ...i18n,
-    t: (key: AnnotationMessageKey, params?: TranslationParams) =>
-      annotationText(i18n.locale, key, params),
-  };
+  const t = messages.useText();
+  return { ...i18n, t };
 }

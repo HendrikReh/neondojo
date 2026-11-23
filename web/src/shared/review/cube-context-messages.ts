@@ -1,5 +1,5 @@
-import { useI18n, type Locale } from '../i18n/i18n';
-import { interpolate, type TranslationParams } from '../i18n/i18n-core';
+import { defineMessages, fromRows, type MessageRow } from '../i18n/messages';
+
 const entries = {
   away: [
     '{player} {count}-away',
@@ -196,19 +196,8 @@ const entries = {
     'Brak punktu przyjęcia: podwojenie nie jest możliwe lub wynik wykracza poza tabelę.',
     'Nessun take point: il raddoppio non è possibile o il punteggio è fuori tabella.',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-type Key = keyof typeof entries;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const cubeContextMessages = Object.fromEntries(
-  locales.map((locale, i) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(entries).map(([key, values]) => [key, values[i]]),
-    ),
-  ]),
-) as Record<Locale, Record<Key, string>>;
-export function useCubeContextText() {
-  const { locale } = useI18n();
-  return (key: Key, params: TranslationParams = {}) =>
-    interpolate(cubeContextMessages[locale][key], params);
-}
+} satisfies Record<string, MessageRow>;
+
+const messages = defineMessages('cube-context', fromRows(entries));
+export const cubeContextMessages = messages.catalogs;
+export const useCubeContextText = messages.useText;

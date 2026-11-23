@@ -1,5 +1,4 @@
 import { useCheckerTurns } from '../practice/useCheckerTurns';
-import { interpolate } from '../../../shared/i18n/i18n-core';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import Board from '../../../shared/board/Board';
 import CheckerPracticeBoard, {
@@ -253,7 +252,7 @@ function MistakeQuestion({
     <div className="recurring-question">
       <p>
         <strong>{t(item.kind)}</strong> ·{' '}
-        {interpolate(t('location'), {
+        {t('location', {
           game: item.reference.game_no,
           decision: item.reference.decision_no,
         })}

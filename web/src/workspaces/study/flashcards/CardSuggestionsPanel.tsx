@@ -4,7 +4,7 @@ import Board from '../../../shared/board/Board';
 import { useCardSuggestionText } from './card-suggestion-messages';
 import { useGamePlanText } from '../../analysis/game-plans/game-plan-messages';
 import { useI18n } from '../../../shared/i18n/i18n';
-import { AppError, interpolate } from '../../../shared/i18n/i18n-core';
+import { AppError } from '../../../shared/i18n/i18n-core';
 import { useLearningText } from './learning-messages';
 import {
   loadCardSuggestions,
@@ -42,7 +42,7 @@ export default function CardSuggestionsPanel({
   const t = useLearningText();
   const planText = useGamePlanText();
   const mistakeText = useMistakeText();
-  const { formatError, formatNumber, locale } = useI18n();
+  const { formatError, formatNumber } = useI18n();
   const [result, setResult] = useState<CardSuggestions>();
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
   const [pending, setPending] = useState<'load' | 'save'>();
@@ -117,46 +117,48 @@ export default function CardSuggestionsPanel({
       <div className="learning-controls">
         <ActionButton
           icon="search"
-          label={text.suggest}
+          label={text('suggest')}
           disabled={disabled || !!pending}
           onClick={() => void load()}
         >
-          {text.suggest}
+          {text('suggest')}
         </ActionButton>
         {!!result?.items.length && (
           <ActionButton
             icon="add"
-            label={text.add}
+            label={text('add')}
             disabled={disabled || !!pending || stale || !selected.length}
             onClick={() => void save()}
           >
-            {text.add} ({formatNumber(selected.length)})
+            {text('add')} ({formatNumber(selected.length)})
           </ActionButton>
         )}
       </div>
       {pending && (
-        <p role="status">{pending === 'load' ? text.loading : t('adding')}</p>
+        <p role="status">
+          {pending === 'load' ? text('loading') : t('adding')}
+        </p>
       )}
       {processed !== undefined && (
         <p role="status">{t('added', { count: processed })}</p>
       )}
-      {stale && <p role="alert">{text.changed}</p>}
+      {stale && <p role="alert">{text('changed')}</p>}
       {!!error && <p role="alert">{formatError(error)}</p>}
       {result && !result.history_available && (
-        <p role="status">{text.historyUnavailable}</p>
+        <p role="status">{text('historyUnavailable')}</p>
       )}
       {result && !result.items.length && (
         <p role="status">
-          {result.has_analysis ? text.empty : text.noAnalysis}
+          {result.has_analysis ? text('empty') : text('noAnalysis')}
         </p>
       )}
       {!!result?.items.length && (
-        <ul className="card-suggestion-list" aria-label={text.suggest}>
+        <ul className="card-suggestion-list" aria-label={text('suggest')}>
           {result.items.map((item, index) => {
             const ref = item.reference;
-            const decision = interpolate(text.decision, {
-              game: formatNumber(ref.game_no),
-              decision: formatNumber(ref.decision_no),
+            const decision = text('decision', {
+              game: ref.game_no,
+              decision: ref.decision_no,
             });
             return (
               <li key={`${ref.job_id}:${ref.game_no}:${ref.decision_no}`}>
@@ -202,15 +204,11 @@ export default function CardSuggestionsPanel({
                   </span>
                   <span>
                     {item.recurring_matches
-                      ? interpolate(
-                          text.recurring,
-                          { count: item.recurring_matches },
-                          locale,
-                        )
-                      : text.largestLoss}
+                      ? text('recurring', { count: item.recurring_matches })
+                      : text('largestLoss')}
                   </span>
                   {item.card_id && (
-                    <span>{item.in_deck ? text.inDeck : text.known}</span>
+                    <span>{item.in_deck ? text('inDeck') : text('known')}</span>
                   )}
                 </div>
               </li>
