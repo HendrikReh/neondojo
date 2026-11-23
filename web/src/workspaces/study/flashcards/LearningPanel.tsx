@@ -15,10 +15,6 @@ import { useLearningText } from './learning-messages';
 import type { Theme } from '../../../shared/board/themes';
 import StudyCardExercise from './StudyCardExercise';
 import LearningCardBrowser from './LearningCardBrowser';
-// Analysis imports AddCardsPanel through this module. Keep the re-export at
-// this position: it keeps the stylesheets of the Study subtree ahead of the
-// Analysis stylesheets in the bundle, which the current cascade relies on.
-export { AddCardsPanel } from './AddCardsPanel';
 import CardSearchControls from './CardSearchControls';
 import { SearchFilterSelect } from '../../../shared/ui/SearchFilterForm';
 import { useSearchPages } from '../../../shared/hooks/useSearchPages';

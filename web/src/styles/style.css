@@ -227,18 +227,6 @@ main {
   padding: 37px 40px 20px;
   margin: auto;
 }
-.theme-picker {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: var(--ui-muted);
-  font-size: var(--font-size-micro);
-  white-space: nowrap;
-}
-.theme-picker select {
-  font-size: var(--font-size-control);
-  padding: 7px;
-}
 .play-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 240px;
@@ -892,10 +880,6 @@ progress::-webkit-progress-value {
   .board-navigation small {
     display: none;
   }
-  .theme-picker {
-    flex-direction: column;
-    align-items: flex-end;
-  }
   .board-navigation strong {
     font-size: 11px;
   }
@@ -999,13 +983,6 @@ progress::-webkit-progress-value {
   }
   h1 {
     font-size: var(--font-size-page);
-  }
-  .theme-picker {
-    font-size: var(--font-size-micro);
-  }
-  .theme-picker select {
-    font-size: var(--font-size-control);
-    max-width: 85px;
   }
   .welcome {
     margin-top: 25px;

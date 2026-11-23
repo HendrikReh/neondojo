@@ -31,7 +31,7 @@ Stored snapshots, settings and HTTP contracts keep the engine ID strings `gnubg`
 | --- | --- |
 | `main.tsx`, `generated-api.d.ts`, `generated-themes.json`, `assets/` | Entry point, generated API types and theme catalogue, bundled sounds |
 | `app/` | `App.tsx` with the workspace order (`views`), header, global shortcuts and background jobs |
-| `styles/` | Global stylesheets imported by `main.tsx` and `index.html` |
+| `styles/` | Global stylesheets, the cascade order in `stylesheets.ts` (imported first by `main.tsx`) and the palette tokens linked from `index.html` |
 | `settings/` | Settings dialog and its sections; `configuration/`, `profiles/` and `appearance/` |
 | `shared/` | `http/` (request helpers), `jobs/`, `i18n/`, `format/`, `engine/`, `ui/` (buttons, dialogs, tooltips, search tables), `hooks/`, `board/` (board, checker play state, themes, sounds) and `review/` (decision details shared by Analysis, Play and Study) |
 | `workspaces/play/` | Playing |
@@ -41,7 +41,9 @@ Stored snapshots, settings and HTTP contracts keep the engine ID strings `gnubg`
 | `workspaces/library/` | Match database, its database list (`useDatabases`) and `import/` |
 | `workspaces/players/`, `workspaces/extras/` | Player database; Extras (benchmark, engine matches, backups, version) |
 
-The bundled stylesheet order follows the import order of these modules. Moving an import between features can reorder rules of equal specificity, so compare the built CSS before and after such a change. Keep `/api/` out of module paths: the Vite dev server serves modules under `/src/…`, and browser tests intercept `**/api/**` as backend requests.
+**Loading.** Analysis and the Match database are part of the initial bundle. Playing, Study, Positions (saved positions, decision search and similar positions), the Player database, Extras and the Settings dialog load on their first visit and stay mounted afterwards, so returning to them keeps their state. Playing, Study, Saved positions and Extras, which used to mount hidden at start-up, still mount hidden for one commit before they become visible (`MountHidden`), so their mount effects run before loading starts. `app/LazyPanel.tsx` shows a loading line meanwhile and, if a part cannot be loaded (for example after a redeploy while the page still refers to the previous build), a hint to reload the page. Match database stays in the initial bundle because it clears a deleted database from the import destination at start-up. Message catalogues load with the modules that import them; most still hold all six languages.
+
+**Stylesheet order.** [`styles/stylesheets.ts`](../../web/src/styles/stylesheets.ts) imports every stylesheet in cascade order, and `main.tsx` imports it before any component. Components also import their own stylesheet, but those imports add nothing, so neither module order nor lazy loading changes which of two equally specific rules wins. The order reproduces the cascade from before lazy loading: `style.css` and the other global sheets still follow the component sheets, and many component rules rely on that. `stylesheets.test.ts` checks that every stylesheet is listed once. Moving a file in the list can change computed styles; compare them in every palette before and after such a change. Keep `/api/` out of module paths: the Vite dev server serves modules under `/src/…`, and browser tests intercept `**/api/**` as backend requests.
 
 ## Database schema
 

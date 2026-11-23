@@ -288,7 +288,9 @@ export function validateCatalogs(all: Record<Locale, Catalog>) {
     }
   }
 }
-validateCatalogs(catalogs);
+// Tests and development builds check the catalogs; a production bundle skips the
+// check at start-up. Node (Playwright) has no import.meta.env, so it checks too.
+if (!import.meta.env?.PROD) validateCatalogs(catalogs);
 
 export function translate(
   locale: Locale,

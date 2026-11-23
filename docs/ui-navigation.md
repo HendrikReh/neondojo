@@ -25,8 +25,8 @@ Match database, Player database, and Extras. Rendering and keyboard navigation
 share the `views` list in `web/src/app/App.tsx`: Left/Right move through it and
 wrap, and Home/End select the first and last workspace.
 
-The shared rules live in `web/src/styles/text-navigation.css`, imported after the other
-styles. Local CSS manages surrounding layout and should not reintroduce filled
+The shared rules live in `web/src/styles/text-navigation.css`, the last stylesheet in
+`web/src/styles/stylesheets.ts`. Local CSS manages surrounding layout and should not reintroduce filled
 navigation states or competing padding/gap rules.
 
 Action buttons, field controls, bookmarks, sortable table headers, selected rows,

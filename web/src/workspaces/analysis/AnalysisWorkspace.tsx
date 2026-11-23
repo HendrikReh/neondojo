@@ -33,7 +33,7 @@ import MatchAnalysisPanel, {
 } from './match/MatchAnalysisPanel';
 import NotesPanel from './notes/NotesPanel';
 import GameSelector from './GameSelector';
-import { AddCardsPanel } from '../study/flashcards/LearningPanel';
+import { AddCardsPanel } from '../study/flashcards/AddCardsPanel';
 import { type Job, type Match } from '../../shared/http/api';
 import {
   canOpenReviewDecision,
