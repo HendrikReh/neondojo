@@ -1,4 +1,10 @@
-import { Component, Suspense, type ReactNode } from 'react';
+import {
+  Component,
+  Suspense,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react';
 import { useWorkspaceText } from '../shared/i18n/workspace-messages';
 import ActionButton from '../shared/ui/ActionButton';
 
@@ -71,4 +77,23 @@ export default function LazyPanel({
       <Suspense fallback={quiet ? null : <Loading />}>{children}</Suspense>
     </ChunkBoundary>
   );
+}
+
+/**
+ * Passes `visible` on only after its content has mounted once, hidden. The
+ * workspaces that used to mount at start-up rely on that order: their mount
+ * effects run while hidden, and loading starts when they become visible.
+ * Without it, a workspace that mounts visible starts loading in its mount
+ * effects, which StrictMode runs twice in development.
+ */
+export function MountHidden({
+  visible,
+  children,
+}: {
+  visible: boolean;
+  children: (visible: boolean) => ReactNode;
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return children(visible && mounted);
 }

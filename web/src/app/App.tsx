@@ -97,7 +97,7 @@ import MoveNotesDialog, {
 import { useUiAppearance } from '../settings/appearance/useUiAppearance';
 import { useButtonShortcuts } from './useButtonShortcuts';
 import { useDecisionSearchText } from '../workspaces/positions/decision-search-messages';
-import LazyPanel from './LazyPanel';
+import LazyPanel, { MountHidden } from './LazyPanel';
 
 // Workspaces other than Analysis and the match database, and the settings
 // dialog, load on their first visit and stay mounted afterwards.
@@ -1059,32 +1059,36 @@ export default function App() {
         >
           <LazyPanel>
             {opened('play') && (
-              <PlayWorkspace
-                visible={view === 'play'}
-                settings={settings}
-                theme={theme}
-                requestedSession={requestedPlaySession}
-                onSaved={() => setRevision((n) => n + 1)}
-                onModeChanged={playModeChanged}
-                onOpenPlaySettings={() => {
-                  setSettingsCategory('play');
-                  setSettingsOpen(true);
-                }}
-                onOpenAssessment={(id) => {
-                  cancelRestoration();
-                  setRequestedAssessment((previous) => ({
-                    id,
-                    token: (previous?.token ?? 0) + 1,
-                  }));
-                  setView('learning');
-                }}
-                onOpenPausedMatches={() => {
-                  cancelRestoration();
-                  setDatabaseId(PAUSED_MATCHES_DATABASE_ID);
-                  setView('database');
-                  tabs.current.database?.focus();
-                }}
-              />
+              <MountHidden visible={view === 'play'}>
+                {(visible) => (
+                  <PlayWorkspace
+                    visible={visible}
+                    settings={settings}
+                    theme={theme}
+                    requestedSession={requestedPlaySession}
+                    onSaved={() => setRevision((n) => n + 1)}
+                    onModeChanged={playModeChanged}
+                    onOpenPlaySettings={() => {
+                      setSettingsCategory('play');
+                      setSettingsOpen(true);
+                    }}
+                    onOpenAssessment={(id) => {
+                      cancelRestoration();
+                      setRequestedAssessment((previous) => ({
+                        id,
+                        token: (previous?.token ?? 0) + 1,
+                      }));
+                      setView('learning');
+                    }}
+                    onOpenPausedMatches={() => {
+                      cancelRestoration();
+                      setDatabaseId(PAUSED_MATCHES_DATABASE_ID);
+                      setView('database');
+                      tabs.current.database?.focus();
+                    }}
+                  />
+                )}
+              </MountHidden>
             )}
           </LazyPanel>
         </section>
@@ -1297,26 +1301,32 @@ export default function App() {
           <div hidden={!!similarTarget || positionScope === 'all'}>
             <LazyPanel>
               {opened('positions') && (
-                <PositionBrowser
+                <MountHidden
                   visible={
                     view === 'positions' &&
                     !similarTarget &&
                     positionScope === 'saved'
                   }
-                  bookmarkRevision={bookmarkRevision}
-                  onBookmarkChanged={bookmarkChanged}
-                  revision={revision}
-                  annotationRevision={annotationRevision}
-                  deckRevision={deckRevision}
-                  theme={theme}
-                  onOpenPosition={(id) => {
-                    setDetail('overview');
-                    openPosition(id);
-                  }}
-                  onDeckChanged={deckChanged}
-                  onStudy={openStudyDeck}
-                  onFindSimilar={searchSimilarPositions}
-                />
+                >
+                  {(visible) => (
+                    <PositionBrowser
+                      visible={visible}
+                      bookmarkRevision={bookmarkRevision}
+                      onBookmarkChanged={bookmarkChanged}
+                      revision={revision}
+                      annotationRevision={annotationRevision}
+                      deckRevision={deckRevision}
+                      theme={theme}
+                      onOpenPosition={(id) => {
+                        setDetail('overview');
+                        openPosition(id);
+                      }}
+                      onDeckChanged={deckChanged}
+                      onStudy={openStudyDeck}
+                      onFindSimilar={searchSimilarPositions}
+                    />
+                  )}
+                </MountHidden>
               )}
             </LazyPanel>
           </div>
@@ -1346,16 +1356,20 @@ export default function App() {
         >
           <LazyPanel>
             {opened('learning') && (
-              <StudyWorkspace
-                visible={view === 'learning'}
-                requestedDeck={requestedDeck}
-                requestedAssessment={requestedAssessment}
-                theme={theme}
-                revision={deckRevision}
-                onChanged={deckChanged}
-                onStudyDeck={openStudyDeck}
-                onOpenPlayers={() => setView('players')}
-              />
+              <MountHidden visible={view === 'learning'}>
+                {(visible) => (
+                  <StudyWorkspace
+                    visible={visible}
+                    requestedDeck={requestedDeck}
+                    requestedAssessment={requestedAssessment}
+                    theme={theme}
+                    revision={deckRevision}
+                    onChanged={deckChanged}
+                    onStudyDeck={openStudyDeck}
+                    onOpenPlayers={() => setView('players')}
+                  />
+                )}
+              </MountHidden>
             )}
           </LazyPanel>
         </div>
@@ -1367,16 +1381,20 @@ export default function App() {
         >
           <LazyPanel>
             {opened('extras') && (
-              <ExtrasWorkspace
-                visible={view === 'extras'}
-                tool={extrasTool}
-                setTool={setExtrasTool}
-                onOpenMatch={openMatch}
-                defaultPlies={analysisPlies}
-                playPlies={settings?.play_plies}
-                benchmarkActive={benchmarkActivity.active}
-                onBenchmarkActivity={benchmarkActivity.report}
-              />
+              <MountHidden visible={view === 'extras'}>
+                {(visible) => (
+                  <ExtrasWorkspace
+                    visible={visible}
+                    tool={extrasTool}
+                    setTool={setExtrasTool}
+                    onOpenMatch={openMatch}
+                    defaultPlies={analysisPlies}
+                    playPlies={settings?.play_plies}
+                    benchmarkActive={benchmarkActivity.active}
+                    onBenchmarkActivity={benchmarkActivity.report}
+                  />
+                )}
+              </MountHidden>
             )}
           </LazyPanel>
         </div>
