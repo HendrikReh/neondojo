@@ -13,23 +13,84 @@ fn rejected() -> ApiError {
     ApiError::invalid("Backup contains data that cannot be restored")
 }
 
+/// Insert triggers that are disabled while their table is copied. Each one
+/// derives data the archive already holds (the player catalog in
+/// `match_players`, `matches.played_record_fingerprint`), derives a revision
+/// table that [`rebuild_analysis_revisions`] fills once after the copy, or
+/// announces job events, which are history in a backup. The statements run
+/// in the restore transaction, so a failed restore rolls them back with the
+/// data. Foreign key and other constraint triggers stay enabled throughout.
+const COPY_SUSPENDED_TRIGGERS: &[(&str, &str)] = &[
+    ("matches", "catalog_match_players"),
+    ("positions", "positions_played_record_insert"),
+    ("imported_analyses", "imported_analyses_revision_insert"),
+    ("job_events", "job_events_notify"),
+    (
+        "match_analysis_games",
+        "match_analysis_games_revision_insert",
+    ),
+    ("move_analyses", "move_analyses_revision_insert"),
+];
+
+async fn set_copy_triggers(connection: &mut PgConnection, table: &str, enable: bool) -> Result<()> {
+    let action = if enable { "ENABLE" } else { "DISABLE" };
+    for (_, trigger) in COPY_SUSPENDED_TRIGGERS
+        .iter()
+        .filter(|(owner, _)| *owner == table)
+    {
+        sqlx::query(&format!(
+            "ALTER TABLE {} {action} TRIGGER {}",
+            relation(table),
+            super::identifier(trigger)
+        ))
+        .execute(&mut *connection)
+        .await
+        .with_context(|| format!("Changing restore trigger {trigger} ({action})"))?;
+    }
+    Ok(())
+}
+
+/// Write the revision rows the suspended insert triggers would have written
+/// for the copied analyses: one per job with checkpoints or decisions and one
+/// per match with imported analyses, each carrying this transaction's token.
+/// The revision tables were cleared with the data, and recurring-mistake
+/// publishing locks these rows.
+async fn rebuild_analysis_revisions(connection: &mut PgConnection) -> Result<()> {
+    sqlx::query(
+        "SELECT public.mark_native_analysis_revisions(ARRAY(
+             SELECT j.id FROM public.jobs j
+             WHERE EXISTS (SELECT FROM public.match_analysis_games g WHERE g.job_id=j.id)
+                OR EXISTS (SELECT FROM public.move_analyses a WHERE a.job_id=j.id)))",
+    )
+    .execute(&mut *connection)
+    .await
+    .context("Rebuilding native analysis revisions")?;
+    // The rows and conflict rule `mark_imported_analysis_rows` (migration 0089)
+    // writes, so a row another trigger wrote during the copy cannot fail the restore.
+    sqlx::query(
+        "INSERT INTO public.imported_analysis_revisions AS revisions(match_id, revision)
+         SELECT m.id, 'tx:' || pg_current_xact_id()::text FROM public.matches m
+         WHERE EXISTS (SELECT FROM public.imported_analyses a WHERE a.match_uuid=m.id)
+         ORDER BY m.id
+         ON CONFLICT (match_id) DO UPDATE SET revision = EXCLUDED.revision
+         WHERE revisions.revision <> EXCLUDED.revision",
+    )
+    .execute(connection)
+    .await
+    .context("Rebuilding imported analysis revisions")?;
+    Ok(())
+}
+
 async fn copy_tables(
     connection: &mut PgConnection,
     file: &mut File,
     lengths: Vec<u64>,
 ) -> ApiResult<()> {
-    // These triggers derive values or create rows already present in the backup.
-    // Foreign key triggers stay enabled throughout the restore.
     let mut buffer = vec![0; 128 * 1024];
     for (table, mut remaining) in TABLES.iter().zip(lengths) {
         let columns = columns(connection, table).await?;
         let name = relation(table);
-        if *table == "matches" {
-            sqlx::query("ALTER TABLE public.matches DISABLE TRIGGER catalog_match_players")
-                .execute(&mut *connection)
-                .await
-                .context("Disabling player catalog trigger for restore")?;
-        }
+        set_copy_triggers(connection, table, false).await?;
         let mut writer = connection
             .copy_in_raw(&format!(
                 "COPY {name} ({columns}) FROM STDIN WITH (ENCODING 'UTF8')",
@@ -63,13 +124,9 @@ async fn copy_tables(
                 .context("Finishing restore COPY")
                 .into());
         }
-        if *table == "matches" {
-            sqlx::query("ALTER TABLE public.matches ENABLE TRIGGER catalog_match_players")
-                .execute(&mut *connection)
-                .await
-                .context("Re-enabling player catalog trigger after restore")?;
-        }
+        set_copy_triggers(connection, table, true).await?;
     }
+    rebuild_analysis_revisions(connection).await?;
     Ok(())
 }
 
@@ -308,4 +365,14 @@ pub(super) async fn replace(state: &AppState, mut input: Prepared) -> ApiResult<
     retire_source_work(&mut tx).await?;
     tx.commit().await.context("Committing restored database")?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn suspended_triggers_belong_to_copied_tables() {
+        for (table, _) in super::COPY_SUSPENDED_TRIGGERS {
+            assert!(super::TABLES.contains(table), "{table}");
+        }
+    }
 }

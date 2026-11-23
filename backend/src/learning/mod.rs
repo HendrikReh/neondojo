@@ -23,6 +23,8 @@ mod suggestions;
 mod topics;
 mod transfer;
 use crate::practice::evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation};
+#[cfg(test)]
+pub(crate) use content::position_cards_sql;
 pub(crate) use content::{saved_checker_move, saved_position_cards};
 pub use search::{
     CardBrowseContext, CardBrowseItem, CardDeck, CardKind, CardQuery, CardReviewState,

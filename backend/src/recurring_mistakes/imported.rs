@@ -1,7 +1,9 @@
 //! Bounded foreign catalogs; native checkpoint ownership is decided before projection.
 use super::{
     MistakePracticeQuestion, MistakeReference, MistakeSource, imported_projection,
-    source::{CHOSEN, MAX_DECISIONS, MAX_GAMES, MAX_SOURCE_BYTES, SourceDecision, TOO_BROAD},
+    source::{
+        CHOSEN, ELIGIBLE, MAX_DECISIONS, MAX_GAMES, MAX_SOURCE_BYTES, SourceDecision, TOO_BROAD,
+    },
 };
 use crate::{
     api::{ApiError, ApiResult},
@@ -14,7 +16,25 @@ use uuid::Uuid;
 
 const MAX_LEGACY_SOURCES: usize = 16;
 const FOREIGN: &str = "FROM eligible m JOIN match_games g ON g.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported')";
-const LEGACY_FOREIGN: &str = "FROM eligible m LEFT JOIN match_games g ON g.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf')";
+/// Older foreign imports whose catalogs are still missing. The pending filter
+/// matches the partial index `matches_pending_imported_catalog`, so a library
+/// without such imports answers from an empty index.
+const LEGACY_PENDING: &str = "FROM eligible m LEFT JOIN match_games g ON g.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf') AND (NOT m.imported_analysis_loaded OR NOT m.moves_cataloged)";
+
+/// Pending games and the largest pending source; `$1` database, `$2` match, `$3` players.
+pub(super) fn legacy_size_sql() -> String {
+    format!(
+        "{ELIGIBLE} SELECT count(*),coalesce(max(octet_length(m.original)::bigint+octet_length(m.sgf)::bigint),0)::bigint {LEGACY_PENDING}"
+    )
+}
+
+/// The first pending matches, one more than a request catalogs.
+pub(super) fn legacy_ids_sql() -> String {
+    format!(
+        "{ELIGIBLE} SELECT DISTINCT m.id {LEGACY_PENDING} ORDER BY m.id LIMIT {}",
+        MAX_LEGACY_SOURCES + 1
+    )
+}
 
 /// Player choices use metadata only. Catalog legacy sources only once their
 /// participant/match is selected, and reject oversized requests before parsing.
@@ -24,13 +44,23 @@ pub(super) async fn catalog_legacy(
     match_id: Option<Uuid>,
     player: Option<&[String]>,
 ) -> ApiResult<()> {
-    let (games, bytes): (i64,i64) = sqlx::query_as(&format!("{CHOSEN} SELECT count(*),coalesce(max(octet_length(m.original)::bigint+octet_length(m.sgf)::bigint),0)::bigint {LEGACY_FOREIGN} AND (NOT m.imported_analysis_loaded OR NOT m.moves_cataloged)"))
-        .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_one(pool).await.map_err(anyhow::Error::from)?;
+    let (games, bytes): (i64, i64) = sqlx::query_as(&legacy_size_sql())
+        .bind(database)
+        .bind(match_id)
+        .bind(player.map(<[String]>::to_vec))
+        .fetch_one(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
     if games > MAX_GAMES as i64 || bytes > MAX_SOURCE_BYTES {
         return Err(ApiError::invalid(TOO_BROAD));
     }
-    let ids: Vec<Uuid> = sqlx::query_scalar(&format!("{CHOSEN} SELECT DISTINCT m.id {LEGACY_FOREIGN} AND (NOT m.imported_analysis_loaded OR NOT m.moves_cataloged) ORDER BY m.id LIMIT {}", MAX_LEGACY_SOURCES+1))
-        .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    let ids: Vec<Uuid> = sqlx::query_scalar(&legacy_ids_sql())
+        .bind(database)
+        .bind(match_id)
+        .bind(player.map(<[String]>::to_vec))
+        .fetch_all(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
     let more = ids.len() > MAX_LEGACY_SOURCES;
     for id in ids.into_iter().take(MAX_LEGACY_SOURCES) {
         // Failure is propagated: incomplete legacy coverage must not look complete.
