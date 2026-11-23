@@ -2,7 +2,7 @@
 use super::{PlayPhase, PlaySession, named_export};
 use anyhow::{Result, ensure};
 use sha2::{Digest, Sha256};
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
 
 pub const BOT_DATABASE_ID: Uuid = Uuid::from_u128(3);
@@ -184,9 +184,34 @@ pub(super) async fn sync(
             "Native play source rewrote an existing decision"
         );
     }
-    for (ordinal, p) in imported.positions.iter().enumerate().skip(stored.len()) {
-        sqlx::query("INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(match_uuid,ordinal) DO NOTHING")
-            .bind(Uuid::new_v4()).bind(id).bind(ordinal as i32).bind(p.game_no).bind(p.ply).bind(p.player).bind(p.dice.to_vec()).bind(&p.board).bind(&p.position_id).bind(&p.match_id).bind(&p.notation).execute(&mut **tx).await?;
+    // Each statement refreshes the played-record fingerprint of the whole
+    // match (migration 0086); insert the new decisions in batches, as imports do.
+    let new: Vec<_> = imported
+        .positions
+        .iter()
+        .enumerate()
+        .skip(stored.len())
+        .collect();
+    for batch in new.chunks(500) {
+        let mut insert = QueryBuilder::<Postgres>::new(
+            "INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) ",
+        );
+        insert.push_values(batch, |mut row, (ordinal, p)| {
+            row.push_bind(Uuid::new_v4())
+                .push_bind(id)
+                .push_bind(*ordinal as i32)
+                .push_bind(p.game_no)
+                .push_bind(p.ply)
+                .push_bind(p.player)
+                .push_bind(p.dice.to_vec())
+                .push_bind(&p.board)
+                .push_bind(&p.position_id)
+                .push_bind(&p.match_id)
+                .push_bind(&p.notation);
+        });
+        insert.push(" ON CONFLICT(match_uuid,ordinal) DO NOTHING");
+        // Variable row counts produce different SQL and would churn the cache.
+        insert.build().persistent(false).execute(&mut **tx).await?;
     }
     for game in &imported.games {
         sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(match_uuid,game_no) DO UPDATE SET position_count=EXCLUDED.position_count,white_score=EXCLUDED.white_score,black_score=EXCLUDED.black_score,crawford=EXCLUDED.crawford")

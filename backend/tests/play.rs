@@ -4656,3 +4656,105 @@ async fn malformed_bodies_and_queries_return_the_json_error_body(pool: PgPool) {
         assert!(error["error"].is_string(), "{method} {uri}: {error}");
     }
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn bot_library_archive_inserts_positions_in_batched_statements(pool: PgPool) {
+    let sgf = include_str!("fixtures/WC2014.gnubg.sgf");
+    let session_id = uuid::Uuid::new_v4();
+    let session = json!({"id":session_id,"version":1,"human_player":0,"human_name":"Human",
+        "match_length":11,"bearoff_direction":"clockwise","engine":{"id":"gnubg","version":"fixture","plies":1},
+        "position":{"id":session_id,"match_uuid":session_id,"ordinal":0,"game_no":1,"ply":0,"player":0,"dice":[],"board":[],"position_id":"","gnubg_match_id":"","notation":""},
+        "phase":"match_over","can_double":false,"legal_moves":[],"history":[],"scores":[11,10],"game_no":1,"winner":0});
+    sqlx::query("INSERT INTO play_sessions(id,version,state,gnubg_path,sgf,native_id) VALUES($1,1,$2,'/missing/native',$3,'saved')")
+        .bind(session_id).bind(&session).bind(sgf).execute(&pool).await.unwrap();
+    // Record the size of every INSERT statement into positions.
+    sqlx::raw_sql(
+        "CREATE TABLE position_insert_statements(no serial, inserted bigint);
+         CREATE FUNCTION count_position_inserts() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN INSERT INTO position_insert_statements(inserted) SELECT count(*) FROM inserted; RETURN NULL; END $$;
+         CREATE TRIGGER count_position_inserts AFTER INSERT ON positions
+             REFERENCING NEW TABLE AS inserted FOR EACH STATEMENT EXECUTE FUNCTION count_position_inserts();",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        neondojo::play::backfill_library_matches(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let match_id: uuid::Uuid =
+        sqlx::query_scalar("SELECT library_match_id FROM play_sessions WHERE id=$1")
+            .bind(session_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    type Row = (
+        i32,
+        i32,
+        i32,
+        i32,
+        Vec<i32>,
+        Vec<i32>,
+        String,
+        String,
+        String,
+    );
+    let stored: Vec<Row> = sqlx::query_as(
+        "SELECT ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation
+         FROM positions WHERE match_uuid=$1 ORDER BY ordinal",
+    )
+    .bind(match_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    // The archived source, parsed independently, defines every row in order.
+    let archived: String = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
+        .bind(match_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let imported = neondojo::import::parse_sgf(&archived).unwrap();
+    assert!(imported.games.len() > 1);
+    let expected: Vec<Row> = imported
+        .positions
+        .iter()
+        .enumerate()
+        .map(|(ordinal, p)| {
+            (
+                ordinal as i32,
+                p.game_no,
+                p.ply,
+                p.player,
+                p.dice.to_vec(),
+                p.board.clone(),
+                p.position_id.clone(),
+                p.match_id.clone(),
+                p.notation.clone(),
+            )
+        })
+        .collect();
+    assert_eq!(stored, expected);
+    let (ids, fingerprint_current): (i64, bool) = sqlx::query_as(
+        "SELECT (SELECT count(DISTINCT id) FROM positions WHERE match_uuid=$1),
+                played_record_fingerprint IS NOT NULL
+                AND played_record_fingerprint=played_record_fingerprint(id)
+         FROM matches WHERE id=$1",
+    )
+    .bind(match_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(ids as usize, expected.len());
+    assert!(fingerprint_current);
+    // One statement per 500 positions, so the played-record trigger hashes
+    // the match once per batch instead of once per position.
+    let statements: Vec<i64> =
+        sqlx::query_scalar("SELECT inserted FROM position_insert_statements ORDER BY no")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    let batches: Vec<i64> = expected.chunks(500).map(|c| c.len() as i64).collect();
+    assert_eq!(statements, batches);
+}
