@@ -1,6 +1,6 @@
 //! Bind one GNUbg process to the executable that was checked for it. Analysis
 //! runs (`Engine::run_observed`) and play rules processes share this check.
-use super::{Engine, resolve_binary};
+use super::{Engine, resolve_binary_async};
 use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
 use std::time::Duration;
@@ -29,7 +29,7 @@ struct Identity {
 impl Identity {
     async fn read(engine: &Engine) -> Result<Self> {
         tokio::time::timeout(READ_TIMEOUT, async {
-            let executable = resolve_binary(engine.binary())?;
+            let executable = resolve_binary_async(engine.binary()).await?;
             let mut file = tokio::fs::File::open(&executable).await?;
             ensure!(
                 file.metadata().await?.is_file(),
