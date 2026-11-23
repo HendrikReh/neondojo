@@ -56,6 +56,30 @@ async fn respond(app: Router, request: Request<Body>) -> (u16, Value) {
     )
 }
 
+/// Waits until `count` sessions of this test database wait for a heavyweight
+/// lock (relation, row, transaction or advisory) with a query matching the
+/// SQL `LIKE` pattern. Tests observe the lock wait instead of sleeping.
+pub async fn wait_for_lock_waiters(pool: &PgPool, query: &str, count: i64) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let waiting: i64 = sqlx::query_scalar(
+                "SELECT count(*) FROM pg_stat_activity WHERE datname=current_database()
+                 AND wait_event_type='Lock' AND query LIKE $1",
+            )
+            .bind(query)
+            .fetch_one(pool)
+            .await
+            .unwrap();
+            if waiting >= count {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("{count} sessions should wait for a lock on {query}"));
+}
+
 /// Two seven-point-match games between Alice and Bob with one opening move
 /// each, imported as SGF and then marked as an XG import.
 pub const FOREIGN_SOURCE: &str = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe])(;GM[6]PW[Alice]PB[Bob]MI[length:7][ws:1];W[31hefe])";

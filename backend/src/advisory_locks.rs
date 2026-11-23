@@ -13,6 +13,17 @@ pub(crate) const BENCHMARK_CLAIM: i64 = 91_432_301;
 pub(crate) const ENGINE_MATCH_CLAIM: i64 = 91_432_302;
 /// Serializes analysis job claims and lease recovery (`jobs::claim`).
 pub(crate) const ANALYSIS_JOB_CLAIM: i64 = 91_432_303;
+/// Serializes new card topics so that concurrent saves respect the topic
+/// limit (`learning::topics::save_topic`). Deleting a topic needs no lock.
+pub(crate) const CARD_TOPIC_LIMIT: i64 = 91_432_304;
+/// Serializes transfer round starts from reading the shared seen list to
+/// recording the new round's positions (`learning::transfer::start`), the
+/// only writer of `transfer_practice_seen`.
+pub(crate) const TRANSFER_PRACTICE_SELECTION: i64 = 91_432_305;
+/// Serializes choices of My player profile (`player_directory::
+/// virtual_profiles::set_me`), the only writer of `is_me`; the partial unique
+/// index still allows at most one.
+pub(crate) const MY_VIRTUAL_PLAYER: i64 = 91_432_306;
 /// Serializes new saved position filters so that concurrent saves respect the
 /// filter limit (`position_browser::filters::create_filter`).
 pub(crate) const POSITION_FILTER_LIMIT: i64 = 74_619_781_644_280;
@@ -53,10 +64,13 @@ pub(crate) async fn xact_lock(
 mod tests {
     use super::*;
 
-    const FIXED_KEYS: [i64; 7] = [
+    const FIXED_KEYS: [i64; 10] = [
         BENCHMARK_CLAIM,
         ENGINE_MATCH_CLAIM,
         ANALYSIS_JOB_CLAIM,
+        CARD_TOPIC_LIMIT,
+        TRANSFER_PRACTICE_SELECTION,
+        MY_VIRTUAL_PLAYER,
         POSITION_FILTER_LIMIT,
         ANKI_REVIEW_EXPORT_IDS,
         CONFIGURATION_PROFILES,

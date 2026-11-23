@@ -46,11 +46,8 @@ pub(super) async fn start(
     }
     let player = crate::player_scope::names(&state.pool, &body.player).await?;
     let candidates = source::load(&state.pool, body.database_id, None, Some(&player)).await?;
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("LOCK TABLE transfer_practice_seen IN SHARE ROW EXCLUSIVE MODE")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
+    // Filtering and validating candidates reads no seen list, so it runs
+    // outside the transaction that holds the selection lock.
     let candidate_matches: Vec<_> = candidates
         .iter()
         .map(|row| row.question.position.match_uuid)
@@ -62,7 +59,7 @@ pub(super) async fn start(
          WHERE (payload#>>'{source,match_id}')::uuid=ANY($1)",
     )
     .bind(candidate_matches)
-    .fetch_all(&mut *tx)
+    .fetch_all(&state.pool)
     .await
     .map_err(anyhow::Error::from)?
     .into_iter()
@@ -109,6 +106,13 @@ pub(super) async fn start(
     }
     questions.sort_by_cached_key(|_| Uuid::new_v4());
     let signatures: Vec<_> = questions.iter().map(card_signature).collect();
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    // Concurrent starts must not pick the same unseen positions: hold the
+    // lock from reading the seen list until this round's positions are
+    // recorded. Only transfer starts write that list.
+    crate::advisory_locks::xact_lock(&mut tx, crate::advisory_locks::TRANSFER_PRACTICE_SELECTION)
+        .await
+        .map_err(anyhow::Error::from)?;
     let mut seen: HashSet<String> = sqlx::query_scalar(
         "SELECT signature FROM transfer_practice_seen WHERE signature=ANY($1)
          UNION SELECT signature FROM learning_cards WHERE signature=ANY($1)",

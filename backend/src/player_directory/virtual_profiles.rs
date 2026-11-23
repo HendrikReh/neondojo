@@ -352,19 +352,20 @@ async fn set_me(
 ) -> ApiResult<Json<MyPlayerProfile>> {
     let body = json(body)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    // Serializes concurrent choices; the partial unique index enforces one "me".
-    sqlx::query("LOCK TABLE virtual_player_profiles IN SHARE ROW EXCLUSIVE MODE")
-        .execute(&mut *tx)
+    // Serializes concurrent choices, the only writers of `is_me`; the partial
+    // unique index enforces one "me". Other edits lock only their own row.
+    crate::advisory_locks::xact_lock(&mut tx, crate::advisory_locks::MY_VIRTUAL_PLAYER)
         .await
         .map_err(anyhow::Error::from)?;
     if let Some(id) = body.id {
-        let exists: bool =
-            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM virtual_player_profiles WHERE id=$1)")
+        // Keeps a concurrent delete from removing the choice before it is saved.
+        let exists: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM virtual_player_profiles WHERE id=$1 FOR UPDATE")
                 .bind(id)
-                .fetch_one(&mut *tx)
+                .fetch_optional(&mut *tx)
                 .await
                 .map_err(anyhow::Error::from)?;
-        if !exists {
+        if exists.is_none() {
             return Err(ApiError::invalid(
                 "Choose an existing virtual player profile",
             ));
