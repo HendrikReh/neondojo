@@ -22,10 +22,9 @@ impl SageEngine {
         limit: Option<Duration>,
     ) -> Result<AnalyzedGame> {
         self.check_depth(plies)?;
-        ensure!(
-            (1..=game_count(sgf)?).contains(&game_no),
-            "Game number outside match"
-        );
+        let source = sgf.to_owned();
+        let games = tokio::task::spawn_blocking(move || game_count(&source)).await??;
+        ensure!((1..=games).contains(&game_no), "Game number outside match");
         crate::engine::with_shared_access(async {
             let work = async {
                 let mut batch = super::process::VerifiedBatch::begin(&self.snapshot).await?;
@@ -51,7 +50,9 @@ impl SageEngine {
         game_no: i32,
         mut batch: Option<&mut super::process::VerifiedBatch>,
     ) -> Result<AnalyzedGame> {
-        let (imported, moves) = parse_sgf_source_moves(sgf)?;
+        let source = sgf.to_owned();
+        let (imported, moves) =
+            tokio::task::spawn_blocking(move || parse_sgf_source_moves(&source)).await??;
         let mut decisions = Vec::new();
         let expected_checkers = imported
             .positions

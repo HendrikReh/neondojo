@@ -129,13 +129,20 @@ pub(super) async fn sync(
     sgf: &str,
     target: ArchiveTarget,
 ) -> Result<Uuid> {
-    let sgf = normalize_native_setup_turn(source(session, sgf))?;
-    let (imported, _) = crate::import::sgf::parse_sgf_with_context(&sgf)?;
+    // The archived source needs no database state. Parse it off the async
+    // worker while the caller's transaction is open.
+    let source = source(session, sgf);
+    let (sgf, imported, hash) = tokio::task::spawn_blocking(move || {
+        let sgf = normalize_native_setup_turn(source)?;
+        let (imported, _) = crate::import::sgf::parse_sgf_with_context(&sgf)?;
+        let hash = format!("{:x}", Sha256::digest(sgf.as_bytes()));
+        anyhow::Ok((sgf, imported, hash))
+    })
+    .await??;
     let id = match target {
         ArchiveTarget::Existing(id) => id,
         ArchiveTarget::NewIn(_) => Uuid::new_v4(),
     };
-    let hash = format!("{:x}", Sha256::digest(sgf.as_bytes()));
     let result = if matches!(session.phase, PlayPhase::MatchOver)
         || super::reports::money_finished(session)
     {
