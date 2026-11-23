@@ -30,6 +30,8 @@ mod browse;
 mod repo;
 mod routes;
 mod source_metadata;
+#[doc(hidden)]
+pub use actions::explain_any_active;
 use actions::*;
 pub use browse::browse;
 use browse::*;

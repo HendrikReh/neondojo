@@ -82,6 +82,32 @@ async fn duplicate_matches(
     Ok(Json(find(&state.pool, query(q)?).await?))
 }
 
+/// One page of duplicate groups with the totals over all pages. Binds the
+/// Paused Matches database, the optional scope, the listed members per group,
+/// the cursor and the page size plus one. `matches_played_record_idx`
+/// (migration 0094) delivers the library matches in group order.
+const GROUPS: &str = "WITH grouped AS (
+        SELECT min(m.match_no) AS first_match_no,
+               (array_agg(m.id ORDER BY m.match_no))[1:$3::int] AS ids,
+               count(*) AS match_count,
+               count(DISTINCT m.sha256)=1 AS identical_files
+        FROM matches m JOIN databases d ON d.id=m.database_id
+        WHERE NOT m.collection_only AND NOT d.collection_only AND m.database_id<>$1
+          AND ($2::uuid IS NULL OR m.database_id=$2)
+          AND m.played_record_fingerprint IS NOT NULL
+        GROUP BY m.match_length,m.played_record_fingerprint
+        HAVING count(*)>1
+    ), counted AS (
+        SELECT *,count(*) OVER () AS total_groups,
+               (sum(match_count) OVER ())::bigint AS total_matches
+        FROM grouped
+    )
+    SELECT first_match_no,ids,match_count,identical_files,total_groups,total_matches
+    FROM counted
+    WHERE $4::bigint IS NULL OR first_match_no>$4
+    ORDER BY first_match_no
+    LIMIT $5";
+
 #[derive(sqlx::FromRow)]
 struct GroupRow {
     first_match_no: i64,
@@ -123,37 +149,15 @@ pub async fn find(pool: &PgPool, q: DuplicateMatchQuery) -> ApiResult<DuplicateM
     // The played record is stored per match by the database function
     // `played_record_fingerprint` (migration 0086), refreshed on every write to
     // positions; grouping reads only the matches table.
-    let rows: Vec<GroupRow> = sqlx::query_as(
-        "WITH grouped AS (
-            SELECT min(m.match_no) AS first_match_no,
-                   (array_agg(m.id ORDER BY m.match_no))[1:$3::int] AS ids,
-                   count(*) AS match_count,
-                   count(DISTINCT m.sha256)=1 AS identical_files
-            FROM matches m JOIN databases d ON d.id=m.database_id
-            WHERE NOT m.collection_only AND NOT d.collection_only AND m.database_id<>$1
-              AND ($2::uuid IS NULL OR m.database_id=$2)
-              AND m.played_record_fingerprint IS NOT NULL
-            GROUP BY m.match_length,m.played_record_fingerprint
-            HAVING count(*)>1
-        ), counted AS (
-            SELECT *,count(*) OVER () AS total_groups,
-                   (sum(match_count) OVER ())::bigint AS total_matches
-            FROM grouped
-        )
-        SELECT first_match_no,ids,match_count,identical_files,total_groups,total_matches
-        FROM counted
-        WHERE $4::bigint IS NULL OR first_match_no>$4
-        ORDER BY first_match_no
-        LIMIT $5",
-    )
-    .bind(PAUSED_MATCHES_DATABASE_ID)
-    .bind(q.database_id)
-    .bind(MAX_GROUP_ITEMS)
-    .bind(after)
-    .bind(limit + 1)
-    .fetch_all(pool)
-    .await
-    .map_err(anyhow::Error::from)?;
+    let rows: Vec<GroupRow> = sqlx::query_as(GROUPS)
+        .bind(PAUSED_MATCHES_DATABASE_ID)
+        .bind(q.database_id)
+        .bind(MAX_GROUP_ITEMS)
+        .bind(after)
+        .bind(limit + 1)
+        .fetch_all(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
     let (total_groups, total_matches) = rows
         .first()
         .map_or((0, 0), |row| (row.total_groups, row.total_matches));
@@ -184,6 +188,25 @@ pub async fn find(pool: &PgPool, q: DuplicateMatchQuery) -> ApiResult<DuplicateM
         total_groups,
         total_matches,
     })
+}
+
+/// Support for the ignored large-library performance test: the plan of the
+/// first page's group query with the parameters [`find`] binds.
+#[doc(hidden)]
+pub async fn explain_groups(
+    pool: &PgPool,
+    database_id: Option<Uuid>,
+) -> anyhow::Result<serde_json::Value> {
+    Ok(
+        sqlx::query_scalar(&format!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {GROUPS}"))
+            .bind(PAUSED_MATCHES_DATABASE_ID)
+            .bind(database_id)
+            .bind(MAX_GROUP_ITEMS)
+            .bind(None::<i64>)
+            .bind(DEFAULT_GROUPS + 1)
+            .fetch_one(pool)
+            .await?,
+    )
 }
 
 #[derive(OpenApi)]

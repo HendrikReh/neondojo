@@ -1,10 +1,31 @@
 use super::*;
 
+/// Whether a queued or running job belongs to one of the matches `$1`. The
+/// status filter reads the few active jobs from `jobs_active_claim`, so the
+/// cost does not depend on the number of matches or finished jobs.
+const ANY_ACTIVE: &str = "SELECT EXISTS(SELECT 1 FROM jobs j LEFT JOIN positions p ON p.id=j.position_uuid WHERE coalesce(j.match_uuid,p.match_uuid)=ANY($1) AND j.status IN ('queued','running'))";
+
 pub(super) async fn any_active(
     tx: &mut sqlx::Transaction<'_, Postgres>,
     ids: &[Uuid],
 ) -> ApiResult<bool> {
-    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM jobs j LEFT JOIN positions p ON p.id=j.position_uuid WHERE coalesce(j.match_uuid,p.match_uuid)=ANY($1) AND j.status IN ('queued','running'))").bind(ids).fetch_one(&mut **tx).await.map_err(anyhow::Error::from)?)
+    Ok(sqlx::query_scalar(ANY_ACTIVE)
+        .bind(ids)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(anyhow::Error::from)?)
+}
+
+/// Support for the ignored large-library performance test: the plan of the
+/// active-job check that guards deleting the given matches.
+#[doc(hidden)]
+pub async fn explain_any_active(pool: &PgPool, ids: &[Uuid]) -> anyhow::Result<serde_json::Value> {
+    Ok(sqlx::query_scalar(&format!(
+        "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {ANY_ACTIVE}"
+    ))
+    .bind(ids)
+    .fetch_one(pool)
+    .await?)
 }
 
 pub(super) fn action_item(

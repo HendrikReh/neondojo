@@ -158,7 +158,7 @@ async fn job_events_replay_committed_rows_after_listener_disconnect(pool: PgPool
         .execute(&mut *tx)
         .await
         .unwrap();
-    let mut ids: Vec<i64> = sqlx::query_scalar(
+    let progress: Vec<i64> = sqlx::query_scalar(
         "INSERT INTO job_events(job_id,event,data)
          SELECT $1,'progress',jsonb_build_object('status','running','progress',n*100/105)
          FROM generate_series(1,105) AS n RETURNING id",
@@ -167,21 +167,6 @@ async fn job_events_replay_committed_rows_after_listener_disconnect(pool: PgPool
     .fetch_all(&mut *tx)
     .await
     .unwrap();
-    sqlx::query("UPDATE jobs SET status='completed',progress=100 WHERE id=$1")
-        .bind(job.id)
-        .execute(&mut *tx)
-        .await
-        .unwrap();
-    ids.push(
-        sqlx::query_scalar(
-            "INSERT INTO job_events(job_id,event,data) VALUES($1,'completed',
-             '{\"status\":\"completed\",\"progress\":100}') RETURNING id",
-        )
-        .bind(job.id)
-        .fetch_one(&mut *tx)
-        .await
-        .unwrap(),
-    );
     let stopped: Vec<bool> = sqlx::query_scalar(
         "SELECT pg_terminate_backend(pid,5000) FROM pg_stat_activity
          WHERE datname=current_database() AND application_name='neondojo-job-events'",
@@ -191,7 +176,33 @@ async fn job_events_replay_committed_rows_after_listener_disconnect(pool: PgPool
     .unwrap();
     assert_eq!(stopped, [true]);
     tx.commit().await.unwrap();
-    ids.sort_unstable();
+    // The reconnected listener replays all 105 rows, across the 100-row page.
+    let mut replayed = Vec::new();
+    while replayed.len() < progress.len() {
+        replayed.extend(event_ids(&event_frame(&mut body).await));
+    }
+    assert_eq!(replayed, progress);
+
+    // Finishing the job removes its progress rows in the same transaction.
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("ALTER TABLE job_events ENABLE TRIGGER job_events_notify")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE jobs SET status='completed',progress=100 WHERE id=$1")
+        .bind(job.id)
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let completed: i64 = sqlx::query_scalar(
+        "INSERT INTO job_events(job_id,event,data) VALUES($1,'completed',
+         '{\"status\":\"completed\",\"progress\":100}') RETURNING id",
+    )
+    .bind(job.id)
+    .fetch_one(&mut *tx)
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
     let collect = async |body: Body| {
         let bytes = tokio::time::timeout(Duration::from_secs(5), body.collect())
             .await
@@ -201,12 +212,20 @@ async fn job_events_replay_committed_rows_after_listener_disconnect(pool: PgPool
         String::from_utf8(bytes.to_vec()).unwrap()
     };
     let events = collect(body).await;
-    assert_eq!(event_ids(&events), ids);
+    assert_eq!(event_ids(&events), [completed]);
     assert!(events.contains("event: completed"));
-    let resumed = collect(event_body(&app, job.id, ids[100]).await).await;
-    assert_eq!(event_ids(&resumed), ids[101..]);
+    // A client resuming after a pruned progress row still receives the result.
+    let resumed = collect(event_body(&app, job.id, progress[100]).await).await;
+    assert_eq!(event_ids(&resumed), [completed]);
+    let queued: i64 = sqlx::query_scalar("SELECT min(id) FROM job_events WHERE job_id=$1")
+        .bind(job.id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let full = collect(event_body(&app, job.id, 0).await).await;
+    assert_eq!(event_ids(&full), [queued, running, completed]);
     assert!(
-        collect(event_body(&app, job.id, *ids.last().unwrap()).await)
+        collect(event_body(&app, job.id, completed).await)
             .await
             .is_empty()
     );
