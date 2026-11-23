@@ -521,10 +521,11 @@ This is your personal collection of decisions. You add positions with **Save pos
 
 This view searches **every** checker and cube decision of one player in the displayed analyses, whether or not you saved the position.
 
-1. Choose a **Player** (**My player profile** is pre-selected automatically if configured). You can also set the database, decision type (checker or cube), error type and an equity-loss range.
-2. Select **Search decisions**. The results start with the largest loss. Select the **Loss** heading to reverse the order.
+1. Choose a **Player**. With **My player profile** configured, that player is pre-selected and the decisions are listed as soon as you open the view. You can also set the database, decision type (checker or cube), error type and an equity-loss range.
+2. Select **Search decisions** to apply changed filters. The results start with the largest loss. Select the **Loss** heading to reverse the order.
 3. Select a row, or move with the arrow keys, to preview the board and its cube context. **Open in Analysis** — or **Enter** or a double-click — jumps to the decision (checker decisions in **Checker**, cube decisions in **Cube**).
 4. **Practice results** turns up to 20 errors on the current page into a practice round.
+5. **Add to deck** in the preview turns the selected decision into a flashcard; **Add page to deck** does the same for every decision on the page, cube decisions included.
 
 > **Pro:** Use **More filters** to narrow the search to a score, for example *2-away / 4-away*, or to a cube value and owner. This lets you build a drill set for a specific match situation, such as double-match-point or post-Crawford positions.
 

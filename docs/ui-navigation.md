@@ -106,9 +106,11 @@ Study; after adding positions to a deck, **Study this deck** appears beside
 the transfer outcome.
 
 **All analyzed decisions** uses the same filter card and keeps its filters,
-results and chosen row while the saved positions are open. Before the first
-search it names **Search decisions** as the next step. The preview of a checker
-decision offers **Add to deck**. A row is selected
+results and chosen row while the saved positions are open. When **My player
+profile** fills in the player, the first visit searches at once; a player chosen
+by hand waits for **Search decisions**, which it names as the next step. The
+preview of every decision offers **Add to deck**, and **Add page to deck** in the
+toolbar adds the whole page. A row is selected
 with a click or the arrow keys; Enter or a double-click opens the decision in
 Analysis (checker decisions in **Checker**, cube decisions in **Cube**). The
 **Loss** heading reverses the order.
