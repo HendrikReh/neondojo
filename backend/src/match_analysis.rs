@@ -1,8 +1,8 @@
 //! Native GNUbg game analysis, preserving the complete match context.
 use crate::engine::{Candidate, Engine, parse_checker_candidates};
 use crate::import::{
-    ImportedPosition, parse_sgf,
-    sgf::{Node, parse_trees, write_property},
+    ImportedMatch, ImportedPosition,
+    sgf::{GameContext, Node, parse_importable_sgf_with_context, parse_trees, write_property},
 };
 use anyhow::{Context, Result, ensure};
 use regex::Regex;
@@ -150,8 +150,11 @@ pub struct Decision {
 }
 
 pub fn game_count(sgf: &str) -> Result<i32> {
-    let trees = crate::import::sgf::parse_trees(sgf)?;
-    for tree in &trees {
+    tree_game_count(&crate::import::sgf::parse_trees(sgf)?)
+}
+
+fn tree_game_count(trees: &[Vec<Node>]) -> Result<i32> {
+    for tree in trees {
         anyhow::ensure!(
             tree[0].get("GM").is_some_and(|v| v.as_slice() == ["6"]),
             "Only backgammon SGF is supported"

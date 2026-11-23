@@ -1,4 +1,5 @@
 use super::*;
+use crate::import::parse_sgf;
 const MATCH: &str = include_str!("../../tests/fixtures/WC2014.gnubg.sgf");
 
 async fn run_native_game_analysis(
@@ -558,4 +559,77 @@ fn cube_only_and_empty_exports_preserve_context_without_relaxing_imports() {
     assert!(parse_sgf(cube).is_err());
     assert!(parse_sgf(empty).is_err());
     assert!(parse_sgf("(;GM[6]AE[a:y]AW[e]AB[s]PL[W];B[66sz])").is_err());
+}
+#[test]
+fn native_input_from_one_parse_matches_the_former_double_parse() {
+    // Expected values were produced by the former implementation, which parsed
+    // the source again for the input after validating it with parse_sgf.
+    for (source, expected) in [
+        (
+            "(;GM[6]FF[4]CA[UTF-8]MI[length:7][game:0][ws:6][bs:0]RU[CrawfordGame]PW[Alice]PB[Bob]C[note];W[31hefe]C[x];B[42qusu])",
+            "(;FF[4]GM[6]CA[UTF-8]RU[Crawford:CrawfordGame]MI[length:7][game:0][ws:6][bs:0]PW[Player White]PB[Player Black];W[31hefe];B[42qusu])\n",
+        ),
+        (
+            "(;GM[6]MI[length:7][ws:2][bs:3]AE[a:y]AW[a][a][f]AB[s][u][x]PL[B]CV[2]CO[b];B[31uxst])",
+            "(;GM[6]MI[length:7][game:0][ws:2][bs:3]PW[Player White]PB[Player Black];CV[2]CP[b]PL[B]AE[a:y]AW[a][a][f]AB[s][u][x];B[31uxst])\n",
+        ),
+        (
+            "(;GM[6]MI[length:7][game:0][ws:0][bs:0];W[31hefe])\n(;GM[6]AE[a:y]AW[f]AB[s]PL[W]RE[W+1];W[double];B[drop])\n(;GM[6])",
+            "(;GM[6]MI[length:7][game:0][ws:0][bs:0]PW[Player White]PB[Player Black];W[31hefe])\n(;GM[6]RE[W+1]MI[length:7][game:1][ws:0][bs:0]PW[Player White]PB[Player Black];PL[W]AE[a:y]AW[f]AB[s];W[double];B[drop])\n(;GM[6]MI[length:7][game:2][ws:1][bs:0]PW[Player White]PB[Player Black])\n",
+        ),
+        (
+            "(;GM[6]MI[length:7][ws:2][bs:3];W[31hefe];AE[a:y]AW[a][a][f]AB[s][u][x]PL[B]CV[2]CP[b];B[31uxst])",
+            "(;GM[6]MI[length:7][game:0][ws:2][bs:3]PW[Player White]PB[Player Black];W[31hefe];CV[2]CP[b]PL[B]AE[a:y]AW[a][a][f]AB[s][u][x];B[31uxst])\n",
+        ),
+    ] {
+        let parsed = AnalysisSource::for_game(source, 1).unwrap();
+        assert_eq!(analysis_input(&parsed), expected, "{source}");
+    }
+}
+#[test]
+fn native_source_validation_keeps_its_errors_and_their_order() {
+    let error = |source: &str, game_no| {
+        AnalysisSource::for_game(source, game_no)
+            .err()
+            .map(|error| error.to_string())
+    };
+    assert!(error(MATCH, 10).is_none());
+    for game_no in [0, 11] {
+        assert_eq!(
+            error(MATCH, game_no).as_deref(),
+            Some("Game number outside match")
+        );
+    }
+    // The game count rejects other games before the strict parser sees them.
+    assert_eq!(
+        error("(;GM[1];W[31hefe])", 1).as_deref(),
+        Some("Only backgammon SGF is supported")
+    );
+    // The scope is checked before the moves of the whole match.
+    assert_eq!(
+        error("(;GM[6];W[99zzzz])", 2).as_deref(),
+        Some("Game number outside match")
+    );
+    assert!(
+        error("(;GM[6];W[99zzzz])", 1).is_some_and(|error| error != "Game number outside match")
+    );
+    assert_eq!(
+        error("(;GM[6];W[double];B[drop])", 1).as_deref(),
+        Some("SGF contains no checker-play decisions")
+    );
+}
+#[tokio::test]
+async fn native_analysis_reports_off_thread_validation_errors_before_starting_gnubg() {
+    let engine = Engine::new("/nonexistent/gnubg".into());
+    for (source, game_no, message) in [
+        (MATCH, 11, "Game number outside match"),
+        (
+            "(;GM[6];W[double];B[drop])",
+            1,
+            "SGF contains no checker-play decisions",
+        ),
+    ] {
+        let error = engine.analyze_game(source, game_no, 1).await.unwrap_err();
+        assert_eq!(error.to_string(), message);
+    }
 }
