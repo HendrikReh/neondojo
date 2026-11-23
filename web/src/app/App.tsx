@@ -10,16 +10,16 @@ import ProfileSelector from '../settings/profiles/ProfileSelector';
 import { openingBookConfigurationKey } from '../settings/configuration/configuration-model';
 import { settingsFromConfiguration } from '../settings/configuration/configuration-settings';
 import { useBenchmarkActivity } from '../workspaces/extras/useBenchmarkActivity';
-import ExtrasWorkspace, {
+import {
   readExtrasTool,
   saveExtrasTool,
-} from '../workspaces/extras/ExtrasWorkspace';
+} from '../workspaces/extras/extras-tool';
 import { useBenchmarkText } from '../workspaces/extras/benchmark-messages';
 import ActionButton from '../shared/ui/ActionButton';
-import PlayWorkspace from '../workspaces/play/PlayWorkspace';
 import MatchDropZone from '../workspaces/library/import/MatchDropZone';
 import { usePlayText } from '../workspaces/play/play-messages';
 import {
+  lazy,
   useCallback,
   useEffect,
   useRef,
@@ -37,19 +37,14 @@ import {
 import AnalysisWorkspace, {
   type AnalysisDetail,
 } from '../workspaces/analysis/AnalysisWorkspace';
-import PlayerDirectory from '../workspaces/players/PlayerDirectory';
 import { usePlayerText } from '../workspaces/players/player-directory-messages';
 import MatchDatabase, {
   type PositionSearchRequest,
 } from '../workspaces/library/MatchDatabase';
 import MatchAnalysisDialog from '../workspaces/analysis/match/MatchAnalysisDialog';
 import BulkMatchAnalysisDialog from '../workspaces/analysis/match/BulkMatchAnalysisDialog';
-import StudyWorkspace from '../workspaces/study/StudyWorkspace';
 import type { AssessmentEntry } from '../workspaces/study/reports/match-assessment-api';
-import PositionBrowser from '../workspaces/positions/PositionBrowser';
-import SimilarPositions from '../workspaces/positions/SimilarPositions';
 import { usePositionText } from '../workspaces/positions/position-browser-messages';
-import SettingsDialog from '../settings/SettingsDialog';
 import { loadSettings, type AppSettings } from '../settings/settings-api';
 import { readTheme, saveTheme } from '../settings/ui-preferences';
 import type { Theme } from '../shared/board/themes';
@@ -101,8 +96,29 @@ import MoveNotesDialog, {
 } from '../workspaces/analysis/notes/MoveNotesDialog';
 import { useUiAppearance } from '../settings/appearance/useUiAppearance';
 import { useButtonShortcuts } from './useButtonShortcuts';
-import DecisionSearch from '../workspaces/positions/DecisionSearch';
 import { useDecisionSearchText } from '../workspaces/positions/decision-search-messages';
+import LazyPanel from './LazyPanel';
+
+// Workspaces other than Analysis and the match database, and the settings
+// dialog, load on their first visit and stay mounted afterwards.
+const PlayWorkspace = lazy(() => import('../workspaces/play/PlayWorkspace'));
+const PlayerDirectory = lazy(
+  () => import('../workspaces/players/PlayerDirectory'),
+);
+const StudyWorkspace = lazy(() => import('../workspaces/study/StudyWorkspace'));
+const PositionBrowser = lazy(
+  () => import('../workspaces/positions/PositionBrowser'),
+);
+const SimilarPositions = lazy(
+  () => import('../workspaces/positions/SimilarPositions'),
+);
+const DecisionSearch = lazy(
+  () => import('../workspaces/positions/DecisionSearch'),
+);
+const ExtrasWorkspace = lazy(
+  () => import('../workspaces/extras/ExtrasWorkspace'),
+);
+const SettingsDialog = lazy(() => import('../settings/SettingsDialog'));
 
 type ImportSource = {
   files: readonly MatchFileEntry[];
@@ -156,7 +172,6 @@ export default function App() {
     learnT = useLearningText();
   const l = useLibraryText();
   const playerText = usePlayerText();
-  const [playersOpened, setPlayersOpened] = useState(false);
   const positionText = usePositionText();
   const { appearance, applyAppearance } = useUiAppearance();
   const [requestedAssessment, setRequestedAssessment] =
@@ -194,9 +209,17 @@ export default function App() {
   const [view, setView] = useState<View>(() =>
     bulkAnalysis.showMatchList && bulkJobIds.length ? 'database' : 'analysis',
   );
+  // Workspaces visited so far; they stay mounted while hidden.
+  const [visited, setVisited] = useState<ReadonlySet<View>>(
+    () => new Set([view]),
+  );
   useEffect(() => {
-    if (view === 'players') setPlayersOpened(true);
+    setVisited((current) =>
+      current.has(view) ? current : new Set(current).add(view),
+    );
   }, [view]);
+  const opened = (workspace: View) =>
+    view === workspace || visited.has(workspace);
   const [detail, setDetail] = useState<AnalysisDetail>('overview');
   const [localTheme, setTheme] = useState<Theme>(readTheme);
   const theme = confirmed?.appearance.board_theme ?? localTheme;
@@ -214,6 +237,11 @@ export default function App() {
   const [settingsError, setSettingsError] = useState<unknown>();
   const [settingsRevision, setSettingsRevision] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // The dialog mounts when first opened and then stays mounted.
+  const [settingsOpened, setSettingsOpened] = useState(false);
+  useEffect(() => {
+    if (settingsOpen) setSettingsOpened(true);
+  }, [settingsOpen]);
   const [bookRevision, setBookRevision] = useState(0);
   const bookConfigurationKey = openingBookConfigurationKey(
     confirmed?.opening_book,
@@ -1029,32 +1057,36 @@ export default function App() {
           aria-labelledby="workspace-tab-play"
           hidden={view !== 'play'}
         >
-          <PlayWorkspace
-            visible={view === 'play'}
-            settings={settings}
-            theme={theme}
-            requestedSession={requestedPlaySession}
-            onSaved={() => setRevision((n) => n + 1)}
-            onModeChanged={playModeChanged}
-            onOpenPlaySettings={() => {
-              setSettingsCategory('play');
-              setSettingsOpen(true);
-            }}
-            onOpenAssessment={(id) => {
-              cancelRestoration();
-              setRequestedAssessment((previous) => ({
-                id,
-                token: (previous?.token ?? 0) + 1,
-              }));
-              setView('learning');
-            }}
-            onOpenPausedMatches={() => {
-              cancelRestoration();
-              setDatabaseId(PAUSED_MATCHES_DATABASE_ID);
-              setView('database');
-              tabs.current.database?.focus();
-            }}
-          />
+          <LazyPanel>
+            {opened('play') && (
+              <PlayWorkspace
+                visible={view === 'play'}
+                settings={settings}
+                theme={theme}
+                requestedSession={requestedPlaySession}
+                onSaved={() => setRevision((n) => n + 1)}
+                onModeChanged={playModeChanged}
+                onOpenPlaySettings={() => {
+                  setSettingsCategory('play');
+                  setSettingsOpen(true);
+                }}
+                onOpenAssessment={(id) => {
+                  cancelRestoration();
+                  setRequestedAssessment((previous) => ({
+                    id,
+                    token: (previous?.token ?? 0) + 1,
+                  }));
+                  setView('learning');
+                }}
+                onOpenPausedMatches={() => {
+                  cancelRestoration();
+                  setDatabaseId(PAUSED_MATCHES_DATABASE_ID);
+                  setView('database');
+                  tabs.current.database?.focus();
+                }}
+              />
+            )}
+          </LazyPanel>
         </section>
         <div
           id="workspace-panel-analysis"
@@ -1188,13 +1220,15 @@ export default function App() {
           aria-labelledby="workspace-tab-players"
           hidden={view !== 'players'}
         >
-          {(view === 'players' || playersOpened) && (
-            <PlayerDirectory
-              revision={revision}
-              onOpen={openMatch}
-              onAnalyzeMatches={selectForAnalysis}
-            />
-          )}
+          <LazyPanel>
+            {opened('players') && (
+              <PlayerDirectory
+                revision={revision}
+                onOpen={openMatch}
+                onAnalyzeMatches={selectForAnalysis}
+              />
+            )}
+          </LazyPanel>
           {view === 'players' && analysisDialogs}
         </div>
         <div
@@ -1224,74 +1258,85 @@ export default function App() {
               </button>
             ))}
           </div>
-          {decisionSearchOpened && (
-            <div hidden={!!similarTarget || positionScope !== 'all'}>
-              <DecisionSearch
-                visible={
-                  view === 'positions' &&
-                  !similarTarget &&
-                  positionScope === 'all'
-                }
+          <LazyPanel>
+            {decisionSearchOpened && (
+              <div hidden={!!similarTarget || positionScope !== 'all'}>
+                <DecisionSearch
+                  visible={
+                    view === 'positions' &&
+                    !similarTarget &&
+                    positionScope === 'all'
+                  }
+                  revision={revision}
+                  bookmarkRevision={bookmarkRevision}
+                  onBookmarkChanged={bookmarkChanged}
+                  deckRevision={deckRevision}
+                  onDeckChanged={deckChanged}
+                  theme={theme}
+                  onOpenPosition={(id) => {
+                    setDetail('overview');
+                    openPosition(id);
+                  }}
+                  onOpenCubeDecision={(decision) => {
+                    cancelRestoration();
+                    setDetail('errors');
+                    setView('analysis');
+                    setRequestedCubeDecision((current) => ({
+                      ...decision,
+                      token: (current?.token ?? 0) + 1,
+                    }));
+                    void navigation.openMatch(
+                      decision.matchId,
+                      decision.gameNo,
+                    );
+                  }}
+                />
+              </div>
+            )}
+          </LazyPanel>
+          <div hidden={!!similarTarget || positionScope === 'all'}>
+            <LazyPanel>
+              {opened('positions') && (
+                <PositionBrowser
+                  visible={
+                    view === 'positions' &&
+                    !similarTarget &&
+                    positionScope === 'saved'
+                  }
+                  bookmarkRevision={bookmarkRevision}
+                  onBookmarkChanged={bookmarkChanged}
+                  revision={revision}
+                  annotationRevision={annotationRevision}
+                  deckRevision={deckRevision}
+                  theme={theme}
+                  onOpenPosition={(id) => {
+                    setDetail('overview');
+                    openPosition(id);
+                  }}
+                  onDeckChanged={deckChanged}
+                  onStudy={openStudyDeck}
+                  onFindSimilar={searchSimilarPositions}
+                />
+              )}
+            </LazyPanel>
+          </div>
+          <LazyPanel>
+            {similarTarget && (
+              <SimilarPositions
+                key={similarTarget.token}
+                source={similarTarget.source}
+                matchName={similarTarget.matchName}
+                visible={view === 'positions'}
                 revision={revision}
-                bookmarkRevision={bookmarkRevision}
-                onBookmarkChanged={bookmarkChanged}
-                deckRevision={deckRevision}
-                onDeckChanged={deckChanged}
                 theme={theme}
-                onOpenPosition={(id) => {
+                onClose={() => setSimilarTarget(undefined)}
+                onOpen={(id) => {
                   setDetail('overview');
                   openPosition(id);
                 }}
-                onOpenCubeDecision={(decision) => {
-                  cancelRestoration();
-                  setDetail('errors');
-                  setView('analysis');
-                  setRequestedCubeDecision((current) => ({
-                    ...decision,
-                    token: (current?.token ?? 0) + 1,
-                  }));
-                  void navigation.openMatch(decision.matchId, decision.gameNo);
-                }}
               />
-            </div>
-          )}
-          <div hidden={!!similarTarget || positionScope === 'all'}>
-            <PositionBrowser
-              visible={
-                view === 'positions' &&
-                !similarTarget &&
-                positionScope === 'saved'
-              }
-              bookmarkRevision={bookmarkRevision}
-              onBookmarkChanged={bookmarkChanged}
-              revision={revision}
-              annotationRevision={annotationRevision}
-              deckRevision={deckRevision}
-              theme={theme}
-              onOpenPosition={(id) => {
-                setDetail('overview');
-                openPosition(id);
-              }}
-              onDeckChanged={deckChanged}
-              onStudy={openStudyDeck}
-              onFindSimilar={searchSimilarPositions}
-            />
-          </div>
-          {similarTarget && (
-            <SimilarPositions
-              key={similarTarget.token}
-              source={similarTarget.source}
-              matchName={similarTarget.matchName}
-              visible={view === 'positions'}
-              revision={revision}
-              theme={theme}
-              onClose={() => setSimilarTarget(undefined)}
-              onOpen={(id) => {
-                setDetail('overview');
-                openPosition(id);
-              }}
-            />
-          )}
+            )}
+          </LazyPanel>
         </div>
         <div
           id="workspace-panel-learning"
@@ -1299,16 +1344,20 @@ export default function App() {
           aria-labelledby="workspace-tab-learning"
           hidden={view !== 'learning'}
         >
-          <StudyWorkspace
-            visible={view === 'learning'}
-            requestedDeck={requestedDeck}
-            requestedAssessment={requestedAssessment}
-            theme={theme}
-            revision={deckRevision}
-            onChanged={deckChanged}
-            onStudyDeck={openStudyDeck}
-            onOpenPlayers={() => setView('players')}
-          />
+          <LazyPanel>
+            {opened('learning') && (
+              <StudyWorkspace
+                visible={view === 'learning'}
+                requestedDeck={requestedDeck}
+                requestedAssessment={requestedAssessment}
+                theme={theme}
+                revision={deckRevision}
+                onChanged={deckChanged}
+                onStudyDeck={openStudyDeck}
+                onOpenPlayers={() => setView('players')}
+              />
+            )}
+          </LazyPanel>
         </div>
         <div
           id="workspace-panel-extras"
@@ -1316,16 +1365,20 @@ export default function App() {
           aria-labelledby="workspace-tab-extras"
           hidden={view !== 'extras'}
         >
-          <ExtrasWorkspace
-            visible={view === 'extras'}
-            tool={extrasTool}
-            setTool={setExtrasTool}
-            onOpenMatch={openMatch}
-            defaultPlies={analysisPlies}
-            playPlies={settings?.play_plies}
-            benchmarkActive={benchmarkActivity.active}
-            onBenchmarkActivity={benchmarkActivity.report}
-          />
+          <LazyPanel>
+            {opened('extras') && (
+              <ExtrasWorkspace
+                visible={view === 'extras'}
+                tool={extrasTool}
+                setTool={setExtrasTool}
+                onOpenMatch={openMatch}
+                defaultPlies={analysisPlies}
+                playPlies={settings?.play_plies}
+                benchmarkActive={benchmarkActivity.active}
+                onBenchmarkActivity={benchmarkActivity.report}
+              />
+            )}
+          </LazyPanel>
         </div>
         <footer className="app-footer">
           <span>
@@ -1349,29 +1402,33 @@ export default function App() {
           onSaved={notesSaved}
         />
       )}
-      <SettingsDialog
-        initialCategory={settingsCategory}
-        open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
-        onBookRefresh={() => setBookRevision((n) => n + 1)}
-        onBenchmark={() => {
-          cancelRestoration();
-          setSettingsOpen(false);
-          setExtrasTool('benchmark');
-          setView('extras');
-        }}
-        theme={theme}
-        appearance={appearance}
-        onApply={(applied) => {
-          settingsLoad.current?.abort();
-          setTheme(applied.theme);
-          setLocale(applied.locale);
-          applyAppearance(applied.appearance);
-          setInstalledSettings(applied.settings);
-          setSettingsError(undefined);
-          if (applied.myProfileChanged) setRevision((n) => n + 1);
-        }}
-      />
+      <LazyPanel quiet>
+        {(settingsOpen || settingsOpened) && (
+          <SettingsDialog
+            initialCategory={settingsCategory}
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            onBookRefresh={() => setBookRevision((n) => n + 1)}
+            onBenchmark={() => {
+              cancelRestoration();
+              setSettingsOpen(false);
+              setExtrasTool('benchmark');
+              setView('extras');
+            }}
+            theme={theme}
+            appearance={appearance}
+            onApply={(applied) => {
+              settingsLoad.current?.abort();
+              setTheme(applied.theme);
+              setLocale(applied.locale);
+              applyAppearance(applied.appearance);
+              setInstalledSettings(applied.settings);
+              setSettingsError(undefined);
+              if (applied.myProfileChanged) setRevision((n) => n + 1);
+            }}
+          />
+        )}
+      </LazyPanel>
     </div>
   );
 }

@@ -32,6 +32,9 @@ const en = {
   lastMatch: 'Restoring your last position …',
   analysisProfile: 'Default analysis profile',
   configurationError: 'Settings could not be loaded.',
+  chunkFailed:
+    'This part of NeonDojo could not be loaded. If NeonDojo was just updated, reload the page.',
+  reloadPage: 'Reload page',
 };
 type Key = keyof typeof en;
 type Catalog = Record<Key, string>;
@@ -66,6 +69,9 @@ const de: Catalog = {
   lastMatch: 'Letzte Position wird wiederhergestellt …',
   analysisProfile: 'Standard-Analyseprofil',
   configurationError: 'Einstellungen konnten nicht geladen werden.',
+  chunkFailed:
+    'Dieser Teil von NeonDojo konnte nicht geladen werden. Wurde NeonDojo gerade aktualisiert, lade die Seite neu.',
+  reloadPage: 'Seite neu laden',
 };
 const es: Catalog = {
   analysis: 'Análisis',
@@ -98,6 +104,9 @@ const es: Catalog = {
   lastMatch: 'Restaurando tu última posición …',
   analysisProfile: 'Perfil de análisis predeterminado',
   configurationError: 'No se pudieron cargar los ajustes.',
+  chunkFailed:
+    'No se pudo cargar esta parte de NeonDojo. Si NeonDojo se acaba de actualizar, recarga la página.',
+  reloadPage: 'Recargar página',
 };
 const fr: Catalog = {
   analysis: 'Analyse',
@@ -130,6 +139,9 @@ const fr: Catalog = {
   lastMatch: 'Restauration de votre dernière position …',
   analysisProfile: 'Profil d’analyse par défaut',
   configurationError: 'Impossible de charger les paramètres.',
+  chunkFailed:
+    'Impossible de charger cette partie de NeonDojo. Si NeonDojo vient d’être mis à jour, rechargez la page.',
+  reloadPage: 'Recharger la page',
 };
 const pl: Catalog = {
   analysis: 'Analiza',
@@ -162,6 +174,9 @@ const pl: Catalog = {
   lastMatch: 'Przywracanie ostatniej pozycji …',
   analysisProfile: 'Domyślny profil analizy',
   configurationError: 'Nie można wczytać ustawień.',
+  chunkFailed:
+    'Nie można wczytać tej części NeonDojo. Jeśli NeonDojo zostało właśnie zaktualizowane, odśwież stronę.',
+  reloadPage: 'Odśwież stronę',
 };
 const it: Catalog = {
   analysis: 'Analisi',
@@ -194,6 +209,9 @@ const it: Catalog = {
   lastMatch: 'Ripristino dell’ultima posizione …',
   analysisProfile: 'Profilo di analisi predefinito',
   configurationError: 'Impossibile caricare le impostazioni.',
+  chunkFailed:
+    'Impossibile caricare questa parte di NeonDojo. Se NeonDojo è stato appena aggiornato, ricarica la pagina.',
+  reloadPage: 'Ricarica la pagina',
 };
 export const workspaceMessages = { en, de, es, fr, pl, it };
 export function workspaceText(
