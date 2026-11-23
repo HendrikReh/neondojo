@@ -190,6 +190,8 @@ export default function DecisionSearch({
   const practiceButton = useRef<HTMLButtonElement>(null);
   // "My player profile" fills the player until one is chosen here.
   const playerChosen = useRef(false);
+  // That player's decisions are listed once, on the first visit.
+  const autoSearch = useRef(true);
   const minLoss = useDecimalInput({
     value: draft.minLoss,
     onChange: (value) => set('minLoss')(value),
@@ -247,6 +249,18 @@ export default function DecisionSearch({
   }, [visible, revision, draft.database]);
 
   useEffect(() => {
+    if (!visible || applied || !autoSearch.current) return;
+    if (playerChosen.current) {
+      autoSearch.current = false;
+      return;
+    }
+    const filters = draft.player ? decisionFilters(draft) : undefined;
+    if (!filters) return;
+    autoSearch.current = false;
+    setApplied({ filters, page: 1, attempt: 1 });
+  }, [visible, applied, draft]);
+
+  useEffect(() => {
     if (!visible || !applied) return;
     const abort = new AbortController();
     // The previous results stay visible while the next ones load.
@@ -302,6 +316,7 @@ export default function DecisionSearch({
     if (hit) openHit(hit);
   }
   const practicable = items.filter((item) => item.practicable).slice(0, 20);
+  const pageKey = `page:${keys.join(',')}`;
   const score = (hit: DecisionHit) =>
     hit.away
       ? t('scoreAway', { own: hit.away[0], opponent: hit.away[1] })
@@ -328,6 +343,22 @@ export default function DecisionSearch({
       >
         {t('practice')}
       </ActionButton>
+      <DecisionDeckAction
+        references={items.map((item) => item.reference)}
+        outcomeKey={pageKey}
+        label={t('addPage')}
+        tooltip={t('addPageHint')}
+        compact={false}
+        revision={deckRevision}
+        onAdded={(outcome) => {
+          setDeckOutcome(outcome);
+          onDeckChanged();
+        }}
+        onDeckCreated={onDeckChanged}
+      />
+      {deckOutcome?.key === pageKey && (
+        <DecisionDeckStatus outcome={deckOutcome} />
+      )}
     </>
   );
 
@@ -739,22 +770,16 @@ export default function DecisionSearch({
                             onChanged={onBookmarkChanged}
                           />
                         )}
-                        {hasPosition(preview) && preview.kind === 'checker' && (
-                          <DecisionDeckAction
-                            positionId={preview.position.id}
-                            analysisId={
-                              preview.reference.job_id
-                                ? `job:${preview.reference.job_id}`
-                                : undefined
-                            }
-                            revision={deckRevision}
-                            onAdded={(outcome) => {
-                              setDeckOutcome(outcome);
-                              onDeckChanged();
-                            }}
-                            onDeckCreated={onDeckChanged}
-                          />
-                        )}
+                        <DecisionDeckAction
+                          references={[preview.reference]}
+                          outcomeKey={mistakeReferenceKey(preview.reference)}
+                          revision={deckRevision}
+                          onAdded={(outcome) => {
+                            setDeckOutcome(outcome);
+                            onDeckChanged();
+                          }}
+                          onDeckCreated={onDeckChanged}
+                        />
                         <ActionButton
                           type="button"
                           icon="analysis"
@@ -765,10 +790,10 @@ export default function DecisionSearch({
                       </div>
                     )}
                   </div>
-                  {hasPosition(preview) &&
-                    deckOutcome?.positionId === preview.position.id && (
-                      <DecisionDeckStatus outcome={deckOutcome} />
-                    )}
+                  {deckOutcome?.key ===
+                    mistakeReferenceKey(preview.reference) && (
+                    <DecisionDeckStatus outcome={deckOutcome} />
+                  )}
                   <CubeContextLine
                     matchId={preview.position.gnubg_match_id}
                     players={preview.players}

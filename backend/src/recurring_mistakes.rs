@@ -124,7 +124,7 @@ pub struct MistakePracticeRequest {
     #[serde(default)]
     pub independent_only: bool,
 }
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Deserialize, Serialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct MistakeReference {
     #[serde(skip_serializing_if = "Option::is_none")]

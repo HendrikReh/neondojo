@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Added
+
+- **Decision search fills itself and builds decks.** When **My player profile** pre-selects the player, **All analyzed decisions** lists that player's decisions on the first visit without a click. **Add to deck** in the preview now covers cube decisions and imported analyses as well as checker plays, and **Add page to deck** adds every decision of the current page in one step, reporting how many were added, updated, already in the deck or not available. `POST /api/decks/{id}/decisions` accepts up to 200 decision references with an outcome for each. [Saved positions and searches](docs/reference/library.md#saved-positions-and-searches)
+
 ### Changed
 
 - The five-point NeonGammon preset labels now show approximately 20.3, 15.8, 9.3, and 1.0 PR. All four presets were scored on the same 6,912 decisions against a shared rollout reference. [Five-point preset PR benchmark](docs/open-sage-local.md#five-point-preset-pr-benchmark)
@@ -33,6 +37,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ### Fixed
 
+- **Cards from imported analyses.** Adding the decisions of a match whose displayed analysis is imported (XG, BGBlitz or SGF) to a deck failed with an internal server error, because the query filtered the player on a column the imported-analysis view does not have. It now filters on the player of each recorded move.
 - **Concurrent profile, topic and transfer edits.** Choosing **My player profile** while the same virtual player profile was renamed, deleted or had members changed could fail with an internal error (a database deadlock). Saving a card topic, starting a transfer round and choosing My player profile no longer lock their whole table, so deleting topics and creating or editing other virtual player profiles no longer wait for them, and autovacuum is not held off. Concurrent saves still respect the 200-topic limit, and concurrent transfer starts still never pick the same unseen positions.
 - **Faster database restore without a job event storm.** A restore no longer recomputes the played-record fingerprints and analysis revisions row by row while it copies the backup, and it no longer announces every historical job event, which woke open job event streams and overflowed the event channel when the restore committed. It keeps the fingerprints from the backup, writes the analysis revisions once after the copy, and only announces the jobs it interrupts. Foreign keys and other constraints stay enforced. [Extras](docs/reference/extras.md)
 - **Database restore while jobs start.** A restore now stops analysis jobs that are claimed while it drains, and refuses at once with HTTP 409 naming the running benchmark, engine duel, AI assessment or Anki sync instead of blocking every API request for 30 seconds. [Extras](docs/reference/extras.md)

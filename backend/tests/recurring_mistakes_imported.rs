@@ -461,3 +461,75 @@ async fn foreign_position_ownership_and_best_candidate_method_are_preserved(pool
     assert_eq!(status, 200, "{answer}");
     assert_eq!(answer["method"], "rollout");
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn imported_decision_hits_become_cards_with_their_imported_solution(pool: PgPool) {
+    let (_, ids) = imported(&pool).await;
+    let router = app(&pool);
+    let (status, page) = call(
+        &router,
+        "GET",
+        "/api/study/decisions?player=Alice",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{page}");
+    let references: Vec<Value> = page["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|hit| hit["reference"].clone())
+        .collect();
+    assert_eq!(references.len(), 2, "{page}");
+    assert!(references.iter().all(|r| r.get("job_id").is_none()));
+    let (_, deck) = call(&router, "POST", "/api/decks", json!({"name":"Imported"})).await;
+    let path = format!("/api/decks/{}/decisions", deck["id"].as_str().unwrap());
+    let mut stale = references[0].clone();
+    stale["decision_no"] = json!(999);
+    let mut body = references.clone();
+    body.push(stale);
+    let (status, result) = call(&router, "POST", &path, json!({"decisions": body})).await;
+    assert_eq!(status, 200, "{result}");
+    assert_eq!(result["added"], 2, "{result}");
+    assert_eq!(result["items"][2]["status"], "not_found", "{result}");
+    let sources: Vec<(String, Option<String>)> = sqlx::query_as(
+        "SELECT payload#>>'{source,kind}', payload#>>'{source,imported_analysis_id}' FROM learning_cards ORDER BY 2",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(sources.len(), 2);
+    for (kind, id) in sources {
+        assert_eq!(kind, "imported");
+        assert!(ids.iter().any(|known| Some(known.to_string()) == id));
+    }
+    let (_, again) = call(&router, "POST", &path, json!({"decisions": references})).await;
+    assert_eq!(again["added"], 0, "{again}");
+    assert_eq!(again["total"], 2, "{again}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn imported_match_cards_add_for_the_whole_match_and_one_player(pool: PgPool) {
+    let (match_id, _) = imported(&pool).await;
+    let router = app(&pool);
+    let (_, deck) = call(&router, "POST", "/api/decks", json!({"name":"Match"})).await;
+    let path = format!("/api/decks/{}/cards", deck["id"].as_str().unwrap());
+    let (status, alice) = call(
+        &router,
+        "POST",
+        &path,
+        json!({"match_id": match_id, "player": 0}),
+    )
+    .await;
+    assert_eq!(status, 200, "{alice}");
+    let (status, all) = call(&router, "POST", &path, json!({"match_id": match_id})).await;
+    assert_eq!(status, 200, "{all}");
+    assert!(all["total"].as_i64().unwrap() >= alice["total"].as_i64().unwrap());
+    let players: Vec<i32> = sqlx::query_scalar(
+        "SELECT DISTINCT (payload#>>'{position,player}')::int FROM learning_cards ORDER BY 1",
+    )
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert!(!players.is_empty());
+}

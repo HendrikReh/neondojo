@@ -6,54 +6,70 @@ import ActionButton from '../../shared/ui/ActionButton';
 import CreateDeckForm from '../study/flashcards/CreateDeckForm';
 import { DeckDialog } from '../study/flashcards/DeckLibraryDialogs';
 import { savedDeck, useDecks } from '../study/flashcards/useDecks';
+import { useDecisionSearchText } from './decision-search-messages';
 import { usePositionText } from './position-browser-messages';
 
-type AddCardsResult = components['schemas']['AddCardsResult'];
+type AddDecisionsResult = components['schemas']['AddDecisionsResult'];
+type DecisionAddStatus = components['schemas']['DecisionAddStatus'];
+type MistakeReference = components['schemas']['MistakeReference'];
 export type DecisionDeckOutcome = {
-  positionId: string;
+  /** Identifies what was added: one decision or the shown page. */
+  key: string;
   deck: string;
-  result: AddCardsResult;
+  result: AddDecisionsResult;
 };
 
 /**
- * Adds one analysed checker decision to a deck. The card uses the analysis
- * the decision was found in, so an unsaved position can become a card.
+ * Adds analysed decisions, checker plays and cube decisions alike, to a deck.
+ * Each card uses the analysis its decision was found in, so a decision
+ * without a saved position can become a card.
  */
 export default function DecisionDeckAction({
-  positionId,
-  analysisId,
+  references,
+  outcomeKey,
+  label,
+  tooltip,
+  compact = true,
   revision,
   onAdded,
   onDeckCreated,
 }: {
-  positionId: string;
-  /** The catalog entry of the decision's analysis, when it is known. */
-  analysisId?: string;
+  /** 1 to 200 decisions in the order shown. */
+  references: MistakeReference[];
+  outcomeKey: string;
+  label?: string;
+  tooltip?: string;
+  compact?: boolean;
   revision: number;
   onAdded: (outcome: DecisionDeckOutcome) => void;
   onDeckCreated: () => void;
 }) {
   const p = usePositionText();
   const [open, setOpen] = useState(false);
+  const text = label ?? p('addToDeck');
   return (
     <>
       <ActionButton
         type="button"
         icon="cards"
-        label={p('addToDeck')}
-        compact
+        label={text}
+        tooltip={tooltip}
+        compact={compact}
         aria-haspopup="dialog"
+        disabled={references.length === 0}
         onClick={() => setOpen(true)}
-      />
+      >
+        {compact ? undefined : text}
+      </ActionButton>
       {open && (
         <DecisionDeckDialog
-          positionId={positionId}
-          analysisId={analysisId}
+          title={text}
+          references={references}
           revision={revision}
           onClose={() => setOpen(false)}
           onAdded={(deck, result) => {
             setOpen(false);
-            onAdded({ positionId, deck, result });
+            onAdded({ key: outcomeKey, deck, result });
           }}
           onDeckCreated={onDeckCreated}
         />
@@ -62,37 +78,69 @@ export default function DecisionDeckAction({
   );
 }
 
-/** The deck that received the decision and its new card count. */
+/** What the deck received and its new card count. */
 export function DecisionDeckStatus({
   outcome,
 }: {
   outcome: DecisionDeckOutcome;
 }) {
   const p = usePositionText();
+  const t = useDecisionSearchText();
+  const { items, total } = outcome.result;
+  const count = (status: DecisionAddStatus) =>
+    items.filter((item) => item.status === status).length;
+  const summary =
+    items.length === 1
+      ? single(items[0].status, p, t)
+      : t('deckOutcome', {
+          added: count('added'),
+          updated: count('updated'),
+          duplicate: count('duplicate'),
+          unavailable: count('unavailable') + count('not_found'),
+        });
   return (
     <p className="decision-deck-outcome" role="status">
-      {p(outcome.result.added > 0 ? 'added' : 'updated')} · {outcome.deck} ·{' '}
-      {p('deckCount', { count: outcome.result.total })}
+      {summary} · {outcome.deck} · {p('deckCount', { count: total })}
     </p>
   );
 }
 
+function single(
+  status: DecisionAddStatus,
+  p: ReturnType<typeof usePositionText>,
+  t: ReturnType<typeof useDecisionSearchText>,
+) {
+  switch (status) {
+    case 'added':
+      return p('added');
+    case 'updated':
+      return p('updated');
+    case 'duplicate':
+      return p('duplicate');
+    case 'not_found':
+      return p('not_found');
+    case 'unavailable':
+      return t('cardUnavailable');
+  }
+}
+
 function DecisionDeckDialog({
-  positionId,
-  analysisId,
+  title,
+  references,
   revision,
   onClose,
   onAdded,
   onDeckCreated,
 }: {
-  positionId: string;
-  analysisId?: string;
+  title: string;
+  references: MistakeReference[];
   revision: number;
   onClose: () => void;
-  onAdded: (deck: string, result: AddCardsResult) => void;
+  onAdded: (deck: string, result: AddDecisionsResult) => void;
   onDeckCreated: () => void;
 }) {
   const p = usePositionText();
+  const t = useDecisionSearchText();
   const { formatError } = useI18n();
   const countId = useId();
   const { decks, error: deckError, addDeck } = useDecks(revision);
@@ -112,15 +160,14 @@ function DecisionDeckDialog({
     setBusy(true);
     setError(undefined);
     try {
-      const result = await request<AddCardsResult>(
-        `/decks/${encodeURIComponent(chosen.id)}/cards`,
+      const result = await request<AddDecisionsResult>(
+        `/decks/${encodeURIComponent(chosen.id)}/decisions`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            position_id: positionId,
-            analysis_id: analysisId,
-          } satisfies components['schemas']['AddCards']),
+            decisions: references,
+          } satisfies components['schemas']['AddDecisions']),
         },
       );
       if (live.current) onAdded(chosen.name, result);
@@ -132,7 +179,7 @@ function DecisionDeckDialog({
   }
   return (
     <DeckDialog
-      title={p('addToDeck')}
+      title={title}
       close={onClose}
       busy={busy}
       className="position-transfer-dialog"
@@ -141,7 +188,11 @@ function DecisionDeckDialog({
           type="button"
           icon="add"
           className="primary"
-          label={busy ? p('transfer') : p('addOne')}
+          label={
+            busy
+              ? t('addingDecisions')
+              : t('addDecisions', { count: references.length })
+          }
           disabled={!chosen || busy}
           onClick={() => void add()}
         />
