@@ -114,3 +114,13 @@ pub async fn foreign_analysis(pool: &PgPool) -> (Uuid, Vec<Uuid>) {
     }
     (id, ids)
 }
+
+/// Keeps the `progress` events of jobs that finish in this test database.
+/// Finishing a job normally deletes them (migration 0094); tests that check
+/// which progress events a running job commits read them after it finished.
+pub async fn keep_finished_job_progress(pool: &PgPool) {
+    sqlx::query("ALTER TABLE jobs DISABLE TRIGGER jobs_prune_finished_progress")
+        .execute(pool)
+        .await
+        .unwrap();
+}

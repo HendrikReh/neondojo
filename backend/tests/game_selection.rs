@@ -176,6 +176,7 @@ async fn game_catalog_preserves_all_games_and_queries_stay_inside_selected_game(
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn selected_game_analysis_is_isolated_deduplicated_and_recoverable(pool: PgPool) {
     let (state, app, id) = setup(&pool).await;
+    crate::support::keep_finished_job_progress(&pool).await;
     let endpoint = format!("/api/matches/{id}/analysis");
     let (status, value) = call(
         app.clone(),

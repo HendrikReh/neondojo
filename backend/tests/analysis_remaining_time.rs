@@ -159,6 +159,7 @@ async fn benchmark_zero_move_sections_and_stale_attempt_are_safe(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires PostgreSQL and GNUbg"]
 async fn native_game_commits_timing_with_checkpoint(pool: PgPool) {
+    crate::support::keep_finished_job_progress(&pool).await;
     let (_, id) = setup(&pool).await;
     let state = AppState::new(
         pool.clone(),
