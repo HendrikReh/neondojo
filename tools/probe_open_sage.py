@@ -22,7 +22,7 @@ import time
 
 # Supported NeonGammon package versions (HendrikReh/neongammon releases).
 # The worker and the Rust snapshot validation use this list as well.
-SUPPORTED_VERSIONS = ('3.0.0', '3.1.0',)
+SUPPORTED_VERSIONS = ('3.0.0', '3.1.0', '3.1.1')
 NUMPY_VERSION = '2.5.4'
 # The requested thread budget is the engine's only parallelism, as in the
 # application worker (SINGLE_THREADED_MATH in backend/src/engines/process.rs).
