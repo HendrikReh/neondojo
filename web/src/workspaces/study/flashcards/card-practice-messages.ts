@@ -1,9 +1,8 @@
-import { useI18n } from '../../../shared/i18n/i18n';
 import {
-  formatMessage,
-  type Locale,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../../shared/i18n/messages';
 
 const rows = {
   start: [
@@ -914,15 +913,7 @@ const rows = {
     'NeonDojo nie mogło zapisać wyniku synchronizacji.',
     'NeonDojo non ha potuto salvare il risultato della sincronizzazione.',
   ],
-} as const;
+} satisfies Record<string, MessageRow>;
 
-const languages: readonly Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export function useCardPracticeText() {
-  const { locale } = useI18n();
-  return (key: keyof typeof rows, params: TranslationParams = {}) =>
-    formatMessage(
-      locale,
-      rows[key][languages.indexOf(locale)] ?? rows[key][0],
-      params,
-    );
-}
+const messages = defineMessages('card-practice', fromRows(rows));
+export const useCardPracticeText = messages.useText;

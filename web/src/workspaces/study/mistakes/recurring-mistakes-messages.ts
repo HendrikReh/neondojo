@@ -1,4 +1,9 @@
-import { useI18n, type Locale } from '../../../shared/i18n/i18n';
+import {
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../../shared/i18n/messages';
+
 const entries = {
   title: [
     'My recurring mistakes',
@@ -430,17 +435,8 @@ const entries = {
     'Spróbuj ponownie',
     'Riprova',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const mistakeMessages = Object.fromEntries(
-  locales.map((locale, i) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(entries).map(([key, values]) => [key, values[i]]),
-    ),
-  ]),
-) as Record<Locale, Record<keyof typeof entries, string>>;
-export function useMistakeText() {
-  const { locale } = useI18n();
-  return (key: keyof typeof entries) => mistakeMessages[locale][key];
-}
+} satisfies Record<string, MessageRow>;
+
+const messages = defineMessages('recurring-mistakes', fromRows(entries));
+export const mistakeMessages = messages.catalogs;
+export const useMistakeText = messages.useText;

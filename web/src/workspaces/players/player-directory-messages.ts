@@ -1,8 +1,4 @@
-import { useI18n, type Locale } from '../../shared/i18n/i18n';
-import {
-  formatMessage,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+import { defineMessages } from '../../shared/i18n/messages';
 
 const en = {
   title: 'Player database',
@@ -67,8 +63,7 @@ const en = {
   analyzeRest: 'Analyze unrated matches …',
   nothingToAnalyze: 'No match is waiting for analysis.',
 };
-type Key = keyof typeof en;
-const words: Record<Locale, Record<Key, string>> = {
+const messages = defineMessages('player-directory', {
   en,
   de: {
     title: 'Spielerdatenbank',
@@ -391,10 +386,5 @@ const words: Record<Locale, Record<Key, string>> = {
     analyzeRest: 'Analizuj nieocenione mecze …',
     nothingToAnalyze: 'Żaden mecz nie czeka na analizę.',
   },
-};
-
-export function usePlayerText() {
-  const { locale } = useI18n();
-  return (key: Key, params?: TranslationParams) =>
-    formatMessage(locale, words[locale][key], params);
-}
+});
+export const usePlayerText = messages.useText;

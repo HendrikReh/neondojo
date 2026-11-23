@@ -1,5 +1,5 @@
-import { useI18n, type Locale } from '../i18n/i18n';
-import { interpolate, type TranslationParams } from '../i18n/i18n-core';
+import { defineMessages, fromRows, type MessageRow } from '../i18n/messages';
+
 const entries = {
   title: [
     'What the plays do differently',
@@ -178,19 +178,8 @@ const entries = {
     'Ply: głębokość przeszukiwania silnika. 1-ply to bezpośrednia ocena sieci neuronowej; 3-ply uśrednia następny rzut przeciwnika i własny.',
     'Ply: la profondità di ricerca del motore. 1-ply è la stima diretta della rete neurale; 3-ply fa la media sul prossimo tiro dell’avversario e sul proprio.',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-type Key = keyof typeof entries;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const moveExplanationMessages = Object.fromEntries(
-  locales.map((locale, i) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(entries).map(([key, values]) => [key, values[i]]),
-    ),
-  ]),
-) as Record<Locale, Record<Key, string>>;
-export function useMoveExplanationText() {
-  const { locale } = useI18n();
-  return (key: Key, params: TranslationParams = {}) =>
-    interpolate(moveExplanationMessages[locale][key], params);
-}
+} satisfies Record<string, MessageRow>;
+
+const messages = defineMessages('move-explanation', fromRows(entries));
+export const moveExplanationMessages = messages.catalogs;
+export const useMoveExplanationText = messages.useText;

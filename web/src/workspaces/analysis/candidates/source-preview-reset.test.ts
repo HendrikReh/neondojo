@@ -24,6 +24,10 @@ vi.mock('react', async (original) => ({
       hooks.pending.push(effect);
     hooks.slots[index] = deps;
   },
+  // The message hooks memoize their text function; the test needs no slot.
+  useCallback<T>(callback: T) {
+    return callback;
+  },
   useEffectEvent(callback: (...args: unknown[]) => unknown) {
     const index = hooks.index++;
     type Slot = { callback: typeof callback; event: typeof callback };

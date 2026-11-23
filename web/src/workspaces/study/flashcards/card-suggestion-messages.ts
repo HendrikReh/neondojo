@@ -1,7 +1,6 @@
-import { useI18n } from '../../../shared/i18n/i18n';
-import type { Locale } from '../../../shared/i18n/i18n-core';
+import { defineMessages } from '../../../shared/i18n/messages';
 
-const messages = {
+const messages = defineMessages('card-suggestion', {
   en: {
     suggest: 'Suggest positions',
     loading: 'Finding positions for this match…',
@@ -98,9 +97,6 @@ const messages = {
     add: 'Aggiungi la selezione al mazzo',
     changed: 'L’analisi della partita è cambiata. Carica nuovi suggerimenti.',
   },
-} satisfies Record<Locale, Record<string, string>>;
+});
 
-export function useCardSuggestionText() {
-  const { locale } = useI18n();
-  return messages[locale];
-}
+export const useCardSuggestionText = messages.useText;

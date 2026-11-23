@@ -24,6 +24,8 @@ describe('profile summary', () => {
   it('supplies every profile message in all supported languages', () => {
     for (const locale of ['en', 'de', 'es', 'fr', 'it', 'pl'] as const)
       for (const key of profileMessageKeys)
-        expect(profileText(locale, key, { name: 'Test' })).toBeTruthy();
+        expect(
+          profileText(locale, key, { name: 'Test', count: 2 }),
+        ).toBeTruthy();
   });
 });

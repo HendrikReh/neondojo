@@ -1,5 +1,9 @@
-import { useI18n, type Locale } from '../../shared/i18n/i18n';
 import { matchEventLabels } from '../../shared/i18n/i18n-core';
+import {
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../shared/i18n/messages';
 
 const entries = {
   id: ['ID', 'ID', 'ID', 'ID', 'ID', 'ID'],
@@ -70,11 +74,8 @@ const entries = {
     'Spróbuj ponownie',
     'Riprova',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-type Key = keyof typeof entries;
+} satisfies Record<string, MessageRow>;
 
-export function useAnalysisMatchHeaderText() {
-  const { locale } = useI18n();
-  return (key: Key) => entries[key][locales.indexOf(locale)];
-}
+const messages = defineMessages('analysis-match-header', fromRows(entries));
+
+export const useAnalysisMatchHeaderText = messages.useText;

@@ -1,30 +1,5 @@
 import { expect, it } from 'vitest';
-import {
-  sourceMessageLocales,
-  sourceMessageRows,
-  sourceText,
-} from './analysis-source-messages';
-import {
-  languages,
-  placeholders,
-  validatePluralForms,
-} from '../../../shared/i18n/i18n-core';
-
-it('keeps one translation with the same placeholders and plural forms per language', () => {
-  expect([...sourceMessageLocales].sort()).toEqual(
-    languages.map(({ id }) => id).sort(),
-  );
-  for (const [key, row] of Object.entries(sourceMessageRows)) {
-    expect(row, key).toHaveLength(sourceMessageLocales.length);
-    const english = placeholders(row[0]);
-    sourceMessageLocales.forEach((locale, index) => {
-      const text = row[index] ?? '';
-      expect(text, `${locale}.${key}`).toBeTruthy();
-      expect(placeholders(text), `${locale}.${key}`).toEqual(english);
-      expect(() => validatePluralForms(locale, text)).not.toThrow();
-    });
-  }
-});
+import { sourceText } from './analysis-source-messages';
 
 it.each([
   [1, '1 kontekst wyniku'],

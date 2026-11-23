@@ -1,10 +1,11 @@
-import { useI18n } from '../../../shared/i18n/i18n';
+import type { Locale } from '../../../shared/i18n/i18n-core';
 import {
-  formatMessage,
-  type Locale,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
-export const sourceMessageRows = {
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../../shared/i18n/messages';
+
+const rows = {
   imported: [
     'Imported analysis',
     'Importierte Analyse',
@@ -378,32 +379,12 @@ export const sourceMessageRows = {
     'BackgammonDB łączy pozycję i rzut w kluczu. Kubek ma klucz bez kostek. Wyniki XG zachowują swoje oznaczenia.',
     'BackgammonDB combina posizione e lancio nella chiave. Il cubo usa una chiave senza dadi. I risultati XG mantengono le proprie etichette.',
   ],
-} as const;
-type Key = keyof typeof sourceMessageRows;
-export const sourceMessageLocales: Locale[] = [
-  'en',
-  'de',
-  'es',
-  'fr',
-  'pl',
-  'it',
-];
-export function sourceText(
-  locale: Locale,
-  key: Key,
-  params: TranslationParams = {},
-) {
-  return formatMessage(
-    locale,
-    sourceMessageRows[key][sourceMessageLocales.indexOf(locale)],
-    params,
-  );
-}
-export function useSourceText() {
-  const { locale } = useI18n();
-  return (key: Key, params?: TranslationParams) =>
-    sourceText(locale, key, params);
-}
+} satisfies Record<string, MessageRow>;
+
+const messages = defineMessages('analysis-source', fromRows(rows));
+
+export const sourceText = messages.text;
+export const useSourceText = messages.useText;
 
 export const openingBookProviders = [
   'automatic',

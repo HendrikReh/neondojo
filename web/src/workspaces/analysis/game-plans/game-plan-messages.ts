@@ -1,4 +1,8 @@
-import { useI18n, type Locale } from '../../../shared/i18n/i18n';
+import {
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../../shared/i18n/messages';
 
 const entries = {
   title: [
@@ -99,19 +103,9 @@ const entries = {
     'Reguły NeonGammon klasyfikują strukturę wyświetlonej pozycji. Rekomendacje ruchów pochodzą z GNUbg.',
     'Le regole di NeonGammon classificano la struttura della posizione visualizzata. GNUbg fornisce le raccomandazioni sulle mosse.',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-type Key = keyof typeof entries;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const gamePlanMessages = Object.fromEntries(
-  locales.map((locale, i) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(entries).map(([key, values]) => [key, values[i]]),
-    ),
-  ]),
-) as Record<Locale, Record<Key, string>>;
+} satisfies Record<string, MessageRow>;
 
-export function useGamePlanText() {
-  const { locale } = useI18n();
-  return (key: Key) => gamePlanMessages[locale][key];
-}
+const messages = defineMessages('game-plan', fromRows(entries));
+
+export const gamePlanMessages = messages.catalogs;
+export const useGamePlanText = messages.useText;

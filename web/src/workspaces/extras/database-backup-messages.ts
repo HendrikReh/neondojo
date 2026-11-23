@@ -1,4 +1,4 @@
-import type { Locale } from '../../shared/i18n/i18n';
+import { defineMessages } from '../../shared/i18n/messages';
 
 const en = {
   title: 'Database backup',
@@ -44,9 +44,7 @@ const en = {
   done: 'Backup restored. Reload NeonDojo to open the restored database.',
   reload: 'Reload NeonDojo',
 };
-type Messages = Record<keyof typeof en, string>;
-
-export const databaseBackupMessages = {
+const messages = defineMessages('database-backup', {
   en,
   de: {
     title: 'Datenbanksicherung',
@@ -271,4 +269,7 @@ export const databaseBackupMessages = {
     done: 'Kopia została przywrócona. Odśwież NeonDojo, aby otworzyć przywróconą bazę.',
     reload: 'Odśwież NeonDojo',
   },
-} satisfies Record<Locale, Messages>;
+});
+export const databaseBackupMessages = messages.catalogs;
+export const databaseBackupText = messages.text;
+export const useDatabaseBackupText = messages.useText;

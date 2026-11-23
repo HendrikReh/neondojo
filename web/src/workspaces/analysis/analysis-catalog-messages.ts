@@ -1,9 +1,9 @@
-import { useI18n } from '../../shared/i18n/i18n';
 import {
-  formatMessage,
-  type Locale,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../shared/i18n/messages';
+
 const rows = {
   analysis: [
     'Displayed analysis',
@@ -223,22 +223,10 @@ const rows = {
     'Analiza porównawcza {number}',
     'Analisi di confronto {number}',
   ],
-} as const;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
+} satisfies Record<string, MessageRow>;
+
+const messages = defineMessages('analysis-catalog', fromRows(rows));
+
 export type AnalysisCatalogMessage = keyof typeof rows;
-export function analysisCatalogText(
-  locale: Locale,
-  key: AnalysisCatalogMessage,
-  params?: TranslationParams,
-) {
-  return formatMessage(
-    locale,
-    rows[key][locales.indexOf(locale)] ?? rows[key][0],
-    params,
-  );
-}
-export function useAnalysisCatalogText() {
-  const { locale } = useI18n();
-  return (key: AnalysisCatalogMessage, params?: TranslationParams) =>
-    analysisCatalogText(locale, key, params);
-}
+export const analysisCatalogText = messages.text;
+export const useAnalysisCatalogText = messages.useText;

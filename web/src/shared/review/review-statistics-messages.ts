@@ -1,9 +1,6 @@
-import { useI18n, type TranslationKey } from '../i18n/i18n';
-import {
-  formatMessage,
-  type Locale,
-  type TranslationParams,
-} from '../i18n/i18n-core';
+import { type TranslationKey } from '../i18n/i18n';
+import { defineMessages, fromRows, type MessageRow } from '../i18n/messages';
+
 export const errorThresholdLabels = {
   questionable: 'severity.doubtful',
   error: 'severity.bad',
@@ -382,26 +379,9 @@ const rows = {
     'Niedostępne decyzje',
     'Decisioni non disponibili',
   ],
-} as const;
-type Key = keyof typeof rows;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const statisticsMessages = Object.fromEntries(
-  locales.map((locale, index) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(rows).map(([key, values]) => [key, values[index]]),
-    ),
-  ]),
-) as Record<Locale, Record<Key, string>>;
-export function statisticsText(
-  locale: Locale,
-  key: Key,
-  params: TranslationParams = {},
-) {
-  return formatMessage(locale, statisticsMessages[locale][key], params);
-}
-export function useStatisticsText() {
-  const { locale } = useI18n();
-  return (key: Key, params?: TranslationParams) =>
-    statisticsText(locale, key, params);
-}
+} satisfies Record<string, MessageRow>;
+
+const messages = defineMessages('review-statistics', fromRows(rows));
+export const statisticsMessages = messages.catalogs;
+export const statisticsText = messages.text;
+export const useStatisticsText = messages.useText;

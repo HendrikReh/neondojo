@@ -1,10 +1,9 @@
-import { useI18n } from '../../shared/i18n/i18n';
+import { matchEventLabels } from '../../shared/i18n/i18n-core';
 import {
-  formatMessage,
-  matchEventLabels,
-  type Locale,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../shared/i18n/messages';
 
 const translations = {
   similar: [
@@ -1267,28 +1266,10 @@ const translations = {
     'Zagrany ruch',
     'Mossa giocata',
   ],
-} as const;
+} satisfies Record<string, MessageRow>;
 export type PositionMessageKey = keyof typeof translations;
-type Messages = Record<PositionMessageKey, string>;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const positionMessages = Object.fromEntries(
-  locales.map((locale, index) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(translations).map(([key, values]) => [key, values[index]]),
-    ),
-  ]),
-) as Record<Locale, Messages>;
-export function positionText(
-  locale: Locale,
-  key: PositionMessageKey,
-  params: TranslationParams = {},
-) {
-  return formatMessage(locale, positionMessages[locale][key], params);
-}
 
-export function usePositionText() {
-  const { locale } = useI18n();
-  return (key: PositionMessageKey, params: TranslationParams = {}) =>
-    positionText(locale, key, params);
-}
+const messages = defineMessages('position-browser', fromRows(translations));
+export const positionMessages = messages.catalogs;
+export const positionText = messages.text;
+export const usePositionText = messages.useText;

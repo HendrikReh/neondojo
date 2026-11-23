@@ -1,9 +1,5 @@
 import type { Locale } from '../../../shared/i18n/i18n';
-import {
-  formatMessage,
-  numberFormat,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
+import { defineMessages } from '../../../shared/i18n/messages';
 
 const en = {
   label: 'Analysis time estimate',
@@ -23,8 +19,7 @@ const en = {
   basis: 'Benchmark {date} · {engine}',
   caveat: 'Queueing excluded; time varies with position complexity.',
 };
-type Key = keyof typeof en;
-export const analysisEstimateMessages = {
+const messages = defineMessages('analysis-time-estimate', {
   en,
   de: {
     label: 'Geschätzte Analysezeit',
@@ -121,21 +116,17 @@ export const analysisEstimateMessages = {
     basis: 'Benchmark {date} · {engine}',
     caveat: 'Bez czasu oczekiwania; czas trwania zależy od złożoności pozycji.',
   },
-} satisfies Record<Locale, Record<Key, string>>;
-export function analysisEstimateText(
-  locale: Locale,
-  key: Key,
-  values?: TranslationParams,
-) {
-  return formatMessage(locale, analysisEstimateMessages[locale][key], values);
-}
+});
+
+export const analysisEstimateMessages = messages.catalogs;
+export const analysisEstimateText = messages.text;
 
 type DurationUnit = 'seconds' | 'minutes' | 'hours';
 /**
  * Compact duration units. `{n}` is the amount in the language's number
  * format; a no-break space keeps it on the same line as its unit.
  */
-export const durationUnits = {
+const durationMessages = defineMessages('analysis-duration-units', {
   en: { underSecond: '<1s', seconds: '{n}s', minutes: '{n}m', hours: '{n}h' },
   de: {
     underSecond: '<1 s',
@@ -167,7 +158,8 @@ export const durationUnits = {
     minutes: '{n} min',
     hours: '{n} godz.',
   },
-} satisfies Record<Locale, Record<'underSecond' | DurationUnit, string>>;
+});
+export const durationUnits = durationMessages.catalogs;
 
 /** Rounded remaining or estimated time, omitting zero sub-units. */
 export function formatAnalysisDuration(
@@ -175,10 +167,9 @@ export function formatAnalysisDuration(
   ms: number,
 ): string | null {
   if (!Number.isFinite(ms) || ms <= 0) return null;
-  const units = durationUnits[locale];
-  if (ms < 1000) return units.underSecond;
+  if (ms < 1000) return durationMessages.text(locale, 'underSecond');
   const amount = (unit: DurationUnit, n: number) =>
-    units[unit].replace('{n}', numberFormat(locale).format(n));
+    durationMessages.text(locale, unit, { n });
   const join = (major: string, unit: DurationUnit, remainder: number) =>
     remainder ? `${major} ${amount(unit, remainder)}` : major;
   const seconds = Math.round(ms / 1000);

@@ -1,8 +1,5 @@
-import type { Locale } from '../../../shared/i18n/i18n';
-import {
-  formatMessage,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
+import { defineMessages } from '../../../shared/i18n/messages';
+
 const en = {
   estimated: 'Estimated time remaining: approx. {duration}',
   loading: 'Calculating time remaining …',
@@ -14,8 +11,7 @@ const en = {
   benchmark: 'Based on the saved benchmark',
   observed: 'Based on the measured analysis speed',
 };
-type Key = keyof typeof en;
-export const remainingTimeMessages = {
+const messages = defineMessages('analysis-remaining-time', {
   en,
   de: {
     estimated: 'Geschätzte Restzeit: ca. {duration}',
@@ -72,11 +68,7 @@ export const remainingTimeMessages = {
     benchmark: 'Na podstawie zapisanego benchmarku',
     observed: 'Na podstawie zmierzonego tempa analizy',
   },
-} satisfies Record<Locale, Record<Key, string>>;
-export function remainingTimeText(
-  locale: Locale,
-  key: Key,
-  values?: TranslationParams,
-) {
-  return formatMessage(locale, remainingTimeMessages[locale][key], values);
-}
+});
+
+export const remainingTimeMessages = messages.catalogs;
+export const remainingTimeText = messages.text;

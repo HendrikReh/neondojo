@@ -1,42 +1,6 @@
-import { useI18n, type Locale } from '../../../shared/i18n/i18n';
+import { defineMessages } from '../../../shared/i18n/messages';
 
-const keys = [
-  'tab',
-  'create',
-  'open',
-  'back',
-  'loading',
-  'queued',
-  'running',
-  'missing',
-  'unsupported',
-  'configuration',
-  'failed',
-  'interrupted',
-  'invalid',
-  'source',
-  'forfeit',
-  'basis',
-  'themes',
-  'examples',
-  'training',
-  'limitations',
-  'focus',
-  'preview',
-  'cube',
-  'checker',
-  'opening',
-  'bear_off',
-  'hit',
-  'backgame',
-  'race',
-  'prime',
-  'contact',
-  'anchor',
-] as const;
-type Key = (typeof keys)[number];
-
-const catalogs: Record<Locale, Record<Key, string>> = {
+const messages = defineMessages('match-assessment', {
   de: {
     tab: 'KI-Assessment',
     create: 'KI-Assessment erstellen',
@@ -260,8 +224,5 @@ const catalogs: Record<Locale, Record<Key, string>> = {
     contact: 'Kontakt',
     anchor: 'Kotwice i gra na utrzymanie',
   },
-};
-export function useMatchAssessmentText() {
-  const { locale } = useI18n();
-  return (key: Key) => catalogs[locale][key];
-}
+});
+export const useMatchAssessmentText = messages.useText;

@@ -1,5 +1,5 @@
-import { useI18n, type Locale } from '../i18n/i18n';
-import { interpolate, type TranslationParams } from '../i18n/i18n-core';
+import { defineMessages, fromRows, type MessageRow } from '../i18n/messages';
+
 const entries = {
   previousError: [
     'Previous error',
@@ -205,24 +205,9 @@ const entries = {
     '{view} · {player} · {move}',
     '{view} · {player} · {move}',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-type Key = keyof typeof entries;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export const boardReviewMessages = Object.fromEntries(
-  locales.map((locale, i) => [
-    locale,
-    Object.fromEntries(
-      Object.entries(entries).map(([key, values]) => [key, values[i]]),
-    ),
-  ]),
-) as Record<Locale, Record<Key, string>>;
-export const boardReviewText = (
-  locale: Locale,
-  key: Key,
-  params: TranslationParams = {},
-) => interpolate(boardReviewMessages[locale][key], params);
-export function useBoardReviewText() {
-  const { locale } = useI18n();
-  return (key: Key, params?: TranslationParams) =>
-    boardReviewText(locale, key, params);
-}
+} satisfies Record<string, MessageRow>;
+
+const messages = defineMessages('board-review', fromRows(entries));
+export const boardReviewMessages = messages.catalogs;
+export const boardReviewText = messages.text;
+export const useBoardReviewText = messages.useText;

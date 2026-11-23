@@ -1,12 +1,11 @@
-import { useI18n } from '../../shared/i18n/i18n';
 import type { components } from '../../generated-api';
 import { PAUSED_MATCHES_DATABASE_ID, type Database } from './library-api';
+import { matchEventLabels } from '../../shared/i18n/i18n-core';
 import {
-  formatMessage,
-  matchEventLabels,
-  type Locale,
-  type TranslationParams,
-} from '../../shared/i18n/i18n-core';
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../shared/i18n/messages';
 
 // Each row is complete in English, German, Spanish, French, Polish and Italian.
 const rows = {
@@ -1162,21 +1161,12 @@ const rows = {
     'Uwagi z importu: {count}',
     'Note di importazione: {count}',
   ],
-} as const;
+} satisfies Record<string, MessageRow>;
 type Key = keyof typeof rows;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
-export function libraryText(
-  locale: Locale,
-  key: Key,
-  params: TranslationParams = {},
-) {
-  return formatMessage(locale, rows[key][locales.indexOf(locale)], params);
-}
-export function useLibraryText() {
-  const { locale } = useI18n();
-  return (key: Key, params?: TranslationParams) =>
-    libraryText(locale, key, params);
-}
+const messages = defineMessages('library', fromRows(rows));
+export const libraryMessages = messages.catalogs;
+export const libraryText = messages.text;
+export const useLibraryText = messages.useText;
 export function databaseDisplayName(
   database: Pick<Database, 'id' | 'name'>,
   t: ReturnType<typeof useLibraryText>,

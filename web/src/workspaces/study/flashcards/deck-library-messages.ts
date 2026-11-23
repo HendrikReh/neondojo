@@ -1,9 +1,8 @@
-import { useI18n } from '../../../shared/i18n/i18n';
 import {
-  formatMessage,
-  type Locale,
-  type TranslationParams,
-} from '../../../shared/i18n/i18n-core';
+  defineMessages,
+  fromRows,
+  type MessageRow,
+} from '../../../shared/i18n/messages';
 
 const entries = {
   decks: [
@@ -254,12 +253,7 @@ const entries = {
     'Fiszki lub talie uległy zmianie. Odśwież i sprawdź wybór.',
     'Le schede o i mazzi sono cambiati. Ricarica e controlla la selezione.',
   ],
-} satisfies Record<string, [string, string, string, string, string, string]>;
-const locales: Locale[] = ['en', 'de', 'es', 'fr', 'pl', 'it'];
+} satisfies Record<string, MessageRow>;
 
-export function useDeckLibraryText() {
-  const { locale } = useI18n();
-  const index = locales.indexOf(locale);
-  return (key: keyof typeof entries, values: TranslationParams = {}) =>
-    formatMessage(locale, entries[key][index], values);
-}
+const messages = defineMessages('deck-library', fromRows(entries));
+export const useDeckLibraryText = messages.useText;
