@@ -1703,3 +1703,107 @@ async fn imported_anki_cards_can_be_revealed_and_rated_without_a_board(pool: PgP
     assert_eq!(status, 200);
     assert_eq!(result["review_count"], 1);
 }
+
+async fn seed_card_topics(pool: &PgPool, count: i32) {
+    sqlx::query(
+        "INSERT INTO card_topics(id,name,filter)
+         SELECT gen_random_uuid(),'Seed '||g,'{}'::jsonb FROM generate_series(1,$1) g",
+    )
+    .bind(count)
+    .execute(pool)
+    .await
+    .unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn card_topic_limit_holds_for_concurrent_saves(pool: PgPool) {
+    seed_card_topics(&pool, 199).await;
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    // Hold both saves before they insert, so that both count 199 topics
+    // unless they serialize.
+    let mut gate = pool.begin().await.unwrap();
+    sqlx::query("LOCK TABLE card_topics IN SHARE MODE")
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let saves: Vec<_> = ["Race A", "Race B"]
+        .into_iter()
+        .map(|name| {
+            let app = app.clone();
+            tokio::spawn(async move {
+                call(
+                    app,
+                    "POST",
+                    "/api/study/card-topics",
+                    json!({"name":name,"filter":{"topics":"cube"}}),
+                )
+                .await
+            })
+        })
+        .collect();
+    crate::support::wait_for_lock_waiters(&pool, "%", 2).await;
+    gate.commit().await.unwrap();
+    let mut statuses = Vec::new();
+    for save in saves {
+        let (status, body) = save.await.unwrap();
+        assert!(status == 201 || status == 422, "{status}: {body}");
+        statuses.push(status);
+    }
+    statuses.sort();
+    assert_eq!(statuses, [201, 422]);
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM card_topics")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(count, 200);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn card_topic_delete_does_not_wait_for_a_pending_save(pool: PgPool) {
+    seed_card_topics(&pool, 1).await;
+    let seeded: Uuid = sqlx::query_scalar("SELECT id FROM card_topics")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    // An uncommitted topic of the same name pauses the save at its insert.
+    let mut gate = pool.begin().await.unwrap();
+    sqlx::query("INSERT INTO card_topics(id,name,filter) VALUES(gen_random_uuid(),'Pending','{}')")
+        .execute(&mut *gate)
+        .await
+        .unwrap();
+    let save = tokio::spawn({
+        let app = app.clone();
+        async move {
+            call(
+                app,
+                "POST",
+                "/api/study/card-topics",
+                json!({"name":"pending","filter":{"topics":"cube"}}),
+            )
+            .await
+        }
+    });
+    crate::support::wait_for_lock_waiters(&pool, "%card_topics%", 1).await;
+    let (status, body) = tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        call(
+            app.clone(),
+            "DELETE",
+            &format!("/api/study/card-topics/{seeded}"),
+            Value::Null,
+        ),
+    )
+    .await
+    .expect("deleting a topic must not wait for a pending save");
+    assert_eq!(status, 204, "{body}");
+    gate.rollback().await.unwrap();
+    let (status, body) = save.await.unwrap();
+    assert_eq!(status, 201, "{body}");
+}

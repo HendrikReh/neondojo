@@ -235,8 +235,9 @@ async fn store(
     }
     let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
     // Concurrent requests for the same match must not interleave their rows.
-    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 72))")
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, $2))")
         .bind(candidate.id)
+        .bind(crate::advisory_locks::RECURRING_MISTAKE_MATCH_SEED)
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;

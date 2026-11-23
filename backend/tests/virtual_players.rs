@@ -813,3 +813,103 @@ async fn migration_catalogues_bot_matches_and_keeps_them_in_my_profile(pool: PgP
             .unwrap();
     assert_eq!(version, 1);
 }
+
+async fn virtual_profile(app: &axum::Router, name: &str) -> Uuid {
+    let created = call(
+        app,
+        "POST",
+        "/api/virtual-players",
+        json!({"name":name}),
+        201,
+    )
+    .await;
+    created["id"].as_str().unwrap().parse().unwrap()
+}
+
+fn choose_me(app: &axum::Router, id: Uuid) -> tokio::task::JoinHandle<(u16, Value)> {
+    let app = app.clone();
+    tokio::spawn(async move {
+        crate::support::send(&app, "PUT", "/api/virtual-players/me", json!({"id":id})).await
+    })
+}
+
+async fn lock_virtual_profiles(tx: &mut sqlx::PgConnection, ids: &[Uuid]) {
+    sqlx::query("SELECT id FROM virtual_player_profiles WHERE id=ANY($1) FOR UPDATE")
+        .bind(ids)
+        .execute(tx)
+        .await
+        .unwrap();
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn virtual_me_concurrent_choices_leave_exactly_one_profile(pool: PgPool) {
+    let app = app(&pool);
+    let first = virtual_profile(&app, "First").await;
+    let second = virtual_profile(&app, "Second").await;
+    // Hold both choices at their profile rows, so that both pass their
+    // checks before either writes unless they serialize.
+    let mut gate = pool.begin().await.unwrap();
+    lock_virtual_profiles(&mut gate, &[first, second]).await;
+    let choices = [choose_me(&app, first), choose_me(&app, second)];
+    crate::support::wait_for_lock_waiters(&pool, "%", 2).await;
+    gate.commit().await.unwrap();
+    for choice in choices {
+        let (status, body) = choice.await.unwrap();
+        assert_eq!(status, 200, "{body}");
+    }
+    let chosen: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM virtual_player_profiles WHERE is_me")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(chosen.len(), 1);
+    assert!([first, second].contains(&chosen[0]));
+    let me = call(&app, "GET", "/api/virtual-players/me", Value::Null, 200).await;
+    assert_eq!(me["profile"]["id"], json!(chosen[0]));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn virtual_me_choice_does_not_deadlock_with_a_rename_in_progress(pool: PgPool) {
+    let app = app(&pool);
+    let id = virtual_profile(&app, "Before").await;
+    // A rename between its revision lock and its update.
+    let mut rename = pool.begin().await.unwrap();
+    lock_virtual_profiles(&mut rename, &[id]).await;
+    let choice = choose_me(&app, id);
+    crate::support::wait_for_lock_waiters(&pool, "%", 1).await;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        sqlx::query(
+            "UPDATE virtual_player_profiles SET name='After',version=version+1 WHERE id=$1",
+        )
+        .bind(id)
+        .execute(&mut *rename),
+    )
+    .await
+    .expect("the rename must not wait for the pending choice")
+    .expect("the rename must not deadlock with the pending choice");
+    rename.commit().await.unwrap();
+    let (status, body) = choice.await.unwrap();
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["profile"], json!({"id":id,"name":"After"}));
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn virtual_profile_create_does_not_wait_for_a_pending_me_choice(pool: PgPool) {
+    let app = app(&pool);
+    let id = virtual_profile(&app, "Chosen").await;
+    let mut gate = pool.begin().await.unwrap();
+    lock_virtual_profiles(&mut gate, &[id]).await;
+    let choice = choose_me(&app, id);
+    crate::support::wait_for_lock_waiters(&pool, "%", 1).await;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(3),
+        virtual_profile(&app, "Unrelated"),
+    )
+    .await
+    .expect("creating a profile must not wait for a pending choice of me");
+    gate.commit().await.unwrap();
+    let (status, body) = choice.await.unwrap();
+    assert_eq!(status, 200, "{body}");
+    assert_eq!(body["profile"]["id"], json!(id));
+}
