@@ -1,7 +1,8 @@
 // Disposable NeonDojo stacks for browser tests. Global setup builds the backend
-// once, and each Playwright worker then starts its own PostgreSQL database,
-// backend process, and Vite middleware server. Workers therefore never share
-// persisted data, and spec files can run in parallel.
+// once. Each Playwright worker then starts one Vite middleware server, and every
+// spec file it runs gets a new PostgreSQL database and backend process behind
+// it. Spec files therefore never share persisted data and can run in parallel
+// and in any order.
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
@@ -12,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { createServer, type ViteDevServer } from 'vite';
+import { createServer, type ProxyOptions, type ViteDevServer } from 'vite';
 
 const exec = promisify(execFile);
 export const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -26,9 +27,17 @@ export const stackEnvironment = {
   registry: 'NEONDOJO_E2E_DATABASE_REGISTRY',
 } as const;
 
-export interface Stack {
+export interface SpecStack {
   url: string;
   databaseUrl: string;
+}
+
+export interface Stack {
+  /**
+   * The stack of one spec file. A file other than the last one replaces the
+   * database and backend, so it starts with an empty library.
+   */
+  forSpec(file: string): Promise<SpecStack>;
   stop(): Promise<void>;
 }
 
@@ -186,7 +195,14 @@ function backendLog(worker: number) {
   return file.replace(/(\.[^./]+)?$/, `-${worker}$1`);
 }
 
-export async function startStack(worker: number): Promise<Stack> {
+interface Backend {
+  url: string;
+  databaseUrl: string;
+  stop(): Promise<void>;
+}
+
+/** Starts a backend on a new, empty database and removes both again. */
+async function startBackend(worker: number): Promise<Backend> {
   const executable = process.env[stackEnvironment.backend];
   const registry = process.env[stackEnvironment.registry];
   if (!executable || !registry)
@@ -196,34 +212,17 @@ export async function startStack(worker: number): Promise<Stack> {
   const database = new URL(maintenance);
   database.pathname = `/${name}`;
   database.searchParams.delete('dbname');
-  const temporary = await mkdtemp(join(tmpdir(), 'neondojo-e2e-'));
   let created = false;
   let backend: ChildProcess | undefined;
-  let frontend: ViteDevServer | undefined;
-  let listener: Server | undefined;
   const stop = async () => {
     try {
-      try {
-        await frontend?.close();
-      } finally {
-        if (listener?.listening) {
-          const closed = once(listener, 'close');
-          listener.close();
-          listener.closeAllConnections();
-          await closed;
-        }
-      }
+      if (backend) await stopBackend(backend);
     } finally {
-      try {
-        if (backend) await stopBackend(backend);
-        if (created)
-          await sql(
-            maintenance,
-            `DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`,
-          );
-      } finally {
-        await rm(temporary, { recursive: true, force: true });
-      }
+      if (created)
+        await sql(
+          maintenance,
+          `DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`,
+        );
     }
   };
 
@@ -249,51 +248,120 @@ export async function startStack(worker: number): Promise<Stack> {
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
-    const backendUrl = await listeningUrl(backend, backendLog(worker));
-    const http = createHttpServer();
-    listener = http;
-    frontend = await createServer({
-      root: web,
-      cacheDir: join(temporary, 'vite'),
-      logLevel: 'warn',
-      server: {
-        middlewareMode: true,
-        // Vite injects its dev client in middleware mode. Serve its WebSocket
-        // on the same loopback listener as the browser tests.
-        hmr: { server: http },
-        // Vite discards null options when merging the project's config.
-        watch: { ignored: () => true },
-        proxy: { '/api': backendUrl },
-      },
-    });
-    listener.on('request', frontend.middlewares);
-    const listening = once(listener, 'listening');
-    listener.listen(0, '127.0.0.1');
-    await listening;
-    const address = listener.address();
-    if (!address || typeof address === 'string')
-      throw new Error('Vite did not publish a local test URL.');
-    const url = `http://127.0.0.1:${address.port}/`;
-
-    // Verify the proxy reaches this database before allowing any test writes.
-    const probe = randomUUID();
-    await sql(
-      database,
-      `INSERT INTO databases (id, name) VALUES ('${probe}', 'Playwright connection check')`,
-    );
-    const response = await fetch(new URL('/api/databases', url), {
-      signal: AbortSignal.timeout(10_000),
-    });
-    const databases = response.ok ? await response.json() : null;
-    if (
-      !Array.isArray(databases) ||
-      !databases.some((entry) => entry.id === probe)
-    )
-      throw new Error('Vite API requests did not reach the test database.');
-    await sql(database, `DELETE FROM databases WHERE id = '${probe}'`);
+    const url = await listeningUrl(backend, backendLog(worker));
     return { url, databaseUrl: database.href, stop };
   } catch (error) {
     await stop();
     throw error;
   }
+}
+
+/** Verifies the proxy reaches this database before allowing any test writes. */
+async function verifyProxy(url: string, databaseUrl: string) {
+  const database = new URL(databaseUrl);
+  const probe = randomUUID();
+  await sql(
+    database,
+    `INSERT INTO databases (id, name) VALUES ('${probe}', 'Playwright connection check')`,
+  );
+  const response = await fetch(new URL('/api/databases', url), {
+    signal: AbortSignal.timeout(10_000),
+  });
+  const databases = response.ok ? await response.json() : null;
+  if (
+    !Array.isArray(databases) ||
+    !databases.some((entry) => entry.id === probe)
+  )
+    throw new Error('Vite API requests did not reach the test database.');
+  await sql(database, `DELETE FROM databases WHERE id = '${probe}'`);
+}
+
+export async function startStack(worker: number): Promise<Stack> {
+  const temporary = await mkdtemp(join(tmpdir(), 'neondojo-e2e-'));
+  let backend: Backend | undefined;
+  let frontend: ViteDevServer | undefined;
+  let listener: Server | undefined;
+  let proxy: ProxyOptions | undefined;
+  let current: { file: string; spec: SpecStack } | undefined;
+
+  const stopBackendAndDatabase = async () => {
+    const stopping = backend;
+    current = undefined;
+    backend = undefined;
+    await stopping?.stop();
+  };
+
+  // Vite stays up for the whole worker and keeps its transformed modules. Only
+  // the backend behind its proxy changes between spec files.
+  async function serve(target: string) {
+    if (proxy && listener) {
+      proxy.target = target;
+    } else {
+      const http = createHttpServer();
+      listener = http;
+      frontend = await createServer({
+        root: web,
+        cacheDir: join(temporary, 'vite'),
+        logLevel: 'warn',
+        server: {
+          middlewareMode: true,
+          // Vite injects its dev client in middleware mode. Serve its WebSocket
+          // on the same loopback listener as the browser tests.
+          hmr: { server: http },
+          // Vite discards null options when merging the project's config.
+          watch: { ignored: () => true },
+          proxy: {
+            '/api': {
+              target,
+              changeOrigin: true,
+              // The proxy reads these options again for every request.
+              configure: (_, options) => {
+                proxy = options;
+              },
+            },
+          },
+        },
+      });
+      listener.on('request', frontend.middlewares);
+      const listening = once(listener, 'listening');
+      listener.listen(0, '127.0.0.1');
+      await listening;
+    }
+    const address = listener.address();
+    if (!address || typeof address === 'string')
+      throw new Error('Vite did not publish a local test URL.');
+    return `http://127.0.0.1:${address.port}/`;
+  }
+
+  return {
+    async forSpec(file) {
+      if (current?.file === file) return current.spec;
+      await stopBackendAndDatabase();
+      backend = await startBackend(worker);
+      const url = await serve(backend.url);
+      await verifyProxy(url, backend.databaseUrl);
+      current = { file, spec: { url, databaseUrl: backend.databaseUrl } };
+      return current.spec;
+    },
+    async stop() {
+      try {
+        try {
+          await frontend?.close();
+        } finally {
+          if (listener?.listening) {
+            const closed = once(listener, 'close');
+            listener.close();
+            listener.closeAllConnections();
+            await closed;
+          }
+        }
+      } finally {
+        try {
+          await stopBackendAndDatabase();
+        } finally {
+          await rm(temporary, { recursive: true, force: true });
+        }
+      }
+    },
+  };
 }
