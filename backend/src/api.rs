@@ -15,7 +15,7 @@ use axum::{
         IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
     },
-    routing::{get, post},
+    routing::{any, get, post},
 };
 use futures_util::Stream;
 use serde::{Deserialize, Serialize};
@@ -198,12 +198,17 @@ pub fn router(state: AppState) -> Router {
             "/api/database-backup/target-counts",
             get(crate::database_backup::target_counts),
         )
-        .fallback(|| async { ApiError::missing() })
+        // Not only the fallback: the web client's fallback replaces it.
+        .route("/api", any(not_found))
+        .route("/api/", any(not_found))
+        .route("/api/{*path}", any(not_found))
+        .fallback(not_found)
+        .method_not_allowed_fallback(method_not_allowed)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             database_access,
         ))
-        .merge(crate::database_backup::routes())
+        .merge(crate::database_backup::routes().method_not_allowed_fallback(method_not_allowed))
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024))
         .layer(
             CorsLayer::new()
@@ -229,6 +234,14 @@ pub fn router(state: AppState) -> Router {
         .layer(middleware::from_fn(crate::local_origin::guard))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+async fn not_found() -> ApiError {
+    ApiError::missing()
+}
+
+async fn method_not_allowed() -> ApiError {
+    ApiError(StatusCode::METHOD_NOT_ALLOWED, "Method not allowed".into())
 }
 
 async fn database_access(
