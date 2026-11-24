@@ -383,8 +383,8 @@ async function mountEstimateHarness(page: Page) {
       await import('/src/settings/configuration/ConfigurationProvider.tsx');
     const { defaultConfiguration } =
       await import('/src/settings/configuration/configuration-model.ts');
-    const { default: MatchPanel } =
-      await import('/src/workspaces/analysis/match/MatchAnalysisPanel.tsx');
+    const { default: MatchHeader } =
+      await import('/src/workspaces/analysis/match/MatchAnalysisHeader.tsx');
     const { catalogFixture } =
       await import('/src/workspaces/analysis/analysis-catalog-test-fixtures.ts');
     const config = structuredClone(defaultConfiguration);
@@ -427,9 +427,9 @@ async function mountEstimateHarness(page: Page) {
     );
     const root = document.createElement('div');
     document.body.append(root);
-    function ConfirmedMatch(props: Parameters<typeof MatchPanel>[0]) {
+    function ConfirmedMatch(props: Parameters<typeof MatchHeader>[0]) {
       const confirmed = useConfirmedConfiguration();
-      return react.createElement(MatchPanel, {
+      return react.createElement(MatchHeader, {
         ...props,
         defaultPlies: confirmed?.analysis.plies ?? props.defaultPlies,
       });
@@ -453,6 +453,7 @@ async function mountEstimateHarness(page: Page) {
           },
           catalog: catalogFixture(),
           gameNo: 1,
+          defaultEngine: 'gnubg',
           defaultPlies: 3,
           configured: true,
           analysisInstallationKey: installationKey,
@@ -489,8 +490,10 @@ async function mountEstimateHarness(page: Page) {
     }
     createRoot(root).render(react.createElement(Harness));
   });
+  await openMatchAnalysisOptions(page);
 }
 
+// The harness buttons act without a pointer, which would close the options.
 test('estimates use confirmed settings while an edit is still pending', async ({
   page,
 }) => {
@@ -505,12 +508,12 @@ test('estimates use confirmed settings while an edit is still pending', async ({
   await expect(estimate(page)).toContainText('approx. 40s');
   await page
     .getByRole('button', { name: 'Unsaved engine edit', exact: true })
-    .click();
+    .dispatchEvent('click');
   await expect(estimate(page)).toContainText('approx. 40s');
   expect(calls).toBe(1);
   await page
     .getByRole('button', { name: 'Confirm engine edit', exact: true })
-    .click();
+    .dispatchEvent('click');
   await expect(estimate(page)).toContainText('approx. 1m 20s');
   expect(calls).toBe(2);
 });
@@ -529,7 +532,7 @@ test('invalidates when installation changes while depth stays the same', async (
   await expect(estimate(page)).toContainText('approx. 40s');
   await page
     .getByRole('button', { name: 'Replace engine installation', exact: true })
-    .click();
+    .dispatchEvent('click');
   await expect(estimate(page)).toContainText('approx. 2m');
   expect(calls).toBe(2);
 });
@@ -624,7 +627,7 @@ test('refreshes when mutable match gains moves at the same match, game and depth
   await expect(estimate(page)).toContainText('1,000 checker moves');
   await page
     .getByRole('button', { name: 'Append checker moves', exact: true })
-    .click();
+    .dispatchEvent('click');
   await expect(estimate(page)).toContainText('1,002 checker moves');
   await expect(estimate(page)).toContainText('approx. 1m 20s');
   expect(calls).toBe(2);
