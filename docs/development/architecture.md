@@ -31,7 +31,7 @@ Stored snapshots, settings and HTTP contracts keep the engine ID strings `gnubg`
 | Path | Contents |
 | --- | --- |
 | `main.tsx`, `generated-api.d.ts`, `generated-themes.json`, `assets/` | Entry point, generated API types and theme catalogue, bundled sounds |
-| `app/` | `App.tsx` with the workspace order (`views`), header, global shortcuts and background jobs |
+| `app/` | `App.tsx` with the workspace order (`views`) and header; hooks for importing matches (`useMatchImporter`), restoring the last match (`useSelectionRestore`), installation settings, global shortcuts and background jobs |
 | `styles/` | Global stylesheets, the cascade order in `stylesheets.ts` (imported first by `main.tsx`) and the palette tokens linked from `index.html` |
 | `settings/` | Settings dialog and its sections; `configuration/`, `profiles/` and `appearance/` |
 | `shared/` | `http/` (request helpers), `jobs/`, `i18n/`, `format/`, `engine/`, `ui/` (buttons, dialogs, tooltips, search tables), `hooks/`, `board/` (board, checker play state, themes, sounds) and `review/` (decision details shared by Analysis, Play and Study) |
