@@ -139,10 +139,7 @@ pub(crate) async fn initialize(
     input: InitializeConfiguration,
 ) -> Result<ConfigurationState> {
     let mut tx = begin(state_ref).await?;
-    if sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM configuration_state)")
-        .fetch_one(&mut *tx)
-        .await?
-    {
+    if initialized(&mut tx).await? {
         let result = state(&mut tx).await?;
         tx.commit().await?;
         return Ok(result);
@@ -158,8 +155,8 @@ pub(crate) async fn initialize(
     revision(input.expected_settings_version, app.version)?;
     revision(input.expected_book_version, book.version)?;
     let mut config = input.configuration;
-    apply_app(&mut config, &app);
-    apply_book(&mut config, &book);
+    ProfileSettings::from(&app).apply(&mut config);
+    config.opening_book = ConfigurationBook::from(&book);
     let mut warnings = vec![];
     if !config.library.database_id.is_empty()
         && !exists(&mut tx, "databases", &config.library.database_id).await?
@@ -199,61 +196,130 @@ async fn exists(tx: &mut Transaction<'_, Postgres>, table: &str, id: &str) -> Re
             .await?,
     )
 }
-pub(crate) fn apply_app(config: &mut ProfileConfiguration, app: &crate::settings::AppSettings) {
-    config.general.player_name = app.player_name.clone();
-    // Saved settings hold verified engine IDs; an unknown one reads as GNUbg.
-    let engine = |id: &str| {
-        ConfigurationEngine::from(
-            crate::engines::EngineId::parse(id).unwrap_or(crate::engines::EngineId::Gnubg),
-        )
-    };
-    config.analysis.engine = engine(&app.analysis_engine);
-    config.play.engine = engine(&app.play_engine);
-    config.analysis.plies = app.analysis_plies;
-    config.play.plies = app.play_plies;
-    config.play.top_two = app.play_top_two;
-    config.play.default_mode = app.default_play_mode;
-    config.play.tutor_threshold = app.tutor_threshold;
-    config.play.training_auto_analysis = app.training_auto_analysis;
-    config.appearance.bearoff_direction = if app.bearoff_direction == "left" {
-        ConfigurationDirection::Left
-    } else {
-        ConfigurationDirection::Right
-    };
+/// The profile settings that `app_settings` repeats for engine and job code.
+/// The other columns of that table belong to the installation.
+struct ProfileSettings {
+    player_name: String,
+    analysis_engine: ConfigurationEngine,
+    analysis_plies: i32,
+    play_engine: ConfigurationEngine,
+    play_plies: i32,
+    play_top_two: bool,
+    bearoff_direction: ConfigurationDirection,
+    default_play_mode: crate::play::PlayMode,
+    tutor_threshold: f64,
+    training_auto_analysis: bool,
 }
-pub(crate) fn apply_book(
-    config: &mut ProfileConfiguration,
-    book: &crate::opening_book::BookConfig,
-) {
-    config.opening_book = ConfigurationBook {
-        provider: match book.provider.as_str() {
-            "off" => ConfigurationBookProvider::Off,
-            "xg" => ConfigurationBookProvider::Xg,
-            "backgammondb" => ConfigurationBookProvider::Backgammondb,
-            _ => ConfigurationBookProvider::Automatic,
-        },
-        path: book.path.clone(),
-        xg_path: book.xg_path.clone(),
-    };
+impl From<&crate::settings::AppSettings> for ProfileSettings {
+    fn from(app: &crate::settings::AppSettings) -> Self {
+        // Saved settings hold verified engine IDs; an unknown one reads as GNUbg.
+        let engine = |id: &str| {
+            ConfigurationEngine::from(
+                crate::engines::EngineId::parse(id).unwrap_or(crate::engines::EngineId::Gnubg),
+            )
+        };
+        Self {
+            player_name: app.player_name.clone(),
+            analysis_engine: engine(&app.analysis_engine),
+            analysis_plies: app.analysis_plies,
+            play_engine: engine(&app.play_engine),
+            play_plies: app.play_plies,
+            play_top_two: app.play_top_two,
+            bearoff_direction: if app.bearoff_direction == "left" {
+                ConfigurationDirection::Left
+            } else {
+                ConfigurationDirection::Right
+            },
+            default_play_mode: app.default_play_mode,
+            tutor_threshold: app.tutor_threshold,
+            training_auto_analysis: app.training_auto_analysis,
+        }
+    }
 }
-pub(crate) async fn projections(
-    tx: &mut Transaction<'_, Postgres>,
-    config: &ProfileConfiguration,
-) -> Result<()> {
-    let a = &config.analysis;
-    let p = &config.play;
-    sqlx::query("UPDATE app_settings SET version=version+1,player_name=$1,analysis_engine=$2,analysis_plies=$3,play_engine=$4,play_plies=$5,bearoff_direction=$6,default_play_mode=$7,tutor_threshold=$8,training_auto_analysis=$9,play_top_two=$10 WHERE singleton=true AND (player_name,analysis_engine,analysis_plies,play_engine,play_plies,bearoff_direction,default_play_mode,tutor_threshold,training_auto_analysis,play_top_two) IS DISTINCT FROM ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
-        .bind(&config.general.player_name).bind(enum_string(&a.engine)).bind(a.plies).bind(enum_string(&p.engine)).bind(p.plies).bind(enum_string(&config.appearance.bearoff_direction)).bind(p.default_mode).bind(p.tutor_threshold).bind(p.training_auto_analysis).bind(p.top_two).execute(&mut **tx).await?;
-    let b = &config.opening_book;
-    sqlx::query("UPDATE opening_book_settings SET version=version+1,provider=$1,path=$2,xg_path=$3 WHERE singleton=true AND (provider,path,xg_path) IS DISTINCT FROM ($1,$2,$3)").bind(enum_string(&b.provider)).bind(&b.path).bind(&b.xg_path).execute(&mut **tx).await?;
-    Ok(())
+impl From<&ProfileConfiguration> for ProfileSettings {
+    fn from(config: &ProfileConfiguration) -> Self {
+        Self {
+            player_name: config.general.player_name.clone(),
+            analysis_engine: config.analysis.engine.clone(),
+            analysis_plies: config.analysis.plies,
+            play_engine: config.play.engine.clone(),
+            play_plies: config.play.plies,
+            play_top_two: config.play.top_two,
+            bearoff_direction: config.appearance.bearoff_direction.clone(),
+            default_play_mode: config.play.default_mode,
+            tutor_threshold: config.play.tutor_threshold,
+            training_auto_analysis: config.play.training_auto_analysis,
+        }
+    }
 }
+impl ProfileSettings {
+    fn apply(self, config: &mut ProfileConfiguration) {
+        config.general.player_name = self.player_name;
+        config.analysis.engine = self.analysis_engine;
+        config.analysis.plies = self.analysis_plies;
+        config.play.engine = self.play_engine;
+        config.play.plies = self.play_plies;
+        config.play.top_two = self.play_top_two;
+        config.play.default_mode = self.default_play_mode;
+        config.play.tutor_threshold = self.tutor_threshold;
+        config.play.training_auto_analysis = self.training_auto_analysis;
+        config.appearance.bearoff_direction = self.bearoff_direction;
+    }
+
+    /// The only statement that changes profile settings in `app_settings`.
+    async fn project(&self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+        sqlx::query("UPDATE app_settings SET version=version+1,player_name=$1,analysis_engine=$2,analysis_plies=$3,play_engine=$4,play_plies=$5,bearoff_direction=$6,default_play_mode=$7,tutor_threshold=$8,training_auto_analysis=$9,play_top_two=$10 WHERE singleton=true AND (player_name,analysis_engine,analysis_plies,play_engine,play_plies,bearoff_direction,default_play_mode,tutor_threshold,training_auto_analysis,play_top_two) IS DISTINCT FROM ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)")
+            .bind(&self.player_name)
+            .bind(enum_string(&self.analysis_engine))
+            .bind(self.analysis_plies)
+            .bind(enum_string(&self.play_engine))
+            .bind(self.play_plies)
+            .bind(enum_string(&self.bearoff_direction))
+            .bind(self.default_play_mode)
+            .bind(self.tutor_threshold)
+            .bind(self.training_auto_analysis)
+            .bind(self.play_top_two)
+            .execute(&mut **tx)
+            .await?;
+        Ok(())
+    }
+}
+impl From<&crate::opening_book::BookConfig> for ConfigurationBook {
+    fn from(book: &crate::opening_book::BookConfig) -> Self {
+        Self {
+            provider: match book.provider.as_str() {
+                "off" => ConfigurationBookProvider::Off,
+                "xg" => ConfigurationBookProvider::Xg,
+                "backgammondb" => ConfigurationBookProvider::Backgammondb,
+                _ => ConfigurationBookProvider::Automatic,
+            },
+            path: book.path.clone(),
+            xg_path: book.xg_path.clone(),
+        }
+    }
+}
+impl ConfigurationBook {
+    /// The only statement that changes a saved book choice. Only the defaults of
+    /// a new or older installation are filled in elsewhere, by `opening_book::load`.
+    async fn project(&self, tx: &mut Transaction<'_, Postgres>) -> Result<()> {
+        sqlx::query("UPDATE opening_book_settings SET version=version+1,provider=$1,path=$2,xg_path=$3 WHERE singleton=true AND (provider,path,xg_path) IS DISTINCT FROM ($1,$2,$3)")
+            .bind(enum_string(&self.provider))
+            .bind(&self.path)
+            .bind(&self.xg_path)
+            .execute(&mut **tx)
+            .await?;
+        Ok(())
+    }
+}
+/// The one way to change the current configuration. The profile settings that
+/// engine, job and book code read from their own tables follow it.
 pub(crate) async fn write_state(
     tx: &mut Transaction<'_, Postgres>,
     config: &ProfileConfiguration,
     active: Uuid,
 ) -> Result<()> {
-    projections(tx, config).await?;
+    ProfileSettings::from(config).project(tx).await?;
+    config.opening_book.project(tx).await?;
     sqlx::query("UPDATE configuration_state SET revision=revision+1,current_configuration=$1,active_profile_id=$2,updated_at=now() WHERE singleton=true").bind(value(config)).bind(active).execute(&mut **tx).await?;
     Ok(())
 }
@@ -315,34 +381,225 @@ pub(crate) async fn restore(
     Ok(result)
 }
 
-/// Called by legacy setters in their existing transaction after projection update.
-pub(crate) async fn legacy_app(
+async fn initialized(tx: &mut Transaction<'_, Postgres>) -> Result<bool> {
+    Ok(
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM configuration_state)")
+            .fetch_one(&mut **tx)
+            .await?,
+    )
+}
+/// Saves the profile settings of `PUT /api/settings`. Until the configuration
+/// is initialized, which imports them, the settings table is their only place.
+pub(crate) async fn save_app(
     tx: &mut Transaction<'_, Postgres>,
     app: &crate::settings::AppSettings,
 ) -> Result<()> {
-    if !sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM configuration_state)")
-        .fetch_one(&mut **tx)
-        .await?
-    {
-        return Ok(());
+    let settings = ProfileSettings::from(app);
+    if !initialized(tx).await? {
+        return settings.project(tx).await;
     }
-    let mut state = state(tx).await?;
-    apply_app(&mut state.current_configuration, app);
-    sqlx::query("UPDATE configuration_state SET revision=revision+1,current_configuration=$1,updated_at=now() WHERE singleton=true").bind(value(&state.current_configuration)).execute(&mut **tx).await?;
-    Ok(())
+    let state = state(tx).await?;
+    let mut config = state.current_configuration;
+    settings.apply(&mut config);
+    write_state(tx, &config, state.active_profile.id).await
 }
-pub(crate) async fn legacy_book(
+/// Saves the book choice of `PUT /api/opening-book`, like [`save_app`].
+pub(crate) async fn save_book(
     tx: &mut Transaction<'_, Postgres>,
     book: &crate::opening_book::BookConfig,
 ) -> Result<()> {
-    if !sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM configuration_state)")
-        .fetch_one(&mut **tx)
-        .await?
-    {
-        return Ok(());
+    let book = ConfigurationBook::from(book);
+    if !initialized(tx).await? {
+        return book.project(tx).await;
     }
-    let mut state = state(tx).await?;
-    apply_book(&mut state.current_configuration, book);
-    sqlx::query("UPDATE configuration_state SET revision=revision+1,current_configuration=$1,updated_at=now() WHERE singleton=true").bind(value(&state.current_configuration)).execute(&mut **tx).await?;
-    Ok(())
+    let state = state(tx).await?;
+    let mut config = state.current_configuration;
+    config.opening_book = book;
+    write_state(tx, &config, state.active_profile.id).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{engine::Engine, opening_book::BookConfig, settings::AppSettings};
+
+    fn base() -> ProfileConfiguration {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../tests/fixtures/configuration-normalization.json"
+        ))
+        .unwrap();
+        normalize(serde_json::from_value(fixture["base"].clone()).unwrap()).unwrap()
+    }
+
+    /// Every profile setting differs from `base` and from the table defaults.
+    fn changed() -> ProfileConfiguration {
+        let mut config = base();
+        config.general.player_name = "Changed".into();
+        config.analysis.engine = ConfigurationEngine::OpenSage;
+        config.analysis.plies = 2;
+        config.play.engine = ConfigurationEngine::OpenSage;
+        config.play.plies = 2;
+        config.play.top_two = true;
+        config.play.default_mode = crate::play::PlayMode::Tutor;
+        config.play.tutor_threshold = 0.125;
+        config.play.training_auto_analysis = false;
+        config.appearance.bearoff_direction = ConfigurationDirection::Left;
+        config.opening_book = ConfigurationBook {
+            provider: ConfigurationBookProvider::Xg,
+            path: "/changed/book.sqlite".into(),
+            xg_path: "/changed/XG.ob".into(),
+        };
+        config
+    }
+
+    async fn app(pool: &PgPool) -> AppSettings {
+        sqlx::query_as("SELECT * FROM app_settings")
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    async fn book(pool: &PgPool) -> BookConfig {
+        sqlx::query_as("SELECT version,provider,path,xg_path FROM opening_book_settings")
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    /// The tables must repeat the profile settings of the configuration.
+    async fn assert_projected(pool: &PgPool, expected: &ProfileConfiguration) {
+        let mut projected = base();
+        ProfileSettings::from(&app(pool).await).apply(&mut projected);
+        projected.opening_book = ConfigurationBook::from(&book(pool).await);
+        assert_eq!(value(&projected), value(expected));
+        let mut tx = pool.begin().await.unwrap();
+        if initialized(&mut tx).await.unwrap() {
+            let state = state(&mut tx).await.unwrap();
+            assert_eq!(value(&state.current_configuration), value(expected));
+        }
+    }
+
+    async fn rows(pool: &PgPool) -> AppState {
+        let state = AppState::new(pool.clone(), Engine::new("/missing/gnubg".into()));
+        begin(&state).await.unwrap().commit().await.unwrap();
+        state
+    }
+
+    async fn initialize_base(pool: &PgPool) {
+        let state = rows(pool).await;
+        let mut tx = pool.begin().await.unwrap();
+        let config = base();
+        ProfileSettings::from(&config)
+            .project(&mut tx)
+            .await
+            .unwrap();
+        config.opening_book.project(&mut tx).await.unwrap();
+        tx.commit().await.unwrap();
+        initialize(
+            &state,
+            InitializeConfiguration {
+                expected_settings_version: app(pool).await.version,
+                expected_book_version: book(pool).await.version,
+                configuration: config,
+            },
+        )
+        .await
+        .unwrap();
+        assert_projected(pool, &base()).await;
+    }
+
+    fn settings(current: AppSettings, config: &ProfileConfiguration) -> AppSettings {
+        AppSettings {
+            player_name: config.general.player_name.clone(),
+            analysis_engine: enum_string(&config.analysis.engine),
+            analysis_plies: config.analysis.plies,
+            play_engine: enum_string(&config.play.engine),
+            play_plies: config.play.plies,
+            play_top_two: config.play.top_two,
+            bearoff_direction: enum_string(&config.appearance.bearoff_direction),
+            default_play_mode: config.play.default_mode,
+            tutor_threshold: config.play.tutor_threshold,
+            training_auto_analysis: config.play.training_auto_analysis,
+            ..current
+        }
+    }
+
+    fn book_settings(config: &ProfileConfiguration) -> BookConfig {
+        BookConfig {
+            version: 0,
+            provider: enum_string(&config.opening_book.provider),
+            path: config.opening_book.path.clone(),
+            xg_path: config.opening_book.xg_path.clone(),
+        }
+    }
+
+    async fn save_all(pool: &PgPool, config: &ProfileConfiguration) {
+        let app = settings(app(pool).await, config);
+        let mut tx = pool.begin().await.unwrap();
+        save_app(&mut tx, &app).await.unwrap();
+        save_book(&mut tx, &book_settings(config)).await.unwrap();
+        tx.commit().await.unwrap();
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn every_write_changes_the_configuration_and_its_projection(pool: PgPool) {
+        initialize_base(&pool).await;
+        for (config, through_settings) in [
+            (changed(), false),
+            (base(), true),
+            (changed(), true),
+            (base(), false),
+        ] {
+            let revision = read(&pool).await.unwrap().revision;
+            if through_settings {
+                save_all(&pool, &config).await;
+            } else {
+                let mut tx = pool.begin().await.unwrap();
+                let active = state(&mut tx).await.unwrap().active_profile.id;
+                write_state(&mut tx, &config, active).await.unwrap();
+                tx.commit().await.unwrap();
+            }
+            assert_projected(&pool, &config).await;
+            assert!(read(&pool).await.unwrap().revision > revision);
+        }
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn settings_saved_before_initialization_are_imported(pool: PgPool) {
+        let state = rows(&pool).await;
+        save_all(&pool, &changed()).await;
+        assert_projected(&pool, &changed()).await;
+        let imported = initialize(
+            &state,
+            InitializeConfiguration {
+                expected_settings_version: app(&pool).await.version,
+                expected_book_version: book(&pool).await.version,
+                configuration: base(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            value(&imported.current_configuration),
+            value(&changed()),
+            "the tables are the source until the configuration exists"
+        );
+        assert!(!imported.dirty);
+    }
+
+    /// A changed table value cannot outlive the next write.
+    #[sqlx::test(migrations = "./migrations")]
+    async fn a_write_repairs_a_projection_that_drifted(pool: PgPool) {
+        initialize_base(&pool).await;
+        sqlx::query("UPDATE app_settings SET player_name='Drifted',play_plies=3")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let mut config = base();
+        config.opening_book.path = "/another/book.sqlite".into();
+        let mut tx = pool.begin().await.unwrap();
+        save_book(&mut tx, &book_settings(&config)).await.unwrap();
+        tx.commit().await.unwrap();
+        assert_projected(&pool, &config).await;
+    }
 }

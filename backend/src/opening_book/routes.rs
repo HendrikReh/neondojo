@@ -59,15 +59,35 @@ pub(super) async fn put_settings(
     crate::configuration::store::lock(&mut tx)
         .await
         .map_err(anyhow::Error::from)?;
-    let saved:Option<BookConfig>=sqlx::query_as("UPDATE opening_book_settings SET version=version+1,provider=$2,path=$3,xg_path=coalesce($4,xg_path) WHERE singleton=true AND version=$1 RETURNING version,provider,path,xg_path")
-        .bind(config.version).bind(config.provider).bind(config.path).bind(config.xg_path).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
-    let config = saved.ok_or_else(|| {
-        ApiError(
-            StatusCode::CONFLICT,
-            "Opening book settings changed; reload before saving".into(),
-        )
-    })?;
-    crate::configuration::store::legacy_book(&mut tx, &config).await?;
+    let latest: Option<BookConfig> = sqlx::query_as(
+        "SELECT version,provider,path,xg_path FROM opening_book_settings WHERE singleton=true FOR UPDATE",
+    )
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let latest = latest
+        .filter(|latest| latest.version == config.version)
+        .ok_or_else(|| {
+            ApiError(
+                StatusCode::CONFLICT,
+                "Opening book settings changed; reload before saving".into(),
+            )
+        })?;
+    let config = BookConfig {
+        version: config.version,
+        provider: config.provider,
+        path: config.path,
+        xg_path: config.xg_path.unwrap_or(latest.xg_path),
+    };
+    crate::configuration::store::save_book(&mut tx, &config).await?;
+    // One save is one revision, whether or not it changed a value.
+    let config: BookConfig = sqlx::query_as(
+        "UPDATE opening_book_settings SET version=$1+1 WHERE singleton=true RETURNING version,provider,path,xg_path",
+    )
+    .bind(config.version)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     let status = status(&config).await;
     let xg_status = crate::xg_book::status(&config.xg_path).await;

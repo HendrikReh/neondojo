@@ -186,9 +186,19 @@ async fn initialization_is_concurrent_and_warns_about_missing_legacy_references(
 async fn legacy_settings_and_book_writes_update_current_only(pool: PgPool) {
     let (app, initial) = profile_support::initialized(&pool, true).await;
     let (_, mut settings) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    let version = settings["version"].as_i64().unwrap();
     settings["player_name"] = json!("Legacy edit");
-    let (code, saved) = call(app.clone(), "PUT", "/api/settings", settings).await;
+    settings["parallel_analysis_jobs"] = json!(2);
+    let (code, saved) = call(app.clone(), "PUT", "/api/settings", settings.clone()).await;
     assert_eq!(code, 200, "{saved}");
+    // One save is one revision, although it writes two kinds of settings.
+    settings["version"] = json!(version + 1);
+    assert_eq!(saved, settings);
+    let (code, unchanged) = call(app.clone(), "PUT", "/api/settings", settings.clone()).await;
+    assert_eq!(code, 200, "{unchanged}");
+    assert_eq!(unchanged["version"], version + 2);
+    let (code, _) = call(app.clone(), "PUT", "/api/settings", settings).await;
+    assert_eq!(code, 409);
     let (_, mut book) = call(app.clone(), "GET", "/api/opening-book", Value::Null).await;
     book["config"]["path"] = json!("/another/local/book.sqlite");
     let (code, saved) = call(
