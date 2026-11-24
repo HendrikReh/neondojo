@@ -12,7 +12,7 @@ These rules extend the root [AGENTS.md](../AGENTS.md) for Rust, SQLx, PostgreSQL
 
 ## Integration tests (`backend/tests/`)
 
-- `backend/Cargo.toml` sets `autotests = false` and links all integration tests into one binary (`integration`) via [backend/tests/integration.rs](tests/integration.rs). When adding a new test file under `backend/tests/`, register it with a `mod` line in `integration.rs`; the test `every_test_file_is_a_module` fails until you do.
+- `backend/Cargo.toml` sets `autotests = false` and links all integration tests into one binary (`integration`) via [backend/tests/integration.rs](tests/integration.rs). When adding a new test file under `backend/tests/`, register it with a `mod` line in `integration.rs`; the test `every_test_file_is_a_module` fails until you do. A large module is a directory whose `mod.rs` holds the shared helpers and the `mod` lines of its topics, like [backend/tests/play/](tests/play/mod.rs).
 - Filter a single test module with:
 
   ```sh

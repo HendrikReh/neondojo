@@ -35,8 +35,14 @@ async fn insert(pool: &PgPool, state: &Value, index: i32) {
     sqlx::query("INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id,created_at,updated_at) VALUES($1,$2,'/unavailable','invalid sgf deliberately','saved', '2026-01-01'::timestamptz + $3 * interval '1 second','2026-01-02'::timestamptz + $3 * interval '1 second')")
         .bind(state["id"].as_str().unwrap().parse::<Uuid>().unwrap()).bind(state).bind(index).execute(pool).await.unwrap();
 }
+fn state(pool: PgPool) -> AppState {
+    AppState::new(pool, Engine::new("/unavailable".into()))
+}
 fn app(pool: PgPool) -> axum::Router {
-    api::router(AppState::new(pool, Engine::new("/unavailable".into())))
+    api::router(state(pool))
+}
+fn app_with_openai_key(pool: PgPool, key: &str) -> axum::Router {
+    api::router(state(pool).with_openai_key(key))
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -355,9 +361,10 @@ async fn money_report_groups_page_complete_sessions_with_authoritative_totals(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL and a dummy OPENAI_API_KEY; no provider call"]
 async fn assessment_start_is_versioned_deduplicated_and_language_scoped(pool: PgPool) {
-    let router = app(pool.clone());
+    // No assessment worker runs here, so nothing calls the provider.
+    let router = app_with_openai_key(pool.clone(), "dummy-key");
+    let unconfigured = app_with_openai_key(pool.clone(), "");
     let id = Uuid::new_v4();
     let mut state = snapshot(id);
     state["review"]["games"] = json!([{
@@ -372,13 +379,18 @@ async fn assessment_start_is_versioned_deduplicated_and_language_scoped(pool: Pg
     }]);
     insert(&pool, &state, 0).await;
     let uri = format!("/api/study/reports/{id}/assessment?language=de");
-    let post = |version: i64| {
+    let post_to = |router: &axum::Router, version: i64| {
         let request = Request::post(&uri)
             .header("content-type", "application/json")
             .body(Body::from(json!({"report_version":version}).to_string()))
             .unwrap();
         router.clone().oneshot(request)
     };
+    let post = |version: i64| post_to(&router, version);
+    let (status, missing) = get(&unconfigured, &uri).await;
+    assert_eq!(status, 200);
+    assert_eq!(missing["availability"], "not_configured");
+    assert_eq!(post_to(&unconfigured, 3).await.unwrap().status(), 503);
     let (status, empty) = get(&router, &uri).await;
     assert_eq!(status, 200);
     assert_eq!(empty["availability"], "ready");

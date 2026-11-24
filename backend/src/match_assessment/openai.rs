@@ -10,24 +10,56 @@ const DEFAULT_MODEL: &str = "gpt-6.1-terra";
 const MAX_RESPONSE_BYTES: usize = 256 * 1024;
 const HTTP_STATUS_BYTES: usize = 4;
 
-fn key() -> Option<String> {
-    std::env::var("OPENAI_API_KEY").ok().filter(|value| {
-        !value.is_empty()
-            && value
-                .bytes()
-                .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
-    })
+/// The optional AI provider, read from the environment when NeonDojo starts.
+/// The key has no `Debug` output, so it cannot reach a log.
+#[derive(Clone)]
+pub(crate) struct OpenAi {
+    key: Option<String>,
+    model: String,
 }
 
-pub(super) fn configured() -> bool {
-    key().is_some()
-}
+impl OpenAi {
+    pub(crate) fn from_env() -> Self {
+        Self::new(
+            std::env::var("OPENAI_API_KEY").ok(),
+            std::env::var("NEONDOJO_ASSESSMENT_MODEL").ok(),
+        )
+    }
 
-pub(super) fn model() -> String {
-    std::env::var("NEONDOJO_ASSESSMENT_MODEL")
-        .ok()
-        .filter(|name| !name.trim().is_empty())
-        .unwrap_or_else(|| DEFAULT_MODEL.into())
+    fn new(key: Option<String>, model: Option<String>) -> Self {
+        Self {
+            key: key.filter(|value| {
+                !value.is_empty()
+                    && value
+                        .bytes()
+                        .all(|c| c.is_ascii_alphanumeric() || c == b'-' || c == b'_')
+            }),
+            model: model
+                .filter(|name| !name.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_MODEL.into()),
+        }
+    }
+
+    pub(crate) fn with_key(key: &str) -> Self {
+        Self::new(Some(key.into()), None)
+    }
+
+    pub(super) fn configured(&self) -> bool {
+        self.key.is_some()
+    }
+
+    pub(super) fn model(&self) -> &str {
+        &self.model
+    }
+
+    pub(super) async fn generate(
+        &self,
+        model: &str,
+        input: &Value,
+    ) -> Result<Assessment, &'static str> {
+        let secret = self.key.as_deref().ok_or("not_configured")?;
+        generate(secret, model, input).await
+    }
 }
 
 fn request(model: &str, input: &Value) -> Value {
@@ -66,8 +98,7 @@ fn request(model: &str, input: &Value) -> Value {
     })
 }
 
-pub(super) async fn generate(model: &str, input: &Value) -> Result<Assessment, &'static str> {
-    let secret = key().ok_or("not_configured")?;
+async fn generate(secret: &str, model: &str, input: &Value) -> Result<Assessment, &'static str> {
     let body = serde_json::to_string(&request(model, input)).map_err(|_| "invalid_report")?;
     // Pass the header and body via stdin, away from process arguments and logs.
     // Ignore curlrc, enforce TLS, and do not follow redirects to other hosts.
@@ -226,6 +257,17 @@ fn parse(raw: &[u8]) -> Result<Assessment, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_a_plausible_key_counts_as_configured() {
+        assert!(OpenAi::with_key("sk-test_1").configured());
+        for key in ["", "two words", "line\nbreak", "quote\"", "schlüssel"] {
+            assert!(!OpenAi::with_key(key).configured(), "{key:?}");
+        }
+        assert!(!OpenAi::new(None, None).configured());
+        assert_eq!(OpenAi::new(None, Some(" ".into())).model(), DEFAULT_MODEL);
+        assert_eq!(OpenAi::new(None, Some("other".into())).model(), "other");
+    }
 
     #[test]
     fn separates_curl_status_from_the_response_body() {

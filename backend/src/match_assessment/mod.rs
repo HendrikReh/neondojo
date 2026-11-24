@@ -1,6 +1,7 @@
 //! Assessments own their queue because the source is a saved report, not a library match.
 mod evidence;
 mod openai;
+pub(crate) use openai::OpenAi;
 
 use crate::json_errors::{Json, Path, Query};
 use crate::{
@@ -158,7 +159,7 @@ pub(crate) fn routes() -> Router<AppState> {
     )
 }
 
-fn availability(session: &PlaySession) -> Availability {
+fn availability(openai: &OpenAi, session: &PlaySession) -> Availability {
     if session.match_length <= 0 {
         Availability::Unsupported
     } else if !session.review.as_ref().is_some_and(|review| {
@@ -170,7 +171,7 @@ fn availability(session: &PlaySession) -> Availability {
         })
     }) {
         Availability::MissingAnalysis
-    } else if !openai::configured() {
+    } else if !openai.configured() {
         Availability::NotConfigured
     } else {
         Availability::Ready
@@ -247,7 +248,7 @@ async fn start_assessment(
     .bind(session.version)
     .bind(&language)
     .bind(PROMPT_VERSION)
-    .bind(openai::model())
+    .bind(state.openai.model())
     .execute(&state.pool)
     .await
     .map_err(anyhow::Error::from)?;
@@ -273,7 +274,7 @@ async fn load(
     .await
     .map_err(anyhow::Error::from)?;
     Ok(AssessmentState {
-        availability: availability(session),
+        availability: availability(&state.openai, session),
         abbreviated_match: session.match_forfeited,
         job: row.map(Into::into),
     })
@@ -350,7 +351,7 @@ async fn run_one(state: &AppState) -> anyhow::Result<bool> {
 }
 
 async fn execute(state: &AppState, job: &Claimed) -> Result<Assessment, &'static str> {
-    if !openai::configured() {
+    if !state.openai.configured() {
         return Err("not_configured");
     }
     let (session, sgf) = crate::study::report_checkpoint(&state.pool, job.report_id)
@@ -364,7 +365,7 @@ async fn execute(state: &AppState, job: &Claimed) -> Result<Assessment, &'static
         .await
         .map_err(|_| "source_unavailable")?
         .map_err(|_| "source_unavailable")?;
-    let output = openai::generate(&job.model, &input).await?;
+    let output = state.openai.generate(&job.model, &input).await?;
     evidence::validate(&output, &input)
         .then_some(output)
         .ok_or("invalid_report")

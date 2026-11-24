@@ -41,6 +41,7 @@ pub struct AppState {
     /// How often a running analysis job renews its lease.
     pub(crate) job_heartbeat: Duration,
     pub(crate) running_jobs: Arc<crate::jobs::RunningJobs>,
+    pub(crate) openai: Arc<crate::match_assessment::OpenAi>,
 }
 
 impl AppState {
@@ -57,6 +58,7 @@ impl AppState {
             anki_connection: Arc::default(),
             job_heartbeat: crate::jobs::DEFAULT_HEARTBEAT,
             running_jobs: Arc::default(),
+            openai: Arc::new(crate::match_assessment::OpenAi::from_env()),
         }
     }
 
@@ -74,6 +76,14 @@ impl AppState {
             crate::jobs::LEASE
         );
         self.job_heartbeat = interval;
+        self
+    }
+
+    /// Uses this OpenAI key instead of the one in the environment. An
+    /// implausible key, such as an empty one, leaves AI assessments
+    /// unconfigured. Only the assessment worker calls the provider.
+    pub fn with_openai_key(mut self, key: &str) -> Self {
+        self.openai = Arc::new(crate::match_assessment::OpenAi::with_key(key));
         self
     }
 

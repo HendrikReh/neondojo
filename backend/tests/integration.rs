@@ -60,27 +60,38 @@ mod study_reports;
 mod virtual_players;
 mod workflow;
 
-#[test]
-fn every_test_file_is_a_module() {
-    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
-    let root = include_str!("integration.rs");
+/// The modules next to the root file `root` that it does not declare.
+fn undeclared_modules(directory: &std::path::Path, root: &str) -> Vec<std::path::PathBuf> {
+    let source = std::fs::read_to_string(directory.join(root)).unwrap();
     let mut missing = vec![];
-    for entry in std::fs::read_dir(&directory).unwrap() {
+    for entry in std::fs::read_dir(directory).unwrap() {
         let path = entry.unwrap().path();
         let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
             continue;
         };
-        let is_module = path.extension().is_some_and(|extension| extension == "rs")
-            || path.join("mod.rs").is_file();
-        if is_module
-            && stem != "integration"
-            && !root.lines().any(|line| line == format!("mod {stem};"))
-        {
-            missing.push(stem.to_owned());
+        let is_directory = path.join("mod.rs").is_file();
+        if !is_directory && path.extension().is_none_or(|extension| extension != "rs") {
+            continue;
+        }
+        if path.file_name().is_some_and(|name| name == root) {
+            continue;
+        }
+        if is_directory {
+            missing.extend(undeclared_modules(&path, "mod.rs"));
+        }
+        if !source.lines().any(|line| line == format!("mod {stem};")) {
+            missing.push(path);
         }
     }
+    missing
+}
+
+#[test]
+fn every_test_file_is_a_module() {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests");
+    let missing = undeclared_modules(&directory, "integration.rs");
     assert!(
         missing.is_empty(),
-        "add these modules to tests/integration.rs: {missing:?}"
+        "add these modules to integration.rs or their directory's mod.rs: {missing:?}"
     );
 }
