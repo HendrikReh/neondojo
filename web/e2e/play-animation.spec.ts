@@ -415,11 +415,11 @@ interface Fiber {
   type: unknown;
 }
 
-/** Counts the renders of two components from the commits React reports. */
+/** Counts the renders of these components from the commits React reports. */
 async function countRenders(page: Page) {
   await page.addInitScript(() => {
     const performedWork = 1;
-    const counted = ['PlayWorkspace', 'PlayHistory'];
+    const counted = ['PlayWorkspace', 'PlayBoardStage', 'PlayHistory'];
     const seen: Record<string, Fiber> = {};
     window.__componentRenders = {};
     const componentName = (type: unknown): string | undefined =>
@@ -454,9 +454,7 @@ async function countRenders(page: Page) {
   });
 }
 
-test('the rolling dice do not render the move history again', async ({
-  page,
-}) => {
+test('the rolling dice render only the board again', async ({ page }) => {
   await countRenders(page);
   const before: PlaySession = {
     ...played(opening()),
@@ -482,9 +480,11 @@ test('the rolling dice do not render the move history again', async ({
   await expect(board).toHaveAttribute('data-play-animation', 'dice');
   const start = await renders();
   await expect
-    .poll(async () => (await renders()).PlayWorkspace - start.PlayWorkspace)
+    .poll(async () => (await renders()).PlayBoardStage - start.PlayBoardStage)
     .toBeGreaterThan(10);
-  expect((await renders()).PlayHistory).toBe(start.PlayHistory);
+  const rolling = await renders();
+  expect(rolling.PlayWorkspace).toBe(start.PlayWorkspace);
+  expect(rolling.PlayHistory).toBe(start.PlayHistory);
 
   // The history still reacts to its own changes: it is enabled again.
   answer();

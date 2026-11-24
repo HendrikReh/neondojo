@@ -1,19 +1,96 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import type {
   PlaybackFrame,
   PlayFrame,
 } from '../../shared/board/play-animation';
 import { playSounds } from '../../shared/board/play-audio';
 
+/** What the workspace around the board shows of a frame. */
+export type PlayScene =
+  | { kind: 'checker'; player: number }
+  | {
+      kind: 'dice';
+      player: number;
+      opening: boolean;
+      rolling: boolean;
+      tied: boolean;
+    };
+
+const sceneOf = (frame: PlaybackFrame): PlayScene =>
+  frame.kind === 'checker'
+    ? { kind: 'checker', player: frame.player }
+    : {
+        kind: 'dice',
+        player: frame.player,
+        opening: !!frame.opening,
+        rolling: !!frame.rolling,
+        tied: !!frame.tied,
+      };
+
+const sameScene = (a: PlayScene | null, b: PlayScene) =>
+  a?.kind === b.kind &&
+  a.player === b.player &&
+  (a.kind === 'checker' ||
+    b.kind === 'checker' ||
+    (a.opening === b.opening && a.rolling === b.rolling && a.tied === b.tied));
+
+type FrameListener = (frame: PlaybackFrame | null) => void;
+/** The displayed frame. Dice change it every 65 ms, so only the board reads it. */
+class PlayFrames {
+  current: PlaybackFrame | null = null;
+  private readonly listeners = new Set<FrameListener>();
+  show(frame: PlaybackFrame | null) {
+    this.current = frame;
+    for (const listener of this.listeners) listener(frame);
+  }
+  subscribe(listener: FrameListener) {
+    this.listeners.add(listener);
+    return () => void this.listeners.delete(listener);
+  }
+}
+export type { PlayFrames };
+
+/**
+ * The displayed frame as state of the board. This is deliberately not
+ * useSyncExternalStore: that renders the end of an animation before the state
+ * set with it, and the board would show the previous checkpoint in between.
+ */
+export function usePlayFrame(frames: PlayFrames) {
+  const [frame, setFrame] = useState(frames.current);
+  useLayoutEffect(() => {
+    setFrame(frames.current);
+    return frames.subscribe(setFrame);
+  }, [frames]);
+  return frame;
+}
+
 /** Queue presentation only. Cancellation never changes the saved engine state. */
 export function usePlayAnimation(visible: boolean) {
-  const [frame, setFrame] = useState<PlaybackFrame | null>(null);
+  const [frames] = useState(() => new PlayFrames());
+  const [scene, setScene] = useState<PlayScene | null>(null);
   const [animating, setAnimating] = useState(false);
   const epoch = useRef(0),
     sequence = useRef(0),
     pending = useRef(0);
   const tail = useRef<Promise<void>>(Promise.resolve());
   const waits = useRef(new Map<ReturnType<typeof setTimeout>, () => void>());
+  const show = useCallback(
+    (frame: PlaybackFrame | null) => {
+      frames.show(frame);
+      setScene((current) => {
+        if (!frame) return null;
+        const next = sceneOf(frame);
+        return sameScene(current, next) ? current : next;
+      });
+    },
+    [frames],
+  );
   const cancel = useCallback(() => {
     ++epoch.current;
     pending.current = 0;
@@ -23,9 +100,9 @@ export function usePlayAnimation(visible: boolean) {
       resolve();
     }
     waits.current.clear();
-    setFrame(null);
+    show(null);
     setAnimating(false);
-  }, []);
+  }, [show]);
   useEffect(() => {
     if (!visible) cancel();
   }, [visible, cancel]);
@@ -58,7 +135,7 @@ export function usePlayAnimation(visible: boolean) {
               const ticks = reduced ? 1 : 6;
               for (let tick = 0; tick < ticks; tick++) {
                 if (token !== epoch.current) return;
-                setFrame({
+                show({
                   ...next,
                   id,
                   rolling: true,
@@ -68,15 +145,15 @@ export function usePlayAnimation(visible: boolean) {
               }
             }
             if (token !== epoch.current) return;
-            setFrame({ ...next, id, rolling: false });
+            show({ ...next, id, rolling: false });
             const settle = next.roll ? (next.opening ? 440 : 240) : 600;
             const reducedSettle = next.roll && !next.opening ? 100 : 180;
             await delay(reduced ? reducedSettle : settle);
           } else {
-            setFrame({ ...next, id });
+            show({ ...next, id });
             await delay(reduced ? 80 : 280);
             if (token !== epoch.current) return;
-            setFrame({ ...next, id, before: next.after, motions: [] });
+            show({ ...next, id, before: next.after, motions: [] });
             await delay(reduced ? 10 : 45);
           }
         }
@@ -84,7 +161,7 @@ export function usePlayAnimation(visible: boolean) {
       .finally(() => {
         if (token !== epoch.current) return;
         if (--pending.current === 0) {
-          setFrame(null);
+          show(null);
           setAnimating(false);
         }
       });
@@ -92,7 +169,8 @@ export function usePlayAnimation(visible: boolean) {
     return job;
   }
   return {
-    frame,
+    frames,
+    scene,
     animating,
     play,
     cancel,
