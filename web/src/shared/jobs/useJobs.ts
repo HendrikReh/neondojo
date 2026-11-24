@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLatest } from '../hooks/useLatest';
 import { request, terminal, mergeJob, jobEngine, type Job } from '../http/api';
 import { watchJob } from './job-watch';
 import type { components } from '../../generated-api';
@@ -28,8 +29,7 @@ export function useJobs(
     () => ({ positionId, engineId }),
     [positionId, engineId],
   );
-  const current = useRef(scope);
-  current.current = scope;
+  const current = useLatest(scope);
   const [revision, setRevision] = useState(0);
   const [state, setState] = useState<{
     scope: typeof scope;

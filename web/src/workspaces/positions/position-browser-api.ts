@@ -1,6 +1,5 @@
 import { cursorSearchParams } from '../../shared/http/cursor-search';
 import { request } from '../../shared/http/api';
-import { AppError } from '../../shared/i18n/i18n-core';
 import type { GamePlan } from '../analysis/game-plans/game-plan-api';
 import { mistakeGamePlans } from '../study/mistakes/recurring-mistakes-api';
 
@@ -222,25 +221,11 @@ export const savePositionFilter = (
       }),
     },
   );
-export async function deletePositionFilter(existing: SavedPositionFilter) {
-  const response = await fetch(
-    `/api/position-filters/${existing.id}?expected_version=${existing.version}`,
+export const deletePositionFilter = (existing: SavedPositionFilter) =>
+  request<void>(
+    `/position-filters/${existing.id}?expected_version=${existing.version}`,
     { method: 'DELETE' },
   );
-  if (!response.ok) {
-    let diagnostic = await response.text();
-    try {
-      diagnostic = JSON.parse(diagnostic).error ?? diagnostic;
-    } catch {
-      /* Plain HTTP error. */
-    }
-    throw new AppError(
-      'error.request',
-      { status: String(response.status) },
-      diagnostic,
-    );
-  }
-}
 export const transferPositions = (deckId: string, ids: string[]) =>
   request<PositionTransferResult>(`/decks/${deckId}/positions`, {
     method: 'POST',

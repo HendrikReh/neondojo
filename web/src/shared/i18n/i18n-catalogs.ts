@@ -234,6 +234,7 @@ export const de = {
   'error.invalidResponse': 'Das Backend hat keine gültige Antwort geliefert.',
   'error.request': 'Anfrage fehlgeschlagen (HTTP {status}).',
   'error.network': 'Verbindung zum Backend fehlgeschlagen.',
+  'error.conflict': 'Die Daten haben sich inzwischen geändert.',
   'error.generic': 'Ein Fehler ist aufgetreten.',
   'error.engine': 'GNUbg meldet: {details}',
 } as const;
@@ -471,6 +472,7 @@ export const en = {
   'error.invalidResponse': 'The backend returned an invalid response.',
   'error.request': 'Request failed (HTTP {status}).',
   'error.network': 'Could not connect to the backend.',
+  'error.conflict': 'The data has changed in the meantime.',
   'error.generic': 'An error occurred.',
   'error.engine': 'GNUbg reports: {details}',
 } satisfies Catalog;
@@ -708,6 +710,7 @@ export const es = {
   'error.invalidResponse': 'El servidor ha devuelto una respuesta no válida.',
   'error.request': 'La solicitud ha fallado (HTTP {status}).',
   'error.network': 'No se ha podido conectar con el servidor.',
+  'error.conflict': 'Los datos han cambiado entretanto.',
   'error.generic': 'Se ha producido un error.',
   'error.engine': 'GNUbg informa: {details}',
 } satisfies Catalog;
@@ -946,6 +949,7 @@ export const fr = {
   'error.invalidResponse': 'Le serveur a renvoyé une réponse non valide.',
   'error.request': 'La requête a échoué (HTTP {status}).',
   'error.network': 'Connexion au serveur impossible.',
+  'error.conflict': 'Les données ont changé entre-temps.',
   'error.generic': 'Une erreur s’est produite.',
   'error.engine': 'GNUbg signale : {details}',
 } satisfies Catalog;
@@ -1183,6 +1187,7 @@ export const pl = {
   'error.invalidResponse': 'Serwer zwrócił nieprawidłową odpowiedź.',
   'error.request': 'Żądanie nie powiodło się (HTTP {status}).',
   'error.network': 'Nie udało się połączyć z serwerem.',
+  'error.conflict': 'Dane zmieniły się w międzyczasie.',
   'error.generic': 'Wystąpił błąd.',
   'error.engine': 'GNUbg zgłasza: {details}',
 } satisfies Catalog;
@@ -1420,6 +1425,7 @@ export const it = {
   'error.invalidResponse': 'Il server ha restituito una risposta non valida.',
   'error.request': 'Richiesta non riuscita (HTTP {status}).',
   'error.network': 'Impossibile connettersi al server.',
+  'error.conflict': 'I dati sono cambiati nel frattempo.',
   'error.generic': 'Si è verificato un errore.',
   'error.engine': 'GNUbg segnala: {details}',
 } satisfies Catalog;

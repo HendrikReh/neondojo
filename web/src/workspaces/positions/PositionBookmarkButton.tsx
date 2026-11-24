@@ -1,5 +1,6 @@
 import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useRef, useState } from 'react';
+import { useLatest } from '../../shared/hooks/useLatest';
 import {
   loadPositionBookmark,
   removePositionBookmark,
@@ -30,10 +31,8 @@ export default function PositionBookmarkButton({
     { formatError } = useI18n();
   const [retry, setRetry] = useState(0);
   const identity = `${positionId}:${revision}:${retry}`;
-  const current = useRef(identity);
-  current.current = identity;
-  const changed = useRef(onChanged);
-  changed.current = onChanged;
+  const current = useLatest(identity);
+  const changed = useLatest(onChanged);
   const request = useRef<AbortController | undefined>(undefined);
   const [state, setState] = useState<BookmarkState>({
     identity,

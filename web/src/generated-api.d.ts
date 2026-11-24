@@ -3603,6 +3603,8 @@ export interface components {
         };
         ConfigurationIssue: {
             code: string;
+            /** @description The engine an `engine_unavailable` issue is about. */
+            engine?: components["schemas"]["ConfigurationEngine"];
             message: string;
             path: string;
         };

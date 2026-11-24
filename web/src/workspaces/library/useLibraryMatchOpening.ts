@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useEpoch, useLatest } from '../../shared/hooks/useLatest';
 import {
   request,
   type Match,
@@ -22,13 +23,9 @@ export function useLibraryMatchOpening({
   onOpen: (match: Match) => void;
   onPosition: (position: Position) => void;
 }) {
-  const key = JSON.stringify([scope, visible]);
-  const context = useRef({ key, epoch: 0 });
-  if (context.current.key !== key)
-    context.current = { key, epoch: context.current.epoch + 1 };
-  const epoch = context.current.epoch;
-  const callbacks = useRef({ onOpen, onPosition });
-  callbacks.current = { onOpen, onPosition };
+  const epoch = useEpoch(JSON.stringify([scope, visible]));
+  const latestEpoch = useLatest(epoch);
+  const callbacks = useLatest({ onOpen, onPosition });
   const operation = useRef<
     { epoch: number; controller: AbortController } | undefined
   >(undefined);
@@ -43,7 +40,7 @@ export function useLibraryMatchOpening({
   );
 
   async function open(match: LibraryMatch) {
-    if (!visible || context.current.epoch !== epoch) return;
+    if (!visible || latestEpoch.current !== epoch) return;
     operation.current?.controller.abort();
     operation.current = undefined;
     setPending(undefined);
@@ -58,7 +55,7 @@ export function useLibraryMatchOpening({
     setPending({ epoch, id: libraryRowKey(match) });
     const live = () =>
       !controller.signal.aborted &&
-      context.current.epoch === epoch &&
+      latestEpoch.current === epoch &&
       operation.current === current;
     try {
       const params = new URLSearchParams({

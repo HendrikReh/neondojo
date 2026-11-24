@@ -15340,6 +15340,10 @@
           "code": {
             "type": "string"
           },
+          "engine": {
+            "$ref": "#/components/schemas/ConfigurationEngine",
+            "description": "The engine an `engine_unavailable` issue is about."
+          },
           "message": {
             "type": "string"
           },

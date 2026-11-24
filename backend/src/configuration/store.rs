@@ -168,6 +168,7 @@ pub(crate) async fn initialize(
         warnings.push(ConfigurationIssue {
             path: "library.database_id".into(),
             code: "legacy_reference_missing".into(),
+            engine: None,
             message: "The previously selected database no longer exists; all databases are shown"
                 .into(),
         });
@@ -176,7 +177,7 @@ pub(crate) async fn initialize(
         && !exists(&mut tx, "decks", &config.learning.deck_id).await?
     {
         config.learning.deck_id = "__all__".into();
-        warnings.push(ConfigurationIssue{path:"learning.deck_id".into(),code:"legacy_reference_missing".into(),message:"The previously selected deck no longer exists; all cards were selected during migration".into()});
+        warnings.push(ConfigurationIssue{path:"learning.deck_id".into(),code:"legacy_reference_missing".into(),engine:None,message:"The previously selected deck no longer exists; all cards were selected during migration".into()});
     }
     let config = normalize(config)?;
     let id = Uuid::new_v4();

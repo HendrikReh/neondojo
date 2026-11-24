@@ -1,13 +1,11 @@
 import { useRef, useState } from 'react';
 import { useConfiguration } from '../configuration/ConfigurationProvider';
-import {
-  ConfigurationApiError,
-  type ConfigurationProfile,
-} from '../configuration/configuration-api';
+import type { ConfigurationProfile } from '../configuration/configuration-api';
+import { useConfigurationErrors } from './configuration-error-messages';
 import ActionButton from '../../shared/ui/ActionButton';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
 import ProfileSummary from './ProfileSummary';
-import { profileFieldKey, useProfileText } from './profile-messages';
+import { useProfileText } from './profile-messages';
 
 export default function ProfileChangesDialog({
   onClose,
@@ -15,7 +13,8 @@ export default function ProfileChangesDialog({
   onClose: () => void;
 }) {
   const config = useConfiguration(),
-    t = useProfileText();
+    t = useProfileText(),
+    errors = useConfigurationErrors();
   const [error, setError] = useState<unknown>(),
     [restored, setRestored] = useState<'field' | 'all'>(),
     [confirmation, setConfirmation] =
@@ -97,16 +96,10 @@ export default function ProfileChangesDialog({
         )}
         {!!report && (
           <div role="alert" className="error">
-            <p>{report instanceof Error ? report.message : String(report)}</p>
-            {report instanceof ConfigurationApiError &&
-              report.issues.map((issue, index) => (
-                <p key={index}>
-                  {profileFieldKey(issue.path)
-                    ? t(profileFieldKey(issue.path)!)
-                    : issue.path}
-                  : {issue.message}
-                </p>
-              ))}
+            <p>{errors.message(report)}</p>
+            {errors.issues(report).map((issue, index) => (
+              <p key={index}>{errors.issue(issue)}</p>
+            ))}
             {config.status === 'conflict' && <p>{t('conflict')}</p>}
           </div>
         )}

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useEpoch, useLatest } from '../../../shared/hooks/useLatest';
 import {
   gamePlanBoardKey,
   gamePlanCache,
@@ -19,17 +20,15 @@ export function useGamePlans(board?: readonly number[], active = true) {
   const key = board ? gamePlanBoardKey(board) : undefined;
   const scope = active && board ? (key ?? 'invalid') : '';
   const [attempt, setAttempt] = useState(0);
-  const current = useRef({ scope, attempt, epoch: 0 });
-  // A -> B -> A may happen before effect cleanup. Every render transition
+  // A -> B -> A may happen before effect cleanup. Every transition
   // invalidates preceding promises, even when the final board key is equal.
-  if (current.current.scope !== scope || current.current.attempt !== attempt)
-    current.current = { scope, attempt, epoch: current.current.epoch + 1 };
-  const epoch = current.current.epoch;
+  const epoch = useEpoch(JSON.stringify([scope, attempt]));
+  const latestEpoch = useLatest(epoch);
   const [state, setState] = useState<PlanState>({ epoch: -1, loading: false });
   const retry = useCallback(() => setAttempt((value) => value + 1), []);
 
   useEffect(() => {
-    if (!scope || key === undefined || current.current.epoch !== epoch) return;
+    if (!scope || key === undefined || latestEpoch.current !== epoch) return;
     // Parse the immutable board identity rather than close over a changing array.
     const snapshot = JSON.parse(key) as number[];
     const cached = gamePlanCache.get(snapshot);
@@ -39,7 +38,7 @@ export function useGamePlans(board?: readonly number[], active = true) {
     }
     const abort = new AbortController();
     const isCurrent = () =>
-      !abort.signal.aborted && current.current.epoch === epoch;
+      !abort.signal.aborted && latestEpoch.current === epoch;
     setState({ epoch, loading: true });
     void loadGamePlans(snapshot, abort.signal)
       .then((plans) => {

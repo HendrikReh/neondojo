@@ -1,5 +1,6 @@
 import ActionButton from '../../shared/ui/ActionButton';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { useLatest } from '../../shared/hooks/useLatest';
 import { request, type Match } from '../../shared/http/api';
 import type { LibraryMatch } from '../library/library-api';
 import { libraryText } from '../library/library-messages';
@@ -51,8 +52,7 @@ export default function AnalysisMatchHeader({
     analysisRevision,
     retry,
   ]);
-  const current = useRef(identity);
-  current.current = identity;
+  const current = useLatest(identity);
   const [state, setState] = useState<HeaderState>({ identity, loading: true });
 
   useEffect(() => {

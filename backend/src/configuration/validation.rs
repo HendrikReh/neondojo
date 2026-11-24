@@ -563,6 +563,7 @@ pub(crate) async fn resources(
                 path: "analysis.engine".into(),
                 code: "engine_unavailable".into(),
                 message: "The configured GNUbg installation is unavailable".into(),
+                engine: Some(ConfigurationEngine::Gnubg),
             });
         }
         for (path, selected, plies, threads) in [
@@ -584,8 +585,12 @@ pub(crate) async fn resources(
                     .await
                     .is_err()
             {
-                issues.push(ConfigurationIssue { path: path.into(), code: "engine_unavailable".into(),
-                    message: "The configured NeonGammon installation or requested depth is unavailable or changed".into() });
+                issues.push(ConfigurationIssue {
+                    path: path.into(),
+                    code: "engine_unavailable".into(),
+                    message: "The configured NeonGammon installation or requested depth is unavailable or changed".into(),
+                    engine: Some(selected.clone()),
+                });
             }
         }
     }
@@ -610,6 +615,7 @@ pub(crate) async fn resources(
                 path: "opening_book.provider".into(),
                 code: "book_unavailable".into(),
                 message: "The selected opening book is unavailable".into(),
+                engine: None,
             });
         }
     }

@@ -247,6 +247,7 @@ async fn current_availability_reports_outages_without_changing_configuration(poo
     assert_eq!(availability["valid"], false);
     assert_eq!(availability["revision"], state["revision"]);
     assert_eq!(availability["issues"][0]["code"], "engine_unavailable");
+    assert_eq!(availability["issues"][0]["engine"], "gnubg");
     let (_, after) = call(app, "GET", "/api/configuration", Value::Null).await;
     assert_eq!(state, after);
 }

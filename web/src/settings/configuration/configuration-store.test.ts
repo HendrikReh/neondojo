@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { HttpError } from '../../shared/http/api';
+import { AppError } from '../../shared/i18n/i18n-core';
 import { ConfigurationStore } from './configuration-store';
 import { defaultConfiguration } from './configuration-model';
 import {
-  ConfigurationApiError,
   type ConfigurationApi,
   type ConfigurationState,
 } from './configuration-api';
@@ -53,8 +54,7 @@ function harness() {
     write: async (revision, configuration) => {
       calls.push('write');
       if (wait) await wait;
-      if (revision !== state.revision)
-        throw new ConfigurationApiError(409, 'Conflict');
+      if (revision !== state.revision) throw new HttpError(409, 'Conflict');
       state = {
         ...state,
         revision: state.revision + 1,
@@ -69,14 +69,14 @@ function harness() {
         (body as { expected_state_revision: number })
           .expected_state_revision !== state.revision
       )
-        throw new ConfigurationApiError(409, 'Conflict');
+        throw new HttpError(409, 'Conflict');
       const restoring = path === '/configuration/restore-profile';
       if (
         restoring &&
         (body as { expected_profile_revision: number })
           .expected_profile_revision !== state.active_profile.revision
       )
-        throw new ConfigurationApiError(409, 'Conflict');
+        throw new HttpError(409, 'Conflict');
       state = {
         ...state,
         revision: state.revision + 1,
@@ -183,7 +183,7 @@ describe('configuration writing', () => {
     }));
     const before = structuredClone(h.store.getSnapshot().current);
     vi.spyOn(h.api, 'mutate').mockRejectedValueOnce(
-      new ConfigurationApiError(422, 'Saved resource unavailable'),
+      new HttpError(422, 'Saved resource unavailable'),
     );
     await expect(
       h.store.restoreProfile(h.store.getSnapshot().activeProfile!),
@@ -249,7 +249,7 @@ describe('configuration writing', () => {
     }));
     const before = structuredClone(h.store.getSnapshot().current);
     vi.spyOn(h.api, 'write').mockRejectedValueOnce(
-      new ConfigurationApiError(422, 'Saved resource missing'),
+      new HttpError(422, 'Saved resource missing'),
     );
     await expect(
       h.store.restoreProfileField(
@@ -459,6 +459,66 @@ describe('configuration writing', () => {
     expect(h.store.getSnapshot().status).toBe('conflict');
     expect(h.store.getSnapshot().current?.general.player_name).toBe('Local');
     expect(h.storage.size).toBe(1);
+  });
+  // The shared helper reports a lost connection as an AppError, like a refusal.
+  const lost = () => new AppError('error.network', {}, 'Failed to fetch');
+  const rename = (h: ReturnType<typeof harness>) =>
+    h.store.updateCurrent((c) => ({
+      ...c,
+      general: { ...c.general, player_name: 'Local' },
+    }));
+  it('accepts a write that the server applied before the connection was lost', async () => {
+    const h = harness();
+    await h.store.load();
+    const write = h.api.write;
+    h.api.write = async (...args) => {
+      await write(...args);
+      throw lost();
+    };
+    rename(h);
+    await h.store.flush();
+    expect(h.store.getSnapshot()).toMatchObject({
+      status: 'ready',
+      error: null,
+    });
+    expect(h.store.getSnapshot().confirmed?.revision).toBe(2);
+  });
+  it('reports a conflict when other settings arrived during a lost connection', async () => {
+    const h = harness();
+    await h.store.load();
+    h.api.write = async () => {
+      h.conflict();
+      throw lost();
+    };
+    rename(h);
+    await expect(h.store.flush()).rejects.toMatchObject({
+      code: 'uncertain_result',
+    });
+    expect(h.store.getSnapshot().status).toBe('conflict');
+  });
+  it('keeps a lost connection as the error when nothing changed', async () => {
+    const h = harness();
+    await h.store.load();
+    h.api.write = async () => {
+      throw lost();
+    };
+    rename(h);
+    await expect(h.store.flush()).rejects.toMatchObject({
+      key: 'error.network',
+    });
+    expect(h.store.getSnapshot().status).toBe('error');
+  });
+  it('does not ask again after the server refused a write', async () => {
+    const h = harness();
+    await h.store.load();
+    const read = vi.spyOn(h.api, 'read');
+    h.api.write = async () => {
+      throw new HttpError(422, 'Refused', 'invalid_configuration');
+    };
+    rename(h);
+    await expect(h.store.flush()).rejects.toThrow('Refused');
+    expect(read).not.toHaveBeenCalled();
+    expect(h.store.getSnapshot().status).toBe('error');
   });
   it('replays a journal only when its server base revision matches', async () => {
     const h = harness();

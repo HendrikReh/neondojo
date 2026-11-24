@@ -2,9 +2,9 @@ import { useEffect, useId, useRef, useState } from 'react';
 import {
   loadSageInstallation,
   saveSageInstallation,
-  SettingsApiError,
   type SageInstallation,
 } from './settings-api';
+import { isConflict } from '../shared/http/api';
 import { useI18n } from '../shared/i18n/i18n';
 import { useSettingsText } from './settings-messages';
 
@@ -177,11 +177,7 @@ export default function OpenSageInstallation({
         <>
           <p role="alert">{formatError(error)}</p>
           <button type="button" onClick={reload}>
-            {settingsT(
-              error instanceof SettingsApiError && error.status === 409
-                ? 'loadLatest'
-                : 'retry',
-            )}
+            {settingsT(isConflict(error) ? 'loadLatest' : 'retry')}
           </button>
         </>
       )}

@@ -381,6 +381,10 @@ pub struct ConfigurationIssue {
     pub path: String,
     pub code: String,
     pub message: String,
+    /// The engine an `engine_unavailable` issue is about.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub engine: Option<ConfigurationEngine>,
 }
 /// A configuration error always has a `code` and `issues`.
 pub(crate) struct ConfigurationError(pub StatusCode, pub ErrorBody);
@@ -414,6 +418,7 @@ impl ConfigurationError {
                     path: path.into(),
                     code: "invalid_value".into(),
                     message,
+                    engine: None,
                 }]),
             },
         )

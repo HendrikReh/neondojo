@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-  ConfigurationApiError,
   configurationRequest,
   parseConfigurationState,
   parseProfile,
   parseAvailability,
 } from './configuration-api';
+import { HttpError } from '../../shared/http/api';
 import { defaultConfiguration } from './configuration-model';
 afterEach(() => vi.unstubAllGlobals());
 describe('configuration API contract', () => {
@@ -73,11 +73,9 @@ describe('configuration API contract', () => {
       await configurationRequest('/profiles/test/activate', 'POST', {});
       throw new Error('Expected rejection');
     } catch (error) {
-      expect(error).toBeInstanceOf(ConfigurationApiError);
-      expect((error as ConfigurationApiError).status).toBe(422);
-      expect((error as ConfigurationApiError).issues[0].path).toBe(
-        'opening_book.path',
-      );
+      expect(error).toBeInstanceOf(HttpError);
+      expect((error as HttpError).status).toBe(422);
+      expect((error as HttpError).issues[0].path).toBe('opening_book.path');
     }
   });
   it('rejects non-JSON responses without reporting a successful write', async () => {
@@ -86,7 +84,7 @@ describe('configuration API contract', () => {
       async () => new Response('bad response', { status: 200 }),
     );
     await expect(configurationRequest('/configuration')).rejects.toThrow(
-      'Invalid server response',
+      'error.invalidResponse',
     );
   });
 });

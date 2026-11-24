@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useLatest } from '../../shared/hooks/useLatest';
 import {
   loadPlayHistory,
   type PlayReviewHistory,
@@ -17,10 +18,8 @@ export function usePlayReview(session: PlaySession | null, enabled: boolean) {
   } | null>(null);
   const [view, setView] = useState<BoardView>('arrows');
   const active = selection?.key === key && Boolean(session);
-  const activeRef = useRef(false);
-  activeRef.current = active;
-  const liveKey = useRef(key);
-  liveKey.current = key;
+  const activeRef = useLatest(active);
+  const liveKey = useLatest(key);
   const cache = useRef<{ key: string; data: PlayReviewHistory } | null>(null);
   const [result, setResult] = useState<{
     key: string;

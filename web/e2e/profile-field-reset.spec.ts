@@ -146,7 +146,7 @@ test('failed field reset retains all changes and can be retried explicitly', asy
   );
   await reset(page, 'Analysis · Search depth (ply)').click();
   await expect(dialog.getByRole('alert')).toContainText(
-    'Saved engine is unavailable',
+    'Some of these settings are not available on this computer.',
   );
   expect(backend.state.current_configuration).toEqual(changed);
   await expect(dialog.locator('tbody tr')).toHaveCount(2);

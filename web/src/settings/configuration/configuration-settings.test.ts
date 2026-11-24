@@ -52,7 +52,7 @@ describe('settings/profile boundary', () => {
         ...installed,
         gnubg_path: '/new/gnubg',
       }),
-    ).rejects.toMatchObject({ status: 409 });
+    ).rejects.toMatchObject({ code: 'settings_conflict' });
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
   it('applies a thread limit and preserves concurrent edits to the other engine', async () => {

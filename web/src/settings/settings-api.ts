@@ -1,6 +1,8 @@
 import configurationOptions from '../../../shared/configuration-options.json' with { type: 'json' };
 import type { components } from '../generated-api';
 import type { DepthEngine } from '../shared/engine/analysis-depth';
+import { request } from '../shared/http/api';
+import { AppError } from '../shared/i18n/i18n-core';
 import {
   isPlayMode,
   type PlayMode,
@@ -24,34 +26,6 @@ export type AppSettings = Omit<
   training_auto_analysis?: boolean;
 };
 export type EngineInfo = Schema['EngineInfo'] & { version: string | null };
-
-export class SettingsApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'SettingsApiError';
-  }
-}
-
-async function settingsRequest(path: string, options: RequestInit = {}) {
-  const response = await fetch(`/api${path}`, options);
-  let data: unknown;
-  try {
-    data = await response.json();
-  } catch {
-    throw new SettingsApiError(response.status, response.statusText);
-  }
-  if (!response.ok) {
-    const diagnostic =
-      data && typeof data === 'object' && 'error' in data
-        ? String(data.error)
-        : response.statusText;
-    throw new SettingsApiError(response.status, diagnostic);
-  }
-  return data;
-}
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -110,13 +84,13 @@ function parseSettings(value: unknown): AppSettings {
       value.play_engine as DepthEngine
     ].play.includes(value.play_plies)
   ) {
-    throw new SettingsApiError(200, '');
+    throw new AppError('error.invalidResponse');
   }
   return value as unknown as AppSettings;
 }
 
 export async function loadSettings(signal?: AbortSignal) {
-  return parseSettings(await settingsRequest('/settings', { signal }));
+  return parseSettings(await request<unknown>('/settings', { signal }));
 }
 
 export type AppVersion = { release: string; commit: string };
@@ -124,18 +98,18 @@ export type AppVersion = { release: string; commit: string };
 export async function loadAppVersion(
   signal?: AbortSignal,
 ): Promise<AppVersion> {
-  const value = await settingsRequest('/version', { signal });
+  const value = await request<unknown>('/version', { signal });
   if (
     !isObject(value) ||
     typeof value.release !== 'string' ||
     typeof value.commit !== 'string'
   )
-    throw new SettingsApiError(200, '');
+    throw new AppError('error.invalidResponse');
   return { release: value.release.trim(), commit: value.commit.trim() };
 }
 
 export async function loadEngines(signal?: AbortSignal): Promise<EngineInfo[]> {
-  const value = await settingsRequest('/engines', { signal });
+  const value = await request<unknown>('/engines', { signal });
   if (
     !Array.isArray(value) ||
     !value.every(
@@ -160,13 +134,13 @@ export async function loadEngines(signal?: AbortSignal): Promise<EngineInfo[]> {
         engine.plies.every((ply: unknown) => Number.isInteger(ply)),
     )
   )
-    throw new SettingsApiError(200, '');
+    throw new AppError('error.invalidResponse');
   return value as EngineInfo[];
 }
 
 export async function saveSettings(value: AppSettings, signal?: AbortSignal) {
   return parseSettings(
-    await settingsRequest('/settings', {
+    await request<unknown>('/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(value),
@@ -180,7 +154,7 @@ export async function checkGnubg(
   signal?: AbortSignal,
   threads?: number | null,
 ) {
-  const value = await settingsRequest('/engines/gnubg/check', {
+  const value = await request<unknown>('/engines/gnubg/check', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path, threads }),
@@ -191,7 +165,7 @@ export async function checkGnubg(
     typeof value.version !== 'string' ||
     !value.version.trim()
   ) {
-    throw new SettingsApiError(200, '');
+    throw new AppError('error.invalidResponse');
   }
   return { version: value.version };
 }
@@ -203,7 +177,11 @@ function parseSageInstallation(value: unknown): SageInstallation {
     !Number.isSafeInteger(value.version) ||
     typeof value.python_path !== 'string'
   )
-    throw new SettingsApiError(200, 'Invalid NeonGammon installation response');
+    throw new AppError(
+      'error.invalidResponse',
+      {},
+      'Invalid NeonGammon installation response',
+    );
   const snapshot = value.snapshot;
   if (
     snapshot != null &&
@@ -216,12 +194,16 @@ function parseSageInstallation(value: unknown): SageInstallation {
       !isThreadLimit(snapshot.threads, 'bgsage') ||
       snapshot.adapter_version !== 1)
   )
-    throw new SettingsApiError(200, 'Invalid NeonGammon installation identity');
+    throw new AppError(
+      'error.invalidResponse',
+      {},
+      'Invalid NeonGammon installation identity',
+    );
   return value as SageInstallation;
 }
 export async function loadSageInstallation(signal?: AbortSignal) {
   return parseSageInstallation(
-    await settingsRequest('/engines/bgsage', { signal }),
+    await request<unknown>('/engines/bgsage', { signal }),
   );
 }
 export async function saveSageInstallation(
@@ -230,7 +212,7 @@ export async function saveSageInstallation(
   signal?: AbortSignal,
 ) {
   return parseSageInstallation(
-    await settingsRequest('/engines/bgsage', {
+    await request<unknown>('/engines/bgsage', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version, path }),

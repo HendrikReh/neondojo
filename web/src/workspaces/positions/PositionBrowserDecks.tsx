@@ -1,5 +1,6 @@
 import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useRef, useState, useId, type ReactNode } from 'react';
+import { useLatest } from '../../shared/hooks/useLatest';
 import { request } from '../../shared/http/api';
 import { useI18n } from '../../shared/i18n/i18n';
 import { DeckDialog } from '../study/flashcards/DeckLibraryDialogs';
@@ -94,10 +95,8 @@ export default function PositionBrowserDecks({
     [resultNames, setResultNames] = useState<Record<string, string>>({});
   const live = useRef(true),
     generation = useRef(0),
-    changed = useRef(onChanged),
-    busyChanged = useRef(onBusyChange);
-  changed.current = onChanged;
-  busyChanged.current = onBusyChange;
+    changed = useLatest(onChanged),
+    busyChanged = useLatest(onBusyChange);
   useEffect(() => {
     live.current = true;
     return () => {

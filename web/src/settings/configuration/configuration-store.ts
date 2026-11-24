@@ -1,11 +1,13 @@
 import {
   configurationApi,
-  ConfigurationApiError,
+  ConfigurationConflict,
+  isDecided,
   type ConfigurationApi,
   type ConfigurationProfile,
   type ConfigurationState,
   type ConfigurationIssue,
 } from './configuration-api';
+import { HttpError, isConflict } from '../../shared/http/api';
 import {
   isConfigurationDirty,
   normalizeConfiguration,
@@ -156,8 +158,7 @@ export class ConfigurationStore {
       status:
         this.recoveryBaseRevision !== undefined ||
         this.snapshot.status === 'conflict' ||
-        (error instanceof ConfigurationApiError &&
-          error.status === 409 &&
+        (isConflict(error) &&
           !['duplicate_name', 'active_profile'].includes(error.code))
           ? 'conflict'
           : 'error',
@@ -209,7 +210,7 @@ export class ConfigurationStore {
     try {
       return await this.api.write(revision, configuration);
     } catch (error) {
-      if (error instanceof ConfigurationApiError) throw error;
+      if (isDecided(error)) throw error;
       try {
         const remote = await this.api.read();
         if (remote.revision > revision) {
@@ -217,15 +218,13 @@ export class ConfigurationStore {
             !isConfigurationDirty(remote.current_configuration, configuration)
           )
             return remote;
-          throw new ConfigurationApiError(
-            409,
-            'Settings changed after an interrupted save',
+          throw new ConfigurationConflict(
             'uncertain_result',
+            'Settings changed after an interrupted save',
           );
         }
       } catch (reconciliation) {
-        if (reconciliation instanceof ConfigurationApiError)
-          throw reconciliation;
+        if (isDecided(reconciliation)) throw reconciliation;
       }
       throw error;
     }
@@ -239,7 +238,7 @@ export class ConfigurationStore {
           state = await this.api.read();
         } catch (error) {
           if (
-            error instanceof ConfigurationApiError &&
+            error instanceof HttpError &&
             error.code === 'configuration_not_initialized'
           )
             state = await this.api.initialize();
@@ -263,17 +262,16 @@ export class ConfigurationStore {
               if (saved.base_revision !== state.revision) {
                 this.recoveryBaseRevision = saved.base_revision;
                 this.fail(
-                  new ConfigurationApiError(
-                    409,
-                    'Saved local changes conflict with newer settings',
+                  new ConfigurationConflict(
                     'journal_conflict',
+                    'Saved local changes conflict with newer settings',
                   ),
                 );
               } else await this.flushNow();
             } else this.journal();
           }
         } catch (error) {
-          if (error instanceof ConfigurationApiError) throw error;
+          if (isDecided(error)) throw error;
           this.publish({ storageError: true });
         }
         await this.loadProfiles();
@@ -379,7 +377,7 @@ export class ConfigurationStore {
         } catch (error) {
           if (
             !canRetry ||
-            !(error instanceof ConfigurationApiError) ||
+            !isConflict(error) ||
             error.code !== 'revision_conflict'
           )
             throw error;
@@ -435,10 +433,9 @@ export class ConfigurationStore {
       active.id !== profile.id ||
       active.revision !== profile.revision
     )
-      throw new ConfigurationApiError(
-        409,
-        'The active profile changed. Review its current settings before resetting.',
+      throw new ConfigurationConflict(
         'stale_profile',
+        'The active profile changed. Review its current settings before resetting.',
       );
     return active;
   }
@@ -480,18 +477,16 @@ export class ConfigurationStore {
       }
       await this.loadAvailability();
     } catch (error) {
-      if (!(error instanceof ConfigurationApiError)) {
+      if (!isDecided(error)) {
         try {
           const remote = await this.api.read();
           if (remote.revision !== (this.snapshot.confirmed?.revision ?? 0))
-            throw new ConfigurationApiError(
-              409,
-              'The server changed after an interrupted request. Reload the server state to reconcile.',
+            throw new ConfigurationConflict(
               'uncertain_result',
+              'The server changed after an interrupted request. Reload the server state to reconcile.',
             );
         } catch (reconciliation) {
-          if (reconciliation instanceof ConfigurationApiError)
-            throw reconciliation;
+          if (isDecided(reconciliation)) throw reconciliation;
         }
       }
       throw error;
@@ -594,10 +589,9 @@ export class ConfigurationStore {
         const state = await this.api.read();
         if (state.revision !== (this.snapshot.confirmed?.revision ?? 0)) {
           if (this.localGeneration !== this.acceptedGeneration)
-            throw new ConfigurationApiError(
-              409,
-              'Settings changed in another window',
+            throw new ConfigurationConflict(
               'remote_conflict',
+              'Settings changed in another window',
             );
           this.accept(state, this.localGeneration, true);
         }
