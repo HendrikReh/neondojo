@@ -25,8 +25,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
   expect(verified.status(), await verified.text()).toBe(200);
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
-  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
-  await dialog.getByText('Engines on this computer', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
   await expect(dialog.getByLabel('Python path', { exact: true })).toHaveValue(
     process.env.NEONDOJO_SAGE_PYTHON!,
   );
@@ -55,6 +54,7 @@ test('independent native engines, immutable sessions and desktop settings', asyn
     .click();
   await expect(dialog.getByRole('alert')).toHaveCount(0);
 
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
   await dialog
     .getByLabel('Analysis engine', { exact: true })
     .selectOption('bgsage');

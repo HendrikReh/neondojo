@@ -703,7 +703,7 @@ test('recapture the user guide screenshots', async ({ page }) => {
     await page.locator('header.app-header').getByRole('button', { name: 'Settings' }).click();
     const dialog = page.getByRole('dialog').filter({ hasText: 'Personal preferences' }).first();
     await dialog.waitFor();
-    for (const category of ['General', 'Appearance', 'Analysis', 'Playing', 'Board', 'Profiles']) {
+    for (const category of ['General', 'Appearance', 'Analysis', 'Playing', 'Board', 'Engines', 'Profiles']) {
       await dialog
         .getByRole('tab', { name: category, exact: true })
         .or(dialog.getByRole('button', { name: category, exact: true }))

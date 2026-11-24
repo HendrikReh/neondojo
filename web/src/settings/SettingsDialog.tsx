@@ -6,7 +6,9 @@ import { HttpError, isConflict } from '../shared/http/api';
 import { AppError } from '../shared/i18n/i18n-core';
 import { useOptionalConfiguration } from './configuration/ConfigurationProvider';
 import OpeningBookDialog from './OpeningBookDialog';
-import LocalEngineSettings, { type CheckState } from './LocalEngineSettings';
+import EngineSettingsSection, {
+  type CheckState,
+} from './EngineSettingsSection';
 import PlaySettingsSection from './PlaySettingsSection';
 import BoardSettingsSection from './BoardSettingsSection';
 import ProfileSettingsPanel from './profiles/ProfileSettingsPanel';
@@ -83,7 +85,7 @@ import {
 
 export interface SettingsDialogProps {
   open: boolean;
-  initialCategory?: 'general' | 'play' | 'profiles';
+  initialCategory?: 'general' | 'play' | 'engines' | 'profiles';
   onClose: () => void;
   onBookRefresh: () => void;
   onBenchmark?: () => void;
@@ -100,7 +102,13 @@ export interface SettingsDialogProps {
 }
 
 type Category =
-  'general' | 'appearance' | 'analysis' | 'play' | 'board' | 'profiles';
+  | 'general'
+  | 'appearance'
+  | 'analysis'
+  | 'play'
+  | 'board'
+  | 'engines'
+  | 'profiles';
 type GuardedDestination = 'close' | 'profiles' | 'book' | 'benchmark';
 
 function profilePreferences(current: ProfileConfiguration) {
@@ -152,6 +160,7 @@ export default function SettingsDialog({
     'analysis',
     'play',
     'board',
+    'engines',
   ];
   if (configuration) categories.push('profiles');
   const t = useSettingsText();
@@ -1050,34 +1059,6 @@ export default function SettingsDialog({
                       onClick={() => requestDestination('book')}
                     />
                   </div>
-                  <LocalEngineSettings
-                    id={id}
-                    draft={draft}
-                    update={update}
-                    engines={engines}
-                    check={check}
-                    checking={checking}
-                    gnubgEdited={gnubgEdited}
-                    onCheck={checkInstallation}
-                    onInstallationEdited={resetInstallationCheck}
-                    diagnostic={diagnostic}
-                    sage={sage}
-                    onVerified={refreshEngines}
-                  />
-                  {Boolean(engineCatalogError) && (
-                    <div className="settings-error" role="alert">
-                      <p>
-                        {t('engineStatusError')}{' '}
-                        {diagnostic(engineCatalogError)}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => void refreshEngines()}
-                      >
-                        {t('retry')}
-                      </button>
-                    </div>
-                  )}
                   {onBenchmark && (
                     <div className="settings-analysis-row">
                       <h3>{benchmarkT('benchmark')}</h3>
@@ -1106,6 +1087,24 @@ export default function SettingsDialog({
                   hidden={category !== 'board'}
                   theme={draftTheme}
                   onTheme={setDraftTheme}
+                />
+                <EngineSettingsSection
+                  id={id}
+                  draft={draft}
+                  update={update}
+                  disabled={saving}
+                  hidden={category !== 'engines'}
+                  engines={engines}
+                  engineCatalogError={engineCatalogError}
+                  onRefreshEngines={() => void refreshEngines()}
+                  check={check}
+                  checking={checking}
+                  gnubgEdited={gnubgEdited}
+                  onCheck={checkInstallation}
+                  onInstallationEdited={resetInstallationCheck}
+                  diagnostic={diagnostic}
+                  sage={sage}
+                  onVerified={refreshEngines}
                 />
               </>
             )}

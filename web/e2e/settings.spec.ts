@@ -189,8 +189,7 @@ test('Apply appears for changed settings and identifies the save destination', a
   );
   await name.fill(initialSettings.player_name);
   await expect(apply).toBeHidden();
-  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
-  await dialog.getByText('Engines on this computer', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
   const path = dialog.getByLabel('GNUbg executable path', { exact: true });
   await path.fill('/opt/other/bin/gnubg');
   await expect(apply).toHaveAccessibleDescription(
@@ -202,13 +201,13 @@ test('Apply appears for changed settings and identifies the save destination', a
     'Saves changes to the current configuration. Engine paths and thread limits are saved on this computer.',
   );
   await name.fill(initialSettings.player_name);
-  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
   await path.fill(initialSettings.gnubg_path);
   await expect(apply).toBeHidden();
   expect(backend.writes).toHaveLength(0);
 });
 
-test('analysis puts defaults and book source ahead of local engine setup', async ({
+test('analysis keeps profile settings and Engines provides a dedicated local configuration section', async ({
   page,
 }, info) => {
   await settingsBackend(page);
@@ -219,14 +218,6 @@ test('analysis puts defaults and book source ahead of local engine setup', async
   const engine = dialog.getByLabel('Analysis engine', { exact: true });
   const depth = dialog.getByLabel('Default analysis profile', { exact: true });
   await expect(dialog.getByText('Automatic', { exact: true })).toBeVisible();
-  const setup = dialog.getByText('Engines on this computer', { exact: true });
-  await expect(setup).toBeInViewport();
-  await expect(
-    dialog.getByText('GNUbg · Available', { exact: true }),
-  ).toBeVisible();
-  await expect(
-    dialog.getByText('NeonGammon · Not available', { exact: true }),
-  ).toBeVisible();
   const path = dialog.getByLabel('GNUbg executable path', { exact: true });
   await expect(path).toBeHidden();
   for (const [width, height] of [
@@ -239,15 +230,28 @@ test('analysis puts defaults and book source ahead of local engine setup', async
     const depthBox = await depth.boundingBox();
     expect(engineBox!.y).toBe(depthBox!.y);
     expect(engineBox!.x).toBeLessThan(depthBox!.x);
-    await expect(setup).toBeInViewport();
     await dialog.screenshot({ path: info.outputPath(`analysis-${width}.png`) });
   }
-  await page.setViewportSize({ width: 1800, height: 1169 });
-  await setup.click();
+  await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
+  await expect(
+    dialog.getByText('Engines on this computer', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText('GNUbg · Available', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText('NeonGammon · Not available', { exact: true }),
+  ).toBeVisible();
   await expect(path).toBeVisible();
-  await dialog.screenshot({
-    path: info.outputPath('analysis-engine-details.png'),
-  });
+  for (const [width, height] of [
+    [1800, 1169],
+    [2560, 1440],
+    [3840, 2160],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await expect(path).toBeInViewport();
+    await dialog.screenshot({ path: info.outputPath(`engines-${width}.png`) });
+  }
 });
 
 test('playing groups engine, feedback and game preferences without desktop scrolling', async ({
@@ -323,8 +327,7 @@ test('an edited NeonGammon path stays in the draft until verified or discarded',
   });
   await page.goto('/');
   const { dialog } = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
-  await dialog.getByText('Engines on this computer', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
   const path = dialog.getByLabel('Python path', { exact: true });
   await expect(path).toHaveValue(original);
   await expect(
@@ -425,25 +428,27 @@ test('saves separate engine thread limits and restores them when reopened', asyn
   const backend = await settingsBackend(page);
   await page.goto('/');
   const { dialog } = await openSettings(page);
-  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
-  await dialog.getByText('Engines on this computer', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
   const fields = [
-    ['GNUbg threads for analysis', 1, 7, '3'],
-    ['GNUbg threads for playing', 1, 7, '2'],
-    ['NeonGammon threads for analysis', 2, 9, '6'],
-    ['NeonGammon threads for playing', 2, 9, '4'],
+    ['GNUbg threads for analysis', 1, 7, 1, '3'],
+    ['GNUbg threads for playing', 1, 7, 1, '2'],
+    ['NeonGammon threads for analysis', 2, 9, 4, '6'],
+    ['NeonGammon threads for playing', 2, 9, 2, '4'],
   ] as const;
-  for (const [label, min, max] of fields) {
+  for (const [label, min, max, defaultThreads] of fields) {
     const field = dialog.getByRole('combobox', { name: label, exact: true });
     await expect(field).toHaveAccessibleDescription(
       new RegExp(`Configurable range ${min}–${max}`),
+    );
+    await expect(field.locator('option').first()).toHaveText(
+      `Default (${defaultThreads})`,
     );
     await expect(field.locator('option').last()).toHaveAttribute(
       'value',
       String(max),
     );
   }
-  for (const [label, , , value] of fields)
+  for (const [label, , , , value] of fields)
     await dialog
       .getByRole('combobox', { name: label, exact: true })
       .selectOption(value);
@@ -453,6 +458,9 @@ test('saves separate engine thread limits and restores them when reopened', asyn
   });
   await expect(parallelJobs).toHaveAccessibleDescription(
     /NeonGammon runs one analysis at a time/,
+  );
+  await expect(parallelJobs.locator('option').first()).toHaveText(
+    'Default (1)',
   );
   await expect(parallelJobs.locator('option').last()).toHaveAttribute(
     'value',
@@ -472,7 +480,7 @@ test('saves separate engine thread limits and restores them when reopened', asyn
   ).toBeHidden();
   await expect(dialog).toBeVisible();
   await expect(
-    dialog.getByRole('button', { name: 'Analysis', exact: true }),
+    dialog.getByRole('button', { name: 'Engines', exact: true }),
   ).toHaveAttribute('aria-current', 'page');
   await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -486,9 +494,8 @@ test('saves separate engine thread limits and restores them when reopened', asyn
     }),
   ]);
   await openSettings(page);
-  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
-  await dialog.getByText('Engines on this computer', { exact: true }).click();
-  for (const [label, , , value] of fields)
+  await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
+  for (const [label, , , , value] of fields)
     await expect(
       dialog.getByRole('combobox', { name: label, exact: true }),
     ).toHaveValue(value);
@@ -623,8 +630,7 @@ test('installation failures and save conflicts retain drafts and do not apply pr
     .getByLabel('Player name', { exact: true })
     .fill('Retained draft');
   await dialog.getByLabel('Language', { exact: true }).selectOption('de');
-  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
-  await dialog.getByText('Engines on this computer', { exact: true }).click();
+  await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
   await dialog
     .getByLabel('GNUbg executable path', { exact: true })
     .fill('/missing/gnubg');
