@@ -279,10 +279,10 @@ pub(crate) fn requires_cube_analysis(position: &crate::import::ImportedPosition)
 }
 
 pub(crate) fn cube_analysis_available(board: &[i32], match_id: &str, player: i32) -> Result<bool> {
-    if board == crate::import::sgf::initial_board() {
+    if board == crate::backgammon::initial_board() {
         return Ok(false);
     }
-    use crate::import::ids::{Field, MatchId};
+    use crate::backgammon::ids::{Field, MatchId};
     let id = MatchId::decode(match_id).context("Invalid imported Match ID")?;
     let owner = id.get(Field::CUBE_OWNER);
     if id.get(Field::CRAWFORD) != 0 || (owner != 3 && owner != player) {

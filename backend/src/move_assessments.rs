@@ -259,7 +259,7 @@ pub(crate) fn after_checker_play(
             }
         }
     }
-    crate::import::sgf::expand_xg_play(&mut board, player, dice, &runs).ok()?;
+    crate::backgammon::expand_joined_play(&mut board, player, dice, &runs).ok()?;
     Some(board)
 }
 

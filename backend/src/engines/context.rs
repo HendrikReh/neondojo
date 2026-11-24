@@ -1,5 +1,5 @@
 //! The only absolute/GNU-ID to mover-relative Sage context conversion.
-use crate::import::ids::{Field, MatchId};
+use crate::backgammon::ids::{Field, MatchId};
 use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 
@@ -69,7 +69,7 @@ impl Context {
     }
 
     pub fn board(&self, position_id: &str, match_id: &str) -> Result<[i32; 26]> {
-        let absolute: [i32; 26] = crate::import::ids::decode_board(position_id, match_id)?
+        let absolute: [i32; 26] = crate::backgammon::ids::decode_board(position_id, match_id)?
             .try_into()
             .ok()
             .context("Invalid board length")?;
@@ -126,7 +126,7 @@ pub(super) fn from_sage(board: &[i32; 26], player: i32) -> Result<[i32; 26]> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::import::ids;
+    use crate::backgammon::ids;
     use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 
     #[test]

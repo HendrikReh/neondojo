@@ -504,7 +504,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires locked NeonGammon; no database"]
     async fn full_strength_uses_pinned_checker_depth_and_two_ply_cube() {
-        use crate::import::ids::{match_id, position_id};
+        use crate::backgammon::ids::{match_id, position_id};
 
         let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
         let mut profile = SageEngine::probe_profile(python, 2, 2).await.unwrap();
@@ -554,7 +554,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires locked NeonGammon; no database"]
     async fn bot_cube_decision_equals_the_full_cube_evaluation() {
-        use crate::import::ids::{match_id, position_id};
+        use crate::backgammon::ids::{match_id, position_id};
 
         let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
         let mut profile = SageEngine::probe_profile(python, 2, 2).await.unwrap();

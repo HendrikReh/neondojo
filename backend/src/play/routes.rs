@@ -21,7 +21,7 @@ pub(super) async fn checker_turns(
     Json(request): Json<CheckerTurnsRequest>,
 ) -> ApiResult<Json<Vec<CheckerTurn>>> {
     let result = tokio::task::spawn_blocking(move || {
-        crate::import::sgf::checker_paths(&request.board, request.player, request.dice).map(
+        crate::backgammon::checker_paths(&request.board, request.player, request.dice).map(
             |paths| {
                 paths
                     .into_iter()

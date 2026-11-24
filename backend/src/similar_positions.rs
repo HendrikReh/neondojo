@@ -600,7 +600,7 @@ mod tests {
     }
     #[sqlx::test(migrations = "./migrations")]
     async fn ranks_real_positions_and_filters_their_source_and_context(pool: sqlx::PgPool) {
-        use crate::import::ids::{match_id, position_id};
+        use crate::backgammon::ids::{match_id, position_id};
         use axum::{
             body::{Body, to_bytes},
             http::Request,

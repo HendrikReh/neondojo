@@ -305,7 +305,7 @@ impl Labels {
     }
 }
 fn match_fields(id: &str) -> anyhow::Result<[i32; 7]> {
-    use crate::import::ids::{Field, MatchId};
+    use crate::backgammon::ids::{Field, MatchId};
     let id = MatchId::decode(id).ok_or_else(|| anyhow::anyhow!("Invalid match ID"))?;
     Ok([
         1 << id.get(Field::CUBE_LOG2),

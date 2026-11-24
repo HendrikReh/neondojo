@@ -147,7 +147,7 @@ fn checker(
     dice: [i32; 2],
     runs: &[(usize, usize)],
 ) -> Result<String> {
-    let steps = super::sgf::expand_xg_play(board, side, dice, runs)?;
+    let steps = crate::backgammon::expand_joined_play(board, side, dice, runs)?;
     let color = if side == 0 { 'W' } else { 'B' };
     let mut result = format!(";{color}[{}{}", dice[0], dice[1]);
     for (from, to) in steps {
@@ -297,7 +297,7 @@ pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
             out.push_str(&format!("RU[{}]", rules.join(":")));
         }
         let root_end = out.len();
-        let mut board = super::sgf::initial_board();
+        let mut board = crate::backgammon::initial_board();
         let mut cube = 1i32;
         let mut dropped = false;
         let mut resigned = false;

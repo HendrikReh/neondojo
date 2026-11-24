@@ -60,7 +60,7 @@ pub(crate) fn review_position(
     position_uuid: Option<Uuid>,
     before_roll: bool,
 ) -> Option<Position> {
-    use crate::import::ids::{Field, MatchId, decode_board, hide_dice};
+    use crate::backgammon::ids::{Field, MatchId, decode_board, hide_dice};
     let state = MatchId::decode(&source.match_id)?;
     let response = !before_roll && matches!(action(&source.notation), Some("take" | "drop"));
     if state.get(Field::TURN) != source.player

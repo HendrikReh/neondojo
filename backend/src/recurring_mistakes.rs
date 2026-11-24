@@ -247,7 +247,7 @@ fn evaluation_position(question: &MistakePracticeQuestion) -> ApiResult<Cow<'_, 
     if matches!(question.source, Some(MistakeSource::Native)) && question.kind == "cube_response" {
         let mut position = question.position.clone();
         position.gnubg_match_id =
-            crate::import::ids::without_offer_marker(&position.gnubg_match_id)
+            crate::backgammon::ids::without_offer_marker(&position.gnubg_match_id)
                 .ok_or_else(|| ApiError::invalid("This question has no valid cube context"))?;
         Ok(Cow::Owned(position))
     } else {

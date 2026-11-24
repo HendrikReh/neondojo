@@ -2,7 +2,7 @@
 //! dead-cube take point from a match equity table.
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
-use crate::import::ids::{Field, MatchId};
+use crate::backgammon::ids::{Field, MatchId};
 use crate::json_errors::Json;
 use crate::practice::evaluation::CubeChances;
 use axum::{Router, extract::State, routing::post};
@@ -254,7 +254,7 @@ pub struct CubeContextDoc;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::import::ids::match_id;
+    use crate::backgammon::ids::match_id;
 
     fn close(actual: f64, expected: f64) {
         assert!(

@@ -168,7 +168,7 @@ impl Key {
         position: &crate::model::Position,
         beaver: Option<bool>,
     ) -> Result<(Self, String)> {
-        use crate::import::ids::{Field, MatchId};
+        use crate::backgammon::ids::{Field, MatchId};
         let (canonical, _) = crate::opening_book::canonical_keys(position)?;
         let mut parts: Vec<String> = canonical.split(':').map(str::to_owned).collect();
         let length = parts[8].parse::<i32>()?;

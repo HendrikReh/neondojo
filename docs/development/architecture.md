@@ -5,7 +5,8 @@
 | Path                                                                                                               | Responsibility                                                      |
 | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
 | [`backend/src/api.rs`](../../backend/src/api.rs)                                                                         | REST, SSE, and OpenAPI                                              |
-| [`backend/src/import/`](../../backend/src/import/)                                                                       | Import, rule validation, and GNUbg identifiers                      |
+| [`backend/src/backgammon/`](../../backend/src/backgammon/) | Boards, legal checker turns, and GNUbg identifiers; depends on no other module |
+| [`backend/src/import/`](../../backend/src/import/) | Import formats, replay, and match validation |
 | [`backend/src/engine.rs`](../../backend/src/engine.rs), [`backend/src/match_analysis.rs`](../../backend/src/match_analysis.rs) | Isolated GNUbg processes and native checker and cube analysis       |
 | [`backend/src/engines/`](../../backend/src/engines/) | Engine providers, capability checks, and NeonGammon sidecar (`worker.py`) |
 | [`backend/src/jobs.rs`](../../backend/src/jobs.rs), [`backend/src/match_jobs.rs`](../../backend/src/match_jobs.rs)             | Job state, progress events, game checkpoints, and player statistics |

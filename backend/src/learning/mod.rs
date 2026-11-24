@@ -454,7 +454,7 @@ impl CardRow {
                 position.id = self.id;
                 position.notation.clear();
                 if matches!(c.kind.as_str(), "cube_offer" | "cube_response") {
-                    if let Some(id) = crate::import::ids::hide_dice(&position.gnubg_match_id) {
+                    if let Some(id) = crate::backgammon::ids::hide_dice(&position.gnubg_match_id) {
                         position.gnubg_match_id = id;
                     }
                     position.dice = vec![0, 0];

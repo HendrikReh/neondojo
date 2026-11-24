@@ -1,7 +1,7 @@
 use super::*;
 
 pub(crate) fn canonical_keys(position: &Position) -> Result<(String, Option<String>)> {
-    use crate::import::ids::{Field, MatchId};
+    use crate::backgammon::ids::{Field, MatchId};
     ensure!(matches!(position.player, 0 | 1), "Invalid player");
     ensure!(
         position.board.len() == 26 && position.board[0] <= 0 && position.board[25] >= 0,
@@ -86,7 +86,7 @@ pub(crate) fn canonical_keys(position: &Position) -> Result<(String, Option<Stri
     // The checks above bound each side to 15 checkers, so the board fits 80 bits.
     let board: &[i32; 26] = position.board.as_slice().try_into()?;
     ensure!(
-        crate::import::ids::position_id(board, position.player) == position.position_id,
+        crate::backgammon::ids::position_id(board, position.player) == position.position_id,
         "Board does not match GNUbg Position ID"
     );
     let mover = position.player as usize;

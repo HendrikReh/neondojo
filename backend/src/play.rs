@@ -88,7 +88,7 @@ pub struct CheckerTurn {
 }
 
 impl CheckerTurn {
-    fn from_path(path: crate::import::sgf::CheckerPath, player: i32) -> Self {
+    fn from_path(path: crate::backgammon::CheckerPath, player: i32) -> Self {
         let absolute = |point| if player == 0 { point } else { 25 - point };
         let (steps, dice) = path
             .steps

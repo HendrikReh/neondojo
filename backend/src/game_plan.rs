@@ -99,7 +99,7 @@ const OPENING_MAX_DISPLACED: i32 = 4;
 
 /// Both sides have at most four checkers off their starting points.
 fn is_opening(board: &[i32; 26]) -> bool {
-    let start = crate::import::sgf::initial_board();
+    let start = crate::backgammon::initial_board();
     let displaced = |sign: i32| -> i32 {
         (1..=24)
             .map(|point| ((start[point] * sign).max(0) - (board[point] * sign).max(0)).max(0))
