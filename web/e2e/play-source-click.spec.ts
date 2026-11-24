@@ -228,7 +228,8 @@ for (const mode of [
         'true',
       );
     } else if (owned) {
-      const cube = page.locator('.play-board [data-cube]');
+      // The idle board shown until the session loads has a cube of its own.
+      const cube = page.locator('.play-live-board [data-cube]');
       await expect(cube).toHaveCSS('pointer-events', 'none');
       const box = await cube.boundingBox();
       expect(box).not.toBeNull();

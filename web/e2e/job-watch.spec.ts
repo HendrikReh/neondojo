@@ -12,6 +12,21 @@ test('a running dice job uses one event stream and no full read per progress eve
   configuration.analysis.plies = 3;
   await profileBackend(page, { configuration });
   await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  // A finished job keeps no progress events, so count them as they reach the
+  // page's own event stream.
+  await page.addInitScript(() => {
+    const received: Record<string, number> = {};
+    Object.assign(window, { progressEvents: received });
+    window.EventSource = class extends EventSource {
+      constructor(url: string | URL, options?: EventSourceInit) {
+        super(url, options);
+        const { pathname } = new URL(this.url);
+        this.addEventListener('progress', () => {
+          received[pathname] = (received[pathname] ?? 0) + 1;
+        });
+      }
+    };
+  });
   const streams: string[] = [];
   const reads: string[] = [];
   page.on('request', (request) => {
@@ -42,14 +57,16 @@ test('a running dice job uses one event stream and no full read per progress eve
   await expect(page.locator('.dice-grid button')).toHaveCount(36, {
     timeout: 120_000,
   });
-  const events = await (
-    await page.request.get(`/api/jobs/${job.id}/events`)
-  ).text();
-  const progress = events.match(/^event: progress$/gm)?.length ?? 0;
   const stream = `/api/jobs/${job.id}/events`;
   const read = `/api/jobs/${job.id}`;
   // Let late readers and streams of the finished job settle.
   await page.waitForTimeout(4_000);
+  const progress = await page.evaluate(
+    (path) =>
+      (window as unknown as { progressEvents: Record<string, number> })
+        .progressEvents[path] ?? 0,
+    stream,
+  );
   console.log(
     `job-watch: progress events=${progress}, streams=${streams.filter((path) => path === stream).length}, full reads=${reads.filter((path) => path === read).length}`,
   );

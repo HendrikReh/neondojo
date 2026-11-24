@@ -91,7 +91,7 @@ The November 8, 2026 rerun imported 33 of 42 files and rejected nine XG tourname
 
 ### Browser tests
 
-Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependencies. GNUbg workflows require a working local engine. Global setup builds the backend once. Each Playwright worker then creates its own database, verifies that the API is using it, starts its own backend and Vite on local ports, and removes its database when the worker stops. Global teardown drops any database that a crashed worker left behind. Vite serves HTTP and its development WebSocket on the same loopback port. The harness lives in [`web/e2e/stack.ts`](../../web/e2e/stack.ts) and [`web/e2e/test.ts`](../../web/e2e/test.ts).
+Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependencies. GNUbg workflows require a working local engine. Global setup builds the backend once. Each Playwright worker then starts its own Vite server on a local port and keeps it for all its spec files. For every spec file the worker creates a new database, starts a backend on it, verifies that the API is using it, and removes both before the next file. Global teardown drops any database that a crashed worker left behind. Vite serves HTTP and its development WebSocket on the same loopback port. The harness lives in [`web/e2e/stack.ts`](../../web/e2e/stack.ts) and [`web/e2e/test.ts`](../../web/e2e/test.ts).
 
 ```sh
 npm run test:e2e --prefix web
@@ -99,7 +99,7 @@ npm run test:e2e --prefix web
 
 The suite runs four workers by default. Set `NEONDOJO_E2E_WORKERS` or pass `--workers` to change that; every worker runs its own GNUbg processes, so more workers mainly help the mocked specs. On November 21, 2026, on the Mac mini M4 Pro, 614 tests ran in 6.3 minutes with four workers and 24 opt-in tests were skipped. The previous single-worker harness had needed 7.2 minutes for its first 200 tests.
 
-Tests of one spec file run in order on one worker and may build on each other's data. Tests in different files can share a worker's database, so a spec must not assume an empty library: give imported matches and created databases unique names, select its own database, and assert on its own rows rather than on global counts. Import specs from `./test`. Its `test` fixture also isolates the personal configuration of each test with a mocked profile backend, and `backendTest` uses the real configuration of the worker's backend. `NEONDOJO_E2E_DATABASE_URL` and the `databaseUrl` fixture name the worker's database for direct SQL checks.
+Every spec file starts with an empty library, so it cannot see the matches, analyses or settings of another file, whatever ran before it on the same worker. Replacing the database and backend takes about half a second per file. Tests of one spec file run in order and share that library. Keep them independent all the same, because after a failure Playwright continues the file on a new worker with an empty library, and `--grep` skips the earlier tests: give imported matches and created databases unique names, assert on their own rows rather than on global counts, and note that importing the same fixture twice opens the same match with the analyses it already has. Import specs from `./test`. Its `test` fixture also isolates the personal configuration of each test with a mocked profile backend, and `backendTest` uses the real configuration of the spec file's backend. `NEONDOJO_E2E_DATABASE_URL` and the `databaseUrl` fixture name the spec file's database for direct SQL checks.
 
 Write screenshots for visual review with `test.info().outputPath(...)`. Playwright stores them with the other artifacts of the test under `web/test-results/`, or under the directory passed with `--output`. To keep the backend output for diagnosis, set `NEONDOJO_E2E_BACKEND_LOG` to a file; the worker with index 1 and higher appends `-1`, `-2` and so on to its name.
 
@@ -121,7 +121,7 @@ restored progress and persisted job IDs in the disposable database.
 npm run test:e2e --prefix web -- e2e/analysis-calculation-controls.spec.ts --grep "reload resumes native bulk"
 ```
 
-The default PostgreSQL connection targets the Compose instance. For another server or port, set `NEONDOJO_E2E_POSTGRES_URL` to a connection with `CREATEDB`. For tests that need prepared data, set `NEONDOJO_E2E_POSTGRES_TEMPLATE` to a dedicated fixture database named `neondojo_e2e_template_*`. The harness copies the template for each worker. Unset the obsolete `NEONDOJO_TEST_URL` before running Playwright.
+The default PostgreSQL connection targets the Compose instance. For another server or port, set `NEONDOJO_E2E_POSTGRES_URL` to a connection with `CREATEDB`. For tests that need prepared data, set `NEONDOJO_E2E_POSTGRES_TEMPLATE` to a dedicated fixture database named `neondojo_e2e_template_*`. The harness copies the template for each spec file. Unset the obsolete `NEONDOJO_TEST_URL` before running Playwright.
 
 Coverage includes import and analysis, game selection and move pagination, search and filters, saved notes and revision conflicts, deck creation, review and Anki exports, themes and all six locales, and selection changes while responses are in flight.
 
