@@ -25,6 +25,10 @@ const SINGLE_THREADED_MATH: [(&str, &str); 3] = [
 // still exclude all other engine work through the shared engine gate.
 static GENERAL: Mutex<Option<Worker>> = Mutex::const_new(None);
 static PLAY: Mutex<Option<Worker>> = Mutex::const_new(None);
+/// Installation checks run one at a time, each in its own process. They wait
+/// for neither worker, so a game analysis does not delay a new match, the
+/// engine list or the submission of another analysis.
+static PROBE: Mutex<()> = Mutex::const_new(());
 static CPU_BUDGET: LazyLock<(u32, Semaphore)> = LazyLock::new(|| {
     let capacity = crate::configuration::available_cpu_threads()
         .and_then(|count| u32::try_from(count).ok())
@@ -331,10 +335,9 @@ pub(super) async fn request_costed(
 
 pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
     crate::engine::with_shared_access(async {
-        let mut cache = GENERAL.lock().await;
         tokio::time::timeout(Duration::from_secs(120), async {
+            let _single = PROBE.lock().await;
             let _threads = acquire_threads(profile).await?;
-            reap_other_runtime(&mut cache).await?;
             let mut worker = Worker::start(profile).await?;
             let (identity, _) = worker
                 .exchange(json!({"operation":"initialize", "profile":profile}))
@@ -343,7 +346,7 @@ pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
             Ok(identity)
         })
         .await
-        .context("NeonGammon installation check timed out")?
+        .context("NeonGammon installation check timed out, including the wait for another check and the CPU budget")?
     })
     .await
 }
@@ -482,7 +485,7 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
     }
 }
 
-fn validate_identity(profile: &SageSnapshot, identity: &Value) -> Result<()> {
+pub(super) fn validate_identity(profile: &SageSnapshot, identity: &Value) -> Result<()> {
     ensure!(
         identity["package_version"].as_str() == Some(&profile.package_version)
             && identity["artifact_fingerprint"].as_str() == Some(&profile.artifact_fingerprint),
@@ -1132,6 +1135,28 @@ for line in sys.stdin:
             worker.shutdown().await.unwrap();
             assert_reaped(&new_pid).await;
         });
+    }
+
+    #[tokio::test]
+    async fn installation_checks_finish_while_an_analysis_block_holds_the_general_worker() {
+        let _serial = TEST_LOCK.lock().await;
+        let analysis = FakeWorker::new("batch_healthy");
+        let check = FakeWorker::new("healthy");
+        let batch = VerifiedBatch::begin(&analysis.profile).await.unwrap();
+        let checks = async { tokio::join!(probe(&check.profile), probe(&check.profile)) };
+        let (first, second) = tokio::time::timeout(Duration::from_secs(5), checks)
+            .await
+            .expect("An installation check waited for the analysis block");
+        first.unwrap();
+        second.unwrap();
+        assert_reaped(&check.pid()).await;
+        batch.finish().await.unwrap();
+        assert!(
+            GENERAL.lock().await.is_some(),
+            "A check took the worker of the analysis block"
+        );
+        drop(GENERAL.lock().await.take());
+        assert_reaped(&analysis.pid()).await;
     }
 
     #[tokio::test]
