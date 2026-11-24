@@ -405,7 +405,10 @@ export default function MatchAnalysisPanel({
     if (page !== decisions.page) decisions.setPage(page);
   }
 
-  async function navigateReview(direction: 'previous' | 'next') {
+  /** Resolves to false when a newer selection or revision ended the search. */
+  async function navigateReview(
+    direction: 'previous' | 'next',
+  ): Promise<boolean> {
     if (
       !boardReview ||
       loading ||
@@ -414,7 +417,7 @@ export default function MatchAnalysisPanel({
       pageError ||
       !decisions.total
     )
-      return;
+      return true;
     if (selectedIndex >= 0) {
       const step = direction === 'next' ? 1 : -1;
       for (let index = selectedIndex + step; rows[index]; index += step) {
@@ -423,7 +426,7 @@ export default function MatchAnalysisPanel({
           row: rows[index],
           ordinal: pageOffset + index + 1,
         });
-        return;
+        return true;
       }
     }
     pendingJump.current?.abort();
@@ -451,14 +454,15 @@ export default function MatchAnalysisPanel({
               }
             : undefined,
       });
-      if (!current()) return;
+      if (!current()) return false;
       if (entry && entry.row.id !== boardReview.origin.row?.id)
         openListedDecision(entry);
       else setReviewJump({ key: selectionKey, entry: currentJump?.entry });
     } catch (error) {
-      if (current())
-        setReviewJump({ key: selectionKey, entry: currentJump?.entry, error });
+      if (!current()) return false;
+      setReviewJump({ key: selectionKey, entry: currentJump?.entry, error });
     }
+    return true;
   }
   // Opening Cube without a reviewed decision shows the first matching one
   // from the board position on, as Next error would. An existing selection
@@ -488,7 +492,14 @@ export default function MatchAnalysisPanel({
     )
       return;
     awaitingCubeSelection.current = false;
-    void navigateReview('next');
+    const { intent, currentIntent } = boardReview;
+    void navigateReview('next').then((finished) => {
+      // A revision that arrives during the search, such as the first loaded
+      // configuration, ends it. Unless the board moved, land on the decisions
+      // of that revision instead.
+      if (!finished && currentIntent() === intent)
+        awaitingCubeSelection.current = true;
+    });
     // The loaded page and the selection decide; the callbacks are current.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
