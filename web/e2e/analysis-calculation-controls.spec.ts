@@ -74,6 +74,12 @@ test('imported candidates come first and position progress stays in the workspac
   ).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(recalculate).toBeFocused();
+  // A cancelled dialog returns to the options.
+  const options = header.getByRole('button', {
+    name: 'Analysis options',
+    exact: true,
+  });
+  await expect(options).toHaveAttribute('aria-expanded', 'true');
   let submitted = 0;
   let job: Record<string, unknown>;
   await page.route('**/api/jobs', async (route) => {
@@ -105,6 +111,9 @@ test('imported candidates come first and position progress stays in the workspac
     .getByRole('button', { name: 'Analyze position', exact: true })
     .click();
   await expect(dialog).toBeHidden();
+  // A started one closes them, so they do not cover the analysis.
+  await expect(options).toHaveAttribute('aria-expanded', 'false');
+  await expect(options).toBeFocused();
   await expect(
     header.getByRole('progressbar', { name: 'Analysis progress' }),
   ).toHaveAttribute('value', '25');

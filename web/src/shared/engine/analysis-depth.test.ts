@@ -2,9 +2,9 @@ import { catalogFixture } from '../../workspaces/analysis/analysis-catalog-test-
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { PositionAnalysisDepth } from '../../workspaces/analysis/AnalysisPanel';
-import { ANALYSIS_PLIES } from './analysis-depth';
-import MatchAnalysisPanel from '../../workspaces/analysis/match/MatchAnalysisPanel';
+import { PositionAnalysisDepth } from '../../workspaces/analysis/PositionCalculationControls';
+import { ANALYSIS_PLIES, DEFAULT_ANALYSIS_PLIES } from './analysis-depth';
+import MatchAnalysisHeader from '../../workspaces/analysis/match/MatchAnalysisHeader';
 import { I18nProvider } from '../i18n/i18n';
 import type { Match } from '../http/api';
 
@@ -54,9 +54,12 @@ it('labels NeonGammon depths without a GNUbg level', () => {
 it('defaults game/match analysis to GNUbg 3-ply and offers 4- and 5-ply', () => {
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
-      children: createElement(MatchAnalysisPanel, {
+      children: createElement(MatchAnalysisHeader, {
         match: { id: 'match', white: 'Alice', black: 'Bob' } as Match,
         gameNo: 1,
+        defaultEngine: 'gnubg',
+        defaultPlies: DEFAULT_ANALYSIS_PLIES,
+        configured: true,
         catalog: catalogFixture(),
       }),
     }),

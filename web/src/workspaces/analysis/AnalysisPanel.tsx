@@ -1,12 +1,10 @@
-import type { MatchAnalysisEngine } from './match/useMatchAnalysis';
-import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
+import type { PositionCalculation } from './usePositionCalculation';
 import Tooltip from '../../shared/ui/Tooltip';
 import EngineLabel from '../../shared/engine/EngineLabel';
 import ActionButton from '../../shared/ui/ActionButton';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
 import { useLibraryText } from '../library/library-messages';
 import { useEffect, useEffectEvent, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   request,
   type Distribution,
@@ -33,11 +31,7 @@ import type { PositionAnalysisResult } from './analysis-catalog-api';
 import { useAnalysisCatalogText } from './analysis-catalog-messages';
 import { useCandidateText } from './candidates/candidate-messages';
 import './candidates/analysis-sources.css';
-import {
-  ANALYSIS_PLIES,
-  DEFAULT_ANALYSIS_PLIES,
-  depthLabel,
-} from '../../shared/engine/analysis-depth';
+import { DEFAULT_ANALYSIS_PLIES } from '../../shared/engine/analysis-depth';
 import type { SourceAnalysis } from './candidates/source-analysis-api';
 
 const noImportedRecords: SourceAnalysis[] = [];
@@ -54,16 +48,13 @@ function rollKey(dice: readonly number[] | undefined) {
 
 export default function AnalysisPanel({
   positionJobs,
+  calculation,
   catalog,
   observedMatchId,
   gameNo,
-  disabled,
   active = true,
   resultsVisible,
-  calculationTarget,
-  onShowResults,
   defaultPlies = DEFAULT_ANALYSIS_PLIES,
-  configuredEngine = 'gnubg',
   positionId,
   openingBookRevision = 0,
   onPreview,
@@ -74,16 +65,13 @@ export default function AnalysisPanel({
   analysisRevision,
 }: {
   positionJobs: ReturnType<typeof useJobs>;
+  calculation: PositionCalculation;
   catalog: AnalysisCatalog;
   observedMatchId?: string;
   gameNo?: number;
-  disabled: boolean;
   active?: boolean;
   resultsVisible: boolean;
-  calculationTarget?: HTMLElement | null;
-  onShowResults?: () => void;
   defaultPlies?: number;
-  configuredEngine?: MatchAnalysisEngine;
   positionId?: string;
   openingBookRevision?: number;
   onPreview?: (candidate: PreviewCandidate | null, view?: BoardView) => void;
@@ -101,9 +89,9 @@ export default function AnalysisPanel({
     formatDecision,
     formatError,
   } = useI18n();
-  const engineName = configuredEngine === 'bgsage' ? 'NeonGammon' : 'GNUbg';
-  const supportedPlies =
-    configurationOptions.engine_profiles[configuredEngine].analysis;
+  const { jobs, restoring, failure, submitting, run, removeDice } =
+    positionJobs;
+  const { engine, view, setView, pending, blocked, diceDeleted } = calculation;
   const l = useSourceText();
   const candidateText = useCandidateText();
   const catalogText = useAnalysisCatalogText();
@@ -116,15 +104,6 @@ export default function AnalysisPanel({
   );
   const resetPreview = useEffectEvent(() => onPreview?.(null));
   const [bookOpen, setBookOpen] = useState(false);
-  const [dicePlies, setDicePlies] = useState(defaultPlies);
-  const [checkerPlies, setCheckerPlies] = useState(defaultPlies);
-  useEffect(() => {
-    setDicePlies(defaultPlies);
-    setCheckerPlies(defaultPlies);
-  }, [defaultPlies, configuredEngine]);
-  const [view, setView] = useState<
-    'analysis' | 'comparison' | 'dice' | 'observed'
-  >('analysis');
   const observedPath =
     observedMatchId && gameNo !== undefined
       ? `/matches/${encodeURIComponent(observedMatchId)}/dice?game_no=${gameNo}`
@@ -157,21 +136,6 @@ export default function AnalysisPanel({
     return () => abort.abort();
   }, [observedPath, loadObserved]);
   useEffect(() => resetPreview(), [catalog.analysisId, positionId, view]);
-  const [calculation, setCalculation] = useState<{
-    positionId: string;
-    engine: string;
-    plies: number;
-    kind: 'analysis' | 'dice';
-  }>();
-  const settings =
-    active &&
-    calculation?.positionId === positionId &&
-    calculation?.engine === configuredEngine
-      ? calculation
-      : undefined;
-  useEffect(() => {
-    setCalculation(undefined);
-  }, [active, positionId, configuredEngine]);
   // The grid starts on the roll shown on the board; a choice applies to its position only.
   const rolled = rollKey(position?.dice);
   const [rollChoice, setRollChoice] = useState<{
@@ -182,17 +146,6 @@ export default function AnalysisPanel({
     rollChoice && rollChoice.positionId === positionId
       ? rollChoice.roll
       : (rolled ?? '1-1');
-  const { jobs, restoring, failure, submitting, run, removeDice } =
-    positionJobs;
-  // After a deletion, the tab waits for an explicit request instead of recalculating.
-  const [deletedDice, setDeletedDice] = useState<{
-    positionId?: string;
-    engine: MatchAnalysisEngine;
-  }>();
-  const diceDeleted =
-    !!deletedDice &&
-    deletedDice.positionId === positionId &&
-    deletedDice.engine === configuredEngine;
   const [diceDeletion, setDiceDeletion] = useState<{
     positionId?: string;
     jobId: string;
@@ -204,18 +157,14 @@ export default function AnalysisPanel({
     diceDeletion?.positionId === positionId ? diceDeletion : undefined;
   const diceJob = jobs.dice;
   const latestJob = view === 'dice' ? diceJob : jobs.analysis;
-  const pending = Object.values(jobs).some(
-    (job) => job.status === 'queued' || job.status === 'running',
-  );
   const distribution =
     diceJob?.status === 'completed' ? (diceJob.result as Distribution) : null;
-  const blocked = disabled || submitting || restoring || pending;
   const canRequestDice =
     resultsVisible &&
     !!positionId &&
     !blocked &&
     failure !== 'restore' &&
-    !settings;
+    !calculation.settings;
   const diceFailed = failure === 'dice' || diceJob?.status === 'failed';
   const requestMissingDice = useEffectEvent(() => {
     void run('dice', defaultPlies);
@@ -231,40 +180,21 @@ export default function AnalysisPanel({
       requestMissingDice();
   }, [view, canRequestDice, diceJob, diceFailed, diceDeleted]);
   const chooseDice = () => {
-    setView('dice');
-    setDeletedDice(undefined);
-    onPreview?.(null);
+    calculation.showDice();
     if (canRequestDice && !distribution && diceFailed)
       void run('dice', defaultPlies);
-  };
-  const closeCalculation = () => setCalculation(undefined);
-  const startCalculation = () => {
-    if (!settings || blocked) return;
-    closeCalculation();
-    onShowResults?.();
-    if (settings.kind === 'dice') {
-      setView('dice');
-      setDeletedDice(undefined);
-      onPreview?.(null);
-      setDicePlies(settings.plies);
-      void run('dice', settings.plies);
-    } else {
-      setView('analysis');
-      setCheckerPlies(settings.plies);
-      void run('analysis', settings.plies);
-    }
   };
   const confirmDiceDeletion = async () => {
     const target = deletionTarget;
     if (!target || target.busy) return;
     setDiceDeletion({ ...target, busy: true, error: undefined });
-    setDeletedDice({ positionId: target.positionId, engine: configuredEngine });
+    calculation.setDeletedDice({ positionId: target.positionId, engine });
     onPreview?.(null);
     try {
       await removeDice(target.jobId);
       setDiceDeletion(undefined);
     } catch (error) {
-      setDeletedDice(undefined);
+      calculation.setDeletedDice(undefined);
       setDiceDeletion((current) =>
         current?.jobId === target.jobId
           ? { ...target, busy: false, error }
@@ -583,73 +513,6 @@ export default function AnalysisPanel({
           {latestJob.error && t('error.engine', { details: latestJob.error })}
         </p>
       )}
-      {active &&
-        calculationTarget &&
-        createPortal(
-          <>
-            {(['analysis', 'dice'] as const).map((kind) => (
-              <ActionButton
-                key={kind}
-                type="button"
-                icon="analysis"
-                label={`${t(kind === 'dice' ? 'analysis.recalculateDice' : 'analysis.recalculate')} …`}
-                aria-haspopup="dialog"
-                disabled={!positionId || blocked}
-                onClick={(event) => {
-                  if (!positionId) return;
-                  event.currentTarget.focus();
-                  setCalculation({
-                    positionId,
-                    plies:
-                      kind === 'dice'
-                        ? (diceJob?.plies ?? dicePlies)
-                        : checkerPlies,
-                    engine: configuredEngine,
-                    kind,
-                  });
-                }}
-              />
-            ))}
-            {settings && (
-              <LibraryDialog
-                title={t(
-                  settings.kind === 'dice'
-                    ? 'analysis.recalculateDice'
-                    : 'analysis.recalculate',
-                )}
-                native
-                initialFocus="dialog"
-                onClose={closeCalculation}
-              >
-                <p className="fineprint">{engineName}</p>
-                <div className="analysis-controls">
-                  <PositionAnalysisDepth
-                    plies={settings.plies}
-                    engine={configuredEngine}
-                    supportedPlies={supportedPlies}
-                    onChange={(plies) => setCalculation({ ...settings, plies })}
-                  />
-                  <ActionButton
-                    type="button"
-                    icon="analysis"
-                    label={t(
-                      settings.kind === 'dice'
-                        ? 'analysis.diceEquity'
-                        : 'analysis.analyze',
-                    )}
-                    className="primary"
-                    disabled={blocked}
-                    onClick={startCalculation}
-                  />
-                  <button type="button" onClick={closeCalculation}>
-                    {library('cancel')}
-                  </button>
-                </div>
-              </LibraryDialog>
-            )}
-          </>,
-          calculationTarget,
-        )}
     </section>
   );
 }
@@ -733,46 +596,5 @@ export function SelectedAnalysisResult({
       <p>{text(selected ? 'missing' : 'none')}</p>
       {alternatives && <p>{text('alternatives')}</p>}
     </div>
-  );
-}
-
-export function PositionAnalysisDepth({
-  plies = DEFAULT_ANALYSIS_PLIES,
-  engine,
-  supportedPlies,
-  onChange,
-}: {
-  plies?: number;
-  engine?: string;
-  supportedPlies: readonly number[];
-  onChange: (plies: number) => void;
-}) {
-  const { t } = useI18n();
-  return (
-    <label className="depth-label">
-      {t('analysis.depth')}{' '}
-      <select
-        aria-label={t('analysis.depth')}
-        value={plies}
-        onChange={(event) => onChange(Number(event.target.value))}
-      >
-        {ANALYSIS_PLIES.map((ply) => {
-          const depth = depthLabel(ply, engine);
-          return (
-            <option
-              key={ply}
-              value={ply}
-              disabled={!supportedPlies.includes(ply)}
-            >
-              {ply === 1
-                ? t('analysis.fast', { depth })
-                : ply === DEFAULT_ANALYSIS_PLIES
-                  ? t('analysis.accurate', { depth })
-                  : depth}
-            </option>
-          );
-        })}
-      </select>
-    </label>
   );
 }

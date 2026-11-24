@@ -2,7 +2,7 @@ import { catalogFixture, entryForJob } from '../analysis-catalog-test-fixtures';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import MatchAnalysisPanel from './MatchAnalysisPanel';
+import MatchAnalysisHeader from './MatchAnalysisHeader';
 import { I18nProvider } from '../../../shared/i18n/i18n';
 import type { Job, Match } from '../../../shared/http/api';
 const state = vi.hoisted(() => ({ status: 'running' }));
@@ -29,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals());
 const render = () =>
   renderToStaticMarkup(
     createElement(I18nProvider, {
-      children: createElement(MatchAnalysisPanel, {
+      children: createElement(MatchAnalysisHeader, {
         match: {
           id: 'source',
           white: 'Alice',
@@ -38,6 +38,9 @@ const render = () =>
           position_count: 100,
         } as Match,
         gameNo: 1,
+        defaultEngine: 'gnubg',
+        defaultPlies: 3,
+        configured: true,
         catalog: catalogFixture(
           entryForJob(
             {

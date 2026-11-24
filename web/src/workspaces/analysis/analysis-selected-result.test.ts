@@ -82,9 +82,19 @@ it('shows the ranked candidates from the selected game analysis', () => {
 it('offers an explicit action for a completed calculation while keeping the selected source', async () => {
   const { default: AnalysisPanel } = await import('./AnalysisPanel');
   const { catalogFixture } = await import('./analysis-catalog-test-fixtures');
+  const { usePositionCalculation } = await import('./usePositionCalculation');
+  type Props = Parameters<typeof AnalysisPanel>[0];
+  function Panel(props: Omit<Props, 'calculation'>) {
+    const calculation = usePositionCalculation({
+      positionJobs: props.positionJobs,
+      disabled: false,
+      active: true,
+    });
+    return createElement(AnalysisPanel, { ...props, calculation });
+  }
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
-      children: createElement(AnalysisPanel, {
+      children: createElement(Panel, {
         catalog: {
           ...catalogFixture(),
           analysisId: 'imported:match',
@@ -107,7 +117,6 @@ it('offers an explicit action for a completed calculation while keeping the sele
           error: undefined,
           failure: undefined,
         },
-        disabled: false,
         resultsVisible: true,
       }),
     }),

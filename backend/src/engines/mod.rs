@@ -313,6 +313,13 @@ impl SageEngine {
     pub fn saved_version(&self) -> Option<&str> {
         Some(&self.version)
     }
+    /// Checks in a separate process that this exact profile still runs and
+    /// matches its saved identity.
+    pub(crate) async fn verify(&self) -> Result<String> {
+        let identity = process::probe(&self.snapshot).await?;
+        process::validate_identity(&self.snapshot, &identity)?;
+        Ok(self.version.clone())
+    }
     pub async fn restart(&self) -> Result<()> {
         process::restart(&self.snapshot).await
     }

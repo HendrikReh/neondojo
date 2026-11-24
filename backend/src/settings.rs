@@ -300,15 +300,15 @@ async fn analysis_snapshot(
     .await
 }
 
-/// The same verified NeonGammon profile with cubeless evaluation. Starting the
-/// worker for its version runs the real capability check for that profile.
+/// The same verified NeonGammon profile with cubeless evaluation, after the
+/// real capability check for that profile.
 pub(crate) async fn cubeless_sage(mut snapshot: EngineSnapshot) -> anyhow::Result<EngineSnapshot> {
     let sage = snapshot
         .open_sage
         .as_mut()
         .ok_or_else(|| anyhow::anyhow!("Missing verified NeonGammon installation"))?;
     sage.cubeless = true;
-    snapshot.engine_version = Some(SageEngine::new(sage.clone())?.version().await?);
+    snapshot.engine_version = Some(SageEngine::new(sage.clone())?.verify().await?);
     Ok(snapshot)
 }
 
@@ -327,7 +327,10 @@ pub(crate) async fn snapshot_for(
         None
     };
     let engine_version = match &open_sage {
-        Some(snapshot) => Some(SageEngine::new(snapshot.clone())?.version().await?),
+        // `verified_profile` has just checked this profile in its own process.
+        Some(snapshot) => SageEngine::new(snapshot.clone())?
+            .saved_version()
+            .map(str::to_owned),
         None => {
             let current = Engine::new(gnubg_path.to_owned()).version().await.ok();
             let saved = load_row(state).await?;

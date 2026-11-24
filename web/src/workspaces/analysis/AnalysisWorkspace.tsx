@@ -28,9 +28,13 @@ import { BoardDecisionComparison } from './BoardDecisionReview';
 import AnalysisPanel from './AnalysisPanel';
 import CubeReviewEvaluation from './CubeReviewEvaluation';
 import AnalysisRunningJobs from './AnalysisRunningJobs';
-import MatchAnalysisPanel, {
-  type BoardReviewTarget,
-} from './match/MatchAnalysisPanel';
+import MatchAnalysisHeader from './match/MatchAnalysisHeader';
+import MatchAnalysisPanel from './match/MatchAnalysisPanel';
+import MatchDecisionFilters from './match/MatchDecisionFilters';
+import MatchErrorNavigation from './match/MatchErrorNavigation';
+import { useMatchReview } from './match/useMatchReview';
+import PositionCalculationControls from './PositionCalculationControls';
+import { usePositionCalculation } from './usePositionCalculation';
 import NotesPanel from './notes/NotesPanel';
 import GameSelector from './GameSelector';
 import { AddCardsPanel } from '../study/flashcards/AddCardsPanel';
@@ -61,7 +65,7 @@ import type { MoveNotesTarget } from './notes/MoveNotesDialog';
 import { useAnalysisBoardResize } from './useAnalysisBoardResize';
 import type { MatchAnalysisEngine } from './match/useMatchAnalysis';
 import { useWorkspaceLayout, useWorkspaceSession } from '../../shared/hooks/useWorkspaceSession';
-import { useAnalysisCatalog, type AnalysisCatalog } from './useAnalysisCatalog';
+import { useAnalysisCatalog } from './useAnalysisCatalog';
 import AnalysisCatalogSelect from './AnalysisCatalogSelect';
 
 export type AnalysisDetail =
@@ -162,15 +166,6 @@ export default function AnalysisWorkspace({
   const availableTabs = sourceAvailable
     ? detailTabs
     : detailTabs.filter((tab) => tab !== 'statistics' && tab !== 'errors');
-  const [commandTarget, setCommandTarget] = useState<HTMLDivElement | null>(
-    null,
-  );
-  const [positionControls, setPositionControls] =
-    useState<HTMLDivElement | null>(null);
-  const [boardTarget, setBoardTarget] = useState<HTMLDivElement | null>(null);
-  const [checkerControls, setCheckerControls] = useState<HTMLDivElement | null>(
-    null,
-  );
   const [checkerReviewMatch, setCheckerReviewMatch] = useState<string>();
   const overview = detail === 'overview';
   const errors = detail === 'errors';
@@ -499,6 +494,45 @@ export default function AnalysisWorkspace({
     // The request token and the loaded analysis identify one lookup.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedCubeDecision?.token, cubeRequestReady]);
+  const calculationActive = active && !cubeBoard;
+  const calculation = usePositionCalculation({
+    positionJobs: jobs,
+    positionId: position?.id,
+    engine: defaultEngine,
+    defaultPlies,
+    disabled: !position || !configured,
+    active: calculationActive,
+    open: !!match,
+    onShowResults: () => onDetail('overview'),
+    onResetPreview: () => onPreview(null),
+  });
+  const positionCalculation = calculationActive ? calculation : undefined;
+  const matchReview = useMatchReview({
+    match: match && sourceAvailable ? match : undefined,
+    catalog,
+    analysisRevision: catalogRevision,
+    gameNo: game?.game_no,
+    reviewKind: overview ? 'checker' : 'cube',
+    showResults: errors,
+    checkerFiltersOpen: reviewingCheckers,
+    board: showErrorNavigation
+      ? {
+          origin: {
+            game: game?.game_no,
+            ply: position?.ply,
+            row: cube ?? checkerReview,
+          },
+          intent,
+          currentIntent: navigation.intent,
+          busy: loading,
+        }
+      : undefined,
+    selectedPositionId: cubeBoard ? undefined : position?.id,
+    selectedDecisionId: (cube ?? checkerReview)?.id,
+    onDecision: openReviewDecision,
+    onShowReview: showReview,
+    onGame: (number) => void navigation.selectGame(number),
+  });
   const tabRefs = useRef<
     Partial<Record<AnalysisDetail, HTMLButtonElement | null>>
   >({});
@@ -587,14 +621,31 @@ export default function AnalysisWorkspace({
             </button>
           ))}
         </div>
-        {sourceAvailable && (
-          <div className="workspace-analysis-command" ref={setCommandTarget} />
-        )}
-        {!sourceAvailable && (
-          <div
-            className="position-analysis-actions"
-            ref={setPositionControls}
+        {sourceAvailable ? (
+          <MatchAnalysisHeader
+            key={match.id}
+            match={match}
+            gameNo={game?.game_no}
+            defaultEngine={defaultEngine}
+            defaultPlies={defaultPlies}
+            configured={configured}
+            analysisInstallationKey={analysisInstallationKey}
+            analysisRevision={catalogRevision}
+            catalog={catalog}
+            positionCalculation={positionCalculation}
+            onJob={onTrackJob}
+            onAccepted={(job) => {
+              onTrackJob(job);
+              catalog.refresh();
+            }}
+            onAnalyzeMatch={onAnalyzeMatch && (() => onAnalyzeMatch(match))}
           />
+        ) : (
+          <div className="position-analysis-actions">
+            {positionCalculation && (
+              <PositionCalculationControls calculation={positionCalculation} />
+            )}
+          </div>
         )}
         <AnalysisRunningJobs
           jobs={runningJobs}
@@ -685,7 +736,15 @@ export default function AnalysisWorkspace({
           )}
         </aside>
         <section className="board-panel" id="analysis-board-panel">
-          {showErrorNavigation && <div ref={setBoardTarget} />}
+          {showErrorNavigation && (
+            <div>
+              <MatchErrorNavigation
+                review={matchReview}
+                catalog={catalog}
+                match={match}
+              />
+            </div>
+          )}
           {boardPosition ? (
             <>
               <div className="board-heading">
@@ -871,7 +930,14 @@ export default function AnalysisWorkspace({
           >
             {reviewingCheckers && (
               <div className="checker-statistics-review">
-                <div ref={setCheckerControls} />
+                <div>
+                  <MatchDecisionFilters
+                    review={matchReview}
+                    match={match}
+                    games={games}
+                    gameNo={game?.game_no}
+                  />
+                </div>
                 <ActionButton
                   type="button"
                   icon="clear"
@@ -916,17 +982,15 @@ export default function AnalysisWorkspace({
             )}
             <AnalysisPanel
               positionJobs={jobs}
+              calculation={calculation}
               catalog={catalog}
-              active={active && !cubeBoard}
+              active={calculationActive}
               resultsVisible={active && overview && !cubeBoard && !loading}
-              calculationTarget={positionControls}
-              onShowResults={() => onDetail('overview')}
               observedMatchId={
                 sourceAvailable && gameLoaded ? match.id : undefined
               }
               gameNo={game?.game_no}
               defaultPlies={defaultPlies}
-              configuredEngine={defaultEngine}
               positionId={position?.id}
               position={position ?? undefined}
               players={match}
@@ -941,46 +1005,24 @@ export default function AnalysisWorkspace({
               analysisRevision={catalogRevision}
               onPreview={onPreview}
               selectedPreview={selectedPreview}
-              disabled={!position || !configured}
             />
           </div>
           {sourceAvailable && (
-            <MatchResults
-              matchId={match.id}
-              gameNo={game?.game_no}
-              navigation={navigation}
-              defaultEngine={defaultEngine}
-              defaultPlies={defaultPlies}
-              configured={configured}
-              analysisInstallationKey={analysisInstallationKey}
-              detail={detail}
-              target={commandTarget}
-              positionControlsRef={setPositionControls}
-              onDecision={openReviewDecision}
-              onTrackJob={onTrackJob}
-              onAnalyzeMatch={onAnalyzeMatch}
-              catalog={catalog}
-              analysisRevision={catalogRevision}
-              boardReview={
-                boardTarget && showErrorNavigation
-                  ? {
-                      element: boardTarget,
-                      origin: {
-                        game: game?.game_no,
-                        ply: position?.ply,
-                        row: cube ?? checkerReview,
-                      },
-                      intent,
-                      currentIntent: navigation.intent,
-                      busy: loading,
-                    }
-                  : undefined
-              }
-              onShowReview={showReview}
-              checkerControls={reviewingCheckers ? checkerControls : null}
-              selectedDecisionId={(cube ?? checkerReview)?.id}
-              selectedPositionId={cubeBoard ? undefined : position?.id}
-            />
+            <div
+              className="workspace-match-results"
+              hidden={detail !== 'errors' && detail !== 'statistics'}
+            >
+              <MatchAnalysisPanel
+                key={match.id}
+                review={matchReview}
+                match={match}
+                games={games}
+                gameNo={game?.game_no}
+                catalog={catalog}
+                showResults={errors}
+                showStatistics={detail === 'statistics'}
+              />
+            </div>
           )}
           {cube && cubeBoard && (
             <div className="overview-evaluation">
@@ -1031,88 +1073,5 @@ export default function AnalysisWorkspace({
         </aside>
       </div>
     </section>
-  );
-}
-
-// Keep the subscription mounted regardless of inspector tab or main workspace.
-function MatchResults({
-  navigation,
-  defaultEngine,
-  defaultPlies,
-  analysisInstallationKey,
-  configured,
-  detail,
-  target,
-  positionControlsRef,
-  onDecision,
-  onTrackJob,
-  onAnalyzeMatch,
-  catalog,
-  boardReview,
-  analysisRevision,
-  onShowReview,
-  checkerControls,
-  selectedPositionId,
-  selectedDecisionId,
-}: {
-  matchId: string;
-  gameNo?: number;
-  navigation: ReturnType<typeof useGameNavigation>;
-  defaultEngine: MatchAnalysisEngine;
-  defaultPlies: number;
-  analysisInstallationKey?: string;
-  configured: boolean;
-  detail: AnalysisDetail;
-  target: HTMLElement | null;
-  positionControlsRef: (element: HTMLDivElement | null) => void;
-  onDecision: (decision: ReviewDecision) => void;
-  onTrackJob: (job: Job | undefined) => void;
-  onAnalyzeMatch?: (match: Match) => void;
-  catalog: AnalysisCatalog;
-  boardReview?: BoardReviewTarget;
-  analysisRevision?: string;
-  onShowReview: (kind: DecisionKind) => void;
-  checkerControls: HTMLElement | null;
-  selectedPositionId?: string;
-  selectedDecisionId?: string;
-}) {
-  return (
-    <div
-      className="workspace-match-results"
-      hidden={detail !== 'errors' && detail !== 'statistics'}
-    >
-      <MatchAnalysisPanel
-        key={navigation.match!.id}
-        match={navigation.match!}
-        games={navigation.games}
-        onDecision={onDecision}
-        gameNo={navigation.game?.game_no}
-        defaultEngine={defaultEngine}
-        defaultPlies={defaultPlies}
-        configured={configured}
-        analysisInstallationKey={analysisInstallationKey}
-        controlsTarget={target}
-        positionControlsRef={positionControlsRef}
-        selectedPositionId={selectedPositionId}
-        selectedDecisionId={selectedDecisionId}
-        showResults={detail === 'errors'}
-        showStatistics={detail === 'statistics'}
-        reviewKind={detail === 'overview' ? 'checker' : 'cube'}
-        checkerControls={checkerControls}
-        onShowReview={onShowReview}
-        onGame={(number) => void navigation.selectGame(number)}
-        catalog={catalog}
-        onJob={onTrackJob}
-        onAccepted={(job) => {
-          onTrackJob(job);
-          catalog.refresh();
-        }}
-        onAnalyzeMatch={
-          onAnalyzeMatch && (() => onAnalyzeMatch(navigation.match!))
-        }
-        boardReview={boardReview}
-        analysisRevision={analysisRevision}
-      />
-    </div>
   );
 }

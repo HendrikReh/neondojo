@@ -1063,9 +1063,6 @@ progress::-webkit-progress-value {
   align-items: flex-end;
   gap: 8px 12px;
 }
-.match-analysis-inline-options {
-  display: contents;
-}
 .match-analysis-options label {
   min-width: 0;
   flex: 0 1 auto;
@@ -1073,11 +1070,6 @@ progress::-webkit-progress-value {
 .match-analysis-options select {
   max-width: 100%;
 }
-.match-analysis-heading h3 {
-  margin: 8px 0;
-  font-size: var(--font-size-panel);
-}
-.match-analysis-heading p,
 .analysis-method {
   color: var(--ui-muted);
   font-size: var(--font-size-meta);
