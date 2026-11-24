@@ -54,7 +54,7 @@ docker compose up -d --wait db
 
 The backend applies migrations at startup. Cargo can compile with PostgreSQL stopped. The backend reads `.env` only from its working directory, not from parent directories. See [.env.example](.env.example) and [Environment variables](#environment-variables).
 
-Check that `gnubg --version` works. If the executable is outside the backend's `PATH`, set `GNUBG_BIN` in `.env` before the first launch or configure the executable under **Settings → Analysis → Engines on this computer**. Use **Check installation** to verify that GNUbg can evaluate a position with its installed weights.
+Check that `gnubg --version` works. If the executable is outside the backend's `PATH`, set `GNUBG_BIN` in `.env` before the first launch or configure the executable under **Settings → Engines**. Use **Check installation** to verify that GNUbg can evaluate a position with its installed weights.
 
 ### Environment variables
 

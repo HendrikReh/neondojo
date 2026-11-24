@@ -420,12 +420,17 @@ Both previews update as you select options and apply to the rest of the app
 when you choose **Apply**.
 
 Analysis shows the engine and default depth side by side, followed by four
-editable error thresholds and the configured opening-book source. The thresholds
-classify normalized equity loss in error review, move history and statistics.
-In new matches, the Error threshold sets when Coach pauses for checker errors
-and missed doubles, and sets the initial Tutor warning threshold. Expand
-**Engines on this computer** for paths, installation checks, and thread limits. The collapsed section shows the
-availability of GNUbg and NeonGammon.
+editable error thresholds, the configured opening-book source, and the link to
+**Benchmark**. The thresholds classify normalized equity loss in error review,
+move history and statistics. In new matches, the Error threshold sets when
+Coach pauses for checker errors and missed doubles, and sets the initial Tutor
+warning threshold.
+
+**Engines** (**Engines on this computer**) is a dedicated category showing
+availability for GNUbg and NeonGammon, their local installation paths and
+verification controls, the per-engine thread limits with explicit default counts
+(**Default (1)**, **Default (4)**, **Default (2)**), and **Simultaneous analysis
+jobs**.
 
 Closing **Opening books** returns to **Analysis** in Settings and restores focus
 to **Manage opening books**.

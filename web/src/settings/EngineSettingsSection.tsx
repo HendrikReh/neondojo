@@ -21,7 +21,11 @@ function ParallelJobsField({
   onChange: (value: number | null) => void;
   t: ReturnType<typeof useSettingsText>;
 }) {
-  const { min, max } = configurationOptions.parallel_analysis_jobs;
+  const {
+    min,
+    max,
+    default: defaultJobs,
+  } = configurationOptions.parallel_analysis_jobs;
   const retained = value != null && (value < min || value > max);
   const labelId = `${id}-parallel-jobs-label`;
   const helpId = `${id}-parallel-jobs-help`;
@@ -45,7 +49,9 @@ function ParallelJobsField({
             )
           }
         >
-          <option value="">{t('defaultParallelJobs')}</option>
+          <option value="">
+            {t('defaultParallelJobs', { count: defaultJobs })}
+          </option>
           {retained && (
             <option value={value} disabled>
               {value}
@@ -67,12 +73,16 @@ function ParallelJobsField({
   );
 }
 
-/** Local engine installation: GNUbg path check, NeonGammon, threads and jobs. */
-export default function LocalEngineSettings({
+/** Dedicated Engines category: local installations, thread limits and jobs. */
+export default function EngineSettingsSection({
   id,
   draft,
   update,
+  disabled,
+  hidden,
   engines,
+  engineCatalogError,
+  onRefreshEngines,
   check,
   checking,
   gnubgEdited,
@@ -85,7 +95,11 @@ export default function LocalEngineSettings({
   id: string;
   draft: AppSettings;
   update: (values: Partial<AppSettings>) => void;
+  disabled: boolean;
+  hidden: boolean;
   engines: EngineInfo[];
+  engineCatalogError: unknown;
+  onRefreshEngines: () => void;
   check: CheckState;
   checking: boolean;
   gnubgEdited: boolean;
@@ -98,10 +112,15 @@ export default function LocalEngineSettings({
   const t = useSettingsText();
   const engine = engines.find(({ id }) => id === 'gnubg');
   return (
-    <details className="settings-engine-setup">
-      <summary>
-        <span>{t('localEngines')}</span>
-        <span className="settings-engine-summary">
+    <fieldset
+      className="settings-section settings-engines-section"
+      disabled={disabled}
+      hidden={hidden}
+    >
+      <legend>{t('localEngines')}</legend>
+      <div className="settings-engines-intro">
+        <p className="settings-help">{t('localEnginesHelp')}</p>
+        <div className="settings-engine-summary">
           {(
             [
               ['gnubg', t('installation')],
@@ -120,79 +139,101 @@ export default function LocalEngineSettings({
               </span>
             );
           })}
-        </span>
-      </summary>
-      <div className="settings-engine-details">
-        <fieldset className="settings-section settings-engine">
-          <legend>{t('installation')}</legend>
-          <div className="settings-engine-path">
-            <label className="settings-field" htmlFor={`${id}-path`}>
-              <span>{t('path')}</span>
-              <input
-                id={`${id}-path`}
-                required
-                value={draft.gnubg_path}
-                spellCheck={false}
-                autoComplete="off"
-                aria-describedby={`${id}-path-help ${id}-check-status`}
-                aria-invalid={Boolean(check && 'error' in check)}
-                onChange={(event) => {
-                  onInstallationEdited();
-                  update({ gnubg_path: event.target.value });
-                }}
-              />
-            </label>
-            <ActionButton
-              icon="confirm"
-              label={t('check')}
-              type="button"
-              disabled={checking || !draft.gnubg_path.trim()}
-              onClick={onCheck}
-            />
-          </div>
-          <p id={`${id}-path-help`} className="settings-help">
-            {t('pathHelp')}
+        </div>
+      </div>
+      {Boolean(engineCatalogError) && (
+        <div className="settings-error" role="alert">
+          <p>
+            {t('engineStatusError')} {diagnostic(engineCatalogError)}
           </p>
-          <div className="settings-engine-status" id={`${id}-check-status`}>
-            {engine?.version && !check && !gnubgEdited && (
-              <p>
-                <EngineLabel
-                  details={engine.version}
-                  format={(version) => t('engineVersion', { version })}
+          <button type="button" onClick={onRefreshEngines}>
+            {t('retry')}
+          </button>
+        </div>
+      )}
+      <div className="settings-engine-cards">
+        <div className="settings-engine-card">
+          <fieldset className="settings-section settings-engine">
+            <legend>{t('installation')}</legend>
+            <div className="settings-engine-path">
+              <label className="settings-field" htmlFor={`${id}-path`}>
+                <span>{t('path')}</span>
+                <input
+                  id={`${id}-path`}
+                  required
+                  value={draft.gnubg_path}
+                  spellCheck={false}
+                  autoComplete="off"
+                  aria-describedby={`${id}-path-help ${id}-check-status`}
+                  aria-invalid={Boolean(check && 'error' in check)}
+                  onChange={(event) => {
+                    onInstallationEdited();
+                    update({ gnubg_path: event.target.value });
+                  }}
                 />
-              </p>
-            )}
-            {!engine?.available && <p>{t('unavailable')}</p>}
-            {check && 'version' in check && (
-              <p role="status" className="settings-success">
-                <EngineLabel
-                  details={check.version}
-                  format={(version) => t('checkSuccess', { version })}
-                />
-              </p>
-            )}
-            {check && 'error' in check && (
-              <p role="alert" className="settings-error">
-                {t('checkError')} {diagnostic(check.error)}
-              </p>
-            )}
-            {!check && gnubgEdited && <p>{t('checkNeeded')}</p>}
-            {checking && <p role="status">{t('checking')}</p>}
-          </div>
-          <p className="settings-help">{t('checkHelp')}</p>
-        </fieldset>
-        <OpenSageInstallation setup={sage} onVerified={onVerified} />
-        <p className="settings-help">{t('localEnginesHelp')}</p>
+              </label>
+              <ActionButton
+                icon="confirm"
+                label={t('check')}
+                type="button"
+                disabled={checking || !draft.gnubg_path.trim()}
+                onClick={onCheck}
+              />
+            </div>
+            <p id={`${id}-path-help`} className="settings-help">
+              {t('pathHelp')}
+            </p>
+            <div className="settings-engine-status" id={`${id}-check-status`}>
+              {engine?.version && !check && !gnubgEdited && (
+                <p>
+                  <EngineLabel
+                    details={engine.version}
+                    format={(version) => t('engineVersion', { version })}
+                  />
+                </p>
+              )}
+              {!engine?.available && <p>{t('unavailable')}</p>}
+              {check && 'version' in check && (
+                <p role="status" className="settings-success">
+                  <EngineLabel
+                    details={check.version}
+                    format={(version) => t('checkSuccess', { version })}
+                  />
+                </p>
+              )}
+              {check && 'error' in check && (
+                <p role="alert" className="settings-error">
+                  {t('checkError')} {diagnostic(check.error)}
+                </p>
+              )}
+              {!check && gnubgEdited && <p>{t('checkNeeded')}</p>}
+              {checking && <p role="status">{t('checking')}</p>}
+            </div>
+            <p className="settings-help">{t('checkHelp')}</p>
+          </fieldset>
+        </div>
+        <div className="settings-engine-card">
+          <OpenSageInstallation setup={sage} onVerified={onVerified} />
+        </div>
+      </div>
+      <section
+        className="settings-play-group settings-engine-concurrency"
+        role="group"
+        aria-labelledby={`${id}-engine-threads`}
+      >
+        <h3 id={`${id}-engine-threads`}>{t('engineThreadsHeading')}</h3>
         <div className="settings-field-pair">
           {(
             [
-              ['gnubg', 'gnubg_threads', 'gnubgAnalysisThreads'],
-              ['gnubg', 'gnubg_play_threads', 'gnubgPlayThreads'],
-              ['bgsage', 'open_sage_threads', 'sageAnalysisThreads'],
-              ['bgsage', 'open_sage_play_threads', 'sagePlayThreads'],
+              ['gnubg', 'gnubg_threads', 'gnubgAnalysisThreads', 'analysis'],
+              ['gnubg', 'gnubg_play_threads', 'gnubgPlayThreads', 'play'],
+              ['bgsage', 'open_sage_threads', 'sageAnalysisThreads', 'analysis'],
+              ['bgsage', 'open_sage_play_threads', 'sagePlayThreads', 'play'],
             ] as const
-          ).map(([provider, field, label]) => {
-            const { min } = configurationOptions.engine_threads[provider];
+          ).map(([provider, field, label, purpose]) => {
+            const { min, default: defaults } =
+              configurationOptions.engine_threads[provider];
+            const defaultCount = defaults[purpose];
             const max = engines.find(
               (engine) => engine.id === provider,
             )?.max_parallel_threads;
@@ -226,7 +267,9 @@ export default function LocalEngineSettings({
                     });
                   }}
                 >
-                  <option value="">{t('defaultThreads')}</option>
+                  <option value="">
+                    {t('defaultThreads', { count: defaultCount })}
+                  </option>
                   {retained && (
                     <option value={count} disabled>
                       {count}
@@ -257,7 +300,7 @@ export default function LocalEngineSettings({
           }
           t={t}
         />
-      </div>
-    </details>
+      </section>
+    </fieldset>
   );
 }

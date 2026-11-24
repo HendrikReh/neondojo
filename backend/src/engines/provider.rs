@@ -66,6 +66,10 @@ impl EngineId {
         crate::configuration::engine_min_threads(self.id())
     }
 
+    pub(crate) fn default_threads(self, purpose: &str) -> i32 {
+        crate::configuration::engine_default_threads(self.id(), purpose)
+    }
+
     /// GNUbg is the independent rules engine: it validates legal moves and
     /// drives the game loop, and it plays its own turns inside that loop.
     /// Other engines yield to it for every bot decision.
@@ -165,12 +169,22 @@ mod tests {
                 assert!(!engine.depths(purpose).is_empty(), "{engine:?} {purpose}");
             }
             assert!(engine.min_threads() >= 1);
+            for purpose in ["analysis", "play"] {
+                assert!(
+                    engine.default_threads(purpose) >= engine.min_threads(),
+                    "{engine:?} {purpose}"
+                );
+            }
             assert!(
                 engine
                     .depths("analysis")
                     .contains(&engine.practice_max_plies())
             );
         }
+        assert_eq!(EngineId::Gnubg.default_threads("analysis"), 1);
+        assert_eq!(EngineId::Gnubg.default_threads("play"), 1);
+        assert_eq!(EngineId::NeonGammon.default_threads("analysis"), 4);
+        assert_eq!(EngineId::NeonGammon.default_threads("play"), 2);
     }
 
     #[test]

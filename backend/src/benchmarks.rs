@@ -356,9 +356,9 @@ async fn enqueue(
             &settings.gnubg_path,
             None,
             if play.is_some() {
-                crate::settings::SAGE_PLAY_THREADS
+                crate::settings::sage_default_play_threads()
             } else {
-                crate::settings::SAGE_ANALYSIS_THREADS
+                crate::settings::sage_default_analysis_threads()
             },
             depth,
         )

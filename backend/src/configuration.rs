@@ -142,6 +142,13 @@ pub(crate) fn engine_min_threads(engine: &str) -> i32 {
         .expect("valid embedded minimum thread count")
 }
 
+pub(crate) fn engine_default_threads(engine: &str, purpose: &str) -> i32 {
+    OPTIONS["engine_threads"][engine]["default"][purpose]
+        .as_i64()
+        .and_then(|number| i32::try_from(number).ok())
+        .expect("valid embedded default thread count")
+}
+
 /// Verified provider profiles, shared with client normalization and catalogs.
 pub(crate) fn engine_depths(engine: &str, purpose: &str) -> Vec<i32> {
     OPTIONS["engine_profiles"][engine][purpose]

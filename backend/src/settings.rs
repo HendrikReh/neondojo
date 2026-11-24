@@ -83,8 +83,15 @@ fn thread_override<'de, D: serde::Deserializer<'de>>(
     Option::deserialize(deserializer).map(Some)
 }
 
-pub(crate) const SAGE_ANALYSIS_THREADS: u32 = 4;
-pub(crate) const SAGE_PLAY_THREADS: u32 = 2;
+pub(crate) fn sage_default_analysis_threads() -> u32 {
+    u32::try_from(EngineId::NeonGammon.default_threads("analysis"))
+        .expect("valid embedded NeonGammon analysis default threads")
+}
+
+pub(crate) fn sage_default_play_threads() -> u32 {
+    u32::try_from(EngineId::NeonGammon.default_threads("play"))
+        .expect("valid embedded NeonGammon play default threads")
+}
 
 pub(crate) fn sage_threads(configured: Option<i32>, default: u32) -> u32 {
     configured
@@ -99,11 +106,11 @@ impl AppSettings {
     }
 
     pub(crate) fn sage_analysis_threads(&self) -> u32 {
-        sage_threads(self.open_sage_threads, SAGE_ANALYSIS_THREADS)
+        sage_threads(self.open_sage_threads, sage_default_analysis_threads())
     }
 
     pub(crate) fn sage_play_threads(&self) -> u32 {
-        sage_threads(self.open_sage_play_threads, SAGE_PLAY_THREADS)
+        sage_threads(self.open_sage_play_threads, sage_default_play_threads())
     }
 }
 

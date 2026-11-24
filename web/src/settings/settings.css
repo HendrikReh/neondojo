@@ -179,47 +179,61 @@
 .settings-analysis-row .settings-help {
   margin-top: 3px;
 }
-.settings-engine-setup {
-  margin-top: 8px;
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  background: var(--ui-surface-alt);
+.settings-engines-section > legend {
+  margin-bottom: 6px;
 }
-.settings-engine-setup > summary {
-  padding: 12px 14px;
-  cursor: pointer;
-  font-weight: var(--font-weight-semibold);
+.settings-engines-intro {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px 16px;
+  margin-bottom: 10px;
 }
-.settings-engine-setup > summary:focus-visible {
-  outline: 2px solid var(--ui-accent);
-  outline-offset: -2px;
-  border-radius: inherit;
+.settings-engines-intro .settings-help {
+  margin: 0;
 }
 .settings-engine-summary {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 16px;
-  margin: 5px 0 0 15px;
   color: var(--ui-muted);
   font-size: var(--font-size-table);
   font-weight: var(--font-weight-normal);
 }
-.settings-engine-details {
+.settings-engine-cards {
   display: grid;
-  gap: 12px;
-  padding: 12px 14px 14px;
-  border-top: 1px solid var(--ui-border);
+  gap: 10px;
 }
-.settings-engine-details .settings-help,
+.settings-engine-card {
+  padding: 10px 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface-alt);
+}
+.settings-engine-card .settings-help,
 .settings-engine .settings-engine-status {
   margin: 0;
 }
 .settings-engine > legend {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 .settings-engine .settings-help,
 .settings-engine .settings-engine-status:not(:empty) {
-  margin-top: 6px;
+  margin-top: 4px;
+}
+.settings-engine-concurrency {
+  margin-top: 12px;
+  padding-top: 12px;
+}
+.settings-engine-concurrency h3 {
+  margin-bottom: 8px;
+}
+.settings-engine-concurrency .settings-field-pair {
+  gap: 10px 12px;
+}
+.settings-engine-concurrency .settings-parallel-jobs {
+  margin-top: 14px;
 }
 .settings-engine-status {
   margin: 14px 0;

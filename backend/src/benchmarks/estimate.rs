@@ -186,7 +186,7 @@ async fn estimate(
                     snapshot.plies = plies;
                     snapshot.threads = crate::settings::sage_threads(
                         open_sage_threads,
-                        crate::settings::SAGE_ANALYSIS_THREADS,
+                        crate::settings::sage_default_analysis_threads(),
                     );
                     crate::engines::SageEngine::new(snapshot).ok()
                 })
@@ -358,7 +358,7 @@ mod tests {
         .unwrap();
         let measured = SageEngine::new(SageSnapshot {
             plies: 4,
-            threads: crate::settings::SAGE_ANALYSIS_THREADS,
+            threads: crate::settings::sage_default_analysis_threads(),
             ..installed.clone()
         })
         .unwrap();

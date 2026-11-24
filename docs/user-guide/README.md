@@ -91,7 +91,7 @@ flowchart LR
   E --> E3["Database backup"]
   E --> E4["Versions"]
 
-  SET --> SET1["General · Appearance · Analysis · Playing · Board · Profiles"]
+  SET --> SET1["General · Appearance · Analysis · Playing · Board · Engines · Profiles"]
 ```
 
 **Keyboard:** Focus a header tab and use **Left**/**Right** to move between workspaces. **Home** selects Playing and **End** selects Extras. The same keys work in the tab rows inside each workspace.
@@ -712,7 +712,7 @@ Select the gear in the header. Choose a category on the left. **Apply** saves yo
 <td width="50%"><img src="images/settings-appearance.webp" alt="Settings: Appearance"><br><b>Appearance</b>: the <i>Graphite</i>, <i>Club</i> or <i>Paper</i> theme with <i>Light</i>, <i>Dark</i> or <i>System</i> mode, with a live preview.</td>
 </tr>
 <tr>
-<td><img src="images/settings-analysis.webp" alt="Settings: Analysis"><br><b>Analysis</b>: analysis engine and default depth, the four error thresholds, opening books, <i>Engines on this computer</i> (paths, installation check, threads) and a link to the benchmark.</td>
+<td><img src="images/settings-analysis.webp" alt="Settings: Analysis"><br><b>Analysis</b>: analysis engine and default depth, the four error thresholds, opening books and a link to the benchmark.</td>
 <td><img src="images/settings-playing.webp" alt="Settings: Playing"><br><b>Playing</b>: bot engine and strength (including <b>2-ply + Top-2 (10 mEq)</b> for NeonGammon), default play mode, <i>Open training analysis automatically</i>, game sounds and bear-off direction.</td>
 </tr>
 <tr>
@@ -736,9 +736,9 @@ The error thresholds in **Settings → Analysis** decide how a move is graded in
 
 Each value is the lower bound of its grade. The four values must be greater than 0, at most 1, and strictly increasing. When you change them, existing analyses are graded again from their stored losses. *Inaccuracies* in Statistics counts all four grades together. The **Error** threshold also sets when Coach intervenes and the starting Tutor warning threshold in new matches.
 
-#### Engines on this computer
+#### Engines (Engines on this computer)
 
-Expand **Engines on this computer** to set the GNUbg executable and the NeonGammon Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. By default GNUbg uses 1 thread for both, and NeonGammon uses 4 for analysis/duels and 2 for playing; NeonGammon workers share one CPU thread budget so playing moves can run between analysis evaluations without oversubscribing the machine. **Simultaneous analysis jobs** (1–8) lets several analyses run at the same time; NeonGammon still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. NeonDojo never falls back to another engine on its own. A missing engine is reported as unavailable. See also [Local NeonGammon setup](../open-sage-local.md).
+Open **Settings → Engines** to set the GNUbg executable and the NeonGammon Python environment, and the maximum number of threads per engine, separately for analysis (including engine duels) and for playing. Each thread selector displays its default count directly: **Default (1)** for GNUbg (both analysis and playing), **Default (4)** for NeonGammon analysis/duels, and **Default (2)** for NeonGammon playing; NeonGammon workers share one CPU thread budget so playing moves can run between analysis evaluations without oversubscribing the machine. **Simultaneous analysis jobs** (1–8, **Default (1)**) lets several analyses run at the same time; NeonGammon still runs one analysis at a time. **Check installation** and **Verify and save** run a real position evaluation before a setting is accepted. NeonDojo never falls back to another engine on its own. A missing engine is reported as unavailable. See also [Local NeonGammon setup](../open-sage-local.md).
 
 ---
 
@@ -826,7 +826,7 @@ Shortcuts are ignored while you type in a text field. When a dialog is open, onl
 | Symptom | What to check |
 | --- | --- |
 | The footer shows *Backend / GNUbg unavailable* | Open <http://127.0.0.1:8787/api/health>. It reports whether the database responds and which GNUbg version was found. If the page does not load, the NeonDojo backend is not running; see the [project README](../../README.md). |
-| Analyses fail | **Settings → Analysis → Engines on this computer → Check installation**. GNUbg needs its neural-network weights. Playing also needs GNUbg's embedded Python. |
+| Analyses fail | **Settings → Engines → Check installation**. GNUbg needs its neural-network weights. Playing also needs GNUbg's embedded Python. |
 | NeonGammon is unavailable (or difficulty presets are disabled) | Enter the Python path of its environment and choose **Verify and save**. Named **Difficulty presets** require `neongammon==3.1.0` (`3.0.0` remains supported for analysis and fixed-depth play). See [NeonGammon setup](../open-sage-local.md). |
 | A move shows a dash instead of a loss | The displayed analysis does not cover this position. Run **Analyze game**, or choose another **Displayed analysis**. |
 | No PR is shown | PR needs a **complete** native GNUbg analysis of the match. Imported, NeonGammon and partial analyses don't supply PR. Bot matches played with learning aids show no PR. |

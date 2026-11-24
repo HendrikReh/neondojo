@@ -87,7 +87,7 @@ pub(super) async fn verify_settings(
     .into_iter()
     .filter(|(proposed, saved)| proposed != saved)
     .filter_map(|(proposed, _)| proposed)
-    .map(|threads| sage_threads(Some(threads), SAGE_ANALYSIS_THREADS))
+    .map(|threads| sage_threads(Some(threads), sage_default_analysis_threads()))
     .collect();
     if !changed.is_empty()
         && let Some(installation) = load(pool).await?.snapshot
@@ -123,7 +123,7 @@ async fn put_installation(
         return Err(conflict());
     }
     validate_path(&request.path)?;
-    let snapshot = SageEngine::probe(request.path, SAGE_ANALYSIS_THREADS)
+    let snapshot = SageEngine::probe(request.path, sage_default_analysis_threads())
         .await
         .map_err(|e| ApiError::invalid(format!("NeonGammon installation check failed: {e:#}")))?;
     let saved = sqlx::query_as("UPDATE engine_installations SET version=version+1,python_path=$2,snapshot=$3 WHERE engine_id='bgsage' AND version=$1 RETURNING version,python_path,snapshot")
