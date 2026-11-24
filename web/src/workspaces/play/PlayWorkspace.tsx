@@ -15,7 +15,7 @@ import {
   type CSSProperties,
   type FormEvent,
 } from 'react';
-import { useLatest } from '../../shared/hooks/useLatest';
+import { useLatest, useLatestCallback } from '../../shared/hooks/useLatest';
 import Board from '../../shared/board/Board';
 import PlayHistory from './PlayHistory';
 import PlayFeedback from './PlayFeedback';
@@ -870,11 +870,12 @@ export default function PlayWorkspace({
       ? historical.after.board
       : historical.before.board
     : liveBoard;
-  function selectHistory(index: number) {
+  // The move history renders on its own changes, not on every animation frame.
+  const selectHistory = useLatestCallback((index: number) => {
     if (locked.current || playback.isPlaying()) return;
     setHovered(null);
     review.select(index);
-  }
+  });
   const cubeContext = session
     ? matchContext(session.position.gnubg_match_id)
     : null;
