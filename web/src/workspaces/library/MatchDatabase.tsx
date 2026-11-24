@@ -1,4 +1,3 @@
-import { useClippedCellTooltip } from '../../shared/ui/useClippedCellTooltip';
 import { useWorkspaceDefaults } from '../../settings/configuration/ConfigurationProvider';
 import {
   sessionFields,
@@ -7,15 +6,11 @@ import {
 import ActionButton from '../../shared/ui/ActionButton';
 import ActionIcon from '../../shared/ui/action-icons';
 import {
-  Fragment,
   useCallback,
   useEffect,
   useId,
-  useMemo,
   useRef,
   useState,
-  type KeyboardEvent,
-  type ReactNode,
   type SetStateAction,
 } from 'react';
 import { useLatest } from '../../shared/hooks/useLatest';
@@ -30,11 +25,7 @@ import AnnotationSearch, {
 import { useI18n } from '../../shared/i18n/i18n';
 import { usePlayModeText } from '../play/play-mode-messages';
 import { useWorkspaceText } from '../../shared/i18n/workspace-messages';
-import {
-  databaseDisplayName,
-  useLibraryText,
-  type LibraryMessageKey,
-} from './library-messages';
+import { databaseDisplayName, useLibraryText } from './library-messages';
 import {
   emptyFilters,
   loadLibrary,
@@ -49,16 +40,9 @@ import {
 } from './library-api';
 import { useDatabases } from './useDatabases';
 import DatabaseSidebar from './DatabaseSidebar';
-import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';
 import { useLibraryColumns } from './useLibraryColumns';
-import {
-  createMatchSummaryFormatter,
-  libraryAnalysisStatus,
-  canAnalyzeMatch,
-  isUnfinishedCompetition,
-  canShowMatchPr,
-} from './library-match-summary';
-import { OCCURRENCE_COLUMNS, type LibraryColumn } from './library-columns';
+import { isUnfinishedCompetition } from './library-match-summary';
+import type { LibraryColumn } from './library-columns';
 import { type LibraryDataColumn } from './library-column-preferences';
 import LibraryColumnPicker from '../../shared/ui/LibraryColumnPicker';
 import LibraryImport from './import/LibraryImport';
@@ -67,10 +51,11 @@ import LibraryFilters, {
   type LibraryFilterKey,
 } from './LibraryFilters';
 import LibraryDialogs, { type LibraryDialogState } from './LibraryDialogs';
+import LibraryActionResult from './LibraryActionResult';
+import LibraryBatchBar from './LibraryBatchBar';
+import LibraryTable from './LibraryTable';
 import DuplicateMatchFinder from './DuplicateMatchFinder';
 import './library.css';
-import { prDigits } from '../../shared/format/pr-format';
-import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 
 export interface PositionSearchRequest {
   positionId: string;
@@ -80,18 +65,6 @@ export interface PositionSearchRequest {
 type SearchPanel = 'filters' | 'notes' | 'position' | 'duplicates';
 const defaultLibraryFilters = emptyFilters();
 
-const resultKey: Record<string, LibraryMessageKey> = {
-  copied: 'copied',
-  moved: 'moved',
-  deleted: 'deleted',
-  tagged: 'tagged',
-  duplicate: 'duplicate',
-  same_database: 'sameDatabase',
-  not_found: 'notFound',
-  busy: 'busy',
-  wrong_database: 'notFound',
-  duplicate_request: 'duplicate',
-};
 export default function MatchDatabase({
   revision,
   analysisRevision,
@@ -142,7 +115,7 @@ export default function MatchDatabase({
   onOpenPlay?: (id: string, resume?: boolean) => void;
   onChanged: (deletedIds?: string[], validateSelection?: boolean) => void;
 }) {
-  const { t, locale, formatNumber, formatError } = useI18n(),
+  const { t, formatNumber, formatError } = useI18n(),
     w = useWorkspaceText(),
     l = useLibraryText();
   const modeText = usePlayModeText();
@@ -179,7 +152,6 @@ export default function MatchDatabase({
     (value) => sessionFields(value, defaultLibraryFilters),
   );
   const columns = useLibraryColumns(visible, !!filters.position_id);
-  const cellTooltip = useClippedCellTooltip();
   const [filterInput, setFilterInput] = useState<Filters>();
   const draftFilters = filterInput ?? filters;
   const filterDraft = useLatest(draftFilters);
@@ -403,20 +375,6 @@ export default function MatchDatabase({
       setDirection('asc');
     }
   }
-  const heading = (
-    key: LibrarySort & LibraryColumn,
-    label: string,
-    name?: string,
-  ) => (
-    <LibrarySortHeading
-      fields={[{ key, label, name }]}
-      sort={sort}
-      direction={direction}
-      onSort={sortBy}
-      column={key}
-      resizeHandle={columns.handle(key, name ?? label)}
-    />
-  );
   function openMatchRow(match: LibraryMatch) {
     if (matchResultScope !== matchScope) return;
     if (match.play_paused || isUnfinishedCompetition(match)) {
@@ -433,82 +391,12 @@ export default function MatchDatabase({
       ? match.occurrence.id === currentPosition?.id
       : match.id === selectedMatchId;
   }
-  function matchName(match: LibraryMatch, player: 'white' | 'black') {
-    return (
-      <button
-        className={`match-card ${isCurrentRow(match) ? 'active' : ''}`}
-        disabled={rowOpeningDisabled(match)}
-        aria-busy={matchOpening.openingId === libraryRowKey(match)}
-        onClick={(event) => {
-          event.stopPropagation();
-          openMatchRow(match);
-        }}
-      >
-        <span className="library-match-player" data-tooltip-overflow>
-          {match[player]}
-        </span>
-        <span className="sr-only">
-          {t('common.versus')} {match[player === 'white' ? 'black' : 'white']}
-        </span>
-        {match.display_name.trim() && match.display_name !== match.filename && (
-          <span
-            className="library-match-title"
-            data-tooltip-overflow
-            data-tooltip-text={match.display_name}
-          >
-            · {match.display_name}
-          </span>
-        )}
-      </button>
-    );
-  }
-  /** PRs from a source whose import resolved irregularities. */
-  function importNotesMarker(match: LibraryMatch) {
-    if (!match.import_warning_count) return null;
-    const label = l('importNotesCount', {
-      count: match.import_warning_count,
-    });
-    return (
-      <span
-        className="import-notes-marker"
-        role="img"
-        aria-label={label}
-        title={label}
-      >
-        <ActionIcon name="warning" size={13} />
-      </span>
-    );
-  }
-  function rowKey(
-    e: KeyboardEvent<HTMLTableRowElement>,
-    match: LibraryMatch,
-    index: number,
-  ) {
-    if (e.target !== e.currentTarget) return;
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      openMatchRow(match);
-    }
-    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      const next = Math.min(
-        matches.length - 1,
-        Math.max(0, index + (e.key === 'ArrowDown' ? 1 : -1)),
-      );
-      document
-        .getElementById(`library-row-${libraryRowKey(matches[next])}`)
-        ?.focus();
-    }
-  }
   const reloadPage = useCallback(() => setRevision((n) => n + 1), []);
   useLibraryJobRefresh(matches, visible, reloadPage);
   const active = databases.find((d) => d.id === databaseId);
   const hasFilters = Object.entries(filters).some(
     ([key, value]) => key !== 'date_field' && value.trim(),
   );
-  const allOnPageSelected =
-    matches.length > 0 && matches.every((match) => selected.has(match.id));
-  const someOnPageSelected = matches.some((match) => selected.has(match.id));
   const visibleRows = new Map(
     matches.map((match) => [libraryRowKey(match), match]),
   );
@@ -516,165 +404,7 @@ export default function MatchDatabase({
     (match) => visibleRows.get(libraryRowKey(match)) ?? match,
   );
   const hasSelection = selected.size > 0;
-  const pausedSelected = selection.some((match) => match.play_paused);
-  const singleSelected = selection.length === 1 ? selection[0] : undefined;
-  const resumeId =
-    singleSelected &&
-    (singleSelected.play_paused || singleSelected.play_phase !== 'match_over')
-      ? singleSelected.play_session_id
-      : undefined;
   const selectionIsCurrent = matchResultScope === matchScope;
-  const analyzableMatches = selection.filter(canAnalyzeMatch);
-  function batchButton(action: 'copy' | 'move' | 'tags' | 'export' | 'delete') {
-    return (
-      <ActionButton
-        icon={action}
-        label={l(action)}
-        compact
-        key={action}
-        className={action === 'delete' ? 'danger' : undefined}
-        disabled={
-          !hasSelection ||
-          !selectionIsCurrent ||
-          (action === 'export' && selected.size > 50) ||
-          (pausedSelected && ['copy', 'move', 'delete'].includes(action))
-        }
-        onClick={() =>
-          setDialog({
-            kind: 'batch',
-            action,
-            ids: [...selected],
-            source: databaseId,
-          })
-        }
-      />
-    );
-  }
-  const pr = (value: number | null) =>
-    value == null ? '—' : formatNumber(value, prDigits);
-  const date = (value: string | null) =>
-    value
-      ? dateTimeFormat(locale, { dateStyle: 'medium' }).format(
-          new Date(value.length === 10 ? `${value}T12:00:00` : value),
-        )
-      : '—';
-  const state = (m: LibraryMatch) =>
-    libraryAnalysisStatus(m.analysis_status, locale);
-  const summaries = useMemo(() => {
-    const summary = createMatchSummaryFormatter(locale);
-    return new Map(matches.map((match) => [match.id, summary(match)]));
-  }, [matches, locale]);
-  const dataColumns = columns.activeColumns.filter(
-    (id): id is LibraryDataColumn => id !== 'select',
-  );
-  // Header and body rows render cells in the user's column order from these
-  // maps, so hidden columns never build elements.
-  const headerCells: Record<LibraryDataColumn, () => ReactNode> = {
-    id: () => heading('id', 'ID'),
-    white: () => heading('white', l('white')),
-    white_pr: () => heading('white_pr', 'PR', `${l('white')} · PR`),
-    black: () => heading('black', l('black')),
-    black_pr: () => heading('black_pr', 'PR', `${l('black')} · PR`),
-    play_mode: () => (
-      <th scope="col" data-column="play_mode">
-        <span className="library-sort-label">{modeText('mode')}</span>
-        {columns.handle('play_mode', modeText('mode'))}
-      </th>
-    ),
-    match_length: () => heading('match_length', l('length')),
-    score: () => heading('score', l('result')),
-    played_at: () => heading('played_at', l('played')),
-    created_at: () => heading('created_at', l('importedColumn'), l('imported')),
-    tournament: () => heading('tournament', l('tournament')),
-    position_count: () => heading('position_count', w('positions')),
-    analysis_status: () => heading('analysis_status', l('analysis')),
-    tags: () => heading('tags', l('tags')),
-    comment: () => heading('comment', l('comment')),
-  };
-  const bodyCells: Record<LibraryDataColumn, (m: LibraryMatch) => ReactNode> = {
-    id: (m) => <td className="library-id-cell">{formatNumber(m.match_no)}</td>,
-    white: (m) => <td>{matchName(m, 'white')}</td>,
-    white_pr: (m) => (
-      <td className="library-pr-cell">
-        {pr(canShowMatchPr(m) ? m.white_pr : null)}
-        {importNotesMarker(m)}
-      </td>
-    ),
-    black: (m) => (
-      <td>
-        {showColumn('white') ? (
-          <span className="library-player-name" data-tooltip-overflow>
-            {m.black}
-          </span>
-        ) : (
-          matchName(m, 'black')
-        )}
-      </td>
-    ),
-    black_pr: (m) => (
-      <td className="library-pr-cell">
-        {pr(canShowMatchPr(m) ? m.black_pr : null)}
-        {importNotesMarker(m)}
-      </td>
-    ),
-    play_mode: (m) => (
-      <td className="library-play-mode-cell" data-column="play_mode">
-        {m.play_mode ? (
-          <span className="library-play-mode" data-tooltip-overflow>
-            {modeText(m.play_mode)} ·{' '}
-            {modeText(m.play_assisted ? 'assisted' : 'independent')}
-          </span>
-        ) : (
-          '—'
-        )}
-      </td>
-    ),
-    match_length: (m) => <td>{m.match_length || 'M'}</td>,
-    score: (m) => (
-      <td>
-        {m.white_score != null && m.black_score != null
-          ? `${m.white_score}–${m.black_score}`
-          : 'n/a'}
-      </td>
-    ),
-    played_at: (m) => <td data-tooltip-overflow>{date(m.played_on)}</td>,
-    created_at: (m) => <td data-tooltip-overflow>{date(m.created_at)}</td>,
-    tournament: (m) => <td data-tooltip-overflow>{m.tournament ?? '—'}</td>,
-    position_count: (m) => (
-      <td className="library-match-positions">
-        {formatNumber(m.position_count)}
-      </td>
-    ),
-    analysis_status: (m) => <td data-tooltip-overflow>{state(m)}</td>,
-    tags: (m) => (
-      <td className="library-tags-cell library-notes-cell">
-        <div className="library-notes-summary">
-          {m.tags.length > 0 && (
-            <span
-              className="library-note-tags"
-              data-tooltip-overflow
-              data-tooltip-text={m.tags.join(', ')}
-            >
-              {m.tags.map((tag) => (
-                <span className="tag-chip" key={tag} data-tooltip-overflow>
-                  {tag}
-                </span>
-              ))}
-            </span>
-          )}
-        </div>
-      </td>
-    ),
-    comment: (m) => (
-      <td
-        className="library-comment-cell"
-        data-tooltip-overflow
-        data-tooltip-text={m.comment}
-      >
-        <span className="library-note-comment">{m.comment}</span>
-      </td>
-    ),
-  };
   return (
     <section className="match-database" aria-label={w('database')}>
       <div className="database-heading">
@@ -880,334 +610,47 @@ export default function MatchDatabase({
               {l('occurrenceSelection')}
             </p>
           )}
-          <div
-            className="library-batch-bar"
-            data-has-selection={hasSelection}
-            role="group"
-            aria-label={l('actions')}
-          >
-            <strong role="status">
-              {l('selectedMatches', { count: selected.size })}
-            </strong>
-            <div className="library-batch-group" data-group="single">
-              <ActionButton
-                type="button"
-                icon="open"
-                label={w('openMatch')}
-                compact
-                disabled={
-                  !singleSelected ||
-                  !!resumeId ||
-                  singleSelected.play_paused ||
-                  rowOpeningDisabled(singleSelected)
-                }
-                onClick={() => {
-                  if (singleSelected) openMatchRow(singleSelected);
-                }}
-              />
-              <ActionButton
-                type="button"
-                icon="resume"
-                label={l('resumePlay')}
-                compact
-                disabled={!selectionIsCurrent || !resumeId || !onOpenPlay}
-                onClick={() => {
-                  if (resumeId) onOpenPlay?.(resumeId, true);
-                }}
-              />
-              <ActionButton
-                type="button"
-                icon="edit"
-                label={l('editMatch')}
-                aria-haspopup="dialog"
-                compact
-                disabled={!selectionIsCurrent || !singleSelected}
-                onClick={(event) => {
-                  event.currentTarget.focus();
-                  if (singleSelected)
-                    setDialog({ kind: 'metadata', match: singleSelected });
-                }}
-              />
-            </div>
-            <div className="library-batch-group" data-group="batch">
-              <ActionButton
-                type="button"
-                icon="analysis"
-                label={`${l('analyzeSelection')} …`}
-                aria-haspopup="dialog"
-                compact
-                disabled={
-                  !selectionIsCurrent ||
-                  !onAnalyzeMatches ||
-                  !analyzableMatches.length
-                }
-                onClick={(event) => {
-                  event.currentTarget.focus();
-                  onAnalyzeMatches?.(
-                    analyzableMatches,
-                    selection.length - analyzableMatches.length,
-                  );
-                }}
-              />
-              {(['copy', 'move', 'tags', 'export'] as const).map(batchButton)}
-            </div>
-            <div className="library-batch-group" data-group="destructive">
-              {batchButton('delete')}
-              <ActionButton
-                icon="clear"
-                label={l('clearSelection')}
-                compact
-                disabled={!hasSelection}
-                onClick={() => setSelectedRows([])}
-                aria-label={l('clearSelection')}
-              />
-            </div>
-          </div>
+          <LibraryBatchBar
+            selection={selection}
+            current={selectionIsCurrent}
+            openingDisabled={rowOpeningDisabled}
+            onOpen={openMatchRow}
+            onResume={onOpenPlay && ((id) => onOpenPlay(id, true))}
+            onEdit={(match) => setDialog({ kind: 'metadata', match })}
+            onAnalyze={onAnalyzeMatches}
+            onBatch={(action) =>
+              setDialog({
+                kind: 'batch',
+                action,
+                ids: [...selected],
+                source: databaseId,
+              })
+            }
+            onClear={() => setSelectedRows([])}
+          />
           {hasSelection && <p className="fineprint">{l('batchLimit')}</p>}
           {result && (
-            <div className="library-action-result" role="status">
-              {Object.entries(
-                result.results.reduce<Record<string, number>>(
-                  (totals, r) => ({
-                    ...totals,
-                    [r.status]: (totals[r.status] ?? 0) + 1,
-                  }),
-                  {},
-                ),
-              ).map(([status, count]) => (
-                <span key={status}>
-                  {l(resultKey[status] ?? 'error')}: {count}{' '}
-                </span>
-              ))}
-              {result.results.length > 0 && (
-                <details>
-                  <summary>{w('details')}</summary>
-                  <ul>
-                    {result.results.map((r, i) => (
-                      <li key={`${r.match_id}:${i}`}>
-                        <strong>
-                          {resultNames.current[r.match_id] ??
-                            r.match_id.slice(0, 8)}
-                        </strong>
-                        : {l(resultKey[r.status] ?? 'error')}
-                        {r.error ? ` · ${r.error}` : ''}
-                        {(r.created_id || r.existing_id) && (
-                          <small title={r.created_id ?? r.existing_id ?? ''}>
-                            {' '}
-                            · {l('target')}:{' '}
-                            {(r.created_id ?? r.existing_id)?.slice(0, 8)}
-                          </small>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-            </div>
+            <LibraryActionResult result={result} names={resultNames.current} />
           )}
           <div className="library-content">
             <div>
-              <div className="match-list database-table-wrap">
-                <table
-                  ref={columns.tableRef}
-                  className={`database-table${columns.dragging ? ' library-table-resizing' : ''}`}
-                  style={
-                    columns.tableStyle ?? { minWidth: columns.minimumWidth }
-                  }
-                >
-                  <colgroup>
-                    {filters.position_id &&
-                      OCCURRENCE_COLUMNS.map((column) => (
-                        <col
-                          key={column.id}
-                          data-column={column.id}
-                          className={column.className}
-                          style={{
-                            width:
-                              columns.widths?.[column.id] ??
-                              column.defaultWidth,
-                          }}
-                        />
-                      ))}
-                    {columns.tableColumns.map(({ id, className, width }) => (
-                      <col
-                        key={id}
-                        data-column={id}
-                        className={className}
-                        style={{ width }}
-                      />
-                    ))}
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      {filters.position_id && (
-                        <>
-                          <LibrarySortHeading
-                            fields={[
-                              {
-                                key: 'occurrence_database',
-                                label: l('database'),
-                              },
-                            ]}
-                            sort={sort}
-                            direction={direction}
-                            onSort={sortBy}
-                            column="occurrence_database"
-                            resizeHandle={columns.handle(
-                              'occurrence_database',
-                              l('database'),
-                            )}
-                          />
-                          <LibrarySortHeading
-                            fields={[
-                              {
-                                key: 'occurrence_game',
-                                label: l('occurrenceGame'),
-                              },
-                            ]}
-                            sort={sort}
-                            direction={direction}
-                            onSort={sortBy}
-                            column="occurrence_game"
-                            resizeHandle={columns.handle(
-                              'occurrence_game',
-                              l('occurrenceGame'),
-                            )}
-                          />
-                          <LibrarySortHeading
-                            fields={[
-                              {
-                                key: 'occurrence_move',
-                                label: l('occurrenceMove'),
-                              },
-                            ]}
-                            sort={sort}
-                            direction={direction}
-                            onSort={sortBy}
-                            column="occurrence_move"
-                            resizeHandle={columns.handle(
-                              'occurrence_move',
-                              l('occurrenceMove'),
-                            )}
-                          />
-                        </>
-                      )}
-                      <th scope="col" data-column="select">
-                        <input
-                          type="checkbox"
-                          aria-label={l('selectAll')}
-                          aria-describedby={
-                            filters.position_id && matches.length
-                              ? selectionHintId
-                              : undefined
-                          }
-                          checked={allOnPageSelected}
-                          ref={(checkbox) => {
-                            if (checkbox)
-                              checkbox.indeterminate =
-                                someOnPageSelected && !allOnPageSelected;
-                          }}
-                          disabled={loading || !matches.length}
-                          onChange={(e) =>
-                            changeSelection(matches, e.target.checked)
-                          }
-                        />
-                        {columns.handle('select', l('selection'))}
-                      </th>
-                      {dataColumns.map((id) => (
-                        <Fragment key={id}>{headerCells[id]()}</Fragment>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody
-                    onPointerOver={cellTooltip.onPointerOver}
-                    onPointerLeave={cellTooltip.onPointerLeave}
-                    onPointerDown={cellTooltip.onPointerDown}
-                  >
-                    {matches.map((m, index) => (
-                      <tr
-                        key={libraryRowKey(m)}
-                        id={`library-row-${libraryRowKey(m)}`}
-                        data-match-id={m.id}
-                        data-position-id={m.occurrence?.id}
-                        aria-description={summaries.get(m.id)}
-                        tabIndex={0}
-                        className={isCurrentRow(m) ? 'selected' : undefined}
-                        onClick={(event) => event.currentTarget.focus()}
-                        onDoubleClick={(event) => {
-                          if (
-                            !(event.target as HTMLElement).closest(
-                              'button, a, input',
-                            )
-                          )
-                            openMatchRow(m);
-                        }}
-                        onKeyDown={(e) => rowKey(e, m, index)}
-                      >
-                        {filters.position_id && (
-                          <>
-                            <td
-                              data-column="occurrence_database"
-                              data-tooltip-overflow
-                            >
-                              {m.occurrence?.database_name ??
-                                databases.find((d) => d.id === m.database_id)
-                                  ?.name ??
-                                '—'}
-                            </td>
-                            <td data-column="occurrence_game">
-                              {m.occurrence
-                                ? formatNumber(m.occurrence.game_no)
-                                : '—'}
-                            </td>
-                            <td data-column="occurrence_move">
-                              {m.occurrence ? (
-                                <button
-                                  type="button"
-                                  className="library-occurrence-link"
-                                  aria-label={l('openOccurrence', {
-                                    game: formatNumber(m.occurrence.game_no),
-                                    move: formatNumber(m.occurrence.move_no),
-                                  })}
-                                  disabled={rowOpeningDisabled(m)}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    openMatchRow(m);
-                                  }}
-                                >
-                                  {formatNumber(m.occurrence.move_no)}
-                                </button>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                          </>
-                        )}
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="checkbox"
-                            aria-label={l(
-                              m.occurrence ? 'selectMatch' : 'select',
-                              { name: m.display_name },
-                            )}
-                            checked={selected.has(m.id)}
-                            onChange={(e) =>
-                              changeSelection([m], e.target.checked)
-                            }
-                            disabled={
-                              selected.size >= 100 && !selected.has(m.id)
-                            }
-                          />
-                        </td>
-                        {dataColumns.map((id) => (
-                          <Fragment key={id}>{bodyCells[id](m)}</Fragment>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {cellTooltip.tooltip}
-              </div>
+              <LibraryTable
+                matches={matches}
+                databases={databases}
+                occurrences={!!filters.position_id}
+                columns={columns}
+                sort={sort}
+                direction={direction}
+                onSort={sortBy}
+                loading={loading}
+                selected={selected}
+                onSelect={changeSelection}
+                selectionHintId={selectionHintId}
+                isCurrent={isCurrentRow}
+                openingId={matchOpening.openingId}
+                openingDisabled={rowOpeningDisabled}
+                onOpen={openMatchRow}
+              />
               {!matches.length && !loading && !searchError && (
                 <div className="library-empty">
                   <p role="status">{l('noMatches')}</p>
