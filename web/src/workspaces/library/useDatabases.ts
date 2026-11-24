@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLatest } from '../../shared/hooks/useLatest';
 import { request } from '../../shared/http/api';
 import type { Database } from './library-api';
 
@@ -23,8 +24,7 @@ export function useDatabases(
 ): DatabaseList {
   const [databases, setDatabases] = useState<Database[]>([]);
   const [error, setError] = useState<unknown>();
-  const loaded = useRef(onLoad);
-  loaded.current = onLoad;
+  const loaded = useLatest(onLoad);
   useEffect(() => {
     if (!enabled) return;
     const abort = new AbortController();

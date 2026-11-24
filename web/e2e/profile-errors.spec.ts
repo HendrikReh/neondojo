@@ -171,3 +171,59 @@ test('preserves the draft after an unresolved conflict and confirms reloading se
     page.getByText('Settings changed in another window.', { exact: false }),
   ).toHaveCount(0);
 });
+
+test('shows profile errors and unavailable engines in the interface language', async ({
+  page,
+}) => {
+  const backend = await profileBackend(page);
+  const german = structuredClone(backend.state.current_configuration);
+  german.general.locale = 'de';
+  backend.updateRemote(german);
+  const message = 'English server text';
+  const issue = {
+    path: 'analysis.engine',
+    code: 'engine_unavailable',
+    message,
+  };
+  await page.route('**/api/configuration/availability', (route) =>
+    route.fulfill({
+      json: {
+        revision: backend.state.revision,
+        valid: false,
+        issues: [{ ...issue, engine: 'gnubg' }],
+      },
+    }),
+  );
+  await page.route('**/api/profiles/*/activate', (route) =>
+    route.fulfill({
+      status: 422,
+      json: {
+        error: message,
+        code: 'unavailable_resources',
+        issues: [{ ...issue, path: 'play.engine', engine: 'bgsage' }],
+      },
+    }),
+  );
+  await page.goto('/');
+  const selector = page.locator('.profile-selector');
+  await selector.locator('summary').click();
+  await expect(selector).toContainText(
+    'Analyse · Engine: Die eingestellte GNUbg-Installation ist nicht verfügbar.',
+  );
+  await selector.getByRole('button', { name: /Profil: Standard/ }).click();
+  await page
+    .getByRole('menuitemradio', { name: 'Deep analysis', exact: true })
+    .click();
+  // The modified profile asks first; the answer shows the failure.
+  const alert = page.getByRole('alert');
+  const discard = page.getByRole('button', { name: /verwerfen/i });
+  await expect(alert.or(discard).first()).toBeVisible();
+  if (await discard.count()) await discard.first().click();
+  await expect(alert.first()).toContainText(
+    'Einige dieser Einstellungen sind auf diesem Computer nicht verfügbar.',
+  );
+  await expect(alert.first()).toContainText(
+    'Engine: Die NeonGammon-Installation oder die gewählte Tiefe ist nicht verfügbar oder wurde geändert.',
+  );
+  await expect(page.getByText(message)).toHaveCount(0);
+});

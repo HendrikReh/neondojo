@@ -1,5 +1,6 @@
 import ActionButton from './ActionButton';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { useLatest } from '../hooks/useLatest';
 import { useLibraryText } from '../../workspaces/library/library-messages';
 
 export default function LibraryDialog({
@@ -22,11 +23,9 @@ export default function LibraryDialog({
   const id = useId(),
     box = useRef<HTMLDivElement>(null),
     nativeLayer = useRef<HTMLDialogElement>(null),
-    close = useRef(onClose),
-    pending = useRef(busy);
+    close = useLatest(onClose),
+    pending = useLatest(busy);
   const l = useLibraryText();
-  close.current = onClose;
-  pending.current = busy;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const layer = native ? nativeLayer.current : null;

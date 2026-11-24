@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLatest } from '../../../shared/hooks/useLatest';
 import { useCardPracticeText } from './card-practice-messages';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { AppError, dateTimeFormat } from '../../../shared/i18n/i18n-core';
@@ -27,8 +28,7 @@ export default function AnkiAutoSync({
   const [readError, setReadError] = useState<unknown>();
   const read = useRef<AbortController | null>(null);
   const current = useRef<AnkiAutoSyncSettings | undefined>(undefined);
-  const onReceivedRef = useRef(onReceived);
-  onReceivedRef.current = onReceived;
+  const onReceivedRef = useLatest(onReceived);
 
   useEffect(() => {
     let mounted = true;

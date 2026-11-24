@@ -1,6 +1,9 @@
 import { useOpenSageInstallation } from './OpenSageInstallation';
 import configurationOptions from '../../../shared/configuration-options.json' with { type: 'json' };
-import { ConfigurationApiError } from './configuration/configuration-api';
+import { ConfigurationConflict } from './configuration/configuration-api';
+import { useConfigurationErrors } from './profiles/configuration-error-messages';
+import { HttpError, isConflict } from '../shared/http/api';
+import { AppError } from '../shared/i18n/i18n-core';
 import { useOptionalConfiguration } from './configuration/ConfigurationProvider';
 import OpeningBookDialog from './OpeningBookDialog';
 import LocalEngineSettings, { type CheckState } from './LocalEngineSettings';
@@ -39,6 +42,7 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
+import { useLatest } from '../shared/hooks/useLatest';
 import { readPlaySounds, savePlaySounds } from '../shared/board/play-audio';
 import { useI18n, languages, type Locale } from '../shared/i18n/i18n';
 import { saveLocale, numberFormat } from '../shared/i18n/i18n-core';
@@ -48,7 +52,6 @@ import {
   loadEngines,
   loadSettings,
   saveSettings,
-  SettingsApiError,
   type AppSettings,
   type EngineInfo,
 } from './settings-api';
@@ -130,9 +133,9 @@ export default function SettingsDialog({
   initialCategory = 'general',
 }: SettingsDialogProps) {
   const configuration = useOptionalConfiguration();
-  const configurationRef = useRef(configuration);
-  configurationRef.current = configuration;
+  const configurationRef = useLatest(configuration);
   const profileT = useProfileText();
+  const configurationErrors = useConfigurationErrors();
   const { locale, t: appT } = useI18n();
   const [destination, setDestination] = useState<GuardedDestination | null>(
     null,
@@ -160,9 +163,8 @@ export default function SettingsDialog({
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
   const boardGallery = useRef<HTMLDivElement>(null);
-  const preferences = useRef({ theme, locale, appearance });
-  preferences.current = { theme, locale, appearance };
-  const initialPreferences = useRef(preferences.current);
+  const preferences = useLatest({ theme, locale, appearance });
+  const initialPreferences = useRef({ theme, locale, appearance });
   const [category, setCategory] = useState<Category>('general');
   const [draftSounds, setDraftSounds] = useState(readPlaySounds);
   const [initialSounds, setInitialSounds] = useState(readPlaySounds);
@@ -306,12 +308,13 @@ export default function SettingsDialog({
   ]
     .filter(Boolean)
     .join(' ');
-  const conflict =
-    (saveError instanceof SettingsApiError ||
-      saveError instanceof ConfigurationApiError) &&
-    saveError.status === 409;
+  const conflict = isConflict(saveError);
+  // Only the configuration endpoints send a code; an engine settings conflict
+  // needs the latest values first.
   const canRetryConflict =
-    saveError instanceof ConfigurationApiError && configurationChanged;
+    configurationChanged &&
+    (saveError instanceof ConfigurationConflict ||
+      (saveError instanceof HttpError && !!saveError.code));
   const canApply =
     !!draft &&
     dirty &&
@@ -404,9 +407,16 @@ export default function SettingsDialog({
   }
 
   function diagnostic(error: unknown) {
-    if (error instanceof SettingsApiError && error.status === 200)
+    if (error instanceof AppError && error.key === 'error.invalidResponse')
       return t('invalidResponse');
-    return error instanceof Error ? error.message : '';
+    // Engine and installation errors have no code and say what is wrong.
+    if (error instanceof HttpError && !error.code) return error.diagnostic;
+    if (!(error instanceof AppError))
+      return error instanceof Error ? error.message : '';
+    return [
+      configurationErrors.message(error),
+      ...configurationErrors.issues(error).map(configurationErrors.issue),
+    ].join(' ');
   }
 
   function update(values: Partial<AppSettings>) {

@@ -867,7 +867,7 @@ backendTest(
     await page.keyboard.press('Enter');
     await expect(notices).toBeVisible();
     await expect(notices).toContainText(
-      'opening_book.path: The opening book file is missing on this computer.',
+      'Opening book · BGDB book file: The opening book file is missing on this computer.',
     );
     await page.screenshot({ path: testInfo.outputPath('header-notices.png') });
     await page.keyboard.press('Escape');

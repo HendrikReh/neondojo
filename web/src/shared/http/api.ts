@@ -30,6 +30,61 @@ export async function request<T>(
   return data as T;
 }
 
+export type ErrorIssue = Schema['ConfigurationIssue'];
+
+/** A request the server refused, with the details of its `ErrorBody`. */
+export class HttpError extends AppError {
+  constructor(
+    readonly status: number,
+    diagnostic = '',
+    /** The stable identifier of the problem, or an empty string. */
+    readonly code = '',
+    readonly issues: readonly ErrorIssue[] = [],
+  ) {
+    super('error.request', { status: String(status) }, diagnostic);
+    this.name = 'HttpError';
+  }
+}
+
+/** A conflict the client found itself, before or after a request. */
+export class ConflictError extends AppError {
+  constructor(
+    readonly code: string,
+    diagnostic: string,
+  ) {
+    super('error.conflict', {}, diagnostic);
+    this.name = 'ConflictError';
+  }
+}
+
+/** Whether the data changed elsewhere, so a reload is needed. */
+export const isConflict = (
+  error: unknown,
+): error is HttpError | ConflictError =>
+  error instanceof ConflictError ||
+  (error instanceof HttpError && error.status === 409);
+
+function isIssue(value: unknown): value is ErrorIssue {
+  if (!value || typeof value !== 'object') return false;
+  const issue = value as Record<string, unknown>;
+  return ['path', 'code', 'message'].every(
+    (field) => typeof issue[field] === 'string',
+  );
+}
+
+function httpError(status: number, text: string) {
+  const data = parseResponse(text);
+  if (!data || typeof data !== 'object' || !('error' in data))
+    return new HttpError(status, text);
+  const body = data as Record<string, unknown>;
+  return new HttpError(
+    status,
+    String(body.error),
+    typeof body.code === 'string' ? body.code : '',
+    Array.isArray(body.issues) ? body.issues.filter(isIssue) : [],
+  );
+}
+
 function parseResponse(text: string): unknown {
   try {
     return JSON.parse(text);
@@ -55,17 +110,7 @@ export async function requestResponse(
   }
   if (response.ok) return response;
 
-  const text = await response.text();
-  const data = parseResponse(text);
-  const error =
-    data && typeof data === 'object' && 'error' in data
-      ? String(data.error)
-      : text;
-  throw new AppError(
-    'error.request',
-    { status: String(response.status) },
-    error,
-  );
+  throw httpError(response.status, await response.text());
 }
 
 export const terminal = (job: Job) =>
@@ -105,9 +150,12 @@ export async function downloadResponse(
   response: Response,
   fallbackName: string,
 ) {
-  const blob = await response.blob();
   const header = response.headers.get('Content-Disposition') ?? '';
   const filename = /filename="([^"]+)"/.exec(header)?.[1] ?? fallbackName;
+  saveBlob(await response.blob(), filename);
+}
+
+export function saveBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;

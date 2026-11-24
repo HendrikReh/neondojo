@@ -2,8 +2,7 @@ import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
 import { useProfileText } from './profile-messages';
-import { ConfigurationApiError } from '../configuration/configuration-api';
-import { profileFieldKey } from './profile-messages';
+import { useConfigurationErrors } from './configuration-error-messages';
 
 export default function ProfileActionDialog({
   title,
@@ -26,6 +25,8 @@ export default function ProfileActionDialog({
   error?: unknown;
 }) {
   const t = useProfileText();
+  const errors = useConfigurationErrors();
+  const issues = errors.issues(error);
   return createPortal(
     <LibraryDialog
       title={title}
@@ -38,20 +39,14 @@ export default function ProfileActionDialog({
       {children}
       {!!error && (
         <div role="alert" className="error">
-          <p>{error instanceof Error ? error.message : String(error)}</p>
-          {error instanceof ConfigurationApiError &&
-            error.issues.length > 0 && (
-              <ul>
-                {error.issues.map((issue, index) => (
-                  <li key={index}>
-                    {profileFieldKey(issue.path)
-                      ? t(profileFieldKey(issue.path)!)
-                      : issue.path}
-                    : {issue.message}
-                  </li>
-                ))}
-              </ul>
-            )}
+          <p>{errors.message(error)}</p>
+          {issues.length > 0 && (
+            <ul>
+              {issues.map((issue, index) => (
+                <li key={index}>{errors.issue(issue)}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
       <div className="profile-actions">

@@ -141,7 +141,7 @@ test('failed bulk resets retain all changes and allow an explicit retry', async 
   );
   await confirm.click();
   await expect(dialog.getByRole('alert')).toContainText(
-    'Saved book is unavailable',
+    'Some of these settings are not available on this computer.',
   );
   expect(backend.state.current_configuration).toEqual(changed);
   expect(backend.profiles[0]).toEqual(saved);

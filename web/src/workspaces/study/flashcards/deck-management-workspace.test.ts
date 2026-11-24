@@ -11,6 +11,10 @@ interface EffectSlot {
 }
 vi.mock('react', async (original) => ({
   ...(await original<typeof import('react')>()),
+  // A render of this harness commits at once.
+  useInsertionEffect(effect: () => void) {
+    effect();
+  },
   useState(initial: unknown) {
     const index = hooks.index++;
     if (!(index in hooks.slots))

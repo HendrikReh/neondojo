@@ -6,7 +6,6 @@ import {
   loadEngines,
   loadSettings,
   saveSettings,
-  SettingsApiError,
   type AppSettings,
 } from './settings-api';
 
@@ -35,7 +34,7 @@ describe('settings API', () => {
       vi.stubGlobal('fetch', async () =>
         Response.json({ ...settings, ...invalid }),
       );
-      await expect(loadSettings()).rejects.toBeInstanceOf(SettingsApiError);
+      await expect(loadSettings()).rejects.toMatchObject({ key: 'error.invalidResponse' });
     }
     for (const mode of ['competition', 'training', 'coach', 'tutor']) {
       vi.stubGlobal('fetch', async () =>
@@ -63,7 +62,7 @@ describe('settings API', () => {
     vi.stubGlobal('fetch', async () =>
       Response.json({ ...settings, bearoff_direction: 'sideways' }),
     );
-    await expect(loadSettings()).rejects.toBeInstanceOf(SettingsApiError);
+    await expect(loadSettings()).rejects.toMatchObject({ key: 'error.invalidResponse' });
   });
   it.each([4, 5])(
     'accepts a %i-ply analysis profile while retaining the separate play profile',
@@ -84,7 +83,7 @@ describe('settings API', () => {
       vi.stubGlobal('fetch', async () =>
         Response.json({ ...settings, ...invalid }),
       );
-      await expect(loadSettings()).rejects.toBeInstanceOf(SettingsApiError);
+      await expect(loadSettings()).rejects.toMatchObject({ key: 'error.invalidResponse' });
     }
   });
   it('loads real saved settings and forwards cancellation', async () => {
@@ -122,7 +121,7 @@ describe('settings API', () => {
 
   it('does not invent empty settings after malformed successful responses', async () => {
     vi.stubGlobal('fetch', async () => Response.json({ version: 1 }));
-    await expect(loadSettings()).rejects.toBeInstanceOf(SettingsApiError);
+    await expect(loadSettings()).rejects.toMatchObject({ key: 'error.invalidResponse' });
   });
 
   it('reads engine capability profiles including an unavailable future engine', async () => {
@@ -170,7 +169,7 @@ describe('settings API', () => {
       vi.stubGlobal('fetch', async () =>
         Response.json({ ...settings, ...invalid }),
       );
-      await expect(loadSettings()).rejects.toMatchObject({ status: 200 });
+      await expect(loadSettings()).rejects.toMatchObject({ key: 'error.invalidResponse' });
     }
   });
 
@@ -187,7 +186,7 @@ describe('settings API', () => {
         },
       ]),
     );
-    await expect(loadEngines()).rejects.toBeInstanceOf(SettingsApiError);
+    await expect(loadEngines()).rejects.toMatchObject({ key: 'error.invalidResponse' });
   });
 
   it('checks the backend executable path and surfaces its actual version', async () => {
@@ -213,7 +212,7 @@ describe('settings API', () => {
 
 it('rejects malformed local installation metadata without crashing the settings form', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json([])));
-  await expect(loadSageInstallation()).rejects.toBeInstanceOf(SettingsApiError);
+  await expect(loadSageInstallation()).rejects.toMatchObject({ key: 'error.invalidResponse' });
 });
 it('keeps local installation revision and path separate from portable preferences', async () => {
   const fetcher = vi

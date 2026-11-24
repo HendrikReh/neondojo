@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLatest } from '../../../shared/hooks/useLatest';
 import {
   jobEngine,
   mergeJob,
@@ -28,8 +29,7 @@ export function useMatchAnalysis(
   const [failure, setFailure] = useState<{ scope: string; error: unknown }>();
   const [pending, setPending] = useState<string>();
   const [revision, setRevision] = useState(0);
-  const currentScope = useRef(scope);
-  currentScope.current = scope;
+  const currentScope = useLatest(scope);
   const mounted = useRef(false);
   const submission = useRef(0);
   useEffect(() => {

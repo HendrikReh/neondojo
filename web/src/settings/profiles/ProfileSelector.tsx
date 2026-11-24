@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useConfiguration } from '../configuration/ConfigurationProvider';
-import {
-  ConfigurationApiError,
-  type ConfigurationProfile,
-} from '../configuration/configuration-api';
+import type { ConfigurationProfile } from '../configuration/configuration-api';
+import { useConfigurationErrors } from './configuration-error-messages';
 import { useProfileText } from './profile-messages';
 import { clippedTooltipText } from '../../shared/format/overflow-title';
 import Tooltip from '../../shared/ui/Tooltip';
@@ -20,7 +18,8 @@ export default function ProfileSelector({
   onManage: () => void;
 }) {
   const config = useConfiguration(),
-    t = useProfileText();
+    t = useProfileText(),
+    errors = useConfigurationErrors();
   const [open, setOpen] = useState(false),
     [changesOpen, setChangesOpen] = useState(false),
     [pending, setPending] = useState<ConfigurationProfile>(),
@@ -107,9 +106,7 @@ export default function ProfileSelector({
         {config.error ? (
           <>
             <span role="alert">
-              {config.error instanceof Error
-                ? config.error.message
-                : t('failed')}
+              {errors.message(config.error)}
             </span>
             <button type="button" onClick={() => void config.refresh()}>
               {t('retry')}
@@ -168,7 +165,7 @@ export default function ProfileSelector({
             {warnings.length > 0 && (
               <div role="status">
                 {warnings.map((warning, index) => (
-                  <p key={index}>{warning.message}</p>
+                  <p key={index}>{errors.issue(warning)}</p>
                 ))}
                 <button
                   type="button"
@@ -181,25 +178,16 @@ export default function ProfileSelector({
             {config.availabilityIssues.length > 0 && (
               <div role="status" className="profile-availability">
                 {config.availabilityIssues.map((issue, index) => (
-                  <p key={index}>
-                    {issue.path}: {issue.message}
-                  </p>
+                  <p key={index}>{errors.issue(issue)}</p>
                 ))}
               </div>
             )}
             {!!headerError && (
               <div role="alert">
-                <p>
-                  {headerError instanceof Error
-                    ? headerError.message
-                    : String(headerError)}
-                </p>
-                {headerError instanceof ConfigurationApiError &&
-                  headerError.issues.map((issue, index) => (
-                    <p key={index}>
-                      {issue.path}: {issue.message}
-                    </p>
-                  ))}
+                <p>{errors.message(headerError)}</p>
+                {errors.issues(headerError).map((issue, index) => (
+                  <p key={index}>{errors.issue(issue)}</p>
+                ))}
               </div>
             )}
           </div>

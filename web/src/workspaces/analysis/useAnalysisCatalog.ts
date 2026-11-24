@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLatest } from '../../shared/hooks/useLatest';
 import { request, terminal } from '../../shared/http/api';
 import { watchJobChanges } from '../../shared/jobs/job-watch';
 import {
@@ -32,10 +33,8 @@ export function useAnalysisCatalog(
   revision?: string,
 ) {
   const scope = JSON.stringify([matchId, positionId]);
-  const current = useRef(scope);
-  current.current = scope;
-  const currentMatch = useRef(matchId);
-  currentMatch.current = matchId;
+  const current = useLatest(scope);
+  const currentMatch = useLatest(matchId);
   const readVersion = useRef(0);
   const [generation, setGeneration] = useState(0);
   const [state, setState] = useState<{
@@ -53,8 +52,7 @@ export function useAnalysisCatalog(
   const [busy, setBusy] = useState<string>();
   const [loadingMore, setLoadingMore] = useState<string>();
   const page = state?.scope === scope ? state.page : undefined;
-  const currentPage = useRef(page);
-  currentPage.current = page;
+  const currentPage = useLatest(page);
   const refresh = () => {
     readVersion.current += 1;
     setGeneration((value) => value + 1);

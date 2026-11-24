@@ -5,6 +5,10 @@ import type { Position } from '../../shared/http/api';
 const hooks = vi.hoisted(() => ({ slots: [] as unknown[], index: 0 }));
 vi.mock('react', async (original) => ({
   ...(await original<typeof import('react')>()),
+  // A render of this harness commits at once.
+  useInsertionEffect(effect: () => void) {
+    effect();
+  },
   useContext(context: { _currentValue: unknown }) {
     return context._currentValue;
   },

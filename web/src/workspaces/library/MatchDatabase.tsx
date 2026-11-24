@@ -18,6 +18,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react';
+import { useLatest } from '../../shared/hooks/useLatest';
 import type { Match, Position } from '../../shared/http/api';
 import SearchPagination from '../../shared/ui/SearchPagination';
 import { useSearchPages } from '../../shared/hooks/useSearchPages';
@@ -181,7 +182,7 @@ export default function MatchDatabase({
   const cellTooltip = useClippedCellTooltip();
   const [filterInput, setFilterInput] = useState<Filters>();
   const draftFilters = filterInput ?? filters;
-  const filterDraft = useRef(draftFilters);
+  const filterDraft = useLatest(draftFilters);
   const filterToggle = useRef<HTMLButtonElement>(null);
   const notesToggle = useRef<HTMLButtonElement>(null);
   const positionToggle = useRef<HTMLButtonElement>(null);
@@ -209,7 +210,6 @@ export default function MatchDatabase({
       trigger: duplicatesToggle,
     },
   ] as const;
-  filterDraft.current = draftFilters;
   const setFilters = (next: SetStateAction<Filters>) => {
     const value = typeof next === 'function' ? next(filterDraft.current) : next;
     filterDraft.current = value;

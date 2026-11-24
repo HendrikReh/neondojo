@@ -1,5 +1,6 @@
 import { errorGrades } from './move-severity';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useLatest } from '../hooks/useLatest';
 import { request, type Job } from '../http/api';
 import type { components } from '../../generated-api';
 import { statisticsRevision } from '../../workspaces/analysis/match/match-statistics-api';
@@ -93,8 +94,7 @@ interface AssessmentState {
 export function useMoveAssessments(scope: MoveAssessmentScope) {
   const identity = assessmentIdentity(scope);
   const path = assessmentRequestPath(scope);
-  const current = useRef(identity);
-  current.current = identity;
+  const current = useLatest(identity);
   const [state, setState] = useState<AssessmentState>({
     identity,
     assessments: {},

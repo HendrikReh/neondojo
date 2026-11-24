@@ -1,3 +1,5 @@
+import { ConflictError, request, type ErrorIssue } from '../../shared/http/api';
+import { AppError } from '../../shared/i18n/i18n-core';
 import {
   normalizeConfiguration,
   isConfigurationDirty,
@@ -22,22 +24,18 @@ export interface ConfigurationState {
   profile?: ConfigurationProfile;
   initialization_warnings?: ConfigurationIssue[];
 }
-export interface ConfigurationIssue {
-  path: string;
-  code: string;
-  message: string;
-}
-export class ConfigurationApiError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-    readonly code = '',
-    readonly issues: ConfigurationIssue[] = [],
-  ) {
-    super(message);
-    this.name = 'ConfigurationApiError';
-  }
-}
+export type ConfigurationIssue = ErrorIssue;
+
+/** A conflict found while saving or recovering the configuration. */
+export class ConfigurationConflict extends ConflictError {}
+
+/**
+ * Whether the server or this client decided the outcome. After a lost
+ * connection the server may still have applied the request.
+ */
+export const isDecided = (error: unknown) =>
+  error instanceof AppError && error.key !== 'error.network';
+
 const object = (v: unknown): v is Record<string, unknown> =>
   !!v && typeof v === 'object' && !Array.isArray(v);
 export function parseAvailability(value: unknown): {
@@ -60,8 +58,9 @@ export function parseAvailability(value: unknown): {
         typeof issue.message !== 'string',
     )
   )
-    throw new ConfigurationApiError(
-      200,
+    throw new AppError(
+      'error.invalidResponse',
+      {},
       'Invalid configuration availability response',
     );
   return value as unknown as {
@@ -80,7 +79,7 @@ export function parseProfile(value: unknown): ConfigurationProfile {
     !Number.isSafeInteger(value.revision) ||
     Number(value.revision) < 1
   )
-    throw new ConfigurationApiError(200, 'Invalid profile response');
+    throw new AppError('error.invalidResponse', {}, 'Invalid profile response');
   return {
     ...value,
     configuration: normalizeConfiguration(value.configuration),
@@ -94,7 +93,11 @@ export function parseConfigurationState(value: unknown): ConfigurationState {
     typeof value.dirty !== 'boolean' ||
     !Array.isArray(value.differences)
   )
-    throw new ConfigurationApiError(200, 'Invalid configuration response');
+    throw new AppError(
+      'error.invalidResponse',
+      {},
+      'Invalid configuration response',
+    );
   const profile = parseProfile(value.active_profile),
     current = normalizeConfiguration(value.current_configuration);
   if (
@@ -107,19 +110,23 @@ export function parseConfigurationState(value: unknown): ConfigurationState {
         !Object.hasOwn(d, 'current'),
     )
   )
-    throw new ConfigurationApiError(200, 'Invalid configuration differences');
+    throw new AppError(
+      'error.invalidResponse',
+      {},
+      'Invalid configuration differences',
+    );
   return {
     ...value,
     active_profile: profile,
     current_configuration: current,
   } as unknown as ConfigurationState;
 }
-export async function configurationRequest<T = unknown>(
+export const configurationRequest = (
   path: string,
   method = 'GET',
   body?: unknown,
-): Promise<T> {
-  const response = await fetch(`/api${path}`, {
+) =>
+  request<unknown>(path, {
     method,
     ...(body === undefined
       ? {}
@@ -128,26 +135,6 @@ export async function configurationRequest<T = unknown>(
           body: JSON.stringify(body),
         }),
   });
-  let value: unknown;
-  try {
-    value = await response.json();
-  } catch {
-    throw new ConfigurationApiError(
-      response.status,
-      response.statusText || 'Invalid server response',
-    );
-  }
-  if (!response.ok) {
-    const error = object(value) ? value : {};
-    throw new ConfigurationApiError(
-      response.status,
-      String(error.error || response.statusText),
-      typeof error.code === 'string' ? error.code : '',
-      Array.isArray(error.issues) ? (error.issues as ConfigurationIssue[]) : [],
-    );
-  }
-  return value as T;
-}
 export interface ConfigurationApi {
   read(): Promise<ConfigurationState>;
   initialize(): Promise<ConfigurationState>;
@@ -191,25 +178,10 @@ export const configurationApi: ConfigurationApi = {
     );
   },
   listProfiles: async () => {
-    const value = await configurationRequest<unknown>('/profiles');
-    const items = Array.isArray(value)
-      ? value
-      : object(value) && Array.isArray(value.profiles)
-        ? value.profiles
-        : null;
-    if (!items) throw new ConfigurationApiError(200, 'Invalid profile list');
-    return Promise.all(
-      items.map(async (item) => {
-        if (object(item) && item.configuration) return parseProfile(item);
-        if (!object(item) || typeof item.id !== 'string')
-          throw new ConfigurationApiError(200, 'Invalid profile list');
-        return parseProfile(
-          await configurationRequest(
-            `/profiles/${encodeURIComponent(item.id)}`,
-          ),
-        );
-      }),
-    );
+    const value = await configurationRequest('/profiles');
+    if (!Array.isArray(value))
+      throw new AppError('error.invalidResponse', {}, 'Invalid profile list');
+    return value.map(parseProfile);
   },
   write: async (revision, configuration) =>
     parseConfigurationState(

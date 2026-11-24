@@ -15,6 +15,7 @@ import {
   type CSSProperties,
   type FormEvent,
 } from 'react';
+import { useLatest } from '../../shared/hooks/useLatest';
 import Board from '../../shared/board/Board';
 import PlayHistory from './PlayHistory';
 import PlayFeedback from './PlayFeedback';
@@ -170,8 +171,7 @@ export default function PlayWorkspace({
   const [hintReady, setHintReady] = useState(false);
   const [pendingRoll, setPendingRoll] = useState<PlayAction | null>(null);
   const waitingFaces = useRollingFaces(pendingRoll !== null);
-  const soundsVisible = useRef(visible);
-  soundsVisible.current = visible;
+  const soundsVisible = useLatest(visible);
   useEffect(() => {
     if (!visible) {
       stopPlaySounds();

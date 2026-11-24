@@ -5,7 +5,8 @@ import {
   type ProfileConfiguration,
 } from './configuration-model';
 import type { AppSettings } from '../settings-api';
-import { loadSettings, saveSettings, SettingsApiError } from '../settings-api';
+import { loadSettings, saveSettings } from '../settings-api';
+import { ConflictError } from '../../shared/http/api';
 import type { Locale } from '../../shared/i18n/i18n-core';
 import type { UiAppearance } from '../appearance/ui-appearance';
 
@@ -41,8 +42,8 @@ export async function saveInstallationSettings(
   if (
     edits.some((field) => (latest[field] ?? null) !== (initial[field] ?? null))
   ) {
-    throw new SettingsApiError(
-      409,
+    throw new ConflictError(
+      'settings_conflict',
       'The local engine settings changed; reload before applying your changes',
     );
   }

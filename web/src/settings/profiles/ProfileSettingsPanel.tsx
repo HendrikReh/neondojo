@@ -2,10 +2,11 @@ import { createPortal } from 'react-dom';
 import { useId, useRef, useState } from 'react';
 import ActionButton from '../../shared/ui/ActionButton';
 import { useConfiguration } from '../configuration/ConfigurationProvider';
+import type { ConfigurationProfile } from '../configuration/configuration-api';
 import {
-  ConfigurationApiError,
-  type ConfigurationProfile,
-} from '../configuration/configuration-api';
+  hasNameIssue,
+  useConfigurationErrors,
+} from './configuration-error-messages';
 import { useProfileText } from './profile-messages';
 import { useI18n } from '../../shared/i18n/i18n';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
@@ -18,6 +19,7 @@ import { dateTimeFormat } from '../../shared/i18n/i18n-core';
 export default function ProfileSettingsPanel() {
   const config = useConfiguration(),
     t = useProfileText(),
+    errors = useConfigurationErrors(),
     { locale, formatNumber } = useI18n();
   const activeHeading = useId(),
     actionsId = useId(),
@@ -66,10 +68,11 @@ export default function ProfileSettingsPanel() {
   const conflict = config.status === 'conflict';
   const controlsDisabled = config.busy || conflict;
   const report = conflict ? undefined : (error ?? config.error);
+  const reportIssues = errors.issues(report);
   if (!config.current || !selected || !activeProfile)
     return report ? (
       <div>
-        <p role="alert">{report instanceof Error ? report.message : t('failed')}</p>
+        <p role="alert">{errors.message(report)}</p>
         <button type="button" onClick={() => void config.refresh()}>{t('retry')}</button>
       </div>
     ) : <p role="status">{t('loading')}</p>;
@@ -293,17 +296,14 @@ export default function ProfileSettingsPanel() {
       </p>
       {!!report && (
         <div role="alert" className="error">
-          <p>{report instanceof Error ? report.message : String(report)}</p>
-          {report instanceof ConfigurationApiError &&
-            report.issues.length > 0 && (
-              <ul>
-                {report.issues.map((issue, index) => (
-                  <li key={index}>
-                    {issue.path}: {issue.message}
-                  </li>
-                ))}
-              </ul>
-            )}
+          <p>{errors.message(report)}</p>
+          {reportIssues.length > 0 && (
+            <ul>
+              {reportIssues.map((issue, index) => (
+                <li key={index}>{errors.issue(issue)}</li>
+              ))}
+            </ul>
+          )}
           {config.status === 'error' && (
             <button
               type="button"
@@ -388,14 +388,13 @@ function ProfileNameDialog({
   onSave: (name: string) => Promise<void>;
 }) {
   const t = useProfileText();
+  const errors = useConfigurationErrors();
   const feedbackId = useId();
   const [name, setName] = useState(profile?.name ?? '');
   const [error, setError] = useState<unknown>();
   const trimmed = name.trim();
   const valid = !!trimmed && [...trimmed].length <= 80 && !/\p{Cc}/u.test(name);
-  const nameError =
-    error instanceof ConfigurationApiError &&
-    ['duplicate_name', 'invalid_name'].includes(error.code);
+  const nameError = hasNameIssue(error);
   const invalid = !!name && !valid;
   return createPortal(
     <LibraryDialog
@@ -437,9 +436,7 @@ function ProfileNameDialog({
           <p id={feedbackId} role="alert" className="error">
             {invalid
               ? t('invalidName')
-              : error instanceof Error
-                ? error.message
-                : String(error)}
+              : errors.message(error)}
           </p>
         )}
         <div className="library-dialog-actions">

@@ -8,6 +8,7 @@ import {
 import { useConfirmedConfiguration } from '../../../settings/configuration/ConfigurationProvider';
 import ActionButton from '../../../shared/ui/ActionButton';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useLatest } from '../../../shared/hooks/useLatest';
 import { createPortal } from 'react-dom';
 import {
   cancelJob,
@@ -362,8 +363,7 @@ export default function MatchAnalysisPanel({
   const cubeId =
     boardReview?.origin.row?.kind === 'cube' ? selectedDecisionId : undefined;
   const selectionKey = reviewIdentity(boardReview?.intent, cubeId);
-  const latestSelection = useRef(selectionKey);
-  latestSelection.current = selectionKey;
+  const latestSelection = useLatest(selectionKey);
   const [reviewJump, setReviewJump] = useState<{
     key: string;
     entry?: ReviewListEntry;

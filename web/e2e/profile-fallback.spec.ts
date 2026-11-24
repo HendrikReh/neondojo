@@ -38,7 +38,9 @@ for (const confirmed of [false, true]) {
     if (confirmed) await page.reload();
     else await page.goto('/');
     await expect(
-      page.getByText('Profile unavailable', { exact: true }),
+      page.getByText('Request failed (HTTP 503). Profile unavailable', {
+        exact: true,
+      }),
     ).toBeVisible();
 
     await page.getByLabel('Match file', { exact: true }).setInputFiles({

@@ -15,6 +15,10 @@ const hooks = vi.hoisted(() => ({
   request: vi.fn(),
 }));
 vi.mock('react', () => ({
+  // A render of this harness commits at once.
+  useInsertionEffect(effect: () => void) {
+    effect();
+  },
   useRef(value: string) {
     return (hooks.ref ??= { current: value });
   },

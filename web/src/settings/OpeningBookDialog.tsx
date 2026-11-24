@@ -1,14 +1,13 @@
-import { ConfigurationApiError } from './configuration/configuration-api';
 import { openingBookConfigurationKey } from './configuration/configuration-model';
 import ProfileActionDialog from './profiles/ProfileActionDialog';
 import { useOptionalConfiguration } from './configuration/ConfigurationProvider';
+import { useConfigurationErrors } from './profiles/configuration-error-messages';
 import { useProfileText } from './profiles/profile-messages';
 import ActionButton from '../shared/ui/ActionButton';
 import EngineLabel from '../shared/engine/EngineLabel';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import LibraryDialog from '../shared/ui/LibraryDialog';
-import { request } from '../shared/http/api';
-import { AppError } from '../shared/i18n/i18n-core';
+import { isConflict, request } from '../shared/http/api';
 import { useI18n } from '../shared/i18n/i18n';
 import {
   openingBookProviderLabel,
@@ -32,7 +31,8 @@ export default function OpeningBookDialog({
   const configuration = useOptionalConfiguration();
   const profileT = useProfileText();
   const l = useSourceText(),
-    { locale, formatError } = useI18n();
+    errors = useConfigurationErrors(),
+    { locale } = useI18n();
   const [xgChecked, setXgChecked] = useState<XgBookStatus>();
   const [saved, setSaved] = useState<BookSettings>(),
     [draft, setDraft] = useState<BookConfig>(),
@@ -81,9 +81,7 @@ export default function OpeningBookDialog({
       : saved?.xg_status?.path === draft?.xg_path
         ? saved?.xg_status
         : undefined;
-  const conflict =
-    (error instanceof AppError && String(error.params.status) === '409') ||
-    (error instanceof ConfigurationApiError && error.status === 409);
+  const conflict = isConflict(error);
   async function check() {
     if (!draft || busy) return;
     const abort = new AbortController();
@@ -304,7 +302,7 @@ export default function OpeningBookDialog({
           <p className="fineprint">{l('bookStructure')}</p>
           {!!error && (
             <p role="alert" className="error">
-              {conflict ? l('conflict') : formatError(error)}
+              {conflict ? l('conflict') : errors.message(error)}
             </p>
           )}
           {conflict && (
@@ -343,7 +341,7 @@ export default function OpeningBookDialog({
         </form>
       ) : (
         <>
-          <p role="alert">{formatError(error)}</p>
+          <p role="alert">{errors.message(error)}</p>
           <ActionButton
             icon="refresh"
             label={l('retry')}

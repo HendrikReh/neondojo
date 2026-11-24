@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
+import { useLatest } from './useLatest';
 import {
   MAX_COLUMN_WIDTH,
   captureColumnWidths,
@@ -89,8 +90,7 @@ export function useResizableColumns<Id extends string>(
   const [dragging, setDragging] = useState(false);
   const active = useRef<Drag<Id> | undefined>(undefined);
   const widths = dragging ? dragWidths : (savedWidths ?? undefined);
-  const current = useRef({ layout, options, widths });
-  current.current = { layout, options, widths };
+  const current = useLatest({ layout, options, widths });
   const activeKey = JSON.stringify(
     options.activeColumns ?? layout.columns.map((column) => column.id),
   );

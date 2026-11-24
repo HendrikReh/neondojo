@@ -8,7 +8,8 @@ import ActionButton from '../../../shared/ui/ActionButton';
 import AnkiAutoSync from './AnkiAutoSync';
 import AnkiSyncOverview from './AnkiSyncOverview';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { request } from '../../../shared/http/api';
+import { useEpoch, useLatest } from '../../../shared/hooks/useLatest';
+import { request, requestResponse, saveBlob } from '../../../shared/http/api';
 import { AppError, dateTimeFormat } from '../../../shared/i18n/i18n-core';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useLearningText } from './learning-messages';
@@ -191,21 +192,18 @@ export default function LearningWorkspace({
     rating: Rating;
     id: string;
   } | null>(null);
-  const current = useRef({ deckId, session: {} });
-  if (current.current.deckId !== deckId) {
-    generation.current++;
-    current.current = { deckId, session: {} };
+  // Each visit to a deck is one session; late responses belong to an old one.
+  const session = useEpoch(deckId);
+  const liveSession = useLatest(session);
+  const [questionOwner, setQuestionOwner] = useState<number | null>(null);
+  // A rename changes the revision but not the listed cards.
+  const [metadataOnlyRevision, setMetadataOnlyRevision] = useState<number>();
+  const [list, setList] = useState({ revision, value: 0 });
+  let contentRevision = list.value;
+  if (list.revision !== revision) {
+    if (revision !== metadataOnlyRevision) contentRevision++;
+    setList({ revision, value: contentRevision });
   }
-  const session = current.current.session;
-  const [questionOwner, setQuestionOwner] = useState<object | null>(null);
-  const metadataOnlyRevision = useRef<number | null>(null);
-  const listRevision = useRef({ revision, value: 0 });
-  if (listRevision.current.revision !== revision) {
-    if (revision !== metadataOnlyRevision.current) listRevision.current.value++;
-    metadataOnlyRevision.current = null;
-    listRevision.current.revision = revision;
-  }
-  const contentRevision = listRevision.current.value;
   const searchKey = JSON.stringify([deckId, filters, searchRun]);
   const listKey = JSON.stringify([searchKey, contentRevision]);
   useEffect(() => {
@@ -471,14 +469,14 @@ export default function LearningWorkspace({
     setRevealed(null);
     void request<NextCard>(`/decks/${deckId}/next`, { signal: abort.signal })
       .then((data) => {
-        if (!abort.signal.aborted && current.current.session === owner) {
+        if (!abort.signal.aborted && liveSession.current === owner) {
           setQuestionOwner(owner);
           setNext(data);
           setError(null);
         }
       })
       .catch((error) => {
-        if (abort.signal.aborted || current.current.session !== owner) return;
+        if (abort.signal.aborted || liveSession.current !== owner) return;
         if (
           entryToken !== undefined &&
           error instanceof AppError &&
@@ -492,7 +490,7 @@ export default function LearningWorkspace({
         } else setError(error);
       })
       .finally(() => {
-        if (!abort.signal.aborted && current.current.session === owner)
+        if (!abort.signal.aborted && liveSession.current === owner)
           setLoading(false);
       });
     return () => abort.abort();
@@ -572,34 +570,18 @@ export default function LearningWorkspace({
     setExporting(true);
     setError(null);
     try {
-      const response = await fetch(
-        `/api/decks/${id}/export.apkg?locale=${locale}`,
+      const response = await requestResponse(
+        `/decks/${id}/export.apkg?locale=${locale}`,
       );
-      if (!response.ok) {
-        let details = await response.text();
-        try {
-          details = JSON.parse(details).error || details;
-        } catch {
-          /* Keep native diagnostic. */
-        }
-        throw new AppError(
-          'error.request',
-          { status: response.status },
-          details,
-        );
-      }
       // An explicitly started download completes even when another deck is selected.
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `${(decks.find((d) => d.id === id)?.name || 'NeonDojo').replace(/[^\p{L}\p{N}_ -]/gu, '_')}.apkg`;
-      anchor.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      saveBlob(
+        await response.blob(),
+        `${(decks.find((d) => d.id === id)?.name || 'NeonDojo').replace(/[^\p{L}\p{N}_ -]/gu, '_')}.apkg`,
+      );
     } catch (error) {
-      if (current.current.session === owner) setError(error);
+      if (liveSession.current === owner) setError(error);
     } finally {
-      if (current.current.session === owner) setExporting(false);
+      if (liveSession.current === owner) setExporting(false);
     }
   }
   function reloadCard() {
@@ -958,7 +940,7 @@ export default function LearningWorkspace({
               visible={visible}
               onAttempt={(result) => {
                 if (
-                  current.current.session === session &&
+                  liveSession.current === session &&
                   cardGeneration === generation.current
                 ) {
                   setNext((current) =>
@@ -1204,7 +1186,7 @@ export default function LearningWorkspace({
           }}
           onRenamed={(deck) => {
             replaceDeck(deck);
-            if (!filters.q.trim()) metadataOnlyRevision.current = revision + 1;
+            if (!filters.q.trim()) setMetadataOnlyRevision(revision + 1);
             setManagement(null);
             setLibraryDialog(undefined);
             onChanged();
@@ -1218,7 +1200,7 @@ export default function LearningWorkspace({
               return;
             }
             generation.current++;
-            current.current = { deckId: '', session: {} };
+            liveSession.current = -1;
             cardSearch.invalidateResults();
             removeDeck(id);
             const replacement =
