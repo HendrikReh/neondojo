@@ -18,7 +18,7 @@ Clients that send neither `Origin` nor `Sec-Fetch-Site`, such as `curl` or scrip
 
 ### Errors
 
-Every API error is a JSON `ErrorBody`: `error` holds a message. Configuration and profile errors, and the errors other endpoints pass on from them, add a stable `code` and the affected `issues` (`path`, `code`, `message`). A malformed JSON body or query is HTTP 422. A malformed path, such as an invalid UUID, and a request that is not multipart where an upload is expected are HTTP 400; `/api/positions/{id}/bookmark` and `PUT`/`DELETE /api/decks/{id}` answer a malformed id with 422. Unknown paths under `/api` are served as the web client's fallback page when the backend serves the client.
+Every API error is a JSON `ErrorBody`: `error` holds a message. Configuration and profile errors, and the errors other endpoints pass on from them, add a stable `code` and the affected `issues` (`path`, `code`, `message`). A malformed JSON body or query is HTTP 422. A malformed path, such as an invalid UUID, and a request that is not multipart where an upload is expected are HTTP 400; `/api/positions/{id}/bookmark` and `PUT`/`DELETE /api/decks/{id}` answer a malformed id with 422. An unknown path under `/api` is HTTP 404, and a method an endpoint does not have is HTTP 405 with an `Allow` header.
 
 Handlers take `Json`, `Query`, `Path` and `Multipart` from `backend/src/json_errors.rs`, because Axum's own extractors reject with plain text. `clippy.toml` bans Axum's, and `backend/tests/api_errors.rs` sends malformed requests to every endpoint of the OpenAPI document.
 

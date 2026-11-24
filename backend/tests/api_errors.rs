@@ -225,3 +225,42 @@ fn parameters_are_documented_where_they_are_sent() {
         }
     }
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn unknown_paths_and_methods_return_the_json_error_body(pool: PgPool) {
+    // The backend serves the web client as the fallback for every other path.
+    let app = support::app(&pool, "/unavailable").fallback(|| async { "web client" });
+    for method in ["GET", "POST", "PUT", "PATCH", "DELETE"] {
+        for uri in [
+            "/api",
+            "/api/",
+            "/api/unknown",
+            "/api/health/unknown",
+            "/api/matches/",
+            "/api/matches/1/unknown/2",
+        ] {
+            let status = rejected(&app, method, uri, "application/json", "{}").await;
+            assert_eq!(status, 404, "{method} {uri}");
+        }
+    }
+    let page = app
+        .clone()
+        .oneshot(Request::get("/apiary").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let page = page.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(&page[..], b"web client");
+
+    for operation in operations() {
+        // No endpoint has this method.
+        let uri = operation.unknown_uri();
+        let status = rejected(&app, "TRACE", &uri, "application/json", "{}").await;
+        assert_eq!(status, 405, "{uri}");
+    }
+
+    let response = app
+        .oneshot(Request::post("/api/health").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.headers()[header::ALLOW], "GET,HEAD");
+}
