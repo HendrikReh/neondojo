@@ -516,3 +516,62 @@ async fn changing_only_the_play_engine_verifies_its_installation(pool: PgPool) {
     let (_, after) = call(app, "GET", "/api/configuration", Value::Null).await;
     assert_eq!(after, state);
 }
+
+/// Applying settings and saving them into a profile check the same resources.
+#[sqlx::test(migrations = "./migrations")]
+async fn every_engine_and_book_change_is_verified_on_both_save_paths(pool: PgPool) {
+    let (app, _) = profile_support::initialized(&pool, false).await;
+    // The saved configuration keeps its engine while the installation is missing.
+    for (column, table) in [
+        ("current_configuration", "configuration_state"),
+        ("configuration", "configuration_profiles"),
+    ] {
+        sqlx::query(&format!(
+            "UPDATE {table} SET {column}={column}
+                || jsonb_build_object('analysis', {column}->'analysis' || '{{\"engine\":\"bgsage\",\"plies\":2}}')
+                || jsonb_build_object('play', {column}->'play' || '{{\"engine\":\"bgsage\",\"plies\":2,\"top_two\":false}}')
+                || jsonb_build_object('opening_book', {column}->'opening_book' || '{{\"path\":\"/missing/book.sqlite\"}}')"
+        ))
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    let (_, state) = call(app.clone(), "GET", "/api/configuration", Value::Null).await;
+    let configuration = &state["current_configuration"];
+    assert_eq!(configuration["play"]["top_two"], false);
+    let profile = &state["active_profile"];
+    let snapshot = format!("/api/profiles/{}/snapshot", profile["id"].as_str().unwrap());
+    let save = async |path: &str, configuration: &Value| {
+        let mut body = json!({"configuration":configuration});
+        if path == snapshot {
+            body["expected_state_revision"] = state["revision"].clone();
+            body["expected_profile_revision"] = profile["revision"].clone();
+        } else {
+            body["expected_revision"] = state["revision"].clone();
+        }
+        call(app.clone(), "PUT", path, body).await
+    };
+    for (section, field, value) in [
+        ("analysis", "engine", json!("gnubg")),
+        ("analysis", "plies", json!(3)),
+        ("play", "engine", json!("gnubg")),
+        ("play", "plies", json!(1)),
+        ("play", "top_two", json!(true)),
+        ("opening_book", "provider", json!("backgammondb")),
+    ] {
+        let mut changed = configuration.clone();
+        changed[section][field] = value;
+        for path in ["/api/configuration", &snapshot] {
+            let (code, error) = save(path, &changed).await;
+            assert_eq!(code, 422, "{section}.{field} {path}");
+            assert_eq!(error["code"], "unavailable_resources");
+        }
+    }
+    let (_, after) = call(app.clone(), "GET", "/api/configuration", Value::Null).await;
+    assert_eq!(after, state);
+    // Other settings need no engine.
+    let mut changed = configuration.clone();
+    changed["general"]["player_name"] = json!("Renamed");
+    let (code, saved) = save(&snapshot, &changed).await;
+    assert_eq!(code, 200, "{saved}");
+}
