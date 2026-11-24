@@ -1,4 +1,10 @@
-import { useInsertionEffect, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useInsertionEffect,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 
 /**
  * A ref to the value of the last committed render, for event handlers, effects
@@ -11,6 +17,17 @@ export function useLatest<T>(value: T): RefObject<T> {
     latest.current = value;
   });
   return latest;
+}
+
+/**
+ * A function that never changes and calls the latest one, so that a memoized
+ * child does not render again for it. Call it from events, not while rendering.
+ */
+export function useLatestCallback<A extends unknown[], R>(
+  callback: (...args: A) => R,
+): (...args: A) => R {
+  const latest = useLatest(callback);
+  return useCallback((...args: A) => latest.current(...args), [latest]);
 }
 
 /**

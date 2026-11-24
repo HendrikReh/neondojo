@@ -5,6 +5,7 @@ import type { PlaySession } from '../src/workspaces/play/play-api';
 import { applySteps } from '../src/shared/board/play-state';
 declare global {
   interface Window {
+    __componentRenders: Record<string, number>;
     __animationSamples: {
       time: number;
       phase: string | null;
@@ -405,3 +406,93 @@ for (const human of [0, 1])
       'true',
     );
   });
+
+interface Fiber {
+  flags: number;
+  child: Fiber | null;
+  sibling: Fiber | null;
+  /** A component, its memo wrapper or an element name. */
+  type: unknown;
+}
+
+/** Counts the renders of two components from the commits React reports. */
+async function countRenders(page: Page) {
+  await page.addInitScript(() => {
+    const performedWork = 1;
+    const counted = ['PlayWorkspace', 'PlayHistory'];
+    const seen: Record<string, Fiber> = {};
+    window.__componentRenders = {};
+    const componentName = (type: unknown): string | undefined =>
+      typeof type === 'function'
+        ? type.name
+        : type && typeof type === 'object' && 'type' in type
+          ? componentName(type.type)
+          : undefined;
+    const visit = (start: Fiber) => {
+      for (let fiber: Fiber | null = start; fiber; fiber = fiber.sibling) {
+        const name = componentName(fiber.type);
+        // A commit that leaves a component out keeps its fiber object.
+        if (name && counted.includes(name) && seen[name] !== fiber) {
+          seen[name] = fiber;
+          if (fiber.flags & performedWork)
+            window.__componentRenders[name] =
+              (window.__componentRenders[name] ?? 0) + 1;
+        }
+        if (fiber.child) visit(fiber.child);
+      }
+    };
+    Object.assign(window, {
+      __REACT_DEVTOOLS_GLOBAL_HOOK__: {
+        renderers: new Map(),
+        supportsFiber: true,
+        inject: () => 1,
+        onCommitFiberRoot: (_id: number, root: { current: Fiber }) =>
+          visit(root.current),
+        onCommitFiberUnmount: () => {},
+      },
+    });
+  });
+}
+
+test('the rolling dice do not render the move history again', async ({
+  page,
+}) => {
+  await countRenders(page);
+  const before: PlaySession = {
+    ...played(opening()),
+    position: { ...played(opening()).position, player: 0 },
+  };
+  let answer = () => {};
+  const answered = new Promise<void>((resolve) => {
+    answer = resolve;
+  });
+  await install(page, before, async () => {
+    await answered;
+    return {
+      ...before,
+      version: 2,
+      phase: 'move',
+      position: { ...before.position, dice: [3, 1] },
+    };
+  });
+  await expect(page.locator('.move-history-row')).toHaveCount(1);
+  await rollDice(page).click();
+  const renders = () => page.evaluate(() => ({ ...window.__componentRenders }));
+  const board = page.locator('.play-board');
+  await expect(board).toHaveAttribute('data-play-animation', 'dice');
+  const start = await renders();
+  await expect
+    .poll(async () => (await renders()).PlayWorkspace - start.PlayWorkspace)
+    .toBeGreaterThan(10);
+  expect((await renders()).PlayHistory).toBe(start.PlayHistory);
+
+  // The history still reacts to its own changes: it is enabled again.
+  answer();
+  await expect(board).toHaveAttribute('data-play-phase', 'move');
+  await expect(page.locator('.move-history-row').first()).toBeEnabled();
+  expect((await renders()).PlayHistory).toBeGreaterThan(start.PlayHistory);
+  await page.locator('.move-history-row').first().click();
+  await expect(
+    page.getByRole('button', { name: 'Return to game', exact: true }),
+  ).toBeVisible();
+});
