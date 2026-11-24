@@ -1,9 +1,10 @@
 use super::*;
+use crate::backgammon;
 
 #[test]
 fn mat_normalization_preserves_sgf_values_with_escapes_and_multiple_entries() {
     let source = r"(;GM[6]FF[4]PW[A\\B\]Ć]PB[Black]MI[length:7][ws:0][bs:0];W[31hefe])";
-    let normalized = sgf::normalize_mat_sgf(source, None).unwrap();
+    let normalized = mat::normalize_native_sgf(source, None).unwrap();
 
     assert_eq!(
         sgf::parse_trees(&normalized).unwrap(),
@@ -14,7 +15,7 @@ fn mat_normalization_preserves_sgf_values_with_escapes_and_multiple_entries() {
 
 #[test]
 fn mat_dates_come_only_from_the_transcript_header() {
-    let date = |text: &str| sgf::mat_event_date(text.as_bytes());
+    let date = |text: &str| mat::event_date(text.as_bytes());
     let declared = chrono::NaiveDate::from_ymd_opt(2014, 8, 10);
     assert_eq!(
         date("\u{feff}; [Site \"Monte-Carlo\"]\r\n; [EventDate \"2014.08.10\"]\r\n"),
@@ -36,10 +37,10 @@ fn mat_dates_come_only_from_the_transcript_header() {
     // GNUbg dates an undated transcript with its temporary file's mtime.
     let gnubg = "(;GM[6]FF[4]PW[A]PB[B]DT[2026-11-20]MI[length:7][game:0][ws:0][bs:0];W[31hefe])\
                  (;GM[6]FF[4]PW[A]PB[B]DT[2026-11-20]MI[length:7][game:1][ws:1][bs:0];W[31hefe])";
-    let undated = sgf::normalize_mat_sgf(gnubg, None).unwrap();
+    let undated = mat::normalize_native_sgf(gnubg, None).unwrap();
     assert!(!undated.contains("DT["), "{undated}");
     assert_eq!(crate::databases::source_metadata(&undated).played_on, None);
-    let dated = sgf::normalize_mat_sgf(gnubg, declared).unwrap();
+    let dated = mat::normalize_native_sgf(gnubg, declared).unwrap();
     assert_eq!(dated.matches("DT[").count(), 1);
     assert_eq!(
         crate::databases::source_metadata(&dated).played_on,
@@ -213,76 +214,6 @@ fn malformed_and_unsupported_inputs_are_errors() {
 }
 
 #[test]
-fn compact_xg_runs_interleave_bar_entries_before_continuing() {
-    let mut board = [0; 26];
-    board[25] = 2;
-    board[1] = -1;
-    let steps = sgf::expand_xg_play(&mut board, 0, [3, 3], &[(25, 19), (25, 19)]).unwrap();
-    assert_eq!(&steps[..2], &[(25, 22), (25, 22)]);
-    assert_eq!(steps.len(), 4);
-    assert_eq!(board[25], 0);
-    assert_eq!(board[19], 2);
-}
-
-#[test]
-fn compact_xg_runs_do_not_invent_intermediate_hits() {
-    let mut board = [0; 26];
-    board[13] = 1;
-    board[8] = -1;
-    let steps = sgf::expand_xg_play(&mut board, 0, [5, 1], &[(13, 7)]).unwrap();
-    assert_eq!(steps, vec![(13, 12), (12, 7)]);
-    assert_eq!(board[8], -1);
-    assert_eq!(board[0], 0);
-    assert_eq!(board[7], 1);
-    board[13] = 1;
-    board[7] = 0;
-    board[12] = -2;
-    let before = board;
-    assert!(sgf::expand_xg_play(&mut board, 0, [5, 1], &[(13, 7)]).is_err());
-    assert_eq!(board, before);
-}
-
-#[test]
-fn compact_xg_runs_keep_endpoint_hits_for_both_players() {
-    for player in [0, 1] {
-        let mut local = [0; 26];
-        local[13] = 1;
-        local[7] = -1;
-        let mut board = if player == 0 {
-            local
-        } else {
-            std::array::from_fn(|i| -local[25 - i])
-        };
-        let steps = sgf::expand_xg_play(&mut board, player, [5, 1], &[(13, 7)]).unwrap();
-        assert_eq!(steps.len(), 2);
-        let after = if player == 0 {
-            board
-        } else {
-            std::array::from_fn(|i| -board[25 - i])
-        };
-        assert_eq!(after[13], 0);
-        assert_eq!(after[7], 1);
-        assert_eq!(after[0], -1);
-    }
-}
-
-#[test]
-fn compact_xg_bearing_off_and_single_die_priority_follow_the_rules() {
-    let mut board = [0; 26];
-    board[6] = 1;
-    board[24] = -1;
-    let steps = sgf::expand_xg_play(&mut board, 0, [5, 4], &[(6, 0)]).unwrap();
-    assert_eq!(steps.len(), 2);
-    assert!(!board.iter().any(|n| *n > 0));
-    let mut board = [0; 26];
-    board[25] = 1;
-    board[14] = -2;
-    let before = board;
-    assert!(sgf::expand_xg_play(&mut board, 0, [6, 5], &[(25, 20)]).is_err());
-    assert_eq!(board, before);
-}
-
-#[test]
 fn winning_bearoff_can_end_before_every_playable_die_is_used() {
     for (color, move_value) in [("W", "42cz"), ("B", "42vz")] {
         let setup = if color == "W" {
@@ -299,7 +230,7 @@ fn winning_bearoff_can_end_before_every_playable_die_is_used() {
     board[3] = 1;
     board[24] = -1;
     assert_eq!(
-        sgf::expand_xg_play(&mut board, 0, [4, 2], &[(3, 0)]).unwrap(),
+        backgammon::expand_joined_play(&mut board, 0, [4, 2], &[(3, 0)]).unwrap(),
         vec![(3, 0)]
     );
     assert!(!board.iter().any(|n| *n > 0));

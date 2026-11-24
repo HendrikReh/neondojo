@@ -1,8 +1,8 @@
 //! Rules and engine access shared by interactive exercises.
 use crate::{
-    import::{
+    backgammon::{
+        apply_checker_turn,
         ids::{self, Field},
-        sgf::apply_checker_turn,
     },
     model::Position,
     play::PlayStep,
@@ -156,7 +156,7 @@ pub(crate) fn cube_response_options(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::{import::sgf::initial_board, move_assessments::after_play};
+    use crate::{backgammon::initial_board, move_assessments::after_play};
 
     pub(crate) fn position(player: i32, dice: [i32; 2]) -> Position {
         let board = initial_board();

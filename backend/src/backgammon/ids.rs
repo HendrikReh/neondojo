@@ -91,6 +91,16 @@ pub(crate) fn with_offer_marker(id: &str) -> Option<String> {
     Some(id.encode())
 }
 
+/// The same Match ID while `doubler` waits for the answer to a double. GNUbg's
+/// player on roll stays the doubler; the opponent must decide.
+pub(crate) fn with_offer_from(id: &str, doubler: i32) -> Option<String> {
+    let mut id = MatchId::decode(id)?;
+    id.set(Field::ON_ROLL, doubler);
+    id.set(Field::TURN, 1 - doubler);
+    id.set(Field::DOUBLED, 1);
+    Some(id.encode())
+}
+
 /// GNUbg encodes the opponent's checkers first, then the player on roll.
 pub(crate) fn position_id(board: &[i32; 26], player: i32) -> String {
     let mut bytes = [0u8; 10];
@@ -187,7 +197,7 @@ mod tests {
 
     #[test]
     fn ids_equal_gnubg_reference_ids() {
-        let board = crate::import::sgf::initial_board();
+        let board = crate::backgammon::initial_board();
         for player in [0, 1] {
             assert_eq!(position_id(&board, player), OPENING);
             let on_roll = match_id(0, [0, 0], 1, 3, false, true, player, [0, 0]);
@@ -237,6 +247,28 @@ mod tests {
         let offered = with_offer_marker(&id.encode()).unwrap();
         assert_eq!(MatchId::decode(&offered).unwrap().get(Field::DOUBLED), 1);
         assert_eq!(without_offer_marker(&offered).unwrap(), id.encode());
+    }
+
+    #[test]
+    fn an_offered_double_keeps_the_doubler_on_roll() {
+        for doubler in [0, 1] {
+            for player in [0, 1] {
+                let before = match_id(7, [2, 4], 2, doubler, false, false, player, [0, 0]);
+                let offered = MatchId::decode(&with_offer_from(&before, doubler).unwrap()).unwrap();
+                assert_eq!(offered.get(Field::ON_ROLL), doubler);
+                assert_eq!(offered.get(Field::TURN), 1 - doubler);
+                assert_eq!(offered.get(Field::DOUBLED), 1);
+                let mut restored = MatchId::decode(&before).unwrap();
+                for field in [Field::ON_ROLL, Field::TURN, Field::DOUBLED] {
+                    restored.set(field, offered.get(field));
+                }
+                assert_eq!(
+                    restored.encode(),
+                    offered.encode(),
+                    "no other field changes"
+                );
+            }
+        }
     }
 
     #[test]

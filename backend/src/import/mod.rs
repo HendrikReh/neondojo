@@ -1,10 +1,8 @@
-//! Strict standard-backgammon imports. The board is absolute: White moves
-//! 24 -> 1, positive checkers; Black moves 1 -> 24, negative checkers.
-//! Index 0 is Black's bar, and index 25 is White's bar. The same module owns
-//! the XG writer, so both directions share one reading of the binary format.
+//! Strict standard-backgammon imports, replayed with the rules and boards of
+//! [`crate::backgammon`]. The same module owns the XG writer, so both
+//! directions share one reading of the binary format.
 
 mod bgf;
-pub(crate) mod ids;
 pub(crate) mod mat;
 pub(crate) mod match_context;
 pub(crate) mod ogxm;

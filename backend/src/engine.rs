@@ -555,7 +555,7 @@ impl Engine {
         let native = tokio::fs::read_to_string(temp.path().join("canonical.sgf"))
             .await
             .context("GNUbg could not import this MAT file")?;
-        crate::import::sgf::normalize_mat_sgf(&native, crate::import::sgf::mat_event_date(bytes))
+        crate::import::mat::normalize_native_sgf(&native, crate::import::mat::event_date(bytes))
     }
 
     /// Import a MAT transcript, ending each game before a move that fails

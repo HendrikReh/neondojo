@@ -1,5 +1,6 @@
 mod advisory_locks;
 pub mod api;
+mod backgammon;
 pub mod cube_context;
 pub mod engine;
 pub mod engines;

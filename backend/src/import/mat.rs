@@ -10,6 +10,9 @@
 //! cell, has no result, and the next game starts from its own header. The
 //! original file stays unchanged; only the text given to GNUbg is shortened.
 
+mod native;
+pub(crate) use native::{event_date, normalize_native_sgf};
+
 use crate::model::{ImportWarning, ImportWarningKind, MatchGame};
 use anyhow::{Context, Result, anyhow, bail};
 use std::{future::Future, time::Duration};

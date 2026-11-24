@@ -1,5 +1,5 @@
 use super::*;
-use crate::{import::ids, practice};
+use crate::{backgammon::ids, practice};
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

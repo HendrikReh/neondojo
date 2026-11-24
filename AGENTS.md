@@ -25,7 +25,8 @@ Prioritize backgammon correctness, preservation of user data, database performan
 - Keep transport, domain logic, persistence, and engine integration separate. Use the existing domain module that owns the behavior and keep HTTP handlers and React components focused on their roles.
 - Backend ownership:
   - `backend/src/api.rs`: REST, SSE, and OpenAPI
-  - `backend/src/import/`: import formats, rule validation, and GNUbg identifiers
+  - `backend/src/backgammon/`: boards, legal checker turns, and GNUbg identifiers; depends on no other module
+  - `backend/src/import/`: import formats, replay, and match validation
   - `backend/src/engine.rs` and `backend/src/match_analysis.rs`: isolated GNUbg processes and native analysis
   - `backend/src/engines/`: engine providers, capability probes, and NeonGammon sidecar (`worker.py`)
   - `backend/src/jobs.rs` and `backend/src/match_jobs.rs`: job state, progress events, and game checkpoints

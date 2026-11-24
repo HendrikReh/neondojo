@@ -563,7 +563,7 @@ mod tests {
             state.position.position_id = imported.positions[0].position_id.clone();
             // The cube decision precedes the rolled checker dice.
             state.position.gnubg_match_id =
-                crate::import::ids::hide_dice(&imported.positions[0].match_id).unwrap();
+                crate::backgammon::ids::hide_dice(&imported.positions[0].match_id).unwrap();
             let feedback = analyze_decision(&state, engine.binary()).await.unwrap();
             let no_double = feedback.iter().find(|a| a.action == "roll").unwrap();
             let double = feedback.iter().find(|a| a.action == "double").unwrap();

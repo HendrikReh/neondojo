@@ -2,8 +2,8 @@ use super::*;
 use crate::recurring_mistakes::MistakeReference;
 use crate::{
     analysis_catalog::{self, SelectedAnalysis},
+    backgammon::ids::{self, decode_board},
     engine::Analysis,
-    import::ids::{self, decode_board},
     move_assessments::after_play,
     store,
 };

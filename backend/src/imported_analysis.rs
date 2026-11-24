@@ -155,7 +155,7 @@ pub(crate) fn probabilities(values: &[Option<f64>]) -> Value {
 fn base(m: &SourceMove, kind: &str, engine: &str, version: Option<String>) -> ImportedAnalysisData {
     let pre_roll = kind == "cube" && m.kind == "checker";
     let mut match_id = m.match_id.clone();
-    if pre_roll && let Some(hidden) = crate::import::ids::hide_dice(&match_id) {
+    if pre_roll && let Some(hidden) = crate::backgammon::ids::hide_dice(&match_id) {
         match_id = hidden;
     }
     ImportedAnalysisData {

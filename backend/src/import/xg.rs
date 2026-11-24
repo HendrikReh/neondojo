@@ -497,7 +497,7 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
     let mut game_crawford = false;
     let mut game_scores = [0, 0];
     let mut root_end = 0;
-    let mut board = super::sgf::initial_board();
+    let mut board = crate::backgammon::initial_board();
     let mut pending_cube_analysis = None;
     let mut first_checker_record = None;
     for (index, record) in bytes.chunks_exact(RECORD_BYTES).enumerate().skip(1) {
@@ -537,7 +537,7 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
                 first_checker_record = first_checker.map(|(offset, _)| index + 1 + offset);
                 let start_board = first_checker
                     .map(|(_, r)| xg_board(r, 9))
-                    .unwrap_or_else(super::sgf::initial_board);
+                    .unwrap_or_else(crate::backgammon::initial_board);
                 let start_cube = match game_records.map(|(_, r)| r).find(|r| matches!(r[8], 2 | 3))
                 {
                     Some(r) => cube_state(i32_at(r, if r[8] == 2 { 32 } else { 108 })?)?,
@@ -548,7 +548,7 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
                 let initial = xg_board(record, 21);
                 ensure!(
                     initial.iter().all(|n| *n == 0)
-                        || initial == super::sgf::initial_board()
+                        || initial == crate::backgammon::initial_board()
                         || initial == start_board,
                     "XG: game {} header position does not match its first checker record",
                     game_count + 1
@@ -581,7 +581,7 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
                 board = start_board;
                 (cube, owner) = start_cube;
                 pending_cube_analysis = None;
-                if board != super::sgf::initial_board() || start_cube != (1, 0) {
+                if board != crate::backgammon::initial_board() || start_cube != (1, 0) {
                     let turn = first_checker
                         .map(|(_, r)| i32_at(r, 64).and_then(color))
                         .transpose()?;
@@ -691,7 +691,7 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
                     // from it; the illegal play is not a checker decision, so
                     // its native analysis and the preceding no-double
                     // analysis have no imported decision to attach to.
-                    board = super::sgf::local_board(
+                    board = crate::backgammon::local_board(
                         &xg_board(record, 35),
                         if active == 1 { 0 } else { 1 },
                     );
@@ -727,7 +727,7 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
                     coordinate(to, active)?;
                     runs.push(((from + 1) as usize, (to + 1).max(0) as usize));
                 }
-                let steps = super::sgf::expand_xg_play(
+                let steps = crate::backgammon::expand_joined_play(
                     &mut board,
                     if active == 1 { 0 } else { 1 },
                     [d1, d2],

@@ -450,7 +450,7 @@ impl SageEngine {
                 );
                 // Existing rule validation independently proves that no die can be played.
                 let absolute = context::from_sage(&board, context.player)?;
-                crate::import::sgf::apply_checker_turn(&absolute, context.player, dice, &[])?;
+                crate::backgammon::apply_checker_turn(&absolute, context.player, dice, &[])?;
                 candidate.notation = "Cannot move".into();
             } else {
                 ensure!(
@@ -732,11 +732,11 @@ pub(crate) fn validate_evaluation(equity: f64, probabilities: &[f64]) -> Result<
 /// the rule validation that also checks recorded moves.
 pub(crate) fn forced_pass(position_id: &str, match_id: &str, dice: [i32; 2]) -> Result<bool> {
     let player = context::Context::decode(match_id)?.player;
-    let board: [i32; 26] = crate::import::ids::decode_board(position_id, match_id)?
+    let board: [i32; 26] = crate::backgammon::ids::decode_board(position_id, match_id)?
         .try_into()
         .ok()
         .context("Invalid board length")?;
-    Ok(crate::import::sgf::apply_checker_turn(&board, player, dice, &[]).is_ok())
+    Ok(crate::backgammon::apply_checker_turn(&board, player, dice, &[]).is_ok())
 }
 
 /// A configured engine instance. Shared operations dispatch here; callers

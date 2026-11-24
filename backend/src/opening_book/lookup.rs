@@ -184,7 +184,7 @@ pub(super) async fn source_beaver_rule(
     pool: &sqlx::PgPool,
     position: &Position,
 ) -> Result<Option<bool>> {
-    use crate::import::ids::{Field, MatchId};
+    use crate::backgammon::ids::{Field, MatchId};
     let length = MatchId::decode(&position.gnubg_match_id)
         .context("Invalid GNUbg Match ID")?
         .get(Field::LENGTH);

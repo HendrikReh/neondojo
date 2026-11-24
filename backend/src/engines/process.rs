@@ -420,7 +420,7 @@ fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> 
                         );
                         let absolute = super::context::from_sage(&before, 0)?;
                         let dice = serde_json::from_value::<[i32; 2]>(request["dice"].clone())?;
-                        crate::import::sgf::apply_checker_turn(&absolute, 0, dice, &[])?;
+                        crate::backgammon::apply_checker_turn(&absolute, 0, dice, &[])?;
                     } else {
                         ensure!(
                             !candidate.notation.is_empty(),

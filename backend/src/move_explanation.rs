@@ -265,7 +265,7 @@ pub struct MoveExplanationDoc;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::import::sgf::initial_board;
+    use crate::backgammon::initial_board;
 
     fn opening(player: i32, best: &str, played: &str) -> MoveExplanation {
         explain(&MoveExplanationRequest {

@@ -45,8 +45,8 @@ pub(super) fn native_move_board(
         pairs.push((point(step.from)?, point(step.to)?));
     }
     let mut expanded = before;
-    let steps = crate::import::sgf::expand_xg_play(&mut expanded, player, dice, &pairs)?;
-    crate::import::sgf::apply_checker_turn(&before, player, dice, &steps)
+    let steps = crate::backgammon::expand_joined_play(&mut expanded, player, dice, &pairs)?;
+    crate::backgammon::apply_checker_turn(&before, player, dice, &steps)
 }
 
 pub(super) fn live_checker_turns(session: &PlaySession) -> anyhow::Result<Vec<LiveCheckerTurn>> {
@@ -64,7 +64,7 @@ pub(super) fn live_checker_turns(session: &PlaySession) -> anyhow::Result<Vec<Li
         .as_slice()
         .try_into()
         .context("Invalid saved roll")?;
-    let paths = crate::import::sgf::checker_paths(board, position.player, dice)?;
+    let paths = crate::backgammon::checker_paths(board, position.player, dice)?;
     let mut native_boards = HashMap::new();
     for (index, choice) in session.legal_moves.iter().enumerate() {
         let end = native_move_board(&position.board, position.player, &position.dice, choice)?;
@@ -208,11 +208,11 @@ pub(crate) fn build_history_snapshots(
         let after_board: [i32; 26] = event.after_board.as_slice().try_into()?;
         // IDs encode checkers relative to player-on-roll, while the review
         // perspective remains the action's actor (also true for cube replies).
-        let after_on_roll =
-            crate::import::ids::on_roll(&event.after_match_id).context("Invalid GNUbg Match ID")?;
+        let after_on_roll = crate::backgammon::ids::on_roll(&event.after_match_id)
+            .context("Invalid GNUbg Match ID")?;
         let after = Position {
             board: event.after_board,
-            position_id: crate::import::ids::position_id(&after_board, after_on_roll),
+            position_id: crate::backgammon::ids::position_id(&after_board, after_on_roll),
             gnubg_match_id: event.after_match_id,
             dice: vec![],
             notation: String::new(),
@@ -237,14 +237,14 @@ pub(crate) fn build_history_snapshots(
 // Staging does not consume RNG or begin a native game. For later games the
 // previous native checkpoint already contains NextTurn's Crawford transition.
 pub(super) fn stage_opening(session: &mut PlaySession, next: bool) -> anyhow::Result<()> {
-    use crate::import::ids::{Field, MatchId};
+    use crate::backgammon::ids::{Field, MatchId};
     let crawford = next
         && MatchId::decode(&session.position.gnubg_match_id)
             .is_some_and(|id| id.get(Field::CRAWFORD) == 1);
     if next {
         session.game_no += 1;
     }
-    let board = crate::import::sgf::initial_board();
+    let board = crate::backgammon::initial_board();
     session.position = Position {
         id: session.id,
         match_uuid: session.id,
@@ -254,8 +254,8 @@ pub(super) fn stage_opening(session: &mut PlaySession, next: bool) -> anyhow::Re
         player: session.human_player,
         dice: vec![],
         board: board.to_vec(),
-        position_id: crate::import::ids::position_id(&board, session.human_player),
-        gnubg_match_id: crate::import::ids::match_id(
+        position_id: crate::backgammon::ids::position_id(&board, session.human_player),
+        gnubg_match_id: crate::backgammon::ids::match_id(
             session.match_length,
             session.scores,
             1,

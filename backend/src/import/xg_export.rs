@@ -7,12 +7,15 @@
 //! leaves open follow the official XG-written WC2014 file. Only the played line
 //! is written; every analysis field carries XG's "not analysed" markers.
 use super::{
-    ids::{Field, MatchId},
     sgf::{self, GameContext, SourceMove},
     xg::{
         ARCHIVE_FOOTER_BYTES, MATCH_MAGIC, RECORD_BYTES, REGISTRY_ENTRY_BYTES, RICH_HEADER_BYTES,
         crc32,
     },
+};
+use crate::backgammon::{
+    self,
+    ids::{Field, MatchId},
 };
 use crate::model::{GameResult, GameResultReason, MatchGame};
 use anyhow::{Context, Result, bail, ensure};
@@ -176,7 +179,7 @@ fn xg_moves(event: &SourceMove) -> Result<[i32; 8]> {
     let board = board_of(&event.board)?;
     let after = board_of(&event.after_board)?;
     let dice = event.dice;
-    let paths = sgf::checker_paths(&board, event.player, dice)?;
+    let paths = backgammon::checker_paths(&board, event.player, dice)?;
     let mut moves = [-1; 8];
     if paths.is_empty() {
         ensure!(
@@ -308,7 +311,7 @@ fn move_record(turn: &Turn, event: &SourceMove, edited: bool) -> Result<Record> 
     r.board(9, &turn.board);
     r.board(
         35,
-        &sgf::local_board(&board_of(&event.after_board)?, event.player),
+        &backgammon::local_board(&board_of(&event.after_board)?, event.player),
     );
     r.int(64, xg_player(event.player));
     for (i, value) in xg_moves(event)?.iter().enumerate() {
@@ -365,7 +368,7 @@ fn write_game(
     rules: &SessionRules,
     next_crawford: bool,
 ) -> Result<()> {
-    let initial = sgf::initial_board();
+    let initial = backgammon::initial_board();
     let start_board = match events.first() {
         Some(event) => board_of(&event.board)?,
         None => initial,
@@ -747,7 +750,7 @@ mod tests {
             HEADER_GAME => {
                 let mut start = bytes(r, 21, 26).to_vec();
                 if start.iter().all(|n| *n == 0) {
-                    start = sgf::initial_board().map(|n| n as u8).to_vec();
+                    start = backgammon::initial_board().map(|n| n as u8).to_vec();
                 }
                 vec![
                     ints(r, 12, 2),
