@@ -16,7 +16,6 @@ import {
 } from '../workspaces/extras/extras-tool';
 import { useBenchmarkText } from '../workspaces/extras/benchmark-messages';
 import ActionButton from '../shared/ui/ActionButton';
-import MatchDropZone from '../workspaces/library/import/MatchDropZone';
 import { usePlayText } from '../workspaces/play/play-messages';
 import {
   lazy,
@@ -29,7 +28,6 @@ import {
 } from 'react';
 import {
   request,
-  terminal,
   type Job,
   type Match,
   type Position,
@@ -41,11 +39,8 @@ import { usePlayerText } from '../workspaces/players/player-directory-messages';
 import MatchDatabase, {
   type PositionSearchRequest,
 } from '../workspaces/library/MatchDatabase';
-import MatchAnalysisDialog from '../workspaces/analysis/match/MatchAnalysisDialog';
-import BulkMatchAnalysisDialog from '../workspaces/analysis/match/BulkMatchAnalysisDialog';
 import type { AssessmentEntry } from '../workspaces/study/reports/match-assessment-api';
 import { usePositionText } from '../workspaces/positions/position-browser-messages';
-import { loadSettings, type AppSettings } from '../settings/settings-api';
 import { readTheme, saveTheme } from '../settings/ui-preferences';
 import type { Theme } from '../shared/board/themes';
 import { useGameNavigation } from './useGameNavigation';
@@ -54,41 +49,17 @@ import { useBackgroundJobs } from './useBackgroundJobs';
 import { useI18n } from '../shared/i18n/i18n';
 import { useWorkspaceText } from '../shared/i18n/workspace-messages';
 import { useLearningText } from '../workspaces/study/flashcards/learning-messages';
-import {
-  decodeBulkAnalysisSession,
-  readSelection,
-  clearSelection,
-  saveSelection,
-} from './workspace-state';
+import { decodeBulkAnalysisSession, clearSelection } from './workspace-state';
 import { AppError } from '../shared/i18n/i18n-core';
 import type { AnnotationHit } from '../workspaces/analysis/notes/AnnotationSearch';
 import type { AnnotationKind } from '../workspaces/analysis/notes/annotation-api';
 import './workspace.css';
 import {
-  acceptsLibraryMatches,
   PAUSED_MATCHES_DATABASE_ID,
   readDatabase,
   type StoredMove,
   type LibraryMatch,
 } from '../workspaces/library/library-api';
-import {
-  useLibraryText,
-  type ImportWarning,
-} from '../workspaces/library/library-messages';
-import { ImportWarningList } from '../workspaces/library/import/ImportWarningList';
-import ImportRunPanel, {
-  type ImportResult,
-  type ImportRun,
-} from '../workspaces/library/import/ImportRunPanel';
-import {
-  MATCH_FILE_ACCEPT,
-  matchFileEntries,
-  readDroppedMatchFiles,
-  selectFolderMatchFiles,
-  type MatchFileEntry,
-} from '../workspaces/library/import/match-import';
-
-import { isUnfinishedCompetition } from '../workspaces/library/library-match-summary';
 import type { PlaySession } from '../workspaces/play/play-api';
 import { DEFAULT_ANALYSIS_PLIES } from '../shared/engine/analysis-depth';
 import MoveNotesDialog, {
@@ -98,6 +69,15 @@ import { useUiAppearance } from '../settings/appearance/useUiAppearance';
 import { useButtonShortcuts } from './useButtonShortcuts';
 import { useDecisionSearchText } from '../workspaces/positions/decision-search-messages';
 import LazyPanel, { MountHidden } from './LazyPanel';
+import AnalysisDialogs, { type AnalysisSelection } from './AnalysisDialogs';
+import AppNotices from './AppNotices';
+import AppWelcome from './AppWelcome';
+import MatchImportInputs from './MatchImportInputs';
+import { bulkJobPending, useBulkAnalysis } from './useBulkAnalysis';
+import { useHealth, useInstalledSettings } from './useInstalledSettings';
+import { useMatchImporter } from './useMatchImporter';
+import { usePositionKeys } from './usePositionKeys';
+import { useSelectionRestore } from './useSelectionRestore';
 
 // Workspaces other than Analysis and the match database, and the settings
 // dialog, load on their first visit and stay mounted afterwards.
@@ -119,12 +99,6 @@ const ExtrasWorkspace = lazy(
   () => import('../workspaces/extras/ExtrasWorkspace'),
 );
 const SettingsDialog = lazy(() => import('../settings/SettingsDialog'));
-
-type ImportSource = {
-  files: readonly MatchFileEntry[];
-  /** Set for a folder, with the number of files left out. */
-  folder?: { skipped: number };
-};
 
 type View =
   | 'analysis'
@@ -167,10 +141,9 @@ export default function App() {
     token: number;
     resume?: boolean;
   }>();
-  const { t, setLocale, formatError } = useI18n();
+  const { t, setLocale } = useI18n();
   const w = useWorkspaceText(),
     learnT = useLearningText();
-  const l = useLibraryText();
   const playerText = usePlayerText();
   const positionText = usePositionText();
   const { appearance, applyAppearance } = useUiAppearance();
@@ -194,9 +167,6 @@ export default function App() {
     sessionString,
   );
   const [moveNotes, setMoveNotes] = useState<MoveNotesTarget>();
-  const [importRun, setImportRun] = useState<ImportRun>();
-  const importStop = useRef(false);
-  const importBusy = useRef(false);
   const annotationNavigation = useRef<AbortController | undefined>(undefined);
   useEffect(() => () => annotationNavigation.current?.abort(), []);
   const [bulkAnalysis, setBulkAnalysis] = useWorkspaceSession(
@@ -223,7 +193,13 @@ export default function App() {
   const [detail, setDetail] = useState<AnalysisDetail>('overview');
   const [localTheme, setTheme] = useState<Theme>(readTheme);
   const theme = confirmed?.appearance.board_theme ?? localTheme;
-  const [installedSettings, setInstalledSettings] = useState<AppSettings>();
+  const {
+    settings: installedSettings,
+    error: settingsError,
+    revision: settingsRevision,
+    reload: reloadSettings,
+    apply: applyInstalledSettings,
+  } = useInstalledSettings();
   const settings =
     confirmed && installedSettings
       ? settingsFromConfiguration(confirmed, installedSettings)
@@ -234,8 +210,6 @@ export default function App() {
     confirmed?.analysis.plies ??
     settings?.analysis_plies ??
     DEFAULT_ANALYSIS_PLIES;
-  const [settingsError, setSettingsError] = useState<unknown>();
-  const [settingsRevision, setSettingsRevision] = useState(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
   // The dialog mounts when first opened and then stays mounted.
   const [settingsOpened, setSettingsOpened] = useState(false);
@@ -246,27 +220,14 @@ export default function App() {
   const bookConfigurationKey = openingBookConfigurationKey(
     confirmed?.opening_book,
   );
-  const [health, setHealth] = useState<'checking' | 'ok' | 'degraded'>(
-    'checking',
-  );
+  const health = useHealth(settings?.version);
   const [error, setError] = useState<unknown>();
-  const [notice, setNotice] = useState<{
-    duplicate: boolean;
-    count: number;
-    warnings: ImportWarning[];
-  }>();
-  const [uploading, setUploading] = useState(false);
   const [revision, setRevision] = useState(0);
   const [annotationRevision, setAnnotationRevision] = useState(0);
   const [deckRevision, setDeckRevision] = useState(0);
   const [bookmarkRevision, setBookmarkRevision] = useState(0);
-  const [analysisSelection, setAnalysisSelection] = useState<
-    | {
-        kind: 'single';
-        match: Match & Pick<LibraryMatch, 'display_name'>;
-      }
-    | { kind: 'bulk'; matches: LibraryMatch[]; unavailableCount: number }
-  >();
+  const [analysisSelection, setAnalysisSelection] =
+    useState<AnalysisSelection>();
   const [requestedAnalysis, setRequestedAnalysis] = useState<Job>();
   // A cube decision chosen in the decision search; the analysis opens it once
   // its game has loaded.
@@ -280,9 +241,27 @@ export default function App() {
     kind: AnnotationKind;
     token: number;
   }>();
-  const [restoring, setRestoring] = useState(false);
-  const restorationRequest = useRef<AbortController | null>(null);
   const navigation = useGameNavigation();
+  const { restoring, cancelRestoration } = useSelectionRestore(
+    navigation,
+    (id) => {
+      setRequestedPlaySession({ id, token: Date.now() });
+      setView((current) => (current === 'analysis' ? 'play' : current));
+    },
+  );
+  const importer = useMatchImporter({
+    databaseId,
+    intent: navigation.intent,
+    onStart: cancelRestoration,
+    onOpen: (match) => {
+      setView('analysis');
+      setDetail('overview');
+      void navigation.selectMatch(match);
+    },
+    onChanged: () => setRevision((n) => n + 1),
+    onBatchFinished: () => setView('database'),
+    onError: setError,
+  });
   const {
     active: runningAnalysisJobs,
     tracked: trackedAnalysisJobs,
@@ -290,36 +269,14 @@ export default function App() {
     missing: missingAnalysisJobs,
     assessmentRevision,
   } = useBackgroundJobs(bulkJobIds);
-  const visibleBulkJobIds = databaseId
-    ? bulkJobIds.filter((id) => bulkAnalysis.jobs[id] === databaseId)
-    : bulkJobIds;
-  const bulkAnalysisProgress = {
-    total: visibleBulkJobIds.length,
-    completed: 0,
-    failed: 0,
-    missing: 0,
-    loading: false,
-  };
-  for (const id of visibleBulkJobIds) {
-    const status = trackedAnalysisJobs[id]?.status;
-    if (missingAnalysisJobs.has(id)) bulkAnalysisProgress.missing++;
-    else if (status === 'completed') bulkAnalysisProgress.completed++;
-    else if (status === 'failed') bulkAnalysisProgress.failed++;
-    else if (!status) bulkAnalysisProgress.loading = true;
-  }
-  const bulkJobPending = (id: string) => {
-    const job = trackedAnalysisJobs[id];
-    return !missingAnalysisJobs.has(id) && (!job || !terminal(job));
-  };
-  const bulkAnalysisInProgress = bulkJobIds.some(bulkJobPending);
-  const reopenMatchList = view === 'database' && bulkAnalysisInProgress;
-  useEffect(() => {
-    if (bulkAnalysis.showMatchList !== reopenMatchList)
-      setBulkAnalysis((previous) => ({
-        ...previous,
-        showMatchList: reopenMatchList,
-      }));
-  }, [bulkAnalysis.showMatchList, reopenMatchList, setBulkAnalysis]);
+  const bulkAnalysisProgress = useBulkAnalysis({
+    session: bulkAnalysis,
+    setSession: setBulkAnalysis,
+    databaseId,
+    tracked: trackedAnalysisJobs,
+    missing: missingAnalysisJobs,
+    listVisible: view === 'database',
+  });
   const analysisInstallationKey = JSON.stringify([
     installedSettings?.version,
     installedSettings?.gnubg_path,
@@ -327,26 +284,7 @@ export default function App() {
     settingsRevision,
   ]);
   const jobs = useJobs(navigation.position?.id, analysisEngine, track);
-  const settingsLoad = useRef<AbortController | undefined>(undefined);
-  const input = useRef<HTMLInputElement>(null);
-  const folderInput = useRef<HTMLInputElement>(null);
-  const importDestination = useRef<string | undefined>(undefined);
   const tabs = useRef<Partial<Record<View, HTMLButtonElement | null>>>({});
-  useEffect(() => {
-    const chooser = input.current;
-    const clearDestination = () => {
-      importDestination.current = undefined;
-    };
-    const folderChooser = folderInput.current;
-    // React has no typed prop for the directory picker attribute.
-    if (folderChooser) folderChooser.webkitdirectory = true;
-    chooser?.addEventListener('cancel', clearDestination);
-    folderChooser?.addEventListener('cancel', clearDestination);
-    return () => {
-      chooser?.removeEventListener('cancel', clearDestination);
-      folderChooser?.removeEventListener('cancel', clearDestination);
-    };
-  }, []);
   useEffect(() => {
     if (!confirmed) saveTheme(theme);
   }, [theme, !!confirmed]);
@@ -361,162 +299,12 @@ export default function App() {
   useEffect(() => {
     Object.values(jobs.jobs).forEach(track);
   }, [jobs.jobs, track]);
-  useEffect(() => {
-    const abort = new AbortController();
-    settingsLoad.current = abort;
-    void loadSettings(abort.signal)
-      .then((value) => {
-        if (abort.signal.aborted) return;
-        setInstalledSettings((current) =>
-          current && current.version > value.version ? current : value,
-        );
-        setSettingsError(undefined);
-      })
-      .catch((e) => {
-        if (!abort.signal.aborted) setSettingsError(e);
-      });
-    return () => abort.abort();
-  }, [settingsRevision]);
-  useEffect(() => {
-    const abort = new AbortController();
-    void request<{ status: string }>('/health', { signal: abort.signal })
-      .then((value) => setHealth(value.status === 'ok' ? 'ok' : 'degraded'))
-      .catch(() => {
-        if (!abort.signal.aborted) setHealth('degraded');
-      });
-    return () => abort.abort();
-  }, [settings?.version]);
-  useEffect(() => {
-    const previous = readSelection();
-    if (!previous) return;
-    const abort = new AbortController();
-    restorationRequest.current = abort;
-    const intent = navigation.intent();
-    const current = () =>
-      !abort.signal.aborted && navigation.intent() === intent;
-    setRestoring(true);
-    void (async () => {
-      // Metadata is available even while a Competition source is restricted.
-      // Do not restore that source through the analysis endpoints.
-      let metadata: LibraryMatch | undefined;
-      let missing = false;
-      try {
-        metadata = await request<LibraryMatch>(
-          `/matches/${previous.matchId}/metadata`,
-          { signal: abort.signal },
-        );
-      } catch (e) {
-        // Old/missing metadata still uses normal navigation and its real error.
-        missing = e instanceof AppError && String(e.params.status) === '404';
-      }
-      if (!current()) return;
-      if (
-        metadata &&
-        (metadata.play_paused || isUnfinishedCompetition(metadata)) &&
-        metadata.play_session_id
-      ) {
-        navigation.clear();
-        setRequestedPlaySession({
-          id: metadata.play_session_id,
-          token: Date.now(),
-        });
-        setView((currentView) =>
-          currentView === 'analysis' ? 'play' : currentView,
-        );
-      } else {
-        const opening = previous.positionId
-          ? navigation.openPosition(previous.positionId)
-          : navigation.openMatch(previous.matchId, previous.gameNo);
-        // Opening starts a new navigation; a later one must not be cleared.
-        const openIntent = navigation.intent();
-        const opened = await opening;
-        if (
-          !opened &&
-          missing &&
-          !abort.signal.aborted &&
-          navigation.intent() === openIntent
-        ) {
-          // The last match or position no longer exists: start empty.
-          navigation.clear();
-          clearSelection();
-        }
-      }
-    })().finally(() => {
-      if (!abort.signal.aborted) setRestoring(false);
-      if (restorationRequest.current === abort)
-        restorationRequest.current = null;
-    });
-    return () => {
-      abort.abort();
-      if (restorationRequest.current === abort)
-        restorationRequest.current = null;
-    };
-    // Navigation intent and aborts fence this single startup restore.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  function cancelRestoration() {
-    if (!restorationRequest.current) return;
-    restorationRequest.current.abort();
-    restorationRequest.current = null;
-    navigation.cancel();
-    setRestoring(false);
-  }
   function playModeChanged(session: PlaySession) {
     if (session.play_mode === 'competition' && session.library_match_id) {
       navigation.invalidateMatchAnalysis(session.library_match_id);
     }
   }
-  useEffect(() => {
-    if (
-      navigation.match &&
-      navigation.game &&
-      !navigation.loading &&
-      !navigation.error &&
-      navigation.gameLoaded
-    ) {
-      saveSelection({
-        matchId: navigation.match.id,
-        gameNo: navigation.game.game_no,
-        positionId: navigation.position?.id,
-      });
-    }
-  }, [
-    navigation.match,
-    navigation.game,
-    navigation.loading,
-    navigation.error,
-    navigation.gameLoaded,
-    navigation.position,
-  ]);
-  useEffect(() => {
-    function move(event: globalThis.KeyboardEvent) {
-      if (
-        view !== 'analysis' ||
-        settingsOpen ||
-        event.altKey ||
-        event.ctrlKey ||
-        event.metaKey
-      )
-        return;
-      const target = event.target as HTMLElement | null;
-      if (
-        target?.closest(
-          'input,textarea,select,button,[contenteditable="true"],[role="tablist"],[role="dialog"]',
-        )
-      )
-        return;
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        navigation.previous();
-      }
-      if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        navigation.next();
-      }
-    }
-    window.addEventListener('keydown', move);
-    return () => window.removeEventListener('keydown', move);
-  }, [view, settingsOpen, navigation]);
+  usePositionKeys(navigation, view === 'analysis' && !settingsOpen);
   function tabKey(event: KeyboardEvent<HTMLButtonElement>, current: View) {
     let next: number;
     const index = views.indexOf(current);
@@ -530,151 +318,6 @@ export default function App() {
     cancelRestoration();
     setView(views[next]);
     tabs.current[views[next]]?.focus();
-  }
-  function chooseImportFiles(destination?: string) {
-    importDestination.current = destination;
-    input.current?.click();
-  }
-  function chooseImportFolder(destination: string) {
-    importDestination.current = destination;
-    folderInput.current?.click();
-  }
-  /**
-   * Imports files one by one. `source` may still be reading a dropped folder;
-   * the import counts as running from the call on, so a second drop or pick
-   * waits for this one.
-   */
-  async function upload(
-    source: ImportSource | Promise<ImportSource>,
-    destination = databaseId,
-  ) {
-    if (importBusy.current) return;
-    importBusy.current = true;
-    setUploading(true);
-    const navigationIntent = navigation.intent();
-    try {
-      let files: readonly MatchFileEntry[];
-      let folder: ImportSource['folder'];
-      try {
-        ({ files, folder } = await source);
-      } catch (e) {
-        setError(e);
-        return;
-      }
-      await importFiles(files, destination, folder, navigationIntent);
-    } finally {
-      importBusy.current = false;
-      setUploading(false);
-      if (input.current) input.current.value = '';
-    }
-  }
-  async function importFiles(
-    selected: readonly MatchFileEntry[],
-    destination: string,
-    folder: ImportSource['folder'],
-    navigationIntent: ReturnType<typeof navigation.intent>,
-  ) {
-    if (!selected.length && !folder) return;
-    cancelRestoration();
-    setError(undefined);
-    setNotice(undefined);
-    importStop.current = false;
-    // A folder run always reports in the results panel, even for one file.
-    const batch = !!folder || selected.length > 1;
-    const run: ImportRun = {
-      results: [],
-      total: selected.length,
-      skipped: folder?.skipped ?? 0,
-      folder: !!folder,
-      running: selected.length > 0,
-      stopping: false,
-      stopped: false,
-    };
-    setImportRun(batch ? run : undefined);
-    if (!selected.length) return;
-    const target =
-      destination && acceptsLibraryMatches(destination)
-        ? `?database_id=${encodeURIComponent(destination)}`
-        : '';
-    const results: ImportResult[] = [];
-    // Large batches refresh the library at most every two seconds instead of
-    // reloading the list after every file.
-    let refreshedAt = 0;
-    let unrefreshed = false;
-    for (const { file, path: name } of selected) {
-      if (importStop.current) break;
-      try {
-        if (file.size > 16 * 1024 * 1024) throw new AppError('error.fileSize');
-        const body = new FormData();
-        body.append('file', file);
-        const imported = await request<{
-          match: Match;
-          duplicate: boolean;
-          warnings: ImportWarning[];
-        }>(`/imports${target}`, { method: 'POST', body });
-        unrefreshed = true;
-        if (!batch || Date.now() - refreshedAt >= 2000) {
-          setRevision((n) => n + 1);
-          refreshedAt = Date.now();
-          unrefreshed = false;
-        }
-        results.push({
-          name,
-          status: imported.duplicate ? 'duplicate' : 'importedFile',
-          warnings: imported.warnings,
-        });
-        if (!batch && navigation.intent() === navigationIntent) {
-          setView('analysis');
-          setDetail('overview');
-          void navigation.selectMatch(imported.match);
-          setNotice({
-            duplicate: imported.duplicate,
-            count: imported.match.position_count,
-            warnings: imported.warnings,
-          });
-        }
-      } catch (e) {
-        results.push({ name, status: 'error', detail: e });
-        if (!batch) setError(e);
-      }
-      if (batch)
-        setImportRun(
-          (current) => current && { ...current, results: [...results] },
-        );
-    }
-    if (unrefreshed) setRevision((n) => n + 1);
-    if (batch) {
-      const stopped = results.length < selected.length;
-      setImportRun(
-        (current) =>
-          current && {
-            ...current,
-            results: [...results],
-            running: false,
-            stopping: false,
-            stopped,
-          },
-      );
-      if (navigation.intent() === navigationIntent) setView('database');
-    }
-  }
-  /** Reads a drop now, while its data is still available. */
-  function dropImport(transfer: DataTransfer) {
-    if (importBusy.current) return;
-    void upload(
-      readDroppedMatchFiles(transfer).then(({ files, folder }) => {
-        if (!folder) return { files };
-        const selected = selectFolderMatchFiles(files);
-        return {
-          files: selected.files,
-          folder: { skipped: selected.skipped },
-        };
-      }),
-    );
-  }
-  function stopImport() {
-    importStop.current = true;
-    setImportRun((current) => current && { ...current, stopping: true });
   }
   function goHome(event: MouseEvent<HTMLAnchorElement>) {
     if (
@@ -691,9 +334,8 @@ export default function App() {
     navigation.clear();
     setView('analysis');
     setDetail('overview');
-    setRestoring(false);
     setError(undefined);
-    setNotice(undefined);
+    importer.closeNotice();
     setMoveNotes(undefined);
     clearSelection();
     window.scrollTo(0, 0);
@@ -783,41 +425,14 @@ export default function App() {
     [],
   );
   const welcome = (
-    <section
-      className="welcome analysis-welcome"
-      onDragOver={(event) => event.preventDefault()}
-      onDrop={(event) => {
-        event.preventDefault();
-        dropImport(event.dataTransfer);
+    <AppWelcome
+      importer={importer}
+      restoring={restoring}
+      onOpenLibrary={() => {
+        cancelRestoration();
+        setView('database');
       }}
-    >
-      <span className="eyebrow">NEONDOJO</span>
-      <h1>{w('welcomeTitle')}</h1>
-      <p>{w('welcomeDescription')}</p>
-      <div className="welcome-actions">
-        <ActionButton
-          className="primary"
-          onClick={() => {
-            cancelRestoration();
-            setView('database');
-          }}
-          icon="open"
-          label={w('openMatch')}
-        >
-          {w('openMatch')}
-        </ActionButton>
-        <ActionButton
-          onClick={() => chooseImportFiles()}
-          disabled={uploading}
-          icon="import"
-          label={uploading ? t('app.importRunning') : t('app.importPlain')}
-        >
-          {uploading ? t('app.importRunning') : t('app.importPlain')}
-        </ActionButton>
-        <MatchDropZone disabled={uploading} onDrop={dropImport} />
-      </div>
-      {restoring && <p role="status">{w('lastMatch')}</p>}
-    </section>
+    />
   );
   const selectForAnalysis = (
     matches: LibraryMatch[],
@@ -829,62 +444,38 @@ export default function App() {
         : { kind: 'bulk', matches, unavailableCount },
     );
   // Shown by the workspace that asked for the analysis.
-  const analysisDialogs = (
-    <>
-      {analysisSelection?.kind === 'single' && (
-        <MatchAnalysisDialog
-          key={analysisSelection.match.id}
-          match={analysisSelection.match}
-          defaultEngine={analysisEngine}
-          defaultPlies={analysisPlies}
-          configured
-          analysisInstallationKey={analysisInstallationKey}
-          trackedJobs={trackedAnalysisJobs}
-          onAccepted={(job) => {
-            track(job);
-            setRevision((value) => value + 1);
-          }}
-          onShowResults={(job) => {
-            setAnalysisSelection(undefined);
-            openMatch(analysisSelection.match, undefined, job);
-            requestAnimationFrame(() => tabs.current.analysis?.focus());
-          }}
-          onClose={() => setAnalysisSelection(undefined)}
-        />
-      )}
-      {analysisSelection?.kind === 'bulk' && (
-        <BulkMatchAnalysisDialog
-          matches={analysisSelection.matches}
-          unavailableCount={analysisSelection.unavailableCount}
-          defaultEngine={analysisEngine}
-          defaultPlies={analysisPlies}
-          configured
-          analysisInstallationKey={analysisInstallationKey}
-          onAccepted={(jobs, continuesBatch) => {
-            if (!jobs.length) return;
-            const databaseByMatch = new Map(
-              analysisSelection.matches.map((match) => [
-                match.id,
-                match.database_id,
-              ]),
-            );
-            for (const job of jobs) track(job);
-            setBulkAnalysis((previous) => {
-              const overlaps = Object.keys(previous.jobs).some(bulkJobPending);
-              const tracked =
-                continuesBatch || overlaps ? { ...previous.jobs } : {};
-              for (const job of jobs) {
-                tracked[job.id] =
-                  databaseByMatch.get(job.match_uuid ?? '') ?? null;
-              }
-              return { jobs: tracked, showMatchList: true };
-            });
-            setRevision((value) => value + 1);
-          }}
-          onClose={() => setAnalysisSelection(undefined)}
-        />
-      )}
-    </>
+  const analysisDialogs = analysisSelection && (
+    <AnalysisDialogs
+      selection={analysisSelection}
+      engine={analysisEngine}
+      plies={analysisPlies}
+      installationKey={analysisInstallationKey}
+      trackedJobs={trackedAnalysisJobs}
+      onAccepted={(jobs) => {
+        for (const job of jobs) track(job);
+        setRevision((value) => value + 1);
+      }}
+      onBulkAccepted={(databases, continuesBatch) =>
+        setBulkAnalysis((previous) => {
+          const overlaps = Object.keys(previous.jobs).some((id) =>
+            bulkJobPending(id, trackedAnalysisJobs, missingAnalysisJobs),
+          );
+          return {
+            jobs: {
+              ...(continuesBatch || overlaps ? previous.jobs : {}),
+              ...databases,
+            },
+            showMatchList: true,
+          };
+        })
+      }
+      onShowResults={(match, job) => {
+        setAnalysisSelection(undefined);
+        openMatch(match, undefined, job);
+        requestAnimationFrame(() => tabs.current.analysis?.focus());
+      }}
+      onClose={() => setAnalysisSelection(undefined)}
+    />
   );
 
   return (
@@ -960,39 +551,7 @@ export default function App() {
             compact
           ></ActionButton>
         </div>
-        <input
-          ref={input}
-          className="sr-only"
-          type="file"
-          aria-label={t('app.matchFile')}
-          accept={MATCH_FILE_ACCEPT}
-          multiple
-          onChange={(event) => {
-            const destination = importDestination.current;
-            importDestination.current = undefined;
-            void upload(
-              { files: matchFileEntries(event.target.files ?? []) },
-              destination,
-            );
-          }}
-        />
-        <input
-          ref={folderInput}
-          className="sr-only"
-          type="file"
-          aria-label={l('matchFolder')}
-          multiple
-          onChange={(event) => {
-            const destination = importDestination.current;
-            importDestination.current = undefined;
-            const { files, skipped } = selectFolderMatchFiles(
-              matchFileEntries(event.target.files ?? []),
-            );
-            // Choosing the same folder again must fire another change.
-            event.target.value = '';
-            void upload({ files, folder: { skipped } }, destination);
-          }}
-        />
+        <MatchImportInputs importer={importer} />
       </header>
       {benchmarkActivity.active && (
         <p className="benchmark-global-status" role="status">
@@ -1000,55 +559,16 @@ export default function App() {
         </p>
       )}
       <main className={`app-body app-body-${view}`}>
-        {!!(error || navigation.error) && (
-          <div className="error" role="alert">
-            {formatError(error || navigation.error)}
-            <ActionButton
-              aria-label={t('app.closeError')}
-              onClick={() => {
-                setError(undefined);
-                navigation.clearError();
-              }}
-              icon="close"
-              label={t('app.closeError')}
-              compact
-            ></ActionButton>
-          </div>
-        )}
-        {!!settingsError && (
-          <div className="error" role="alert">
-            {w('configurationError')} {formatError(settingsError)}
-            <ActionButton
-              onClick={() => setSettingsRevision((value) => value + 1)}
-              icon="refresh"
-              label={w('retry')}
-              compact
-            ></ActionButton>
-          </div>
-        )}
-        {notice && (
-          <div className="notice" role="status">
-            ✓{' '}
-            {notice.duplicate
-              ? t('app.importDuplicate')
-              : t('app.importCount', { count: notice.count })}
-            <ActionButton
-              aria-label={t('app.closeNotice')}
-              onClick={() => setNotice(undefined)}
-              icon="close"
-              label={t('app.closeNotice')}
-              compact
-            ></ActionButton>
-            <ImportWarningList warnings={notice.warnings} />
-          </div>
-        )}
-        {importRun && (
-          <ImportRunPanel
-            run={importRun}
-            onStop={stopImport}
-            onClose={() => setImportRun(undefined)}
-          />
-        )}
+        <AppNotices
+          error={error || navigation.error}
+          settingsError={settingsError}
+          importer={importer}
+          onCloseError={() => {
+            setError(undefined);
+            navigation.clearError();
+          }}
+          onRetrySettings={reloadSettings}
+        />
         {/* Global errors, notices and import progress stay above every workspace. */}
         <section
           className="workspace-panel"
@@ -1212,9 +732,9 @@ export default function App() {
             onAnalyzeMatches={selectForAnalysis}
             onPosition={openPosition}
             onAnnotation={openAnnotation}
-            uploading={uploading}
-            onImport={chooseImportFiles}
-            onImportFolder={chooseImportFolder}
+            uploading={importer.uploading}
+            onImport={importer.chooseFiles}
+            onImportFolder={importer.chooseFolder}
           />
           {view === 'database' && analysisDialogs}
         </div>
@@ -1436,12 +956,10 @@ export default function App() {
             theme={theme}
             appearance={appearance}
             onApply={(applied) => {
-              settingsLoad.current?.abort();
               setTheme(applied.theme);
               setLocale(applied.locale);
               applyAppearance(applied.appearance);
-              setInstalledSettings(applied.settings);
-              setSettingsError(undefined);
+              applyInstalledSettings(applied.settings);
               if (applied.myProfileChanged) setRevision((n) => n + 1);
             }}
           />
