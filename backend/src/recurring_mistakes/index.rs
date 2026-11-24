@@ -44,7 +44,8 @@ impl Candidate {
 /// Each match's current fingerprint and stored index entry. `$1` is the index
 /// version; callers append their filter. Transactional revision tokens describe
 /// the displayed analysis, including changes that leave its row IDs intact.
-const CANDIDATES: &str = "SELECT m.id,
+const CANDIDATES: &str = concat!(
+    "SELECT m.id,
                 concat_ws('|', $1::text, coalesce(sel.analysis_id,''), coalesce(sel.source,''),
                           coalesce(sel.job_id::text,''), m.source_revision::text,
                           lower(btrim(m.white)), lower(btrim(m.black)),
@@ -63,16 +64,13 @@ const CANDIDATES: &str = "SELECT m.id,
          LEFT JOIN native_analysis_revisions n ON n.job_id=sel.job_id
          LEFT JOIN imported_analysis_revisions i ON i.match_id=m.id AND sel.source='imported'
          CROSS JOIN LATERAL (
-             SELECT EXISTS(
-                 SELECT 1 FROM play_sessions live
-                 WHERE live.library_match_id=m.id
-                   AND coalesce(live.state->>'play_mode','competition')='competition'
-                   AND live.state->>'phase'<>'match_over'
-                   AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over')
-             ) AS blocked
+             SELECT ",
+    crate::play::review_blocked_sql!("m.id"),
+    " AS blocked
          ) live
          LEFT JOIN decision_index_matches x ON x.match_id=m.id
-         WHERE NOT m.collection_only";
+         WHERE NOT m.collection_only"
+);
 
 /// The candidates of one player's scope: `$2` database or NULL, `$3` the
 /// player's lowercase names. The name filter matches the expression indexes

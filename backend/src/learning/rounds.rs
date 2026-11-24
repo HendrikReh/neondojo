@@ -172,7 +172,7 @@ async fn item_card(connection: &mut PgConnection, item: &Item) -> ApiResult<Opti
         return Ok(Some(CardRow {
             id: item.card_id,
             version: 0,
-            payload: serde_json::to_value(question).map_err(anyhow::Error::from)?,
+            payload: CardPayload::Decision(Box::new(question.clone())),
             due_at: DateTime::UNIX_EPOCH,
             review_count: 0,
             anki_review_count: 0,
@@ -245,7 +245,7 @@ async fn snapshot(connection: &mut PgConnection, round: Round) -> ApiResult<Prac
         total,
         missing: item.is_some() && card.is_none(),
         marked: item.as_ref().is_some_and(|item| item.marked),
-        card: card.as_ref().map(CardRow::question).transpose()?,
+        card: card.as_ref().map(CardRow::question),
         result: item.and_then(|item| item.result),
         summary,
         transfer: round.transfer.is_some(),
@@ -329,16 +329,12 @@ pub(super) async fn answer(
     if card.version != body.card_version {
         return Err(conflict("Card changed; reload it before answering"));
     }
-    let content = if card.is_anki() {
-        if body.answer.is_some() {
-            return Err(ApiError::invalid(
-                "Reveal this Anki card to view the answer",
-            ));
-        }
-        None
-    } else {
-        Some(card.content()?)
-    };
+    let content = card.decision().cloned();
+    if content.is_none() && body.answer.is_some() {
+        return Err(ApiError::invalid(
+            "Reveal this Anki card to view the answer",
+        ));
+    }
     tx.commit().await.map_err(anyhow::Error::from)?;
     if let Some(content) = &content {
         crate::play::require_review_available(&state.pool, content.source.match_id).await?;

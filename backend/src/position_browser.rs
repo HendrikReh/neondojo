@@ -336,7 +336,7 @@ pub struct DeletePositionFilter {
     pub expected_version: i64,
 }
 
-pub(crate) const SAVED_VISIBLE: &str = "NOT EXISTS(SELECT 1 FROM play_sessions live WHERE live.library_match_id=m.id AND coalesce(live.state->>'play_mode','competition')='competition' AND live.state->>'phase'<>'match_over' AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over'))";
+pub(crate) const SAVED_VISIBLE: &str = concat!("NOT ", crate::play::review_blocked_sql!("m.id"));
 
 #[derive(Serialize, ToSchema)]
 struct PositionAnalysisReadiness {

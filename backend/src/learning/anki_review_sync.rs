@@ -267,14 +267,17 @@ pub(super) async fn deck_cards(pool: &PgPool, id: Uuid) -> ApiResult<HashMap<Str
     .await
     .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    if rows.is_empty() || rows.len() > MAX_CARDS as usize || rows.iter().any(CardRow::is_anki) {
-        return Err(ApiError::invalid(
-            "Select a non-empty native NeonDojo deck with at most 1000 cards",
-        ));
+    let unsupported =
+        || ApiError::invalid("Select a non-empty native NeonDojo deck with at most 1000 cards");
+    if rows.is_empty()
+        || rows.len() > MAX_CARDS as usize
+        || rows.iter().any(|row| row.decision().is_none())
+    {
+        return Err(unsupported());
     }
     let mut cards = HashMap::new();
     for row in rows {
-        let identity = card_signature(&row.content()?);
+        let identity = card_signature(row.decision().ok_or_else(unsupported)?);
         // GNUbg's base64 IDs and the decision kind are literal Anki search terms.
         if !identity.bytes().all(|byte| {
             byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'/' | b'+' | b'=' | b'_')
@@ -787,7 +790,17 @@ mod tests {
         assert_eq!(received, 0);
         assert!(outgoing.is_empty());
 
-        let persisted: CardRow = sqlx::query_as("SELECT * FROM learning_cards WHERE id=$1")
+        #[derive(FromRow)]
+        struct Schedule {
+            version: i64,
+            due_at: DateTime<Utc>,
+            review_count: i32,
+            anki_review_count: i32,
+            stability: Option<f64>,
+            difficulty: Option<f64>,
+            last_review: Option<DateTime<Utc>>,
+        }
+        let persisted: Schedule = sqlx::query_as("SELECT * FROM learning_cards WHERE id=$1")
             .bind(card)
             .fetch_one(&pool)
             .await

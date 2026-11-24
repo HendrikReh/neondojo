@@ -12,7 +12,10 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 const MAX_UPLOAD: usize = 128 * 1024 * 1024;
 static PACKAGE_IMPORT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
-#[derive(Serialize, Deserialize)]
+/// The payload `kind` of a rendered Anki card.
+pub(super) const KIND: &str = "anki";
+
+#[derive(Debug, Serialize, Deserialize)]
 pub(super) struct AnkiCard {
     pub kind: String,
     pub prompt: String,
@@ -335,7 +338,7 @@ async fn save_card(
     }
     let signature = format!("anki:{}:{}", input.guid, input.template_number);
     let payload = serde_json::to_value(AnkiCard {
-        kind: "anki".into(),
+        kind: KIND.into(),
         prompt: input.prompt,
     })?;
     let candidate = Uuid::new_v4();

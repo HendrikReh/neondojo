@@ -6,7 +6,8 @@ pub(super) const MATCH_NOTE_JOIN: &str = " LEFT JOIN annotations a ON a.match_uu
 
 // Select the PR source independently of any active whole-match job.
 // Incomplete or imported selected results never borrow another source's rating.
-pub(super) const MATCH_ANALYSIS_JOINS: &str = "
+pub(super) const MATCH_ANALYSIS_JOINS: &str = concat!(
+    "
 LEFT JOIN LATERAL (
     SELECT a.source,a.job_id FROM effective_analysis_selections a WHERE a.match_id=m.id LIMIT 1
 ) selected ON true
@@ -17,7 +18,9 @@ LEFT JOIN LATERAL (
 ) rawpr ON true
 LEFT JOIN LATERAL (
     SELECT rawpr.result WHERE rawpr.total_games>0 AND rawpr.completed_games=rawpr.total_games
-    AND NOT m.play_assisted AND (m.play_mode IS NULL OR (m.play_mode='competition' AND (ps.id IS NULL OR (ps.state->>'phase'='match_over' OR (m.match_length=0 AND ps.state->>'phase'='game_over')))))
+    AND NOT m.play_assisted AND (m.play_mode IS NULL OR (m.play_mode='competition' AND (ps.id IS NULL OR ",
+    crate::play::finished_session_sql!("ps"),
+    ")))
     AND rawpr.result->>'total_games'=rawpr.total_games::text
     AND rawpr.result->>'completed_games'=rawpr.total_games::text
     AND rawpr.result->>'analyzed_moves'=rawpr.result->>'total_moves'
@@ -37,8 +40,9 @@ LEFT JOIN (
     GROUP BY j.match_uuid,j.source_revision
 ) active_match_job ON active_match_job.match_uuid=m.id AND active_match_job.source_revision=m.source_revision
     AND NOT m.collection_only
-    AND (ps.id IS NULL OR coalesce(ps.state->>'play_mode','competition')<>'competition'
-         OR ps.state->>'phase'='match_over' OR (m.match_length=0 AND ps.state->>'phase'='game_over'))
+    AND (ps.id IS NULL OR NOT ",
+    crate::play::active_competition_sql!("ps"),
+    ")
 LEFT JOIN LATERAL (
     SELECT coalesce(
         active_match_job.status,
@@ -51,7 +55,8 @@ LEFT JOIN LATERAL (
          FROM analysis_catalog_sources c WHERE c.match_id=m.id
          ORDER BY (c.status='completed') DESC,c.created_at DESC,c.analysis_id DESC LIMIT 1)
     ) AS status
-) analysis ON true";
+) analysis ON true"
+);
 
 pub(super) const MATCH_COLUMNS: &str = "coalesce((SELECT r.id FROM study_report_snapshots r WHERE r.session_id=ps.id ORDER BY r.game_no DESC,r.created_at DESC LIMIT 1),CASE WHEN ps.state->>'phase'='match_over' AND jsonb_typeof(ps.state->'review')='object' THEN ps.id END) AS study_report_id,ps.id AS play_session_id,ps.paused_from_database_id IS NOT NULL AS play_paused,ps.state->>'phase' AS play_phase,m.play_mode,m.play_assisted,m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,jsonb_array_length(m.import_warnings) AS import_warning_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
 
@@ -183,8 +188,12 @@ pub(super) fn library_filters(
         q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND lower(n.comment) LIKE ").push_bind(literal_pattern(v)).push(")");
     }
     if let Some(v) = &p.position_id {
-        q.push(" AND (ps.id IS NULL OR coalesce(ps.state->>'play_mode','competition')<>'competition' OR ps.state->>'phase'='match_over' OR (m.match_length=0 AND ps.state->>'phase'='game_over')) AND hit.position_id=")
-            .push_bind(v.clone());
+        q.push(concat!(
+            " AND (ps.id IS NULL OR NOT ",
+            crate::play::active_competition_sql!("ps"),
+            ") AND hit.position_id="
+        ))
+        .push_bind(v.clone());
     }
     if let Some(v) = &p.match_type {
         q.push(if v == "money" {

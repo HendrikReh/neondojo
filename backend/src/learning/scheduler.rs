@@ -67,7 +67,10 @@ mod tests {
         let mut row = CardRow {
             id: Uuid::new_v4(),
             version: 0,
-            payload: serde_json::Value::Null,
+            payload: CardPayload::Anki(anki_flashcards::AnkiCard {
+                kind: anki_flashcards::KIND.into(),
+                prompt: String::new(),
+            }),
             due_at: now,
             review_count: 0,
             anki_review_count: 0,

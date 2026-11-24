@@ -1,5 +1,5 @@
 //! A live session owns one library match. Deletion detaches it until explicitly saved again.
-use super::{PlayPhase, PlaySession, named_export};
+use super::{PlaySession, named_export};
 use anyhow::{Result, ensure};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
@@ -143,9 +143,7 @@ pub(super) async fn sync(
         ArchiveTarget::Existing(id) => id,
         ArchiveTarget::NewIn(_) => Uuid::new_v4(),
     };
-    let result = if matches!(session.phase, PlayPhase::MatchOver)
-        || super::reports::money_finished(session)
-    {
+    let result = if super::review_gate::finished(session) {
         "completed"
     } else {
         "ongoing"

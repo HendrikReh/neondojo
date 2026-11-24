@@ -66,21 +66,18 @@ struct Row {
 /// session are left out until it ends.
 macro_rules! eligible {
     () => {
-        r#"
+        concat!(
+            r#"
 WITH eligible AS (
     SELECT m.* FROM matches m
     WHERE NOT m.collection_only
       AND ($1::uuid IS NULL OR m.database_id=$1)
       AND ($2::uuid IS NULL OR m.id=$2)
       AND ($3::text[] IS NULL OR lower(btrim(m.white))=ANY($3) OR lower(btrim(m.black))=ANY($3))
-      AND NOT EXISTS(
-          SELECT 1 FROM play_sessions live
-          WHERE live.library_match_id=m.id
-            AND coalesce(live.state->>'play_mode','competition')='competition'
-            AND live.state->>'phase'<>'match_over'
-            AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over')
-      )
-)"#
+      AND NOT "#,
+            crate::play::review_blocked_sql!("m.id"),
+            "\n)"
+        )
     };
 }
 /// Only `eligible`. A query that reads no other CTE of `CHOSEN` uses this, so

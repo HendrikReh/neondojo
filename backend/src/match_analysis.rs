@@ -163,10 +163,14 @@ fn tree_game_count(trees: &[Vec<Node>]) -> Result<i32> {
     Ok(i32::try_from(trees.len())?)
 }
 
+/// GNUbg exports six decimals. Use the same precision for classification and
+/// filter boundaries instead of exposing binary subtraction noise.
+pub(crate) fn rounded_equity_difference(played: f64, best: f64) -> f64 {
+    ((best - played) * 1_000_000.0).round() / 1_000_000.0
+}
+
 pub(crate) fn normalized_loss(played: f64, best: f64) -> f64 {
-    // GNUbg exports six decimals. Use the same precision for classification
-    // and filter boundaries instead of exposing binary subtraction noise.
-    (((best - played) * 1_000_000.0).round() / 1_000_000.0).max(0.0)
+    rounded_equity_difference(played, best).max(0.0)
 }
 
 /// Check that a saved native decision contains a consistent pair of equities.

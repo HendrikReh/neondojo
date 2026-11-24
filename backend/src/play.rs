@@ -28,8 +28,9 @@ use native::*;
 pub(crate) use native::{benchmark_checker_turn, benchmark_sage_checker_turn, probe_native};
 use repo::*;
 pub(crate) use review_gate::{
-    ACTIVE_COMPETITION, require_job_review_available, require_position_review_available,
-    require_review_available, require_review_available_on,
+    active_competition_sql, finished_session_sql, require_job_review_available,
+    require_position_review_available, require_review_available, require_review_available_on,
+    review_blocked_sql,
 };
 pub(crate) use routes::{PlayDoc, routes};
 use service::*;
