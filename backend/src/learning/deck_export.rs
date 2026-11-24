@@ -25,6 +25,8 @@ pub(super) async fn build_deck_package(
         .await
         .map_err(anyhow::Error::from)?
         .ok_or_else(ApiError::missing)?;
+    let anki_cards =
+        || ApiError::invalid("Use the original Anki package to export imported Anki cards");
     if sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (SELECT 1 FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id
                         WHERE dc.deck_id=$1 AND c.payload->>'kind'='anki')",
@@ -34,9 +36,7 @@ pub(super) async fn build_deck_package(
     .await
     .map_err(anyhow::Error::from)?
     {
-        return Err(ApiError::invalid(
-            "Use the original Anki package to export imported Anki cards",
-        ));
+        return Err(anki_cards());
     }
     let card_ids: Vec<Uuid> = sqlx::query_scalar(
         "SELECT c.id FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id
@@ -64,7 +64,7 @@ pub(super) async fn build_deck_package(
             .fetch_one(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
-        let c = row.content()?;
+        let c = row.decision().ok_or_else(anki_cards)?.clone();
         let a = content::answer_on_connection(&mut tx, row.id, &c).await?;
         cards.push((row.id, c, a));
     }

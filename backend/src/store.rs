@@ -427,9 +427,10 @@ pub async fn positions_scoped_in_database(
         game_no.is_none() || match_id.is_some(),
         "game_no requires match_id"
     );
-    let mut query = QueryBuilder::<Postgres>::new(
-        "SELECT * FROM positions WHERE NOT EXISTS(SELECT 1 FROM play_sessions live WHERE live.library_match_id=positions.match_uuid AND coalesce(live.state->>'play_mode','competition')='competition' AND live.state->>'phase'<>'match_over' AND NOT (live.state->>'match_length'='0' AND live.state->>'phase'='game_over'))",
-    );
+    let mut query = QueryBuilder::<Postgres>::new(concat!(
+        "SELECT * FROM positions WHERE NOT ",
+        crate::play::review_blocked_sql!("positions.match_uuid")
+    ));
     if let Some(database_id) = database_id {
         query
             .push(" AND match_uuid IN (SELECT id FROM matches WHERE database_id=")
@@ -518,12 +519,10 @@ pub(crate) async fn jobs_with_review_status(
     pool: &PgPool,
     ids: &[Uuid],
 ) -> Result<Vec<JobReviewStatus>> {
-    let active_competition = crate::play::ACTIVE_COMPETITION;
-    Ok(sqlx::query_as(&format!(
-        "SELECT j.*, EXISTS(
-            SELECT 1 FROM play_sessions
-            WHERE library_match_id=coalesce(j.match_uuid,p.match_uuid) AND {active_competition}
-         ) AS restricted
+    Ok(sqlx::query_as(concat!(
+        "SELECT j.*, ",
+        crate::play::review_blocked_sql!("coalesce(j.match_uuid,p.match_uuid)"),
+        " AS restricted
          FROM jobs j LEFT JOIN positions p ON p.id=j.position_uuid
          WHERE j.id=ANY($1) ORDER BY j.id"
     ))

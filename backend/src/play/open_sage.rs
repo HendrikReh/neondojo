@@ -447,7 +447,7 @@ pub(super) async fn alternatives(
                 action: "move".into(),
                 move_index: Some(index),
                 notation: choice.notation.clone(),
-                loss: ((best - candidate.equity) * 1e6).round().max(0.0) / 1e6,
+                loss: crate::match_analysis::normalized_loss(candidate.equity, best),
                 equity: Some(candidate.equity),
                 probabilities: Some(candidate.probabilities.clone()),
             });
@@ -490,7 +490,7 @@ pub(super) async fn alternatives(
             } else {
                 action.into()
             },
-            loss: ((best - equity) * 1e6).round().max(0.0) / 1e6,
+            loss: crate::match_analysis::normalized_loss(equity, best),
             equity: Some(equity),
             probabilities: Some(probabilities.clone()),
         })

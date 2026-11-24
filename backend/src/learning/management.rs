@@ -421,15 +421,13 @@ pub(super) async fn duplicates(
     }
     let items = rows
         .into_iter()
-        .map(|entry| {
-            Ok(DuplicateCard {
-                card: entry.row.question()?,
-                decks: memberships.remove(&entry.row.id).unwrap_or_default(),
-                duplicate_key: entry.identity,
-                copies: entry.copies,
-            })
+        .map(|entry| DuplicateCard {
+            card: entry.row.question(),
+            decks: memberships.remove(&entry.row.id).unwrap_or_default(),
+            duplicate_key: entry.identity,
+            copies: entry.copies,
         })
-        .collect::<anyhow::Result<_>>()?;
+        .collect();
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(DuplicatePage {
         items,
@@ -467,7 +465,8 @@ pub(super) async fn resolve_duplicate(
     struct Candidate {
         id: Uuid,
         signature: String,
-        payload: serde_json::Value,
+        #[sqlx(json)]
+        payload: CardPayload,
         version: i64,
     }
     let candidates: Vec<Candidate> = sqlx::query_as(
@@ -493,14 +492,10 @@ pub(super) async fn resolve_duplicate(
     {
         return Err(changed());
     }
-    let identity = card_signature(
-        &serde_json::from_value::<CardContent>(keep.payload.clone())
-            .map_err(anyhow::Error::from)?,
-    );
-    let removed_identity = card_signature(
-        &serde_json::from_value::<CardContent>(delete.payload.clone())
-            .map_err(anyhow::Error::from)?,
-    );
+    let identity = |card: &Candidate| card.payload.decision().map(card_signature);
+    let (identity, removed_identity) = identity(keep)
+        .zip(identity(delete))
+        .ok_or_else(|| ApiError::invalid("Anki cards are not compared for duplicates"))?;
     if identity != removed_identity {
         return Err(ApiError::invalid(
             "These cards have different match contexts or question types",

@@ -391,11 +391,39 @@ pub(crate) struct CardContent {
     solution: CardSolution,
     played: String,
 }
+/// The stored payload of a card. Its `kind` is `anki` for a rendered Anki card
+/// and the question type for a decision.
+#[derive(Debug, Deserialize)]
+#[serde(try_from = "serde_json::Value")]
+enum CardPayload {
+    Decision(Box<CardContent>),
+    Anki(anki_flashcards::AnkiCard),
+}
+impl TryFrom<serde_json::Value> for CardPayload {
+    type Error = serde_json::Error;
+
+    fn try_from(payload: serde_json::Value) -> Result<Self, Self::Error> {
+        if payload["kind"] == anki_flashcards::KIND {
+            serde_json::from_value(payload).map(Self::Anki)
+        } else {
+            serde_json::from_value(payload).map(Self::Decision)
+        }
+    }
+}
+impl CardPayload {
+    fn decision(&self) -> Option<&CardContent> {
+        match self {
+            Self::Decision(content) => Some(content),
+            Self::Anki(_) => None,
+        }
+    }
+}
 #[derive(Debug, FromRow)]
 struct CardRow {
     id: Uuid,
     version: i64,
-    payload: serde_json::Value,
+    #[sqlx(json)]
+    payload: CardPayload,
     due_at: DateTime<Utc>,
     review_count: i32,
     anki_review_count: i32,
@@ -406,37 +434,41 @@ struct CardRow {
     tags_version: i64,
 }
 impl CardRow {
-    fn content(&self) -> anyhow::Result<CardContent> {
-        Ok(serde_json::from_value(self.payload.clone())?)
-    }
-    fn is_anki(&self) -> bool {
-        self.payload["kind"] == "anki"
+    /// The decision this card asks about; none for a rendered Anki card.
+    fn decision(&self) -> Option<&CardContent> {
+        self.payload.decision()
     }
 
-    fn question(&self) -> anyhow::Result<CardQuestion> {
-        let (kind, position, players, prompt, source) = if self.is_anki() {
-            let card: anki_flashcards::AnkiCard = serde_json::from_value(self.payload.clone())?;
-            (
-                "anki".into(),
+    fn question(&self) -> CardQuestion {
+        let (kind, position, players, prompt, source) = match &self.payload {
+            CardPayload::Anki(card) => (
+                card.kind.clone(),
                 None,
                 [String::new(), String::new()],
-                card.prompt,
+                card.prompt.clone(),
                 None,
-            )
-        } else {
-            let c = self.content()?;
-            let mut position = c.position;
-            position.id = self.id;
-            position.notation.clear();
-            if matches!(c.kind.as_str(), "cube_offer" | "cube_response") {
-                if let Some(id) = crate::import::ids::hide_dice(&position.gnubg_match_id) {
-                    position.gnubg_match_id = id;
+            ),
+            CardPayload::Decision(content) => {
+                let c = content.as_ref();
+                let mut position = c.position.clone();
+                position.id = self.id;
+                position.notation.clear();
+                if matches!(c.kind.as_str(), "cube_offer" | "cube_response") {
+                    if let Some(id) = crate::import::ids::hide_dice(&position.gnubg_match_id) {
+                        position.gnubg_match_id = id;
+                    }
+                    position.dice = vec![0, 0];
                 }
-                position.dice = vec![0, 0];
+                (
+                    c.kind.clone(),
+                    Some(position),
+                    c.players.clone(),
+                    c.prompt.clone(),
+                    Some(c.source.clone()),
+                )
             }
-            (c.kind, Some(position), c.players, c.prompt, Some(c.source))
         };
-        Ok(CardQuestion {
+        CardQuestion {
             id: self.id,
             version: self.version,
             kind,
@@ -447,19 +479,19 @@ impl CardRow {
             due_at: self.due_at,
             review_count: self.review_count + self.anki_review_count,
             tags_version: self.tags_version,
-        })
+        }
     }
 
     async fn answer(&self, connection: &mut sqlx::PgConnection) -> anyhow::Result<CardAnswer> {
-        if self.is_anki() {
+        let Some(content) = self.decision() else {
             return Ok(CardAnswer {
                 solution: None,
                 notes: String::new(),
                 tags: self.tags.clone(),
                 played: String::new(),
             });
-        }
-        content::answer_on_connection(connection, self.id, &self.content()?).await
+        };
+        content::answer_on_connection(connection, self.id, content).await
     }
 }
 

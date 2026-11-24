@@ -63,19 +63,14 @@ pub(super) async fn pips(
         return Err(ApiError::invalid("Pip counts must be between 0 and 375"));
     }
     let row = card(&state, body.card_id).await?;
-    if row.is_anki() {
+    let Some(content) = row.decision() else {
         return Err(ApiError::invalid("This Anki card has no practice board"));
-    }
-    if row.is_anki() {
-        return Err(ApiError::invalid(
-            "This Anki card has no cube practice board",
-        ));
-    }
-    let content = row.content()?;
+    };
     crate::play::require_review_available(&state.pool, content.source.match_id).await?;
     let board: [i32; 26] = content
         .position
         .board
+        .as_slice()
         .try_into()
         .map_err(|_| ApiError::invalid("Invalid board"))?;
     let (counts, bar_pips) = crate::game_plan::absolute_pip_counts(&board);
@@ -84,6 +79,11 @@ pub(super) async fn pips(
         bar_pips,
         correct: std::array::from_fn(|i| counts[i] == body.counts[i]),
     }))
+}
+
+fn cube_content(row: &CardRow) -> ApiResult<&CardContent> {
+    row.decision()
+        .ok_or_else(|| ApiError::invalid("This Anki card has no cube practice board"))
 }
 
 fn score_positions(content: &CardContent) -> ApiResult<Vec<Position>> {
@@ -143,15 +143,10 @@ pub(super) async fn score_questions(
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<ScorePractice>> {
     let row = card(&state, id).await?;
-    if row.is_anki() {
-        return Err(ApiError::invalid(
-            "This Anki card has no cube practice board",
-        ));
-    }
-    let content = row.content()?;
+    let content = cube_content(&row)?;
     crate::play::require_review_available(&state.pool, content.source.match_id).await?;
-    let question = row.question()?;
-    let questions = score_positions(&content)?
+    let question = row.question();
+    let questions = score_positions(content)?
         .into_iter()
         .enumerate()
         .map(|(index, mut position)| {
@@ -196,9 +191,9 @@ pub(super) async fn score_answer(
     if row.version != version {
         return Err(conflict("Card changed; reload its score variants"));
     }
-    let content = row.content()?;
+    let content = cube_content(&row)?;
     crate::play::require_review_available(&state.pool, content.source.match_id).await?;
-    let position = score_positions(&content)?
+    let position = score_positions(content)?
         .into_iter()
         .nth(body.index)
         .ok_or_else(|| ApiError::invalid("Invalid score variant"))?;
@@ -226,8 +221,7 @@ pub(super) async fn preview(
         .await
         .map_err(anyhow::Error::from)?
         .ok_or_else(ApiError::missing)?;
-    if !row.is_anki() {
-        let content = row.content()?;
+    if let Some(content) = row.decision() {
         crate::play::require_review_available_on(&mut *connection, content.source.match_id).await?;
     }
     Ok(Json(row.answer(&mut connection).await?))

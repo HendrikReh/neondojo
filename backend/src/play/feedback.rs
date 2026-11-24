@@ -197,8 +197,7 @@ pub(super) fn stage_choice(
     Ok(())
 }
 pub(super) fn present(mut session: PlaySession) -> PlaySession {
-    let complete =
-        matches!(session.phase, PlayPhase::MatchOver) || super::reports::money_finished(&session);
+    let complete = super::review_gate::finished(&session);
     for decision in session
         .pending_decision
         .iter_mut()

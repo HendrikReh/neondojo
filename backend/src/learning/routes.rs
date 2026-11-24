@@ -522,7 +522,7 @@ pub(super) async fn next_card(
         } else {
             None
         };
-        (Some(row.card.question()?), attempt)
+        (Some(row.card.question()), attempt)
     } else {
         (None, None)
     };
@@ -592,12 +592,11 @@ pub(super) async fn submit_attempt(
         let result = attempted_card(&mut tx, &row, previous.into_data()).await?;
         return Ok(Json(result));
     }
-    if row.is_anki() {
+    let Some(card) = row.decision() else {
         return Err(ApiError::invalid("Reveal the Anki card before rating"));
-    }
-    let card = row.content()?;
+    };
     crate::play::require_review_available(&state.pool, card.source.match_id).await?;
-    let evaluation = evaluate_card(&state, &card, &body.answer).await?;
+    let evaluation = evaluate_card(&state, card, &body.answer).await?;
 
     // Evaluation can be slow. Serialize only the short write with reviews
     // and card updates and verify the snapshot version again at that point.

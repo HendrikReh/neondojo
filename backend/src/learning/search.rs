@@ -400,13 +400,11 @@ pub(super) async fn load(
     }
     let items = rows
         .iter()
-        .map(|row| {
-            Ok(CardBrowseItem {
-                card: row.question()?,
-                browse: contexts.remove(&row.id).unwrap_or_default(),
-            })
+        .map(|row| CardBrowseItem {
+            card: row.question(),
+            browse: contexts.remove(&row.id).unwrap_or_default(),
         })
-        .collect::<anyhow::Result<_>>()?;
+        .collect();
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(CardPage {
         items,

@@ -1684,6 +1684,35 @@ async fn imported_anki_cards_can_be_revealed_and_rated_without_a_board(pool: PgP
     assert!(next["card"]["position"].is_null());
     assert_eq!(next["card"]["prompt"], "Take Point");
 
+    // Every practice board and the duplicate check reject the card by name.
+    let other = Uuid::new_v4();
+    sqlx::query("INSERT INTO learning_cards(id,signature,payload) SELECT $1,'anki:other',payload FROM learning_cards WHERE id=$2")
+        .bind(other)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for (path, body, error) in [
+        (
+            "/api/study/card-pips".to_owned(),
+            json!({"card_id":id,"counts":[0,0]}),
+            "This Anki card has no practice board",
+        ),
+        (
+            format!("/api/cards/{id}/score-variants"),
+            Value::Null,
+            "This Anki card has no cube practice board",
+        ),
+        (
+            "/api/cards/duplicates/resolve".to_owned(),
+            json!({"keep_id":id,"keep_version":0,"delete_id":other,"delete_version":0}),
+            "Anki cards are not compared for duplicates",
+        ),
+    ] {
+        let (status, body) = call(app.clone(), "POST", &path, body).await;
+        assert_eq!((status, &body["error"]), (422, &json!(error)), "{path}");
+    }
+
     let (status, revealed) = call(
         app.clone(),
         "POST",
