@@ -45,7 +45,7 @@ pub(super) async fn build_hits(
     analysis_id: &str,
     job: Option<&Job>,
     imported: bool,
-    format: &str,
+    format: MatchFormat,
 ) -> ApiResult<()> {
     let job_id = job.map(|job| job.id);
     let mut tx = pool
@@ -100,7 +100,6 @@ pub(super) async fn build_hits(
                 row.id.clone(),
             )
         });
-        let format = format.to_owned();
         let job = job.cloned();
         let batch = tokio::task::spawn_blocking(move || {
             rows.into_iter()
@@ -112,7 +111,7 @@ pub(super) async fn build_hits(
                         row.id.clone(),
                         row.player,
                     );
-                    let decision = project(row, match_id, &format, job.as_ref())?.decision;
+                    let decision = project(row, match_id, format, job.as_ref())?.decision;
                     Some(Hit {
                         game_no,
                         decision_no,
@@ -173,7 +172,7 @@ pub(super) struct HitPage<'a> {
     pub(super) analysis_id: &'a str,
     pub(super) job_id: Option<Uuid>,
     pub(super) imported: bool,
-    pub(super) format: &'a str,
+    pub(super) format: MatchFormat,
     pub(super) job: Option<&'a Job>,
     pub(super) game: Option<i32>,
     pub(super) query: &'a ReviewQuery,
@@ -245,8 +244,7 @@ impl HitPage<'_> {
                 .fetch_all(&mut *connection)
                 .await
                 .map_err(anyhow::Error::from)?;
-            let (match_id, format, job) =
-                (self.match_id, self.format.to_owned(), self.job.cloned());
+            let (match_id, format, job) = (self.match_id, self.format, self.job.cloned());
             let (errors_only, severity, thresholds) =
                 (self.query.errors_only, self.query.severity, self.thresholds);
             items = tokio::task::spawn_blocking(move || {
@@ -255,7 +253,7 @@ impl HitPage<'_> {
                         filtered_decision(
                             row,
                             match_id,
-                            &format,
+                            format,
                             job.as_ref(),
                             errors_only,
                             severity,

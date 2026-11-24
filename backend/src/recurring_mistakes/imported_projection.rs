@@ -1,6 +1,6 @@
 //! Read-only foreign analysis validation against the original played source.
 use crate::{
-    import::sgf::SourceMove,
+    import::{MatchFormat, sgf::SourceMove},
     imported_analysis::ImportedAnalysisData,
     match_analysis::{CubeEquityUnit, CubeEvaluation, Decision, cube_options},
     model::Position,
@@ -103,10 +103,9 @@ pub(crate) fn project(
     source: &SourceMove,
     match_id: Uuid,
     position_uuid: Option<Uuid>,
-    source_format: &str,
+    source_format: MatchFormat,
 ) -> Option<Projection> {
-    if !(matches!(source_format, "xg" | "bgf")
-        || source_format == "sgf" && record.kind == "checker")
+    if !source_format.supplies_decisions(&record.kind)
         || record.game_no != source.game_no
         || record.source_move_no != source.move_no
         || record.player != source.player
@@ -175,7 +174,7 @@ pub(crate) fn project(
             }
         }
         let played_eq = played_eq?;
-        let loss = if source_format == "sgf" {
+        let loss = if source_format == MatchFormat::Sgf {
             crate::move_assessments::rounded_loss(played_eq, best_eq)?
         } else {
             loss(best_eq, played_eq)?
@@ -199,7 +198,7 @@ pub(crate) fn project(
             return None;
         }
         let (best, played_eq, best_eq, loss, evaluation): ImportedCubeEvaluation =
-            if source_format == "xg" {
+            if source_format == MatchFormat::Xg {
                 let c = record.cube.as_ref()?;
                 if c["equity_kind"] != "cubeful" || c["perspective"] != "doubler" {
                     return None;
@@ -280,8 +279,11 @@ fn number(value: &serde_json::Value) -> Option<f64> {
         .or_else(|| value.as_str()?.trim().parse().ok())
         .filter(|n| n.is_finite())
 }
-fn checker_equity(c: &crate::imported_analysis::ImportedCandidate, format: &str) -> Option<f64> {
-    if format == "bgf" {
+fn checker_equity(
+    c: &crate::imported_analysis::ImportedCandidate,
+    format: MatchFormat,
+) -> Option<f64> {
+    if format == MatchFormat::Bgf {
         // The displayed MWC/cubeless value is never an EMG substitute.
         if c.raw["eq"]["hasEMG"] != true {
             return None;
@@ -414,13 +416,17 @@ mod tests {
         ];
         (s, r)
     }
-    fn projection(r: &ImportedAnalysisData, s: &SourceMove, format: &str) -> Option<Projection> {
+    fn projection(
+        r: &ImportedAnalysisData,
+        s: &SourceMove,
+        format: MatchFormat,
+    ) -> Option<Projection> {
         project(r, s, Uuid::nil(), Some(Uuid::from_u128(7)), format)
     }
     #[test]
     fn xg_checker_joins_legal_final_board_and_preserves_depth_without_revealing_notation() {
         let (s, r) = checker();
-        let p = projection(&r, &s, "xg").unwrap();
+        let p = projection(&r, &s, MatchFormat::Xg).unwrap();
         assert!((p.decision.equity_loss - 0.1).abs() < 1e-9);
         assert_eq!(p.decision.severity, "blunder");
         assert_eq!(p.decision.played, s.notation);
@@ -436,16 +442,16 @@ mod tests {
         let (s, r) = checker();
         let mut wrong = r.clone();
         wrong.candidates.pop();
-        assert!(projection(&wrong, &s, "xg").is_none());
+        assert!(projection(&wrong, &s, MatchFormat::Xg).is_none());
         let mut wrong = r.clone();
         wrong.candidates.push(r.candidates[0].clone());
-        assert!(projection(&wrong, &s, "xg").is_none());
+        assert!(projection(&wrong, &s, MatchFormat::Xg).is_none());
         let mut wrong = r.clone();
         wrong.candidates[0].notation = "24/1".into();
-        assert!(projection(&wrong, &s, "xg").is_none());
+        assert!(projection(&wrong, &s, MatchFormat::Xg).is_none());
         let mut wrong = r.clone();
         wrong.played = "24/21 6/5".into();
-        assert!(projection(&wrong, &s, "xg").is_none());
+        assert!(projection(&wrong, &s, MatchFormat::Xg).is_none());
         for field in 0..7 {
             let mut wrong = r.clone();
             match field {
@@ -457,7 +463,10 @@ mod tests {
                 5 => wrong.gnubg_match_id = Some("forged".into()),
                 _ => wrong.dice = Some([6, 6]),
             };
-            assert!(projection(&wrong, &s, "xg").is_none(), "field {field}");
+            assert!(
+                projection(&wrong, &s, MatchFormat::Xg).is_none(),
+                "field {field}"
+            );
         }
     }
     #[test]
@@ -469,12 +478,12 @@ mod tests {
             c.equity = Some(0.5);
             c.raw = json!({"eq":{"hasEMG":true,"emg":emg}});
         }
-        let p = projection(&r, &s, "bgf").unwrap();
+        let p = projection(&r, &s, MatchFormat::Bgf).unwrap();
         assert!((p.decision.equity_loss - 0.03649746).abs() < 1e-8);
         r.candidates[1].raw["eq"]["hasEMG"] = json!(false);
-        assert!(projection(&r, &s, "bgf").is_none());
+        assert!(projection(&r, &s, MatchFormat::Bgf).is_none());
         r.candidates[1].raw = Value::Null;
-        assert!(projection(&r, &s, "bgf").is_none());
+        assert!(projection(&r, &s, MatchFormat::Bgf).is_none());
     }
     #[test]
     fn checker_rejects_mwc_unknown_units_and_nonfinite_values() {
@@ -484,11 +493,11 @@ mod tests {
             for c in &mut wrong.candidates {
                 c.equity_kind = kind.into();
             }
-            assert!(projection(&wrong, &s, "xg").is_none());
+            assert!(projection(&wrong, &s, MatchFormat::Xg).is_none());
         }
         let mut wrong = r.clone();
         wrong.candidates[1].equity = Some(f64::NAN);
-        assert!(projection(&wrong, &s, "xg").is_none());
+        assert!(projection(&wrong, &s, MatchFormat::Xg).is_none());
     }
     fn cube(r: &mut ImportedAnalysisData, nd: f64, dt: f64, dp: f64) {
         r.cube = Some(
@@ -499,7 +508,7 @@ mod tests {
     fn xg_virtual_cube_hides_next_roll_and_uses_offer_minimum() {
         let (s, mut r) = fixture("(;FF[4]GM[6];W[31hefe])", "cube", 0);
         cube(&mut r, 0.4, 0.6, 1.0);
-        let p = projection(&r, &s, "xg").unwrap();
+        let p = projection(&r, &s, MatchFormat::Xg).unwrap();
         assert_eq!(p.decision.best, "double");
         assert_eq!(p.decision.played, "no double");
         assert_eq!(p.decision.dice, None);
@@ -519,7 +528,7 @@ mod tests {
             ] {
                 let (s, mut r) = fixture(prefix, "cube", index);
                 cube(&mut r, 0.9, 1.2, 1.0);
-                let p = projection(&r, &s, "xg").unwrap();
+                let p = projection(&r, &s, MatchFormat::Xg).unwrap();
                 assert_eq!(p.decision.player, s.player);
                 assert_eq!(p.position.board, s.board);
                 assert_eq!(p.position.gnubg_match_id, s.match_id);
@@ -541,7 +550,7 @@ mod tests {
         let (s, mut r) = fixture("(;FF[4]GM[6];W[double];B[take])", "cube", 1);
         r.raw = json!({"equity":{"useMatchEquity":true,"cubeDecision":{"eqNoDouble":"0.42259570","eqDoubleTake":"0.41401069","eqDoublePass":"0.41765104"}},"pr":{"cubeError":"-0.08841271","cubeErrorMWP":"-0.00364035"}});
         r.cube = Some(json!({"equity_kind":"unknown","source":r.raw["equity"]}));
-        let p = projection(&r, &s, "bgf").unwrap();
+        let p = projection(&r, &s, MatchFormat::Bgf).unwrap();
         assert_eq!(p.decision.best, "drop");
         assert_eq!(p.decision.player, 1);
         assert!((p.decision.equity_loss - 0.08841271).abs() < 1e-9);
@@ -553,11 +562,11 @@ mod tests {
         assert_eq!(evaluation.double_pass, 0.41765104);
         for bad in ["-99.00000000", "0.08841271", "NaN"] {
             r.raw["pr"]["cubeError"] = json!(bad);
-            assert!(projection(&r, &s, "bgf").is_none());
+            assert!(projection(&r, &s, MatchFormat::Bgf).is_none());
         }
         r.raw["pr"]["cubeError"] = json!("-0.08841271");
         r.raw["pr"]["cubeErrorMWP"] = json!("-0.4");
-        assert!(projection(&r, &s, "bgf").is_none());
+        assert!(projection(&r, &s, MatchFormat::Bgf).is_none());
     }
     #[test]
     fn real_binary_xg_parser_records_project_without_engine_calls() {
@@ -571,7 +580,7 @@ mod tests {
                 sources
                     .iter()
                     .find(|s| s.game_no == r.game_no && s.move_no == r.source_move_no)
-                    .and_then(|s| projection(r, s, "xg"))
+                    .and_then(|s| projection(r, s, MatchFormat::Xg))
             })
             .collect();
         assert!(
@@ -603,7 +612,7 @@ mod tests {
         let sgf = crate::import::bgf_to_sgf(format!("{header}\n{value}").as_bytes()).unwrap();
         let records = extract(&sgf).unwrap();
         let (_, sources) = parse_sgf_source_moves(&sgf).unwrap();
-        let p = projection(&records[0], &sources[0], "bgf").unwrap();
+        let p = projection(&records[0], &sources[0], MatchFormat::Bgf).unwrap();
         assert!((p.decision.equity_loss - 0.1).abs() < 1e-9);
         assert_eq!(records[0].candidates[0].equity_kind, "mwc");
     }
@@ -612,7 +621,7 @@ mod tests {
         let (s, mut r) = fixture("(;FF[4]GM[6];W[31hefe])", "cube", 0);
         for values in [(-99.0, 0.6, 1.0), (0.4, -99.0, 1.0), (0.4, 0.6, -99.0)] {
             cube(&mut r, values.0, values.1, values.2);
-            assert!(projection(&r, &s, "xg").is_none());
+            assert!(projection(&r, &s, MatchFormat::Xg).is_none());
         }
     }
     #[test]
@@ -622,7 +631,7 @@ mod tests {
             candidate(1, "6/5(2) 8/7(2)", 0.3),
             candidate(2, "8/7 6/5 8/7 6/5", 0.3),
         ];
-        let p = projection(&r, &s, "xg").unwrap();
+        let p = projection(&r, &s, MatchFormat::Xg).unwrap();
         assert_eq!(p.decision.equity_loss, 0.0);
     }
     #[test]
@@ -634,12 +643,12 @@ mod tests {
             let first = if sgf.contains("31") { 1 } else { 0 };
             let (s, mut r) = fixture(sgf, "cube", first);
             cube(&mut r, 1.3, 1.2, 1.0);
-            let p = projection(&r, &s, "xg").unwrap();
+            let p = projection(&r, &s, MatchFormat::Xg).unwrap();
             assert_eq!(p.decision.best, "no double");
             assert!((p.decision.equity_loss - 0.3).abs() < 1e-9);
             let (s, mut r) = fixture(sgf, "cube", first + 1);
             cube(&mut r, 0.5, 0.8, 1.0);
-            let p = projection(&r, &s, "xg").unwrap();
+            let p = projection(&r, &s, MatchFormat::Xg).unwrap();
             assert_eq!(p.decision.best, "take");
             assert!((p.decision.equity_loss - 0.2).abs() < 1e-9);
         }
@@ -661,21 +670,21 @@ mod tests {
             r.cube = Some(
                 json!({"equity_kind":"unknown","source":if virtual_cube {r.raw["equity"]["cubeDecision"].clone()} else {r.raw["equity"].clone()}}),
             );
-            let p = projection(&r, &s, "bgf").unwrap();
+            let p = projection(&r, &s, MatchFormat::Bgf).unwrap();
             assert_eq!(
                 p.decision.best,
                 if virtual_cube { "double" } else { "no double" }
             );
             assert!((p.decision.equity_loss + err).abs() < 1e-9);
             r.raw["equity"]["useMatchEquity"] = Value::Null;
-            assert!(projection(&r, &s, "bgf").is_none());
+            assert!(projection(&r, &s, MatchFormat::Bgf).is_none());
         }
     }
     #[test]
     fn unranked_played_candidate_remains_unknown() {
         let (s, mut r) = checker();
         r.candidates[1].rank = 0;
-        assert!(projection(&r, &s, "xg").is_none());
+        assert!(projection(&r, &s, MatchFormat::Xg).is_none());
     }
     #[test]
     fn legacy_optional_context_uses_authoritative_source_without_weakening_present_fields() {
@@ -683,7 +692,7 @@ mod tests {
         r.position_id = None;
         r.gnubg_match_id = None;
         r.dice = None;
-        let p = projection(&r, &s, "xg").unwrap();
+        let p = projection(&r, &s, MatchFormat::Xg).unwrap();
         assert_eq!(p.position.position_id, s.position_id);
         assert_eq!(p.position.gnubg_match_id, s.match_id);
         assert_eq!(p.position.dice, s.dice);
@@ -692,7 +701,7 @@ mod tests {
         let expected_id = r.gnubg_match_id.take().unwrap();
         r.position_id = None;
         r.dice = None;
-        let p = projection(&r, &s, "xg").unwrap();
+        let p = projection(&r, &s, MatchFormat::Xg).unwrap();
         assert_eq!(p.position.gnubg_match_id, expected_id);
         assert_eq!(p.position.dice, vec![0, 0]);
     }

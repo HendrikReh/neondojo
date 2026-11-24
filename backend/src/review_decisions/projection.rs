@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn filtered_decision(
     row: Row,
     id: Uuid,
-    format: &str,
+    format: MatchFormat,
     job: Option<&Job>,
     errors_only: bool,
     filter: Option<MoveSeverity>,
@@ -46,7 +46,7 @@ pub(super) fn severity_selected(
 pub(super) fn project(
     row: Row,
     match_id: Uuid,
-    format: &str,
+    format: MatchFormat,
     job: Option<&Job>,
 ) -> Option<ReviewDecision> {
     let (decision, move_id, review_position, engine, depth, depth_plies, job_id, source) = if row

@@ -561,14 +561,14 @@ impl Engine {
     /// Import a MAT transcript, ending each game before a move that fails
     /// [`Self::normalize_mat`]. The warnings name every such game and each
     /// header score that contradicts the previous result.
-    pub async fn import_mat(&self, bytes: &[u8]) -> Result<crate::import::MatImport> {
+    pub async fn import_mat(&self, bytes: &[u8]) -> Result<crate::import::ConvertedMatch> {
         let recovered =
             crate::import::mat::recover(
                 bytes,
                 |text| async move { self.normalize_mat(&text).await },
             )
             .await?;
-        Ok(crate::import::MatImport {
+        Ok(crate::import::ConvertedMatch {
             sgf: recovered.sgf,
             warnings: recovered.warnings,
         })

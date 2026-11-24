@@ -1,4 +1,5 @@
 use super::*;
+use crate::import::MatchFormat;
 
 #[derive(Debug)]
 pub struct SourceMetadata {
@@ -119,17 +120,23 @@ pub async fn backfill_source_metadata(pool: &PgPool) -> anyhow::Result<usize> {
     .fetch_all(&mut *tx)
     .await?;
 
+    let rereadable: Vec<&str> = MatchFormat::ALL
+        .into_iter()
+        .filter(|format| format.rereader().is_some())
+        .map(MatchFormat::id)
+        .collect();
     for id in &ids {
         // Fetch sources one at a time: a batch must not retain 100 large originals.
         let (sgf, format, original, version, source_loaded, context_pending):
-            (String, String, Vec<u8>, i64, bool, bool) = sqlx::query_as(
+            (String, MatchFormat, Vec<u8>, i64, bool, bool) = sqlx::query_as(
                 "SELECT CASE WHEN NOT source_metadata_loaded AND metadata_version=0 THEN sgf ELSE '' END,
-                        format, CASE WHEN metadata_version=0 AND format IN ('xg','bgf')
+                        format, CASE WHEN metadata_version=0 AND format=ANY($2)
                                      THEN original ELSE ''::bytea END,
                         metadata_version, source_metadata_loaded, native_match_context_pending
                  FROM matches WHERE id=$1",
             )
             .bind(id)
+            .bind(&rereadable)
             .fetch_one(&mut *tx)
             .await?;
 
@@ -139,11 +146,7 @@ pub async fn backfill_source_metadata(pool: &PgPool) -> anyhow::Result<usize> {
                 let legacy = (!source_loaded).then(|| {
                     let mut metadata = source_metadata(&sgf);
                     // Recover outcomes missing from older canonical SGF.
-                    let canonical = match format.as_str() {
-                        "xg" => crate::import::xg_to_sgf(&original).ok(),
-                        "bgf" => crate::import::bgf_to_sgf(&original).ok(),
-                        _ => None,
-                    };
+                    let canonical = format.rereader().and_then(|read| read(&original).ok());
                     if let Some(canonical) = canonical {
                         let source = source_metadata(&canonical);
                         metadata.result_state = source.result_state;
@@ -153,9 +156,9 @@ pub async fn backfill_source_metadata(pool: &PgPool) -> anyhow::Result<usize> {
                     metadata
                 });
                 let mut context = if context_pending {
-                    crate::import::match_context::from_original(&format, &original)
+                    format.match_context(&original)
                         .unwrap_or_else(|error| {
-                            tracing::warn!(%match_id, %format, %error, "Could not recover match context from original");
+                            tracing::warn!(%match_id, format = format.id(), %error, "Could not recover match context from original");
                             Default::default()
                         })
                 } else {

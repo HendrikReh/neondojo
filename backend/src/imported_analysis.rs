@@ -1,6 +1,7 @@
 //! Immutable analysis supplied by the imported artifact, separate from engine jobs.
 pub(crate) mod projections;
 pub(crate) mod sage;
+use crate::import::MatchFormat;
 use crate::import::sgf::{Node, SourceMove, parse_sgf_source_moves, parse_trees};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
@@ -550,7 +551,7 @@ pub(crate) async fn ensure_catalog(pool: &PgPool, id: Uuid) -> Result<bool> {
         return Ok(true);
     }
     let mut tx = pool.begin().await?;
-    let row: Option<(bool, String, Vec<u8>, String)> = sqlx::query_as(
+    let row: Option<(bool, MatchFormat, Vec<u8>, String)> = sqlx::query_as(
         "SELECT imported_analysis_loaded,format,original,sgf FROM matches WHERE id=$1 FOR UPDATE",
     )
     .bind(id)
@@ -561,10 +562,9 @@ pub(crate) async fn ensure_catalog(pool: &PgPool, id: Uuid) -> Result<bool> {
     };
     if !loaded {
         let records = tokio::task::spawn_blocking(move || {
-            let source = match format.as_str() {
-                "xg" => crate::import::xg_to_sgf(&original)?,
-                "bgf" => crate::import::bgf_to_sgf(&original)?,
-                _ => sgf,
+            let source = match format.rereader() {
+                Some(read) => read(&original)?,
+                None => sgf,
             };
             extract(&source)
         })

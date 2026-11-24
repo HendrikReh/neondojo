@@ -1,6 +1,6 @@
 //! Decoder for the public XG2 RichGame/ZLIBArchive container and TSaveRec.
 //! Format references and fixture provenance live in tests/fixtures/README.md.
-use super::{match_context::MatchContext, sgf::escape_value};
+use super::{format::ConvertedMatch, match_context::MatchContext, sgf::escape_value};
 use crate::model::{ImportWarning, ImportWarningKind};
 use anyhow::{Context, Result, bail, ensure};
 use chrono::{Days, NaiveDate};
@@ -433,13 +433,6 @@ fn analysis_property(out: &mut String, key: &str, value: &serde_json::Value) -> 
     Ok(())
 }
 
-/// A converted XG match and the source irregularities it resolved.
-#[derive(Debug)]
-pub struct XgImport {
-    pub sgf: String,
-    pub warnings: Vec<ImportWarning>,
-}
-
 /// Convert real binary XG2 files, retaining played moves, score and cube state.
 /// Native analysis is retained independently through XGA/XGC SGF extensions.
 pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
@@ -450,7 +443,7 @@ pub fn xg_to_sgf(input: &[u8]) -> Result<String> {
 /// marks as illegal, or start a game before the previous one was finished.
 /// These become explicit SGF setups and import warnings. Every other recorded
 /// position must match the replay of the preceding legal plays.
-pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
+pub fn convert_xg(input: &[u8]) -> Result<ConvertedMatch> {
     let bytes = main_records(input)?;
     ensure!(
         bytes.len() >= RECORD_BYTES * 2 && bytes.len() % RECORD_BYTES == 0,
@@ -808,7 +801,7 @@ pub fn convert_xg(input: &[u8]) -> Result<XgImport> {
     );
     // Replay validates bars, hits, legal die distances, bearing off, and turns.
     super::parse_sgf(&out).context("XG checker-play validation failed")?;
-    Ok(XgImport { sgf: out, warnings })
+    Ok(ConvertedMatch { sgf: out, warnings })
 }
 
 #[cfg(test)]

@@ -3,6 +3,7 @@ use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     configuration::ErrorThresholds,
+    import::MatchFormat,
     imported_analysis::ImportedAnalysisData,
     match_analysis::Decision,
     model::{Job, MoveSeverity},
@@ -291,7 +292,7 @@ async fn load_review_bounded(
                 &stale.analysis_id,
                 stale.job.as_deref(),
                 stale.imported,
-                &stale.format,
+                stale.format,
             )
             .await?;
             Box::pin(load_review_bounded(state, id, query, max_limit, false)).await
@@ -309,7 +310,7 @@ struct StaleHits {
     analysis_id: String,
     job: Option<Box<Job>>,
     imported: bool,
-    format: String,
+    format: MatchFormat,
 }
 
 async fn read_review(
@@ -320,7 +321,7 @@ async fn read_review(
     offset: Option<i64>,
     rebuild: bool,
 ) -> ApiResult<ReviewRead> {
-    let (format, revision): (String, i64) =
+    let (format, revision): (MatchFormat, i64) =
         sqlx::query_as("SELECT format,source_revision FROM matches WHERE id=$1")
             .bind(id)
             .fetch_one(&mut *tx)
@@ -492,7 +493,7 @@ async fn read_review(
                 analysis_id,
                 job_id,
                 imported,
-                format: &format,
+                format,
                 job: job.as_deref(),
                 game,
                 query,
@@ -532,7 +533,6 @@ async fn read_review(
             .fetch_all(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
-        let format = format.clone();
         let job = job.clone();
         let scope = scope.clone();
         let severity = query.severity;
@@ -558,7 +558,7 @@ async fn read_review(
                 let Some(result) = filtered_decision(
                     row,
                     id,
-                    &format,
+                    format,
                     job.as_deref(),
                     errors_only,
                     severity,

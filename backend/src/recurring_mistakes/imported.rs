@@ -8,6 +8,7 @@ use super::{
 use crate::{
     api::{ApiError, ApiResult},
     game_plan,
+    import::{MatchFormat, supplies_decisions_sql},
     imported_analysis::ImportedAnalysisData,
 };
 use sqlx::{FromRow, PgPool, Postgres, Transaction};
@@ -15,11 +16,20 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 const MAX_LEGACY_SOURCES: usize = 16;
-const FOREIGN: &str = "FROM eligible m JOIN match_games g ON g.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported')";
+const DECISION_FORMATS: &str = supplies_decisions_sql!("m");
+const FOREIGN: &str = concat!(
+    "FROM eligible m JOIN match_games g ON g.match_uuid=m.id WHERE ",
+    supplies_decisions_sql!("m"),
+    " AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported')"
+);
 /// Older foreign imports whose catalogs are still missing. The pending filter
 /// matches the partial index `matches_pending_imported_catalog`, so a library
 /// without such imports answers from an empty index.
-const LEGACY_PENDING: &str = "FROM eligible m LEFT JOIN match_games g ON g.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf') AND (NOT m.imported_analysis_loaded OR NOT m.moves_cataloged)";
+const LEGACY_PENDING: &str = concat!(
+    "FROM eligible m LEFT JOIN match_games g ON g.match_uuid=m.id WHERE ",
+    supplies_decisions_sql!("m"),
+    " AND (NOT m.imported_analysis_loaded OR NOT m.moves_cataloged)"
+);
 
 /// Pending games and the largest pending source; `$1` database, `$2` match, `$3` players.
 pub(super) fn legacy_size_sql() -> String {
@@ -79,7 +89,7 @@ pub(super) async fn catalog_legacy(
 pub(super) struct ImportedGame {
     match_id: Uuid,
     game_no: i32,
-    format: String,
+    format: MatchFormat,
     white: String,
     black: String,
 }
@@ -124,12 +134,12 @@ pub(super) async fn load(
     }
     let games=sqlx::query_as(&format!("{CHOSEN} SELECT m.id AS match_id,g.game_no,m.format,m.white,m.black {FOREIGN} ORDER BY m.id,g.game_no"))
         .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
-    let events:Vec<ImportedEvent>=sqlx::query_as(&format!("{CHOSEN} SELECT e.*,p.ply AS checker_ply FROM eligible m JOIN match_moves e ON e.match_uuid=m.id LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no WHERE m.format IN ('xg','bgf','sgf') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,e.game_no,e.move_no LIMIT {}",MAX_DECISIONS+1))
+    let events:Vec<ImportedEvent>=sqlx::query_as(&format!("{CHOSEN} SELECT e.*,p.ply AS checker_ply FROM eligible m JOIN match_moves e ON e.match_uuid=m.id LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no WHERE {DECISION_FORMATS} AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,e.game_no,e.move_no LIMIT {}",MAX_DECISIONS+1))
         .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     if events.len() > MAX_DECISIONS {
         return Err(ApiError::invalid(TOO_BROAD));
     }
-    let rows:Vec<ImportedRow>=sqlx::query_as(&format!("{CHOSEN} SELECT a.id,a.match_uuid AS match_id,a.position_uuid,a.game_no,a.source_move_no,a.kind,a.data FROM eligible m JOIN primary_imported_analyses a ON a.match_uuid=m.id WHERE m.format IN ('xg','bgf','sgf') AND a.kind IN ('checker','cube') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,a.game_no,a.source_move_no,a.source_ordinal LIMIT {}",MAX_DECISIONS+1))
+    let rows:Vec<ImportedRow>=sqlx::query_as(&format!("{CHOSEN} SELECT a.id,a.match_uuid AS match_id,a.position_uuid,a.game_no,a.source_move_no,a.kind,a.data FROM eligible m JOIN primary_imported_analyses a ON a.match_uuid=m.id WHERE {DECISION_FORMATS} AND a.kind IN ('checker','cube') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,a.game_no,a.source_move_no,a.source_ordinal LIMIT {}",MAX_DECISIONS+1))
         .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     if rows.len() + native_decisions > MAX_DECISIONS {
         return Err(ApiError::invalid(TOO_BROAD));
@@ -189,7 +199,7 @@ pub(super) fn reconstruct(imported: Imported) -> Vec<SourceDecision> {
                 source,
                 game.match_id,
                 row.position_uuid,
-                &game.format,
+                game.format,
             ) else {
                 continue;
             };
@@ -249,12 +259,12 @@ pub(super) fn reconstruct(imported: Imported) -> Vec<SourceDecision> {
                     plies: p.depth_plies,
                     depth: p.depth,
                     method: Some(method),
-                    source: Some(if game.format == "xg" {
-                        MistakeSource::Xg
-                    } else if game.format == "bgf" {
-                        MistakeSource::Bgblitz
-                    } else {
-                        MistakeSource::Sgf
+                    source: Some(match game.format {
+                        MatchFormat::Xg => MistakeSource::Xg,
+                        MatchFormat::Bgf => MistakeSource::Bgblitz,
+                        MatchFormat::Sgf | MatchFormat::Mat | MatchFormat::Ogxm => {
+                            MistakeSource::Sgf
+                        }
                     }),
                 },
             });
