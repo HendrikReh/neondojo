@@ -48,7 +48,23 @@ async function openAnalyzedMatch(page: Page) {
     'completed',
     { timeout: 20_000 },
   );
+  const submitted = page.waitForResponse((response) =>
+    response.request().method() === 'POST' &&
+    new URL(response.url()).pathname === '/api/jobs',
+  );
   await (await openPositionCalculation(page)).getByRole('button', { name: /Analyze position/ }).click();
+  const positionJob = await (await submitted).json();
+  // The candidates of the game analysis are visible already. Wait for the
+  // position job itself, because its progress row moves the board when it goes.
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/jobs/${positionJob.id}`)).json())
+          .status,
+      { timeout: 30_000 },
+    )
+    .toBe('completed');
+  await expect(page.locator('.analysis-running-job')).toHaveCount(0);
   await expect(page.locator('.candidates tbody tr').first()).toBeVisible({ timeout: 15_000 });
   await page.getByLabel('Displayed analysis', { exact: true }).selectOption(`job:${gameJob.id}`);
   await expect(page.locator('.candidates tbody tr').first()).toBeVisible();

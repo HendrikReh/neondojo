@@ -1,3 +1,4 @@
+import { createReadStream } from 'node:fs';
 import {
   openFullMatchAnalysis,
   openMatchAnalysisOptions,
@@ -5,6 +6,8 @@ import {
 } from './analysis-controls';
 import { sql } from './stack';
 import { test, expect, type Page } from './test';
+
+const reference = '../backend/tests/fixtures/WC2014.mat';
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -51,13 +54,23 @@ async function openReference(page: import('@playwright/test').Page) {
   );
   await page
     .getByLabel('Matchdatei')
-    .setInputFiles('../backend/tests/fixtures/WC2014.mat');
+    .setInputFiles(reference);
   const match = (await (await imported).json()).match;
   await expect(
     page.getByLabel('Spiel auswählen', { exact: true }),
   ).toBeVisible();
   await expect(page.locator('.board-heading')).toContainText('Spiel 1');
   return match;
+}
+
+/** The reference match, loaded with its completed whole-match analysis. */
+async function openAnalyzedReference(page: Page) {
+  const match = await openReference(page);
+  const job = await completedFullJob(page, match.id);
+  // The page does not follow a job that was submitted outside it.
+  await page.reload();
+  await expect(page.locator('.board-heading')).toContainText('Spiel 1');
+  return { match, job };
 }
 
 test('one game owns its move list, board boundaries and native analysis; full match remains optional', async ({
@@ -272,8 +285,7 @@ test('a long individual game transparently loads all pages within that game', as
 });
 
 test('changing Cube filters resets the decision count', async ({ page }) => {
-  const match = await openReference(page);
-  await completedFullJob(page, match.id);
+  await openAnalyzedReference(page);
   await page.getByRole('tab', { name: 'Cube', exact: true }).click();
   await expect(page.locator('.workspace-analysis-command').getByText('Matchanalyse abgeschlossen', { exact: true })).toBeVisible();
   // Opening Cube selects the first matching decision, which stays selected.
@@ -290,11 +302,54 @@ test('changing Cube filters resets the decision count', async ({ page }) => {
   await expect(count).toHaveText(total);
 });
 
+test('Cube still opens on a decision when a new revision interrupts the search', async ({
+  page,
+}) => {
+  const imported = await page.request.post('/api/imports', {
+    multipart: { file: createReadStream(reference) },
+  });
+  await expect(imported).toBeOK();
+  await completedFullJob(page, (await imported.json()).match.id);
+  const hold = () => {
+    let release = () => {};
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return { release, released };
+  };
+  // The first loaded configuration starts a new review revision. Deliver it
+  // while Cube searches for the decision to open on.
+  const configuration = hold();
+  const search = hold();
+  let searches = 0;
+  await page.route('**/api/configuration', async (route) => {
+    await configuration.released;
+    await route.fallback();
+  });
+  await page.route('**/review-decisions?*', async (route) => {
+    const query = new URL(route.request().url()).searchParams;
+    if (query.get('kind') === 'cube' && query.get('limit') === '100') {
+      searches += 1;
+      if (searches === 1) await search.released;
+    }
+    await route.continue().catch(() => {});
+  });
+  await openReference(page);
+  await page.getByRole('tab', { name: 'Cube', exact: true }).click();
+  await expect.poll(() => searches).toBe(1);
+  const interrupted = page.waitForEvent('requestfailed', (request) =>
+    new URL(request.url()).pathname.endsWith('/review-decisions'),
+  );
+  configuration.release();
+  await interrupted;
+  search.release();
+  await expect(page.locator('.board-heading')).toContainText('Cube');
+});
+
 test('a cube line in the move history opens its review and is marked', async ({
   page,
 }) => {
-  const match = await openReference(page);
-  await completedFullJob(page, match.id);
+  await openAnalyzedReference(page);
   await expect(
     page
       .locator('.workspace-analysis-command')

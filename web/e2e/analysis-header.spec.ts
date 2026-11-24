@@ -61,7 +61,7 @@ async function imported(
   return { match, metadata, white, black, event };
 }
 
-test('analysis header shows a compact single-line identity and metadata while database export stays available', async ({
+test('analysis header keeps the longest identity and metadata readable beside the analysis selector', async ({
   page,
 }) => {
   const event =
@@ -93,15 +93,21 @@ test('analysis header shows a compact single-line identity and metadata while da
   await expect(field(page, 'pr-black')).toContainText('n/a');
   await expect(header(page).locator('a[href*="/source"]')).toHaveCount(0);
   await expect(header(page)).not.toContainText('SGF');
-  for (const [width, height] of [
-    [1800, 1169],
-    [2560, 1440],
-    [3840, 2160],
+  for (const [width, height, lines] of [
+    // The longest fields wrap to a second line where one does not fit them.
+    [1800, 1169, 2],
+    [2560, 1440, 2],
+    [3840, 2160, 1],
   ]) {
     await page.setViewportSize({ width, height });
     const title = (await header(page)
       .getByRole('heading', { level: 1 })
       .boundingBox())!;
+    const selector = (await page
+      .locator('.analysis-header-row > .analysis-catalog-control')
+      .boundingBox())!;
+    const centers: number[] = [];
+    let previous: { right: number; center: number } | undefined;
     for (const id of [
       'id',
       'length',
@@ -114,16 +120,28 @@ test('analysis header shows a compact single-line identity and metadata while da
       'pr-black',
     ]) {
       const box = (await field(page, id).boundingBox())!;
-      expect(box.x + box.width).toBeLessThanOrEqual(width);
-      if (id === 'round' || id === 'place') {
+      const right = box.x + box.width;
+      const center = box.y + box.height / 2;
+      // Every line starts beside the title and ends before the selector.
+      expect(box.x).toBeGreaterThanOrEqual(title.x + title.width);
+      expect(right).toBeLessThanOrEqual(selector.x);
+      if (id === 'event') expect(box.width).toBeGreaterThanOrEqual(110);
+      if (id === 'event' || id === 'round' || id === 'place') {
         const value = (await field(page, id).locator('dd').boundingBox())!;
         expect(value.width).toBeGreaterThan(24);
       }
-      expect(
-        Math.abs(box.y + box.height / 2 - (title.y + title.height / 2)),
-      ).toBeLessThan(18);
+      if (previous && Math.abs(center - previous.center) < 2)
+        expect(box.x).toBeGreaterThanOrEqual(previous.right);
+      else centers.push(center);
+      previous = { right, center };
     }
-    expect((await header(page).boundingBox())!.height).toBeLessThanOrEqual(48);
+    expect(centers).toHaveLength(lines);
+    expect(Math.abs(centers[0] - (title.y + title.height / 2))).toBeLessThan(
+      18,
+    );
+    expect((await header(page).boundingBox())!.height).toBeLessThanOrEqual(
+      lines === 1 ? 48 : 60,
+    );
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
