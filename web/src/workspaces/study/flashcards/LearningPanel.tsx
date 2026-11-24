@@ -17,7 +17,6 @@ import type { Theme } from '../../../shared/board/themes';
 import StudyCardExercise from './StudyCardExercise';
 import LearningCardBrowser from './LearningCardBrowser';
 import CardSearchControls from './CardSearchControls';
-import { SearchFilterSelect } from '../../../shared/ui/SearchFilterForm';
 import { useSearchPages } from '../../../shared/hooks/useSearchPages';
 import {
   ALL_CARDS,
@@ -31,12 +30,18 @@ import {
 } from './card-search-api';
 import { useCardSearchText } from './card-search-messages';
 import { useCardPracticeText } from './card-practice-messages';
-import CardPracticeRound, { roundPath } from './CardPracticeRound';
+import AnkiTransferStatus from './AnkiTransferStatus';
+import CardPracticeActions, {
+  type SpecialPractice,
+} from './CardPracticeActions';
+import CardPracticeRound from './CardPracticeRound';
+import CardSelectionActions from './CardSelectionActions';
+import { useAnkiTransfers } from './useAnkiTransfers';
+import { useCardPractice } from './useCardPractice';
 import CardTagEditor from './CardTagEditor';
 import CardTopics from './CardTopics';
 import TransferPractice from './TransferPractice';
 import CardSpecialPractice from './CardSpecialPractice';
-import { usePositionText } from '../../positions/position-browser-messages';
 import './learning-workspace.css';
 import { savedDeck, useDecks } from './useDecks';
 import DeckSelector from './DeckSelector';
@@ -52,30 +57,15 @@ import {
 import { useDeckLibraryText } from './deck-library-messages';
 import { useStudyOverviewText } from '../study-messages';
 import type { VersionedDeck } from './deck-management-api';
-import { sendDeckToAnki, syncAnkiReviews } from './learning-api';
 import type {
-  Deck,
   NextCard,
   CardPage,
-  CardQuestion,
   RevealedCard,
   ReviewResult,
   Rating,
-  PracticeRound,
-  AddCardsResult,
-  ImportedAnkiDeck,
 } from './learning-api';
 
-const practiceStorageKey = 'neondojo.card-practice-round';
 const defaultCardFilters = emptyCardFilters();
-
-function storedPracticeRound() {
-  try {
-    return localStorage.getItem(practiceStorageKey);
-  } catch {
-    return null;
-  }
-}
 
 export default function LearningWorkspace({
   visible = true,
@@ -95,30 +85,10 @@ export default function LearningWorkspace({
   const overviewText = useStudyOverviewText();
   const searchT = useCardSearchText();
   const practiceT = useCardPracticeText();
-  const [practiceRound, setPracticeRound] = useState<PracticeRound>();
-  const [resumeRound, setResumeRound] = useState(storedPracticeRound);
   const [practiceLimit, setPracticeLimit] = useState(10);
-  const [specialPractice, setSpecialPractice] = useState<{
-    mode: 'pips' | 'score' | 'preview';
-    cards: CardQuestion[];
-  }>();
+  const [specialPractice, setSpecialPractice] = useState<SpecialPractice>();
   const specialPracticeTrigger = useRef<HTMLButtonElement | null>(null);
-  const [practiceStarting, setPracticeStarting] = useState(false);
-  const [practiceError, setPracticeError] = useState<unknown>();
-  const [ankiImportProgress, setAnkiImportProgress] = useState<{
-    file: string;
-    current: number;
-    total: number;
-  }>();
-  const [ankiNotice, setAnkiNotice] = useState<string>();
-  const [ankiError, setAnkiError] = useState<string>();
-  const [sendingAnki, setSendingAnki] = useState(false);
-  const [syncingAnki, setSyncingAnki] = useState(false);
-  const ankiBusy = !!ankiImportProgress || sendingAnki || syncingAnki;
   const externalAnkiInput = useRef<HTMLInputElement>(null);
-  const practiceRequest = useRef<AbortController | null>(null);
-  useEffect(() => () => practiceRequest.current?.abort(), []);
-  const p = usePositionText();
   const [editedFilters, setDraftFilters] =
     useState<ReturnType<typeof emptyCardFilters>>();
   const [searchRun, setSearchRun] = useState(0);
@@ -150,7 +120,7 @@ export default function LearningWorkspace({
     mode: 'rename' | 'delete';
     deck: VersionedDeck;
   } | null>(null);
-  const { t: uiT, locale, formatError, formatNumber } = useI18n();
+  const { t: uiT, locale, formatError } = useI18n();
   const {
     decks,
     error: deckError,
@@ -206,185 +176,19 @@ export default function LearningWorkspace({
   }
   const searchKey = JSON.stringify([deckId, filters, searchRun]);
   const listKey = JSON.stringify([searchKey, contentRevision]);
-  useEffect(() => {
-    if (practiceRequest.current) {
-      practiceRequest.current.abort();
-      practiceRequest.current = null;
-      setPracticeStarting(false);
-    }
-    setPracticeError(undefined);
-  }, [listKey, visible]);
-  function rememberRound(id: string | null) {
-    setResumeRound(id);
-    try {
-      if (id) localStorage.setItem(practiceStorageKey, id);
-      else localStorage.removeItem(practiceStorageKey);
-    } catch {
-      // The current round remains usable in this tab.
-    }
-  }
-  async function openPractice(existing?: string) {
-    if (practiceRequest.current) return;
-    const controller = new AbortController();
-    practiceRequest.current = controller;
-    setPracticeStarting(true);
-    setPracticeError(undefined);
-    try {
-      const round = await request<PracticeRound>(
-        existing
-          ? roundPath(existing)
-          : cardPracticePath(deckId, filters, practiceLimit),
-        { method: existing ? 'GET' : 'POST', signal: controller.signal },
-      );
-      if (controller.signal.aborted) return;
-      rememberRound(round.id);
-      setPracticeRound(round);
-    } catch (failure) {
-      if (controller.signal.aborted) return;
-      if (
-        existing &&
-        failure instanceof AppError &&
-        failure.params.status === '404'
-      )
-        rememberRound(null);
-      setPracticeError(failure);
-    } finally {
-      if (practiceRequest.current === controller) {
-        practiceRequest.current = null;
-        setPracticeStarting(false);
-      }
-    }
-  }
-  async function importAnki(files: File[], external = false) {
-    if (!files.length || ankiBusy || (!external && isCollectionScope(deckId)))
-      return;
-    setAnkiNotice(undefined);
-    setAnkiError(undefined);
-
-    const path = external
-      ? '/study/anki-imports'
-      : `/decks/${deckId}/import.apkg`;
-    const failures: string[] = [];
-    const importedDecks = new Set<string>();
-    let cards = 0;
-    let added = 0;
-    let existing = 0;
-
-    try {
-      for (const [index, file] of files.entries()) {
-        setAnkiImportProgress({
-          file: file.name,
-          current: index + 1,
-          total: files.length,
-        });
-        try {
-          const body = new FormData();
-          body.set('file', file);
-          const options = { method: 'POST', body };
-          if (external) {
-            const imported = await request<ImportedAnkiDeck[]>(path, options);
-            for (const deck of imported) {
-              importedDecks.add(deck.name);
-              cards += deck.cards;
-            }
-          } else {
-            const result = await request<AddCardsResult>(path, options);
-            added += result.added;
-            existing += result.updated;
-          }
-        } catch (failure) {
-          failures.push(
-            practiceT('ankiImportFailed', {
-              file: file.name,
-              error: formatError(failure),
-            }),
-          );
-        }
-      }
-
-      const successful = files.length - failures.length;
-      const summary = [];
-      if (files.length > 1) {
-        summary.push(
-          practiceT('ankiPackagesImported', {
-            count: formatNumber(successful),
-            total: formatNumber(files.length),
-          }),
-        );
-      }
-      if (successful) {
-        summary.push(
-          external
-            ? practiceT('externalAnkiImported', {
-                decks: formatNumber(importedDecks.size),
-                cards: formatNumber(cards),
-              })
-            : practiceT('ankiImported', {
-                added,
-                existing: formatNumber(existing),
-              }),
-        );
-        cardSearch.invalidateResults();
-        onChanged();
-      }
-      if (summary.length) setAnkiNotice(summary.join(' · '));
-      if (failures.length) setAnkiError(failures.join('\n'));
-    } finally {
-      setAnkiImportProgress(undefined);
-    }
-  }
-  async function sendToAnki(deck: Deck) {
-    if (ankiBusy) return;
-    setSendingAnki(true);
-    setAnkiNotice(undefined);
-    setAnkiError(undefined);
-    try {
-      await sendDeckToAnki(deck.id, { locale });
-      setAnkiNotice(practiceT('ankiSent', { deck: deck.name }));
-    } catch (failure) {
-      const status =
-        failure instanceof AppError ? failure.params.status : undefined;
-      setAnkiError(
-        status === '503'
-          ? practiceT('ankiUnavailable')
-          : status === '504'
-            ? practiceT('ankiUnconfirmed')
-            : formatError(failure),
-      );
-    } finally {
-      setSendingAnki(false);
-    }
-  }
-  async function syncReviews(deck: Deck) {
-    if (ankiBusy) return;
-    setSyncingAnki(true);
-    setAnkiNotice(undefined);
-    setAnkiError(undefined);
-    try {
-      const result = await syncAnkiReviews(deck.id);
-      setAnkiNotice(
-        practiceT('ankiReviewsSynced', {
-          deck: deck.name,
-          profile: result.profile,
-          received: result.received_reviews,
-          sent: result.sent_reviews,
-          matched: result.matched_cards,
-          unmatched: formatNumber(result.unmatched_cards),
-        }),
-      );
-    } catch (failure) {
-      const status =
-        failure instanceof AppError ? failure.params.status : undefined;
-      setAnkiError(
-        status === '503' ? practiceT('ankiUnavailable') : formatError(failure),
-      );
-    } finally {
-      // Anki may have stopped responding after NeonDojo saved incoming reviews.
-      setHistoryRevision((value) => value + 1);
-      onChanged();
-      setSyncingAnki(false);
-    }
-  }
+  const {
+    round: practiceRound,
+    setRound: setPracticeRound,
+    resumeRound,
+    rememberRound,
+    starting: practiceStarting,
+    error: practiceError,
+    open: openPractice,
+  } = useCardPractice({
+    scope: listKey,
+    visible,
+    startPath: () => cardPracticePath(deckId, filters, practiceLimit),
+  });
   const selectedItems =
     cardSelection?.scope === listKey ? [...cardSelection.items.values()] : [];
   const selectedCards = new Set(selectedItems.map((item) => item.id));
@@ -411,6 +215,17 @@ export default function LearningWorkspace({
     pageSize: CARD_PAGE_SIZE,
     enabled: !!deckId,
     loadPage: loadCards,
+  });
+  const anki = useAnkiTransfers({
+    deckId,
+    onImported: () => {
+      cardSearch.invalidateResults();
+      onChanged();
+    },
+    onReviewsSynced: () => {
+      setHistoryRevision((value) => value + 1);
+      onChanged();
+    },
   });
   useEffect(() => {
     if (
@@ -645,11 +460,11 @@ export default function LearningWorkspace({
         <AnkiActionsMenu
           deck={sourceDeck}
           exporting={exporting}
-          busy={ankiBusy}
+          busy={anki.busy}
           onExport={() => void download()}
-          onSend={() => void sendToAnki(sourceDeck)}
-          onSync={() => void syncReviews(sourceDeck)}
-          onImport={(files) => void importAnki(files)}
+          onSend={() => void anki.send(sourceDeck)}
+          onSync={() => void anki.sync(sourceDeck)}
+          onImport={(files) => void anki.importPackages(files)}
         />
       </div>
       {visible && (
@@ -657,7 +472,7 @@ export default function LearningWorkspace({
           key={sourceDeck.id}
           deckId={sourceDeck.id}
           empty={!sourceDeck.card_count}
-          busy={ankiBusy}
+          busy={anki.busy}
           onReceived={() => setHistoryRevision((value) => value + 1)}
         />
       )}
@@ -666,7 +481,6 @@ export default function LearningWorkspace({
   );
   const workspaceError = error || cardSearch.error || deckError;
   const actionDisabled = !selectedCards.size || cardSearch.loading;
-  const canPickTarget = decks.some((deck) => deck.id !== sourceDeck?.id);
   const selectedItem =
     selectedItems.length === 1 ? selectedItems[0] : undefined;
   function openCardAction(mode: CardBatchAction['mode']) {
@@ -692,73 +506,17 @@ export default function LearningWorkspace({
     cardSearch.invalidateResults();
     onChanged();
   }
-  const moveLabel = libraryText('move', {
-    count: formatNumber(selectedCards.size),
-  });
-  const moveHint = !ready
-    ? undefined
-    : decks.length < 2
-      ? libraryText('moveNeedsDecks')
-      : !sourceDeck
-        ? libraryText('moveNeedsSource')
-        : undefined;
   const cardActions = (
-    <>
-      <div
-        className="position-selection-summary"
-        role="group"
-        aria-label={libraryText('actions')}
-      >
-        <strong aria-live="polite">
-          {p('selected', { count: selectedCards.size })}
-        </strong>
-        <ActionButton
-          icon="clear"
-          label={p('clearSelection')}
-          compact
-          disabled={actionDisabled}
-          onClick={() => setCardSelection(undefined)}
-        />
-        <ActionButton
-          icon="add"
-          label={libraryText('addCards')}
-          disabled={actionDisabled || !canPickTarget}
-          onClick={() => openCardAction('add')}
-        >
-          {libraryText('addCards')}
-        </ActionButton>
-        <ActionButton
-          icon="move"
-          label={moveLabel}
-          disabled={actionDisabled || !sourceDeck || !canPickTarget}
-          onClick={() => openCardAction('move')}
-        >
-          {moveLabel}
-        </ActionButton>
-        {sourceDeck && (
-          <ActionButton
-            icon="delete"
-            label={libraryText('removeCards')}
-            className="danger"
-            disabled={actionDisabled}
-            onClick={() => openCardAction('remove')}
-          >
-            {libraryText('removeCards')}
-          </ActionButton>
-        )}
-        <ActionButton
-          icon="delete"
-          label={libraryText('deleteCards')}
-          className="danger"
-          disabled={actionDisabled}
-          onClick={() => openCardAction('delete')}
-        >
-          {libraryText('deleteCards')}
-        </ActionButton>
-        {moveHint && <small>{moveHint}</small>}
-      </div>
-      {cardNotice && <p role="status">{cardNotice}</p>}
-    </>
+    <CardSelectionActions
+      count={selectedCards.size}
+      decks={decks}
+      source={sourceDeck}
+      ready={ready}
+      disabled={actionDisabled}
+      notice={cardNotice}
+      onClear={() => setCardSelection(undefined)}
+      onAction={openCardAction}
+    />
   );
   // Reviewing a deck gives the page to the card: the heading and the library
   // actions return with the card search.
@@ -840,13 +598,13 @@ export default function LearningWorkspace({
             onChange={(event) => {
               const files = Array.from(event.target.files ?? []);
               event.target.value = '';
-              void importAnki(files, true);
+              void anki.importPackages(files, true);
             }}
           />
           <ActionButton
             icon="open"
             label={practiceT('externalAnkiImport')}
-            disabled={ankiBusy}
+            disabled={anki.busy}
             onClick={() => externalAnkiInput.current?.click()}
           >
             {practiceT('externalAnkiImport')}
@@ -867,23 +625,7 @@ export default function LearningWorkspace({
         </div>
       )}
       {reviewing && libraryActions}
-      {ankiImportProgress && (
-        <p role="status">
-          {practiceT('ankiImporting', {
-            file: ankiImportProgress.file,
-            current: formatNumber(ankiImportProgress.current),
-            total: formatNumber(ankiImportProgress.total),
-          })}
-        </p>
-      )}
-      {sendingAnki && <p role="status">{practiceT('sendingAnki')}</p>}
-      {syncingAnki && <p role="status">{practiceT('syncingAnkiReviews')}</p>}
-      {ankiNotice && <p role="status">{ankiNotice}</p>}
-      {ankiError && (
-        <p className="learning-anki-error" role="alert">
-          {ankiError}
-        </p>
-      )}
+      <AnkiTransferStatus transfers={anki} />
       {!!workspaceError && <p role="alert">{formatError(workspaceError)}</p>}
       {missingDeckToken !== undefined &&
         missingDeckToken === requestedDeck?.token && (
@@ -1016,92 +758,26 @@ export default function LearningWorkspace({
             }}
             actions={
               <>
-                <div className="learning-result-toolbar">
-                  <div className="learning-controls learning-practice-row">
-                    <SearchFilterSelect
-                      label={practiceT('size')}
-                      value={String(practiceLimit)}
-                      onChange={(value) => setPracticeLimit(Number(value))}
-                    >
-                      <option value="10">{formatNumber(10)}</option>
-                      <option value="20">{formatNumber(20)}</option>
-                    </SearchFilterSelect>
-                    <ActionButton
-                      icon="play"
-                      label={practiceT('start')}
-                      disabled={
-                        practiceStarting ||
-                        cardSearch.loading ||
-                        !cardSearch.items.length
-                      }
-                      onClick={() => void openPractice()}
-                    >
-                      {practiceT('start')}
-                    </ActionButton>
-                    {resumeRound && (
-                      <ActionButton
-                        icon="open"
-                        label={practiceT('resume')}
-                        disabled={practiceStarting}
-                        onClick={() => void openPractice(resumeRound)}
-                      >
-                        {practiceT('resume')}
-                      </ActionButton>
-                    )}
-                    <ActionButton
-                      icon="view"
-                      label={practiceT('preview')}
-                      disabled={cardSearch.loading || !cardSearch.items.length}
-                      onClick={(event) => {
-                        specialPracticeTrigger.current = event.currentTarget;
-                        setSpecialPractice({
-                          mode: 'preview',
-                          cards: cardSearch.items.slice(0, practiceLimit),
-                        });
-                      }}
-                    >
-                      {practiceT('preview')}
-                    </ActionButton>
-                  </div>
+                <CardPracticeActions
+                  cards={cardSearch.items}
+                  loading={cardSearch.loading}
+                  limit={practiceLimit}
+                  onLimit={setPracticeLimit}
+                  starting={practiceStarting}
+                  error={practiceError}
+                  resumable={!!resumeRound}
+                  selectedItem={selectedItem}
+                  onStart={() => void openPractice()}
+                  onResume={() => {
+                    if (resumeRound) void openPractice(resumeRound);
+                  }}
+                  onSpecial={(practice, trigger) => {
+                    specialPracticeTrigger.current = trigger;
+                    setSpecialPractice(practice);
+                  }}
+                >
                   {cardActions}
-                </div>
-                {practiceStarting && <p role="status">{t('loading')}</p>}
-                {!!practiceError && (
-                  <p role="alert">{formatError(practiceError)}</p>
-                )}
-
-                {selectedItem?.position && (
-                  <div className="learning-controls">
-                    <ActionButton
-                      icon="play"
-                      label={practiceT('pips')}
-                      onClick={(event) => {
-                        specialPracticeTrigger.current = event.currentTarget;
-                        setSpecialPractice({
-                          mode: 'pips',
-                          cards: [selectedItem],
-                        });
-                      }}
-                    >
-                      {practiceT('pips')}
-                    </ActionButton>
-                    {selectedItem.kind !== 'checker' && (
-                      <ActionButton
-                        icon="play"
-                        label={practiceT('score')}
-                        onClick={(event) => {
-                          specialPracticeTrigger.current = event.currentTarget;
-                          setSpecialPractice({
-                            mode: 'score',
-                            cards: [selectedItem],
-                          });
-                        }}
-                      >
-                        {practiceT('score')}
-                      </ActionButton>
-                    )}
-                  </div>
-                )}
+                </CardPracticeActions>
                 <CardTagEditor
                   key={[...selectedCards].sort().join(',')}
                   cards={selectedItems.map((item) => ({
