@@ -1,11 +1,7 @@
 //! Explicit collection membership for an exact imported position occurrence.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
-use axum::{
-    Json, Router,
-    extract::{Path, State, rejection::PathRejection},
-    http::StatusCode,
-    routing::get,
-};
+use crate::json_errors::{Json, Path};
+use axum::{Router, extract::State, http::StatusCode, routing::get};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, Transaction};
@@ -27,9 +23,8 @@ pub fn routes() -> Router<AppState> {
     )
 }
 
-fn position_id(path: Result<Path<Uuid>, PathRejection>) -> ApiResult<Uuid> {
-    path.map(|Path(id)| id)
-        .map_err(|error| ApiError::invalid(error.body_text()))
+fn position_id(path: Result<Path<Uuid>, ApiError>) -> ApiResult<Uuid> {
+    path.map(|Path(id)| id).map_err(ApiError::into_invalid)
 }
 
 async fn lock_position(tx: &mut Transaction<'_, Postgres>, id: Uuid) -> ApiResult<()> {
@@ -67,7 +62,7 @@ async fn load_bookmark(
 #[utoipa::path(get, path="/api/positions/{id}/bookmark", params(("id"=Uuid, Path)), responses((status=200, body=PositionBookmark),(status=404, body=ErrorBody),(status=422, body=ErrorBody)), tag="Positions")]
 async fn get_bookmark(
     State(state): State<AppState>,
-    path: Result<Path<Uuid>, PathRejection>,
+    path: Result<Path<Uuid>, ApiError>,
 ) -> ApiResult<Json<PositionBookmark>> {
     let id = position_id(path)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
@@ -80,7 +75,7 @@ async fn get_bookmark(
 #[utoipa::path(put, path="/api/positions/{id}/bookmark", params(("id"=Uuid, Path)), responses((status=200, body=PositionBookmark, description="Explicitly save this occurrence. Repeated saves retain its original saved_at."),(status=404, body=ErrorBody),(status=422, body=ErrorBody)), tag="Positions")]
 async fn save_bookmark(
     State(state): State<AppState>,
-    path: Result<Path<Uuid>, PathRejection>,
+    path: Result<Path<Uuid>, ApiError>,
 ) -> ApiResult<Json<PositionBookmark>> {
     let id = position_id(path)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
@@ -98,7 +93,7 @@ async fn save_bookmark(
 #[utoipa::path(delete, path="/api/positions/{id}/bookmark", params(("id"=Uuid, Path)), responses((status=204, description="Remove collection membership while retaining the source position, notes, analysis and learning cards. Repeated removal succeeds for an existing position."),(status=404, body=ErrorBody),(status=422, body=ErrorBody)), tag="Positions")]
 async fn remove_bookmark(
     State(state): State<AppState>,
-    path: Result<Path<Uuid>, PathRejection>,
+    path: Result<Path<Uuid>, ApiError>,
 ) -> ApiResult<StatusCode> {
     let id = position_id(path)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;

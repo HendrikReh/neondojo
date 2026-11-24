@@ -1,18 +1,11 @@
 //! Saved checker occurrences with context-preserving search and durable filter definitions.
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::{MatchSummary, MoveSeverity, Position},
     search::literal_pattern,
 };
-use axum::{
-    Json, Router,
-    extract::{
-        Path, Query, State,
-        rejection::{JsonRejection, QueryRejection},
-    },
-    http::StatusCode,
-    routing::get,
-};
+use axum::{Router, extract::State, http::StatusCode, routing::get};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

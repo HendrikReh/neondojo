@@ -99,9 +99,8 @@ pub(super) async fn database_exists(pool: &PgPool, id: Option<Uuid>) -> ApiResul
 #[utoipa::path(get,path="/api/position-browser",params(PositionBrowserQuery),responses((status=200,body=PositionBrowserPage),(status=422,body=ErrorBody)),tag="Positions")]
 pub(super) async fn search(
     State(s): State<AppState>,
-    value: Result<Query<PositionBrowserQuery>, QueryRejection>,
+    Query(query): Query<PositionBrowserQuery>,
 ) -> ApiResult<Json<PositionBrowserPage>> {
-    let query = query(value)?;
     let filters = match query.filters {
         Some(value) if value.len() <= 16000 => {
             serde_json::from_str::<PositionFilterDefinition>(&value)

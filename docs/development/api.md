@@ -16,6 +16,12 @@ The API has no authentication and is meant to be reached from the same machine o
 
 Clients that send neither `Origin` nor `Sec-Fetch-Site`, such as `curl` or scripts, are not affected. The Vite dev server and the Playwright harness forward the browser's loopback `Host` and `Origin` unchanged.
 
+### Errors
+
+Every API error is a JSON `ErrorBody`: `error` holds a message. Configuration and profile errors, and the errors other endpoints pass on from them, add a stable `code` and the affected `issues` (`path`, `code`, `message`). A malformed JSON body or query is HTTP 422. A malformed path, such as an invalid UUID, and a request that is not multipart where an upload is expected are HTTP 400; `/api/positions/{id}/bookmark` and `PUT`/`DELETE /api/decks/{id}` answer a malformed id with 422. Unknown paths under `/api` are served as the web client's fallback page when the backend serves the client.
+
+Handlers take `Json`, `Query`, `Path` and `Multipart` from `backend/src/json_errors.rs`, because Axum's own extractors reject with plain text. `clippy.toml` bans Axum's, and `backend/tests/api_errors.rs` sends malformed requests to every endpoint of the OpenAPI document.
+
 ### Library and position search
 
 The library match (`/api/library/matches`), player, saved position, annotation, flashcard, duplicate-flashcard (`/api/cards/duplicates`), match review-decision (`/api/matches/{id}/review-decisions`), and Study decision search endpoints accept a one-based `page` and return the filtered `total` (`page` and `after` are mutually exclusive). Existing cursor clients can continue to use `after` on its own. `GET /api/library/duplicates` uses keyset pagination (`after` and `limit`) and returns `total_groups` and `total_matches`.

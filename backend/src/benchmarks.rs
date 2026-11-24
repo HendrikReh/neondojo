@@ -3,9 +3,10 @@
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use crate::engine::{GnubgMoveFilter, resolve_binary};
 use crate::engines::EngineId;
+use crate::json_errors::{Json, Path};
 use axum::{
-    Json, Router,
-    extract::{Path, State},
+    Router,
+    extract::State,
     http::StatusCode,
     routing::{delete, get, post},
 };
@@ -262,9 +263,8 @@ pub(crate) async fn running_engine_version(
 #[utoipa::path(post, path="/api/benchmarks",request_body=BenchmarkRequest,responses((status=202,body=Vec<BenchmarkRun>),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
 async fn create(
     State(state): State<AppState>,
-    payload: Result<Json<BenchmarkRequest>, axum::extract::rejection::JsonRejection>,
+    Json(request): Json<BenchmarkRequest>,
 ) -> ApiResult<(StatusCode, Json<Vec<BenchmarkRun>>)> {
-    let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     if request.plies.is_empty()
         || request.plies.len() > 5
         || request.plies.iter().any(|p| {
@@ -292,7 +292,7 @@ async fn create(
 #[utoipa::path(post, path="/api/benchmarks/play", request_body=Option<PlayBenchmarkRequest>, responses((status=202,body=BenchmarkRun),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
 async fn create_play(
     State(state): State<AppState>,
-    payload: Option<crate::json_errors::Json<PlayBenchmarkRequest>>,
+    payload: Option<Json<PlayBenchmarkRequest>>,
 ) -> ApiResult<(StatusCode, Json<BenchmarkRun>)> {
     let settings = crate::settings::load(&state).await?;
     let request = payload

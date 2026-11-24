@@ -5,7 +5,8 @@
 //! Deterministic, board-only Open Sage game-plan labels for absolute colors.
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
-use axum::{Json, Router, extract::rejection::JsonRejection, routing::post};
+use crate::json_errors::Json;
+use axum::{Router, routing::post};
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 
@@ -283,10 +284,7 @@ fn classify_game_plan(board: &[i32; 26]) -> GamePlan {
 }
 
 #[utoipa::path(post, path="/api/game-plans", request_body=GamePlanRequest, responses((status=200,body=GamePlans),(status=422,body=ErrorBody)), tag="Positions")]
-async fn game_plans(
-    payload: Result<Json<GamePlanRequest>, JsonRejection>,
-) -> ApiResult<Json<GamePlans>> {
-    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
+async fn game_plans(Json(request): Json<GamePlanRequest>) -> ApiResult<Json<GamePlans>> {
     classify(&request.board)
         .map(Json)
         .map_err(ApiError::invalid)

@@ -30,6 +30,7 @@ pub use search::{
     CardBrowseContext, CardBrowseItem, CardDeck, CardKind, CardQuery, CardReviewState,
 };
 
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::Candidate,
@@ -37,9 +38,8 @@ use crate::{
     model::Position,
 };
 use axum::{
-    Json, Router,
-    extract::rejection::{PathRejection, QueryRejection},
-    extract::{Path, Query, State},
+    Router,
+    extract::State,
     http::{StatusCode, header},
     response::IntoResponse,
     routing::{get, post, put},

@@ -478,11 +478,8 @@ pub struct ImportedAnalysisSummary {
     pub depths: Vec<String>,
 }
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
-use axum::{
-    Json, Router,
-    extract::{Path, State},
-    routing::get,
-};
+use crate::json_errors::{Json, Path};
+use axum::{Router, extract::State, routing::get};
 use sqlx::{PgPool, Postgres, Transaction};
 use std::collections::HashMap;
 use uuid::Uuid;

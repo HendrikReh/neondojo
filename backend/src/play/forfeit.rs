@@ -1,10 +1,10 @@
 //! A match concession ends point play without adding an engine move or game result.
 use super::{PlayActionRequest, PlayPhase, PlaySession, Saved, pause, persist_session};
+use crate::json_errors::Json;
 use crate::{
     api::{ApiError, ApiResult, AppState},
     import::sgf::MATCH_FORFEIT_PROPERTY,
 };
-use axum::Json;
 
 pub(super) async fn finish(
     state: &AppState,

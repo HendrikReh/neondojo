@@ -1,17 +1,11 @@
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    databases::{conflict, json, query},
+    databases::conflict,
     match_analysis::{match_performance_rating, performance_rating_value},
     search::literal_pattern,
 };
-use axum::{
-    Json, Router,
-    extract::{
-        Path, Query, State,
-        rejection::{JsonRejection, QueryRejection},
-    },
-    routing::get,
-};
+use axum::{Router, extract::State, routing::get};
 use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
@@ -194,9 +188,8 @@ pub(crate) fn openapi() -> utoipa::openapi::OpenApi {
 #[utoipa::path(get,path="/api/players",params(PlayerQuery),responses((status=200,body=PlayerPage),(status=422,body=ErrorBody)),tag="Players")]
 async fn list(
     State(state): State<AppState>,
-    params: Result<Query<PlayerQuery>, QueryRejection>,
+    Query(params): Query<PlayerQuery>,
 ) -> ApiResult<Json<PlayerPage>> {
-    let params = query(params)?;
     let search = params.q.as_deref().unwrap_or("").trim();
     if search.chars().count() > 240 {
         return Err(ApiError::invalid("Player search is too long"));
@@ -440,9 +433,8 @@ async fn ratings(
 async fn update(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    body: Result<Json<PlayerNameWrite>, JsonRejection>,
+    Json(body): Json<PlayerNameWrite>,
 ) -> ApiResult<Json<PlayerDetails>> {
-    let body = json(body)?;
     let first_name = clean_name(&body.first_name, 120)?;
     let last_name = clean_name(&body.last_name, 120)?;
     let changed = sqlx::query(
@@ -478,9 +470,8 @@ fn clean_name(value: &str, max: usize) -> ApiResult<&str> {
 async fn merge(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    body: Result<Json<PlayerMerge>, JsonRejection>,
+    Json(body): Json<PlayerMerge>,
 ) -> ApiResult<Json<PlayerDetails>> {
-    let body = json(body)?;
     if id == body.source_id {
         return Err(ApiError::invalid("Choose a different player"));
     }
@@ -536,9 +527,8 @@ async fn merge(
 async fn add_alias(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    body: Result<Json<PlayerAliasWrite>, JsonRejection>,
+    Json(body): Json<PlayerAliasWrite>,
 ) -> ApiResult<Json<PlayerDetails>> {
-    let body = json(body)?;
     let name = clean_name(&body.name, 1024)?;
     if name.is_empty()
         || !["", "backgammongalaxy.com", "opengammon.com", "neondojo"]

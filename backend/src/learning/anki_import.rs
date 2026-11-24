@@ -1,6 +1,6 @@
 //! Import the structured decision model emitted by NeonDojo APKG exports.
 use super::*;
-use axum::extract::Multipart;
+use crate::json_errors::Multipart;
 use std::io::{Cursor, Read, Write};
 
 const MAX_DB_BYTES: u64 = 32 * 1024 * 1024;
@@ -17,7 +17,7 @@ pub(super) struct AnkiUpload {
 pub(super) async fn import(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    mut multipart: Multipart,
+    Multipart(mut multipart): Multipart,
 ) -> ApiResult<Json<AddCardsResult>> {
     require_deck(&state.pool, id).await?;
     let permit = IMPORTS.try_acquire().map_err(|_| {
@@ -29,13 +29,13 @@ pub(super) async fn import(
     let field = multipart
         .next_field()
         .await
-        .map_err(|e| ApiError(e.status(), e.body_text()))?
+        .map_err(|e| ApiError(e.status(), e.body_text().into()))?
         .filter(|field| field.name() == Some("file"))
         .ok_or_else(|| ApiError::invalid("Select an Anki package"))?;
     let bytes = field
         .bytes()
         .await
-        .map_err(|e| ApiError(e.status(), e.body_text()))?;
+        .map_err(|e| ApiError(e.status(), e.body_text().into()))?;
     let cards = tokio::task::spawn_blocking(move || {
         let _permit = permit;
         read_package(&bytes)
@@ -202,7 +202,7 @@ pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTr
         };
         let tags: String = row.get(1)?;
         let tags = topics::tags(tags.split_whitespace().map(str::to_owned).collect())
-            .map_err(|e| anyhow::anyhow!("{}", e.1))?;
+            .map_err(|e| anyhow::anyhow!("{}", e.1.error))?;
         cards.insert(card_signature(&content), (content, tags));
     }
     anyhow::ensure!(

@@ -1,11 +1,12 @@
 //! Checked practice answers by day and mistake group.
 use super::{MistakeKind, kind, source::SourceDecision};
+use crate::json_errors::Json;
 use crate::{
     api::{ApiResult, AppState},
     game_plan::GamePlan,
     practice::evaluation::PracticeEvaluation,
 };
-use axum::{Json, extract::State};
+use axum::extract::State;
 use chrono::NaiveDate;
 use serde::Serialize;
 use sqlx::{FromRow, PgPool};

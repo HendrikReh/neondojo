@@ -1,14 +1,12 @@
 //! Independent match databases, indexed library browsing and bounded bulk management.
 use crate::annotations::normalize_tag;
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::json_errors::{Json, Path, Query};
 use crate::play::PAUSED_MATCHES_DATABASE_ID;
 use crate::search::literal_pattern;
 use axum::{
-    Json, Router,
-    extract::{
-        Path, Query, State,
-        rejection::{JsonRejection, QueryRejection},
-    },
+    Router,
+    extract::State,
     http::{StatusCode, header},
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -50,12 +48,6 @@ const MAX_EXPORTS: usize = 50;
 const MAX_EXPORT_BYTES: i64 = 64 * 1024 * 1024;
 pub(crate) fn conflict(message: &str) -> ApiError {
     ApiError(StatusCode::CONFLICT, message.into())
-}
-pub(crate) fn query<T>(q: Result<Query<T>, QueryRejection>) -> ApiResult<T> {
-    q.map(|q| q.0).map_err(|e| ApiError::invalid(e.body_text()))
-}
-pub(crate) fn json<T>(j: Result<Json<T>, JsonRejection>) -> ApiResult<T> {
-    j.map(|j| j.0).map_err(|e| ApiError::invalid(e.body_text()))
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema, sqlx::FromRow)]

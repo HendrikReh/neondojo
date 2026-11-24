@@ -345,6 +345,3 @@ pub(crate) async fn legacy_book(
     sqlx::query("UPDATE configuration_state SET revision=revision+1,current_configuration=$1,updated_at=now() WHERE singleton=true").bind(value(&state.current_configuration)).execute(&mut **tx).await?;
     Ok(())
 }
-pub(crate) fn legacy_error(error: ConfigurationError) -> crate::api::ApiError {
-    crate::api::ApiError(error.0, error.1.error)
-}

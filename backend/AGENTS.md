@@ -5,6 +5,7 @@ These rules extend the root [AGENTS.md](../AGENTS.md) for Rust, SQLx, PostgreSQL
 ## Rust and Tokio
 
 - Avoid `unwrap()` and `expect()` on untrusted input or fallible runtime resources. Propagate errors with context and map them deliberately at the API boundary (`backend/src/api.rs`).
+- Take `Json`, `Query`, `Path` and `Multipart` from `crate::json_errors`, so rejected requests return the JSON `ErrorBody`; `clippy.toml` bans Axum's own. [Errors](../docs/development/api.md#errors)
 - Run blocking and CPU-intensive work off Tokio's async worker threads.
 - Keep `strip = "none"` in the workspace [Cargo.toml](../Cargo.toml) (`dev` and `release` profiles) for macOS 27 / Rust 1.94.1 procedural-macro compatibility.
 - Keep study answer validation and equity evaluation in the shared practice module (`backend/src/practice.rs`).

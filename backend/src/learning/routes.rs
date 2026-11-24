@@ -205,7 +205,7 @@ pub(super) async fn decks(State(state): State<AppState>) -> ApiResult<Json<Vec<D
 #[utoipa::path(post,path="/api/decks",request_body=CreateDeck,responses((status=201,body=Deck),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn create_deck(
     State(state): State<AppState>,
-    crate::json_errors::Json(body): crate::json_errors::Json<CreateDeck>,
+    Json(body): Json<CreateDeck>,
 ) -> ApiResult<(StatusCode, Json<Deck>)> {
     let name = deck_name(&body.name)?;
     let deck=sqlx::query_as("INSERT INTO decks(id,name) VALUES($1,$2) RETURNING id,name,version,created_at,0::bigint AS card_count,0::bigint AS due_count").bind(Uuid::new_v4()).bind(name).fetch_one(&state.pool).await.map_err(anyhow::Error::from)?;
@@ -215,10 +215,10 @@ pub(super) async fn create_deck(
 #[utoipa::path(put,path="/api/decks/{id}",params(("id"=Uuid,Path)),request_body=RenameDeck,responses((status=200,body=Deck),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn rename_deck(
     State(state): State<AppState>,
-    path: Result<Path<Uuid>, PathRejection>,
-    crate::json_errors::Json(body): crate::json_errors::Json<RenameDeck>,
+    path: Result<Path<Uuid>, ApiError>,
+    Json(body): Json<RenameDeck>,
 ) -> ApiResult<Json<Deck>> {
-    let Path(id) = path.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let Path(id) = path.map_err(ApiError::into_invalid)?;
     let name = deck_name(&body.name)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     lock_deck_version(&mut tx, id, body.expected_version).await?;
@@ -231,11 +231,11 @@ pub(super) async fn rename_deck(
 #[utoipa::path(delete,path="/api/decks/{id}",params(("id"=Uuid,Path),DeleteDeckQuery),responses((status=204,description="Deck and its memberships deleted; shared cards and history retained"),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn delete_deck(
     State(state): State<AppState>,
-    path: Result<Path<Uuid>, PathRejection>,
-    query: Result<Query<DeleteDeckQuery>, QueryRejection>,
+    path: Result<Path<Uuid>, ApiError>,
+    query: Result<Query<DeleteDeckQuery>, ApiError>,
 ) -> ApiResult<StatusCode> {
-    let Path(id) = path.map_err(|error| ApiError::invalid(error.body_text()))?;
-    let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let Path(id) = path.map_err(ApiError::into_invalid)?;
+    let Query(query) = query?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     lock_deck_version(&mut tx, id, query.expected_version).await?;
     // deck_cards cascades from decks; learning_cards, reviews and saved positions do not.
@@ -252,7 +252,7 @@ pub(super) async fn delete_deck(
 pub(super) async fn cards(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<CardQuery>, QueryRejection>,
+    Query(query): Query<CardQuery>,
 ) -> ApiResult<Json<CardPage>> {
     search::load(&state, Some(id), query).await
 }
@@ -261,7 +261,7 @@ pub(super) async fn cards(
 pub(super) async fn add_cards(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<AddCards>,
+    Json(body): Json<AddCards>,
 ) -> ApiResult<Json<AddCardsResult>> {
     require_deck(&state.pool, id).await?;
     if body.position_id.is_some() && body.job_id.is_some()
@@ -302,7 +302,7 @@ pub(super) async fn add_cards(
 pub(super) async fn add_positions(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<AddPositions>,
+    Json(body): Json<AddPositions>,
 ) -> ApiResult<Json<AddPositionsResult>> {
     require_deck(&state.pool, id).await?;
     let ids = body.validated_ids()?;
@@ -366,7 +366,7 @@ pub(super) async fn add_positions(
 pub(super) async fn add_decisions(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<AddDecisions>,
+    Json(body): Json<AddDecisions>,
 ) -> ApiResult<Json<AddDecisionsResult>> {
     require_deck(&state.pool, id).await?;
     let references = body.validated()?;
@@ -542,7 +542,7 @@ pub(super) async fn next_card(
 pub(super) async fn reveal(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<RevealCard>,
+    Json(body): Json<RevealCard>,
 ) -> ApiResult<Json<RevealedCard>> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let row: CardRow = sqlx::query_as("SELECT * FROM learning_cards WHERE id=$1 FOR UPDATE")
@@ -580,7 +580,7 @@ pub(super) async fn reveal(
 pub(super) async fn submit_attempt(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<CardAttemptRequest>,
+    Json(body): Json<CardAttemptRequest>,
 ) -> ApiResult<Json<AttemptedCard>> {
     let row = load_attempt_card(&state.pool, id, body.expected_version, false).await?;
     if let Some(previous) = active_attempt(&state.pool, &row).await? {
@@ -637,7 +637,7 @@ pub(super) async fn submit_attempt(
 pub(super) async fn review(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<ReviewCard>,
+    Json(body): Json<ReviewCard>,
 ) -> ApiResult<Json<ReviewResult>> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let row: CardRow = sqlx::query_as("SELECT * FROM learning_cards WHERE id=$1 FOR UPDATE")
@@ -695,7 +695,7 @@ pub(super) async fn review(
 pub(super) async fn export_deck(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Query(query): crate::json_errors::Query<ExportQuery>,
+    Query(query): Query<ExportQuery>,
 ) -> ApiResult<impl IntoResponse> {
     let bytes = build_deck_package(&state, id, query).await?;
     Ok((

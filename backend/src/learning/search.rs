@@ -1,7 +1,7 @@
 //! Read-only browsing of shared cards. Filtering happens before cursor pagination.
 use super::*;
 use crate::search::literal_pattern;
-use axum::extract::rejection::QueryRejection;
+
 use sqlx::{Postgres, QueryBuilder, Row};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -286,19 +286,16 @@ pub(super) async fn prepare_game_plans(pool: &PgPool, query: &CardQuery) -> ApiR
 #[utoipa::path(get,path="/api/cards",params(CardQuery),responses((status=200,body=CardPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn all_cards(
     State(state): State<AppState>,
-    query: Result<Query<CardQuery>, QueryRejection>,
+    Query(query): Query<CardQuery>,
 ) -> ApiResult<Json<CardPage>> {
     load(&state, None, query).await
 }
 pub(super) async fn load(
     state: &AppState,
     path: Option<Uuid>,
-    query: Result<Query<CardQuery>, QueryRejection>,
+    query: CardQuery,
 ) -> ApiResult<Json<CardPage>> {
-    let q = query
-        .map_err(|e| ApiError::invalid(e.body_text()))?
-        .0
-        .validate()?;
+    let q = query.validate()?;
     if path.zip(q.deck_id).is_some_and(|(a, b)| a != b) {
         return Err(ApiError::invalid(
             "deck_id does not match the requested deck",

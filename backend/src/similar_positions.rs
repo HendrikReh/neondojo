@@ -1,4 +1,5 @@
 //! Rank library checker positions by the number of checker-pips separating their boards.
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::Position,
@@ -7,11 +8,8 @@ use crate::{
     store,
 };
 use axum::{
-    Json, Router,
-    extract::{
-        Path, Query, State,
-        rejection::{JsonRejection, QueryRejection},
-    },
+    Router,
+    extract::State,
     routing::{get, post},
 };
 use futures_util::TryStreamExt;
@@ -124,9 +122,8 @@ pub(crate) fn routes() -> Router<AppState> {
 async fn search(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<SimilarQuery>, QueryRejection>,
+    Query(query): Query<SimilarQuery>,
 ) -> ApiResult<Json<SimilarPositions>> {
-    let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .execute(&mut *tx)
@@ -236,9 +233,8 @@ async fn practice_position(state: &AppState, id: Uuid) -> ApiResult<Position> {
 async fn score(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    input: Result<Json<CheckerPracticeMove>, JsonRejection>,
+    Json(input): Json<CheckerPracticeMove>,
 ) -> ApiResult<Json<CheckerPracticeScore>> {
-    let Json(input) = input.map_err(|error| ApiError::invalid(error.body_text()))?;
     let position = practice_position(&state, id).await?;
     let evaluation = evaluate_now(
         &state,

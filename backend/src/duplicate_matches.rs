@@ -12,13 +12,10 @@
 //! The record itself is defined once, by the database function
 //! `played_record_fingerprint`, and stored in `matches.played_record_fingerprint`.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
-use crate::databases::{DatabaseMatch, database_matches, query};
+use crate::databases::{DatabaseMatch, database_matches};
+use crate::json_errors::{Json, Query};
 use crate::play::PAUSED_MATCHES_DATABASE_ID;
-use axum::{
-    Json, Router,
-    extract::{Query, State, rejection::QueryRejection},
-    routing::get,
-};
+use axum::{Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -77,9 +74,9 @@ pub fn routes() -> Router<AppState> {
 #[utoipa::path(get, path="/api/library/duplicates", params(DuplicateMatchQuery), responses((status=200, body=DuplicateMatchPage), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Databases")]
 async fn duplicate_matches(
     State(state): State<AppState>,
-    q: Result<Query<DuplicateMatchQuery>, QueryRejection>,
+    Query(q): Query<DuplicateMatchQuery>,
 ) -> ApiResult<Json<DuplicateMatchPage>> {
-    Ok(Json(find(&state.pool, query(q)?).await?))
+    Ok(Json(find(&state.pool, q).await?))
 }
 
 /// One page of duplicate groups with the totals over all pages. Binds the

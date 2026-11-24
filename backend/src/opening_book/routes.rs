@@ -38,9 +38,8 @@ pub(super) async fn get_settings(State(state): State<AppState>) -> ApiResult<Jso
 #[utoipa::path(put,path="/api/opening-book",request_body=BookConfigWrite,responses((status=200,body=BookSettings),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Opening book")]
 pub(super) async fn put_settings(
     State(state): State<AppState>,
-    payload: Result<Json<BookConfigWrite>, JsonRejection>,
+    Json(config): Json<BookConfigWrite>,
 ) -> ApiResult<Json<BookSettings>> {
-    let Json(config) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
     if !(0..i64::MAX).contains(&config.version)
         || !matches!(
             config.provider.as_str(),
@@ -68,9 +67,7 @@ pub(super) async fn put_settings(
             "Opening book settings changed; reload before saving".into(),
         )
     })?;
-    crate::configuration::store::legacy_book(&mut tx, &config)
-        .await
-        .map_err(crate::configuration::store::legacy_error)?;
+    crate::configuration::store::legacy_book(&mut tx, &config).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     let status = status(&config).await;
     let xg_status = crate::xg_book::status(&config.xg_path).await;
@@ -83,9 +80,8 @@ pub(super) async fn put_settings(
 
 #[utoipa::path(post,path="/api/opening-book/check",request_body=BookPathRequest,responses((status=200,body=BookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
 pub(super) async fn check_book(
-    payload: Result<Json<BookPathRequest>, JsonRejection>,
+    Json(request): Json<BookPathRequest>,
 ) -> ApiResult<Json<BookStatus>> {
-    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
     validate_path(&request.path)?;
     Ok(Json(
         status(&BookConfig {
@@ -101,9 +97,8 @@ pub(super) async fn check_book(
 #[utoipa::path(post,path="/api/opening-book/install",request_body=BookPathRequest,responses((status=200,body=BookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
 pub(super) async fn install_book(
     State(state): State<AppState>,
-    payload: Result<Json<BookPathRequest>, JsonRejection>,
+    Json(request): Json<BookPathRequest>,
 ) -> ApiResult<Json<BookStatus>> {
-    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
     validate_path(&request.path)?;
     let config = load(&state.pool).await?;
     Ok(Json(
@@ -117,9 +112,8 @@ pub(super) async fn install_book(
 
 #[utoipa::path(post,path="/api/opening-book/xg/check",request_body=BookPathRequest,responses((status=200,body=crate::xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
 pub(super) async fn check_xg_book(
-    payload: Result<Json<BookPathRequest>, JsonRejection>,
+    Json(request): Json<BookPathRequest>,
 ) -> ApiResult<Json<crate::xg_book::XgBookStatus>> {
-    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
     validate_path(&request.path)?;
     Ok(Json(crate::xg_book::status(&request.path).await))
 }
@@ -127,9 +121,8 @@ pub(super) async fn check_xg_book(
 #[utoipa::path(post,path="/api/opening-book/xg/install",request_body=BookPathRequest,responses((status=200,body=crate::xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
 pub(super) async fn install_xg_book(
     State(state): State<AppState>,
-    payload: Result<Json<BookPathRequest>, JsonRejection>,
+    Json(request): Json<BookPathRequest>,
 ) -> ApiResult<Json<crate::xg_book::XgBookStatus>> {
-    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
     validate_path(&request.path)?;
     let config = load(&state.pool).await?;
     Ok(Json(

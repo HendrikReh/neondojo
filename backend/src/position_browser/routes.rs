@@ -17,18 +17,6 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
-pub(super) fn query<T>(value: Result<Query<T>, QueryRejection>) -> ApiResult<T> {
-    value
-        .map(|v| v.0)
-        .map_err(|e| ApiError::invalid(e.body_text()))
-}
-
-pub(super) fn json<T>(value: Result<Json<T>, JsonRejection>) -> ApiResult<T> {
-    value
-        .map(|v| v.0)
-        .map_err(|e| ApiError::invalid(e.body_text()))
-}
-
 pub(super) fn conflict(message: &str) -> ApiError {
     ApiError(StatusCode::CONFLICT, message.into())
 }
@@ -36,9 +24,9 @@ pub(super) fn conflict(message: &str) -> ApiError {
 #[utoipa::path(post,path="/api/position-browser/analysis-readiness",request_body=crate::learning::AddPositions,responses((status=200,body=PositionAnalysisReadiness),(status=422,body=ErrorBody)),tag="Positions")]
 pub(super) async fn analysis_readiness(
     State(s): State<AppState>,
-    value: Result<Json<crate::learning::AddPositions>, JsonRejection>,
+    Json(input): Json<crate::learning::AddPositions>,
 ) -> ApiResult<Json<PositionAnalysisReadiness>> {
-    let mut ids = json(value)?.validated_ids()?;
+    let mut ids = input.validated_ids()?;
     let mut seen = BTreeSet::new();
     ids.retain(|id| seen.insert(*id));
     let resolved = crate::learning::saved_position_cards(&s.pool, &ids).await?;

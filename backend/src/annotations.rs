@@ -1,16 +1,9 @@
 //! Personal plaintext Markdown notes and tags, addressed by imported target UUIDs.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::json_errors::{Json, Path, Query};
 use crate::search::literal_pattern;
 use anyhow::{Result, bail};
-use axum::{
-    Json, Router,
-    extract::{
-        Path, Query, State,
-        rejection::{JsonRejection, QueryRejection},
-    },
-    http::StatusCode,
-    routing::get,
-};
+use axum::{Router, extract::State, http::StatusCode, routing::get};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool, Postgres, QueryBuilder, Row};
@@ -294,10 +287,10 @@ async fn put_target_annotation(
     state: AppState,
     kind: AnnotationKind,
     id: Uuid,
-    payload: Result<Json<AnnotationUpdate>, JsonRejection>,
+    payload: Result<Json<AnnotationUpdate>, ApiError>,
 ) -> ApiResult<Json<Annotation>> {
     let (kind, id) = canonical_target(&state.pool, kind, id).await?;
-    let Json(update) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
+    let Json(update) = payload?;
     let update = validate_update(update)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     // Hold the parent alive while saving, including the first annotation insert.
@@ -342,7 +335,7 @@ async fn put_target_annotation(
 async fn put_match_annotation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    payload: Result<Json<AnnotationUpdate>, JsonRejection>,
+    payload: Result<Json<AnnotationUpdate>, ApiError>,
 ) -> ApiResult<Json<Annotation>> {
     put_target_annotation(state, AnnotationKind::Match, id, payload).await
 }
@@ -351,7 +344,7 @@ async fn put_match_annotation(
 async fn put_position_annotation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    payload: Result<Json<AnnotationUpdate>, JsonRejection>,
+    payload: Result<Json<AnnotationUpdate>, ApiError>,
 ) -> ApiResult<Json<Annotation>> {
     put_target_annotation(state, AnnotationKind::Position, id, payload).await
 }
@@ -360,7 +353,7 @@ async fn put_position_annotation(
 async fn put_game_annotation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    payload: Result<Json<AnnotationUpdate>, JsonRejection>,
+    payload: Result<Json<AnnotationUpdate>, ApiError>,
 ) -> ApiResult<Json<Annotation>> {
     put_target_annotation(state, AnnotationKind::Game, id, payload).await
 }
@@ -369,7 +362,7 @@ async fn put_game_annotation(
 async fn put_move_annotation(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    payload: Result<Json<AnnotationUpdate>, JsonRejection>,
+    payload: Result<Json<AnnotationUpdate>, ApiError>,
 ) -> ApiResult<Json<Annotation>> {
     put_target_annotation(state, AnnotationKind::Move, id, payload).await
 }
@@ -385,9 +378,8 @@ fn limit(value: Option<i64>) -> ApiResult<i64> {
 #[utoipa::path(get, path="/api/annotations/search", params(SearchQuery), responses((status=200,body=AnnotationPage),(status=422,body=ErrorBody)), tag="Annotations")]
 async fn search_annotations(
     State(state): State<AppState>,
-    query: Result<Query<SearchQuery>, QueryRejection>,
+    Query(query): Query<SearchQuery>,
 ) -> ApiResult<Json<AnnotationPage>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     let raw_q = query.q.as_deref().unwrap_or("");
     let q = raw_q.trim();
     if raw_q.chars().any(char::is_control)
@@ -474,9 +466,8 @@ async fn search_annotations(
 #[utoipa::path(get, path="/api/tags", params(TagQuery), responses((status=200,body=Vec<String>),(status=422,body=ErrorBody)), tag="Annotations")]
 async fn tags(
     State(state): State<AppState>,
-    query: Result<Query<TagQuery>, QueryRejection>,
+    Query(query): Query<TagQuery>,
 ) -> ApiResult<Json<Vec<String>>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     let q = normalize_tag(query.q.as_deref().unwrap_or(""))?;
     let limit = limit(query.limit)?;
     let tags = sqlx::query_scalar("SELECT DISTINCT tag FROM annotations a LEFT JOIN positions p ON p.id=a.position_uuid LEFT JOIN match_games g ON g.id=a.game_uuid LEFT JOIN match_moves mv ON mv.id=a.move_uuid JOIN matches m ON m.id=coalesce(a.match_uuid,p.match_uuid,g.match_uuid,mv.match_uuid) CROSS JOIN LATERAL unnest(a.tags) AS tag WHERE tag LIKE $1 AND ($3::uuid IS NULL OR m.database_id=$3) ORDER BY tag LIMIT $2")

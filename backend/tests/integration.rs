@@ -11,6 +11,7 @@ mod analysis_remaining_time;
 mod analysis_statistics;
 mod analysis_time_estimate;
 mod annotations;
+mod api_errors;
 mod benchmarks;
 mod card_search;
 mod checker_turns;

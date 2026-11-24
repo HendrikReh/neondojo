@@ -37,9 +37,8 @@ pub(super) async fn list_databases(State(s): State<AppState>) -> ApiResult<Json<
 #[utoipa::path(post,path="/api/databases",request_body=DatabaseWrite,responses((status=201,body=Database),(status=422,body=ErrorBody)),tag="Databases")]
 pub(super) async fn create_database(
     State(s): State<AppState>,
-    body: Result<Json<DatabaseWrite>, JsonRejection>,
+    Json(w): Json<DatabaseWrite>,
 ) -> ApiResult<(StatusCode, Json<Database>)> {
-    let w = json(body)?;
     validate_database(&w)?;
     let id = Uuid::new_v4();
     sqlx::query("INSERT INTO databases(id,name,description) VALUES($1,$2,$3)")
@@ -65,9 +64,8 @@ pub(super) async fn create_database(
 pub(super) async fn update_database(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
-    body: Result<Json<DatabaseWrite>, JsonRejection>,
+    Json(w): Json<DatabaseWrite>,
 ) -> ApiResult<Json<Database>> {
-    let w = json(body)?;
     validate_database(&w)?;
     let version = w
         .version
@@ -114,9 +112,8 @@ pub(super) async fn update_database(
 pub(super) async fn delete_database(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
-    q: Result<Query<DatabaseDelete>, QueryRejection>,
+    Query(q): Query<DatabaseDelete>,
 ) -> ApiResult<StatusCode> {
-    let q = query(q)?;
     remove_database_content(
         &s.pool,
         id,
@@ -132,17 +129,17 @@ pub(super) async fn delete_database(
 pub(super) async fn clear_database(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
-    q: Result<Query<DatabaseVersion>, QueryRejection>,
+    Query(q): Query<DatabaseVersion>,
 ) -> ApiResult<StatusCode> {
-    remove_database_content(&s.pool, id, query(q)?.version, DatabaseRemoval::Clear).await
+    remove_database_content(&s.pool, id, q.version, DatabaseRemoval::Clear).await
 }
 
 #[utoipa::path(get,path="/api/library/matches",params(LibraryQuery),responses((status=200,body=LibraryPage),(status=422,body=ErrorBody)),tag="Databases")]
 pub(super) async fn library_matches(
     State(s): State<AppState>,
-    q: Result<Query<LibraryQuery>, QueryRejection>,
+    Query(q): Query<LibraryQuery>,
 ) -> ApiResult<Json<LibraryPage>> {
-    Ok(Json(browse(&s.pool, query(q)?).await?))
+    Ok(Json(browse(&s.pool, q).await?))
 }
 
 #[utoipa::path(get,path="/api/matches/{id}/metadata",params(("id"=Uuid,Path)),responses((status=200,body=DatabaseMatch),(status=404,body=ErrorBody)),tag="Databases")]
@@ -157,9 +154,8 @@ pub(super) async fn get_metadata(
 pub(super) async fn update_metadata(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
-    body: Result<Json<MetadataWrite>, JsonRejection>,
+    Json(w): Json<MetadataWrite>,
 ) -> ApiResult<Json<DatabaseMatch>> {
-    let w = json(body)?;
     if w.version < 0
         || w.display_name.chars().count() > 240
         || w.tournament
@@ -194,9 +190,8 @@ pub(super) async fn update_metadata(
 #[utoipa::path(post,path="/api/library/actions",request_body=LibraryAction,responses((status=200,body=ActionResponse),(status=409,body=ErrorBody,description="Target is reserved for paused sessions"),(status=422,body=ErrorBody)),tag="Databases")]
 pub(super) async fn actions(
     State(s): State<AppState>,
-    body: Result<Json<LibraryAction>, JsonRejection>,
+    Json(mut a): Json<LibraryAction>,
 ) -> ApiResult<Json<ActionResponse>> {
-    let mut a = json(body)?;
     if a.match_ids.is_empty() || a.match_ids.len() > MAX_ACTIONS {
         return Err(ApiError::invalid("Select between 1 and 100 matches"));
     }
@@ -237,9 +232,8 @@ pub(super) async fn actions(
 #[utoipa::path(post,path="/api/library/export",request_body=ExportRequest,responses((status=200,description="Original, SGF or XG file, or a ZIP for multiple matches",content_type="application/octet-stream"),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Databases")]
 pub(super) async fn export(
     State(s): State<AppState>,
-    body: Result<Json<ExportRequest>, JsonRejection>,
+    Json(r): Json<ExportRequest>,
 ) -> ApiResult<Response> {
-    let r = json(body)?;
     if r.match_ids.is_empty() || r.match_ids.len() > MAX_EXPORTS {
         return Err(ApiError::invalid("Select between 1 and 50 matches"));
     }

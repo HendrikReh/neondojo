@@ -3591,11 +3591,6 @@ export interface components {
         ConfigurationDirection: "left" | "right";
         /** @enum {string} */
         ConfigurationEngine: "gnubg" | "bgsage";
-        ConfigurationErrorBody: {
-            code: string;
-            error: string;
-            issues: components["schemas"]["ConfigurationIssue"][];
-        };
         ConfigurationGeneral: {
             locale: components["schemas"]["ConfigurationLocale"];
             play_sounds: boolean;
@@ -4213,8 +4208,13 @@ export interface components {
             gnubg_threads?: number | null;
             open_sage?: null | components["schemas"]["SageSnapshot"];
         };
+        /** @description The body of every API error. */
         ErrorBody: {
+            /** @description A stable identifier of the problem, where the endpoint defines one. */
+            code?: string;
             error: string;
+            /** @description The configuration values that caused the error. */
+            issues?: components["schemas"]["ConfigurationIssue"][];
         };
         ErrorSeverityCounts: {
             /** Format: int32 */
@@ -6533,21 +6533,21 @@ export interface operations {
     };
     search_annotations: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Literal substring, 3–200 characters. Omit only when supplying an exact tag. */
-                q: string | null;
+                q?: string | null;
                 /** @description Exact normalized tag; can be combined with the text and kind filters. */
-                tag: string | null;
-                kind: null | components["schemas"]["AnnotationKind"];
-                after: string | null;
+                tag?: string | null;
+                kind?: null | components["schemas"]["AnnotationKind"];
+                after?: string | null;
                 /** @description One-based result page. Mutually exclusive with `after`. */
-                page: number | null;
-                limit: number | null;
+                page?: number | null;
+                limit?: number | null;
                 /** @description Restrict all note scopes to one logical database. */
-                database_id: string | null;
+                database_id?: string | null;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -7375,7 +7375,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -7406,7 +7406,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {
@@ -7414,7 +7414,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -7441,7 +7441,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -7472,7 +7472,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {
@@ -7480,7 +7480,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -7511,7 +7511,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {
@@ -7519,7 +7519,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -9987,29 +9987,27 @@ export interface operations {
     };
     library_matches: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                database_id: string | null;
-                q: string | null;
-                player: string | null;
-                player_id: string | null;
+            query?: {
+                database_id?: string | null;
+                q?: string | null;
+                player?: string | null;
+                player_id?: string | null;
                 /** @description Matches of a virtual player profile; excludes `player_id`. */
-                virtual_player_id: string | null;
-                date_from: string | null;
-                date_to: string | null;
-                date_field: string | null;
-                tag: string | null;
-                comment: string | null;
+                virtual_player_id?: string | null;
+                date_from?: string | null;
+                date_to?: string | null;
+                date_field?: string | null;
+                tag?: string | null;
+                comment?: string | null;
                 /** @description Search checker Position-ID; returns each occurrence, including repeats in one game. */
-                position_id: string | null;
-                tournament: string | null;
-                round: string | null;
-                match_name: string | null;
-                match_type: string | null;
-                result: string | null;
-                match_points_min: number | null;
-                match_points_max: number | null;
+                position_id?: string | null;
+                tournament?: string | null;
+                round?: string | null;
+                match_name?: string | null;
+                match_type?: string | null;
+                result?: string | null;
+                match_points_min?: number | null;
+                match_points_max?: number | null;
                 /**
                  * @description Sort field: id (or match_no), created_at, played_at, name, white, black,
                  *     white_pr, black_pr, match_length, score, result, tournament, format,
@@ -10018,17 +10016,19 @@ export interface operations {
                  *     score compares the
                  *     visible numeric white/black score pair; result retains result-state order.
                  */
-                sort: string | null;
+                sort?: string | null;
                 /**
                  * @description asc or desc (default desc). Missing values sort last in either direction;
                  *     equal values use ascending UUID order for stable pagination.
                  */
-                direction: string | null;
-                after: string | null;
+                direction?: string | null;
+                after?: string | null;
                 /** @description One-based result page. Mutually exclusive with `after`. */
-                page: number | null;
-                limit: number | null;
+                page?: number | null;
+                limit?: number | null;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
@@ -10378,14 +10378,15 @@ export interface operations {
     };
     estimate: {
         parameters: {
-            query?: never;
+            query?: {
+                plies?: number | null;
+                game_no?: number | null;
+                /** @description Provider for this estimate; omitted uses the saved analysis engine. */
+                engine_id?: string | null;
+            };
             header?: never;
             path: {
                 id: string;
-                plies: number | null;
-                game_no: number | null;
-                /** @description Provider for this estimate; omitted uses the saved analysis engine. */
-                engine_id: string | null;
             };
             cookie?: never;
         };
@@ -10789,14 +10790,15 @@ export interface operations {
     };
     assessments: {
         parameters: {
-            query?: never;
+            query: {
+                game_no: number;
+                /** @description Legacy explicit job identity; use analysis_id for native and imported results. */
+                job_id?: string | null;
+                analysis_id?: string | null;
+            };
             header?: never;
             path: {
                 id: string;
-                game_no: number;
-                /** @description Legacy explicit job identity; use analysis_id for native and imported results. */
-                job_id: string | null;
-                analysis_id: string | null;
             };
             cookie?: never;
         };
@@ -12764,7 +12766,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {
@@ -12772,7 +12774,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -12801,7 +12803,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -12834,7 +12836,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -12867,7 +12869,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {
@@ -12875,7 +12877,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -12908,7 +12910,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {
@@ -12916,7 +12918,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -12949,7 +12951,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
             422: {
@@ -12957,7 +12959,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -12990,7 +12992,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigurationErrorBody"];
+                    "application/json": components["schemas"]["ErrorBody"];
                 };
             };
         };
@@ -14182,14 +14184,14 @@ export interface operations {
     };
     tags: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
+            query?: {
                 /** @description Optional literal tag substring, at most 64 characters. */
-                q: string | null;
-                limit: number | null;
-                database_id: string | null;
+                q?: string | null;
+                limit?: number | null;
+                database_id?: string | null;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

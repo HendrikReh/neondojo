@@ -59,7 +59,7 @@ pub(crate) async fn saved_checker_move(
 ) -> anyhow::Result<Option<(String, String, Option<String>)>> {
     let mut cards = position_cards(pool, &[position.id], None, false)
         .await
-        .map_err(|error| anyhow::anyhow!("{}", error.1))?;
+        .map_err(|error| anyhow::anyhow!("{}", error.1.error))?;
     let Some(card) = cards.remove(&position.id).flatten() else {
         return Ok(None);
     };
@@ -408,7 +408,7 @@ pub(super) async fn decision_cards(
                 matches: &dyn Fn(&MistakeReference) -> bool| {
         if error.0 == axum::http::StatusCode::UNPROCESSABLE_ENTITY {
             for reference in wanted.iter().filter(|r| matches(r)) {
-                output.insert((*reference).clone(), Err(error.1.clone()));
+                output.insert((*reference).clone(), Err(error.1.error.clone()));
             }
             Ok(())
         } else if error.0 == axum::http::StatusCode::NOT_FOUND {

@@ -1,14 +1,7 @@
 //! Durable aggregates from completed similar-position practice rounds.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
-use axum::{
-    Json, Router,
-    extract::{
-        Query, State,
-        rejection::{JsonRejection, QueryRejection},
-    },
-    http::StatusCode,
-    routing::get,
-};
+use crate::json_errors::{Json, Query};
+use axum::{Router, extract::State, http::StatusCode, routing::get};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -79,9 +72,8 @@ pub(super) fn routes() -> Router<AppState> {
     responses((status=200,body=SimilarPracticeSummary),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Study")]
 async fn save_similar_practice_summary(
     State(state): State<AppState>,
-    input: Result<Json<SaveSimilarPracticeSummary>, JsonRejection>,
+    Json(round): Json<SaveSimilarPracticeSummary>,
 ) -> ApiResult<Json<SimilarPracticeSummary>> {
-    let Json(round) = input.map_err(|error| ApiError::invalid(error.body_text()))?;
     let completed_at = DateTime::from_timestamp_millis(round.completed_at.timestamp_millis())
         .ok_or_else(|| ApiError::invalid("Invalid practice completion time"))?;
     if !(1..=super::RESULT_LIMIT as i32).contains(&round.total_positions)
@@ -132,9 +124,8 @@ async fn save_similar_practice_summary(
     responses((status=200,body=SimilarPracticeHistory),(status=422,body=ErrorBody)),tag="Study")]
 async fn list_similar_practice_history(
     State(state): State<AppState>,
-    query: Result<Query<HistoryQuery>, QueryRejection>,
+    Query(query): Query<HistoryQuery>,
 ) -> ApiResult<Json<SimilarPracticeHistory>> {
-    let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
     let mut items: Vec<SimilarPracticeSummary> = sqlx::query_as(&format!(
         "SELECT {COLUMNS} FROM similar_practice_summaries
          WHERE $1::uuid IS NULL OR (completed_at,id) < (SELECT completed_at,id FROM similar_practice_summaries WHERE id=$1)

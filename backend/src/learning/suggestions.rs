@@ -144,9 +144,8 @@ fn group(plan: GamePlan, decision: &Decision) -> Group {
 pub(super) async fn preview(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<SuggestionQuery>, QueryRejection>,
+    Query(query): Query<SuggestionQuery>,
 ) -> ApiResult<Json<CardSuggestions>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     if !query.min_loss.is_finite()
         || query.min_loss < 0.0
         || query.player.is_some_and(|p| !(0..=1).contains(&p))
@@ -199,8 +198,8 @@ pub(super) async fn preview(
         .await
         {
             Ok(rows) => rows,
-            Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, message))
-                if message == source::TOO_BROAD =>
+            Err(ApiError(StatusCode::UNPROCESSABLE_ENTITY, body))
+                if body.error == source::TOO_BROAD =>
             {
                 history_available = false;
                 continue;
@@ -301,7 +300,7 @@ pub(super) async fn preview(
 pub(super) async fn save(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<SaveSuggestions>,
+    Json(body): Json<SaveSuggestions>,
 ) -> ApiResult<Json<AddCardsResult>> {
     let mut requested: HashSet<_> = body.decisions.iter().copied().collect();
     if requested.is_empty()

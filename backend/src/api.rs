@@ -1,12 +1,14 @@
+use crate::json_errors::{Json, Multipart, Path, Query};
 use crate::{
+    configuration::ConfigurationIssue,
     engine::{Analysis, Candidate, DiceEvaluation, Distribution, Engine, valid_id},
     import,
     model::*,
     store,
 };
 use axum::{
-    Json, Router,
-    extract::{DefaultBodyLimit, Multipart, Path, Query, Request, State},
+    Router,
+    extract::{DefaultBodyLimit, Request, State},
     http::{HeaderMap, StatusCode, header},
     middleware::{self, Next},
     response::{
@@ -85,14 +87,36 @@ impl AppState {
     }
 }
 
+/// The body of every API error.
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ErrorBody {
     pub error: String,
+    /// A stable identifier of the problem, where the endpoint defines one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub code: Option<String>,
+    /// The configuration values that caused the error.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable = false)]
+    pub issues: Option<Vec<ConfigurationIssue>>,
 }
-pub struct ApiError(pub(crate) StatusCode, pub(crate) String);
+impl<T: Into<String>> From<T> for ErrorBody {
+    fn from(error: T) -> Self {
+        Self {
+            error: error.into(),
+            code: None,
+            issues: None,
+        }
+    }
+}
+pub struct ApiError(pub(crate) StatusCode, pub(crate) ErrorBody);
 impl ApiError {
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
-        Self(StatusCode::UNPROCESSABLE_ENTITY, message.into())
+        Self(StatusCode::UNPROCESSABLE_ENTITY, message.into().into())
+    }
+    /// The same error as HTTP 422, for a path that documents that status.
+    pub(crate) fn into_invalid(self) -> Self {
+        Self(StatusCode::UNPROCESSABLE_ENTITY, self.1)
     }
     pub(crate) fn missing() -> Self {
         Self(StatusCode::NOT_FOUND, "Not found".into())
@@ -109,7 +133,7 @@ impl From<anyhow::Error> for ApiError {
 }
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.0, Json(ErrorBody { error: self.1 })).into_response()
+        (self.0, Json(self.1)).into_response()
     }
 }
 pub(crate) type ApiResult<T> = Result<T, ApiError>;
@@ -295,8 +319,8 @@ struct UploadForm {
 #[utoipa::path(post, path="/api/imports", params(ImportQuery), request_body(content=UploadForm, content_type="multipart/form-data"), responses((status=201, body=ImportResponse), (status=200, body=ImportResponse, description="Previously imported file"), (status=409, body=ErrorBody, description="Target is reserved for paused sessions"), (status=422, body=ErrorBody), (status=413, description="Upload too large"), (status=429, body=ErrorBody)), tag="Library")]
 async fn upload(
     State(state): State<AppState>,
-    crate::json_errors::Query(query): crate::json_errors::Query<ImportQuery>,
-    mut multipart: Multipart,
+    Query(query): Query<ImportQuery>,
+    Multipart(mut multipart): Multipart,
 ) -> ApiResult<(StatusCode, Json<ImportResponse>)> {
     let _permit = state.imports.try_acquire().map_err(|_| {
         ApiError(
@@ -307,7 +331,7 @@ async fn upload(
     let field = multipart
         .next_field()
         .await
-        .map_err(|e| ApiError(e.status(), e.body_text()))?
+        .map_err(|e| ApiError(e.status(), e.body_text().into()))?
         .ok_or_else(|| ApiError::invalid("Missing file field"))?;
     if field.name() != Some("file") {
         return Err(ApiError::invalid("Expected multipart field 'file'"));
@@ -341,14 +365,14 @@ async fn upload(
     let bytes = field
         .bytes()
         .await
-        .map_err(|e| ApiError(e.status(), e.body_text()))?;
+        .map_err(|e| ApiError(e.status(), e.body_text().into()))?;
     if bytes.is_empty() {
         return Err(ApiError::invalid("Empty file"));
     }
     if multipart
         .next_field()
         .await
-        .map_err(|e| ApiError(e.status(), e.body_text()))?
+        .map_err(|e| ApiError(e.status(), e.body_text().into()))?
         .is_some()
     {
         return Err(ApiError::invalid("Upload one file per request"));
@@ -453,7 +477,7 @@ fn limit(value: Option<i64>) -> ApiResult<i64> {
 #[utoipa::path(get, path="/api/matches", params(MatchQuery), responses((status=200, body=MatchPage), (status=422, body=ErrorBody)), tag="Library")]
 async fn matches(
     State(state): State<AppState>,
-    crate::json_errors::Query(query): crate::json_errors::Query<MatchQuery>,
+    Query(query): Query<MatchQuery>,
 ) -> ApiResult<Json<MatchPage>> {
     let q = query.q.as_deref().unwrap_or("").trim();
     if !q.is_empty() && !(3..=200).contains(&q.chars().count()) {
@@ -573,7 +597,7 @@ struct PositionQuery {
 #[utoipa::path(get, path="/api/positions", params(PositionQuery), responses((status=200, body=PositionPage), (status=422, body=ErrorBody)), tag="Library")]
 async fn positions(
     State(state): State<AppState>,
-    crate::json_errors::Query(query): crate::json_errors::Query<PositionQuery>,
+    Query(query): Query<PositionQuery>,
 ) -> ApiResult<Json<PositionPage>> {
     if let Some(id) = query.match_id {
         crate::play::require_review_available(&state.pool, id).await?;
@@ -641,7 +665,7 @@ async fn positions(
 async fn dice(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Query(query): crate::json_errors::Query<GameScope>,
+    Query(query): Query<GameScope>,
 ) -> ApiResult<Json<DiceStats>> {
     crate::play::require_review_available(&state.pool, id).await?;
     validate_game(&state, id, query.game_no).await?;
@@ -674,9 +698,8 @@ struct JobRequest {
 #[utoipa::path(post, path="/api/jobs", request_body=JobRequest, responses((status=202, body=Job), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Analysis")]
 async fn create_job(
     State(state): State<AppState>,
-    payload: Result<Json<JobRequest>, axum::extract::rejection::JsonRejection>,
+    Json(request): Json<JobRequest>,
 ) -> ApiResult<(StatusCode, Json<Job>)> {
-    let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     crate::play::require_position_review_available(&state.pool, request.position_id).await?;
     let engine_id = request.engine_id.as_ref().map(MatchAnalysisEngine::id);
     let (settings, snapshot) =
@@ -745,10 +768,10 @@ struct MatchAnalysisRequest {
 async fn create_match_analysis(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    payload: Result<Json<MatchAnalysisRequest>, axum::extract::rejection::JsonRejection>,
+    payload: Result<Json<MatchAnalysisRequest>, ApiError>,
 ) -> ApiResult<(StatusCode, Json<Job>)> {
     crate::play::require_review_available(&state.pool, id).await?;
-    let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
+    let Json(request) = payload?;
     let source = store::get_match(&state.pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;
@@ -800,10 +823,10 @@ struct MatchAnalysisQuery {
 async fn latest_match_analysis(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<MatchAnalysisQuery>, axum::extract::rejection::QueryRejection>,
+    query: Result<Query<MatchAnalysisQuery>, ApiError>,
 ) -> ApiResult<Json<Option<Job>>> {
     crate::play::require_review_available(&state.pool, id).await?;
-    let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let Query(query) = query?;
     let game_no = query.game_no;
     validate_game(&state, id, game_no).await?;
     Ok(Json(
@@ -821,10 +844,10 @@ async fn latest_match_analysis(
 async fn match_analysis_jobs(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<GameScope>, axum::extract::rejection::QueryRejection>,
+    query: Result<Query<GameScope>, ApiError>,
 ) -> ApiResult<Json<Vec<AnalysisComparisonRun>>> {
     crate::play::require_review_available(&state.pool, id).await?;
-    let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
+    let Query(query) = query?;
     if query.game_no.is_some() {
         validate_game(&state, id, query.game_no).await?;
     } else {
@@ -876,9 +899,8 @@ struct MoveAnalysisQuery {
 async fn move_analyses(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<MoveAnalysisQuery>, axum::extract::rejection::QueryRejection>,
+    Query(query): Query<MoveAnalysisQuery>,
 ) -> ApiResult<Json<MoveAnalysisPage>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     let job = store::get_job(&state.pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;
@@ -995,9 +1017,8 @@ struct JobStatusBatch {
     responses((status=200, body=JobStatusBatch, description="Each requested ID is represented once as an available job, a missing ID, or an ID restricted by competition play."), (status=422, body=ErrorBody)), tag="Analysis")]
 async fn job_status_batch(
     State(state): State<AppState>,
-    payload: Result<Json<JobStatusRequest>, axum::extract::rejection::JsonRejection>,
+    Json(request): Json<JobStatusRequest>,
 ) -> ApiResult<Json<JobStatusBatch>> {
-    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
     if request.ids.len() > 100 {
         return Err(ApiError::invalid("At most 100 job IDs can be read at once"));
     }
