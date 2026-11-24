@@ -284,6 +284,52 @@ test('a long individual game transparently loads all pages within that game', as
   ).toBeDisabled();
 });
 
+test('late move ratings keep the place the user scrolled to', async ({
+  page,
+}) => {
+  await page.goto('/');
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/matches/*/move-assessments?game_no=10*', async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page
+    .getByLabel('Matchdatei')
+    .setInputFiles('../backend/tests/fixtures/WC2014.xg');
+  const rows = page.locator('.moves-list .move-history-row');
+  await expect(rows).toHaveCount(8, { timeout: 15_000 });
+  await page.getByLabel('Spiel auswählen', { exact: true }).selectOption('10');
+  await expect(rows).toHaveCount(65);
+  // Cube lines arrive on their own and change the height of the list.
+  await expect(
+    page.locator('.moves-list [data-cube-action]').first(),
+  ).toBeAttached();
+  const list = page.locator('.moves-list');
+  const rated = page.locator(
+    '.moves-list .move-history-row[class*="move-assessment-"]',
+  );
+  await expect(rated).toHaveCount(0);
+  const place = await list.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    return element.scrollTop;
+  });
+  expect(place).toBeGreaterThan(100);
+  release();
+  await expect(rated.first()).toBeAttached();
+  await expect(rows.last()).toBeInViewport();
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(place);
+
+  // Choosing a move still brings it into view.
+  await page
+    .getByRole('button', { name: 'Nächster Zug', exact: true })
+    .click();
+  await expect(page.locator('.board-navigation')).toContainText('2 / 65');
+  await expect(rows.nth(1)).toBeInViewport({ ratio: 0.99 });
+});
+
 test('changing Cube filters resets the decision count', async ({ page }) => {
   await openAnalyzedReference(page);
   await page.getByRole('tab', { name: 'Cube', exact: true }).click();

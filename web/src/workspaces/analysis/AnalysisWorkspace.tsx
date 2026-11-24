@@ -65,6 +65,7 @@ import type { MoveNotesTarget } from './notes/MoveNotesDialog';
 import { useAnalysisBoardResize } from './useAnalysisBoardResize';
 import type { MatchAnalysisEngine } from './match/useMatchAnalysis';
 import { useWorkspaceLayout, useWorkspaceSession } from '../../shared/hooks/useWorkspaceSession';
+import { useMoveListFollow } from './useMoveListFollow';
 import { useAnalysisCatalog } from './useAnalysisCatalog';
 import AnalysisCatalogSelect from './AnalysisCatalogSelect';
 
@@ -304,21 +305,10 @@ export default function AnalysisWorkspace({
     [positions, moveAssessments.assessments, filteredMoves, moveFilter],
   );
   const moveFilterControl = useRef<HTMLSelectElement>(null);
-  const moveList = useRef<HTMLDivElement>(null);
-  const currentMove = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    const list = moveList.current,
-      current = currentMove.current;
-    if (!list || !current || !list.clientHeight) return;
-    const outer = list.getBoundingClientRect();
-    const result = current.nextElementSibling;
-    const row = current.getBoundingClientRect();
-    const bottom = result?.matches('.game-result-summary')
-      ? result.getBoundingClientRect().bottom
-      : row.bottom;
-    if (row.top < outer.top) list.scrollTop -= outer.top - row.top;
-    else if (bottom > outer.bottom) list.scrollTop += bottom - outer.bottom;
-  }, [position?.id, history, detail, game?.result]);
+  const { list: moveList, current: currentMove } = useMoveListFollow(
+    JSON.stringify([position?.id, moveFilter, detail]),
+    [history, game?.result],
+  );
   const legacy = useWorkspaceDefaults();
   const [boardView, setBoardView] = useWorkspaceLayout<BoardView>(
     'analysis.boardView',
