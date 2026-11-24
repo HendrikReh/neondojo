@@ -1,4 +1,4 @@
-use super::validation::{enum_string, normalize, resources, upgrade_columns};
+use super::validation::{changed_resources, enum_string, normalize, resources, upgrade_columns};
 use super::*;
 use sqlx::{PgPool, Postgres, Row, Transaction};
 
@@ -340,14 +340,8 @@ pub(crate) async fn update(
     let before = state(&mut tx).await?;
     revision(input.expected_revision, before.revision)?;
     if value(&config) != value(&before.current_configuration) {
-        let old = &before.current_configuration;
-        let engine = config.analysis.engine != old.analysis.engine
-            || config.analysis.plies != old.analysis.plies
-            || config.play.engine != old.play.engine
-            || config.play.plies != old.play.plies
-            || config.play.top_two != old.play.top_two;
-        let book = value(&config)["opening_book"] != value(old)["opening_book"];
-        let issues = resources(state_ref, &mut tx, &config, engine, book).await?;
+        let issues =
+            changed_resources(state_ref, &mut tx, &before.current_configuration, &config).await?;
         if !issues.is_empty() {
             return Err(ConfigurationError::resources(issues));
         }

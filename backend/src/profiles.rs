@@ -1,5 +1,5 @@
 //! Explicit named snapshots of the shared current configuration.
-use crate::configuration::validation::{normalize, resources};
+use crate::configuration::validation::{changed_resources, normalize, resources};
 use crate::json_errors::{Json, Path};
 use crate::{
     api::{ApiError, AppState, ErrorBody},
@@ -173,19 +173,8 @@ async fn save_profile(
     let snapshot_changed = store::value(&target.configuration) != store::value(&config);
     let current_changed = store::value(&before.current_configuration) != store::value(&config);
     if current_changed {
-        let old = store::value(&before.current_configuration);
-        let new = store::value(&config);
-        let issues = resources(
-            &app,
-            &mut tx,
-            &config,
-            old["analysis"]["engine"] != new["analysis"]["engine"]
-                || old["analysis"]["plies"] != new["analysis"]["plies"]
-                || old["play"]["engine"] != new["play"]["engine"]
-                || old["play"]["plies"] != new["play"]["plies"],
-            old["opening_book"] != new["opening_book"],
-        )
-        .await?;
+        let issues =
+            changed_resources(&app, &mut tx, &before.current_configuration, &config).await?;
         if !issues.is_empty() {
             return Err(ConfigurationError::resources(issues));
         }

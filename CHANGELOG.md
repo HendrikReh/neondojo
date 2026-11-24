@@ -44,6 +44,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ### Fixed
 
+- **Top-two in a saved profile.** Saving the current settings into a profile checked the engine when the engine or depth changed, but not when only NeonGammon **2-ply + Top-2** was switched on or off. It now checks the same changes as **Apply** and names an unavailable engine.
 - **Anki cards in the duplicate check.** `POST /api/cards/duplicates/resolve` answered HTTP 500 when one of the two cards was an imported Anki card. It now answers 422 and names the reason; the interface never offers such a pair.
 - **Cards from imported analyses.** Adding the decisions of a match whose displayed analysis is imported (XG, BGBlitz or SGF) to a deck failed with an internal server error, because the query filtered the player on a column the imported-analysis view does not have. It now filters on the player of each recorded move.
 - **Concurrent profile, topic and transfer edits.** Choosing **My player profile** while the same virtual player profile was renamed, deleted or had members changed could fail with an internal error (a database deadlock). Saving a card topic, starting a transfer round and choosing My player profile no longer lock their whole table, so deleting topics and creating or editing other virtual player profiles no longer wait for them, and autovacuum is not held off. Concurrent saves still respect the 200-topic limit, and concurrent transfer starts still never pick the same unseen positions.

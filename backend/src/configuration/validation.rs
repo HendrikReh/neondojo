@@ -545,6 +545,24 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
     Ok(config)
 }
 
+/// Which resources that a changed configuration newly relies on are unavailable.
+/// Changing other settings checks none, so they can be saved while an
+/// installation is missing.
+pub(crate) async fn changed_resources(
+    state: &AppState,
+    tx: &mut Transaction<'_, Postgres>,
+    old: &ProfileConfiguration,
+    new: &ProfileConfiguration,
+) -> Result<Vec<ConfigurationIssue>> {
+    let engine = new.analysis.engine != old.analysis.engine
+        || new.analysis.plies != old.analysis.plies
+        || new.play.engine != old.play.engine
+        || new.play.plies != old.play.plies
+        || new.play.top_two != old.play.top_two;
+    let book = super::store::value(new)["opening_book"] != super::store::value(old)["opening_book"];
+    resources(state, tx, new, engine, book).await
+}
+
 pub(crate) async fn resources(
     state: &AppState,
     tx: &mut Transaction<'_, Postgres>,
