@@ -265,7 +265,6 @@ export default function MatchStatisticsView({
   hidden = false,
   loading = false,
   error,
-  progress,
   comparison,
 }: {
   analysisEntry?: AnalysisCatalogEntry;
@@ -276,7 +275,6 @@ export default function MatchStatisticsView({
   hidden?: boolean;
   loading?: boolean;
   error?: unknown;
-  progress?: ReactNode;
   comparison?: ReactNode;
 }) {
   const text = useStatisticsText();
@@ -305,7 +303,6 @@ export default function MatchStatisticsView({
         <p className="analysis-empty">{catalogText('none')}</p>
       ) : (
         <>
-          {progress}
           <p className="statistics-source">
             <EngineLabel
               details={[engine, analysisEntry.depth]
