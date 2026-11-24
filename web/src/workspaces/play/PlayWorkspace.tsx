@@ -1,58 +1,27 @@
-import { useDecimalInput } from '../../shared/format/decimal-input';
 import {
   playStrengthLabel,
   useSettingsText,
 } from '../../settings/settings-messages';
-import { loadEngines, type EngineInfo } from '../../settings/settings-api';
-import Tooltip from '../../shared/ui/Tooltip';
 import ActionButton from '../../shared/ui/ActionButton';
-import {
-  useEffect,
-  useId,
-  useRef,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type FormEvent,
-} from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useLatest, useLatestCallback } from '../../shared/hooks/useLatest';
-import Board from '../../shared/board/Board';
 import PlayHistory from './PlayHistory';
 import PlayFeedback from './PlayFeedback';
 import PlayCoachFeedback from './PlayCoachFeedback';
-import PlayHintView from './PlayHintView';
-import { hasPlayMovePreview } from './PlayMovePreview';
 import LearningReviewDialog from '../study/reports/LearningReviewDialog';
-import {
-  matchAssessmentReportId,
-  studyAssessment,
-} from '../study/reports/match-assessment-api';
+import { matchAssessmentReportId } from '../study/reports/match-assessment-api';
 import { useMatchAssessmentText } from '../study/reports/match-assessment-messages';
-import {
-  playModes,
-  usePlayModeText,
-  type PlayMode,
-} from './play-mode-messages';
+import { usePlayModeText, type PlayMode } from './play-mode-messages';
 import type { AppSettings } from '../../settings/settings-api';
 import { usePlayReview } from './usePlayReview';
-import { projectMove, type MovePreview } from '../../shared/board/move-preview';
 import type { Theme } from '../../shared/board/themes';
 import { useI18n } from '../../shared/i18n/i18n';
 import { AppError } from '../../shared/i18n/i18n-core';
 import { usePlayText } from './play-messages';
 import { useLibraryText } from '../library/library-messages';
 import {
-  nextCheckerSteps,
-  applySteps,
-  boardFlips,
-  matchingCheckerTurns,
-  relativePoint,
-  type CheckerStepWithDie,
-} from '../../shared/board/play-state';
-import {
   actInPlaySession,
   createPlaySession,
-  loadPlaySession,
   updatePlayFeedback,
   reviewPlaySession,
   changePlayMode,
@@ -66,57 +35,40 @@ import {
 } from '../../shared/board/play-audio';
 import { isNewCubeOffer } from '../../shared/board/play-sound-events';
 import { matchContext } from '../../shared/board/boardMath';
-import PlayCubeDecision from './PlayCubeDecision';
 import PlayBoardDialog from '../../shared/board/PlayBoardDialog';
+import PlayBoardStage, { playHistoryView } from './PlayBoardStage';
+import {
+  PlayCubeDialog,
+  PlayFeedbackDialog,
+  PlayForfeitDialog,
+  PlayHintDialog,
+  PlayPauseDialog,
+  PlayResultDialog,
+} from './PlayDialogs';
 import PlayResignDialog, { type ResignLevel } from './PlayResignDialog';
 import { usePlayResignText } from './play-resign-messages';
-import GameResultSummary from './GameResultSummary';
+import { actionFrames } from '../../shared/board/play-animation';
 import {
-  actionFrames,
-  checkerFrame,
-  reverseFrame,
-} from '../../shared/board/play-animation';
-import { usePlayAnimation, useRollingFaces } from './usePlayAnimation';
+  isMoneyGameFinished,
+  playFeedback,
+  playInterruption,
+} from './play-interruption';
+import { usePlayAnimation } from './usePlayAnimation';
+import { usePlayDialogFocus, usePlayDialogs } from './usePlayDialogs';
+import { usePlaySession } from './usePlaySession';
+import { usePlayThreshold } from './usePlayThreshold';
+import { usePlayTurn } from './usePlayTurn';
+import { useSavedAssessment } from './useSavedAssessment';
+import PlayErrorNotice from './PlayErrorNotice';
+import PlayMatchActions from './PlayMatchActions';
+import PlayModeControl from './PlayModeControl';
 import PlaySetupForm from './PlaySetupForm';
-import { usePlaySetupOptions } from './usePlaySetupOptions';
+import PlayIdleBoard from './PlayIdleBoard';
+import { usePlayEngines, usePlaySetupOptions } from './usePlaySetupOptions';
 import PlayMatchSummary from './PlayMatchSummary';
 import PlayHistoryReviewToolbar from './PlayHistoryReviewToolbar';
 import PlayTurnToolbar from './PlayTurnToolbar';
 import './play.css';
-const storageKey = 'neondojo.play-session';
-function storedSession() {
-  try {
-    return localStorage.getItem(storageKey);
-  } catch {
-    return null;
-  }
-}
-function forgetStoredSession(id: string) {
-  try {
-    if (localStorage.getItem(storageKey) === id)
-      localStorage.removeItem(storageKey);
-  } catch {
-    /* Nothing is restored automatically without storage. */
-  }
-}
-/** Starting position on the empty table behind the setup dialog. */
-const idlePosition: PlaySession['position'] = {
-  id: '',
-  match_uuid: '',
-  ordinal: 0,
-  game_no: 1,
-  ply: 0,
-  player: 0,
-  dice: [],
-  board: [
-    0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0,
-    2, 0,
-  ],
-  position_id: '4HPwATDgc/ABMA',
-  // Centered cube at 1, no score: the empty table carries no match context.
-  gnubg_match_id: 'MAAAAAAAAAAA',
-  notation: '',
-};
 export default function PlayWorkspace({
   visible,
   settings,
@@ -152,89 +104,61 @@ export default function PlayWorkspace({
   const newMatchTrigger = useRef<HTMLButtonElement>(null);
   // Only a setup the user opened takes the focus; an automatic one leaves it.
   const focusSetup = useRef(false);
-  const [pauseWarning, setPauseWarning] = useState(false);
   const autoMoneyReviews = useRef(new Set<string>());
-  const [learningReviewOpen, setLearningReviewOpen] = useState(false);
-  const menuId = useId();
   const menuTrigger = useRef<HTMLButtonElement>(null);
-  const menu = useRef<HTMLDivElement>(null);
   const resignTrigger = useRef<HTMLButtonElement>(null);
-  const restoreResignFocus = useRef(false);
-  const [resignOpen, setResignOpen] = useState(false);
   const forfeitTrigger = useRef<HTMLButtonElement>(null);
-  const [forfeitOpen, setForfeitOpen] = useState(false);
-  const restoreHintFocus = useRef(false);
   const [acknowledgedMatch, setAcknowledgedMatch] = useState<string | null>(
     null,
   );
-  const [hintOpen, setHintOpen] = useState(false);
-  const [hintReady, setHintReady] = useState(false);
-  const [pendingRoll, setPendingRoll] = useState<PlayAction | null>(null);
-  const waitingFaces = useRollingFaces(pendingRoll !== null);
   const soundsVisible = useLatest(visible);
   useEffect(() => {
-    if (!visible) {
-      stopPlaySounds();
-      setHintOpen(false);
-      setResignOpen(false);
-      setForfeitOpen(false);
-      setPauseWarning(false);
-      setLearningReviewOpen(false);
-    }
+    if (!visible) stopPlaySounds();
     return () => stopPlaySounds();
   }, [visible]);
+  const dialogs = usePlayDialogs(visible);
   const t = usePlayText(),
-    { formatError, locale, t: appT } = useI18n();
+    { t: appT } = useI18n();
   const modeT = usePlayModeText();
   const libraryT = useLibraryText();
   const resignT = usePlayResignText();
-  const [session, setSession] = useState<PlaySession | null>(null);
-  const assessmentReportId =
-    visible &&
-    session?.phase === 'match_over' &&
-    session.match_length > 0 &&
-    session.review
-      ? matchAssessmentReportId(session)
-      : undefined;
-  const [savedAssessment, setSavedAssessment] = useState<string>();
-  const assessmentKey = assessmentReportId
-    ? `${assessmentReportId}:${locale}`
-    : undefined;
-  useEffect(() => {
-    if (!assessmentReportId || !assessmentKey) return;
-    const abort = new AbortController();
-    void studyAssessment(assessmentReportId, locale, abort.signal)
-      .then((result) => {
-        if (!abort.signal.aborted)
-          setSavedAssessment(
-            result.job && result.job.status !== 'failed'
-              ? assessmentKey
-              : undefined,
-          );
-      })
-      .catch(() => {
-        if (!abort.signal.aborted) setSavedAssessment(undefined);
-      });
-    return () => abort.abort();
-  }, [assessmentReportId, assessmentKey, locale]);
+  const settingsT = useSettingsText();
+  const {
+    session,
+    busy,
+    error,
+    setError,
+    setup,
+    setSetup,
+    pendingRoll,
+    setPendingRoll,
+    load,
+    run,
+    retry,
+    isLocked,
+  } = usePlaySession({
+    visible,
+    requestedSession,
+    onLoad: playback.cancel,
+    onAccept: (accepted) => {
+      dialogs.accept(accepted);
+      review.reset();
+      threshold.show(accepted.value);
+      if (!accepted.preserveSteps) turn.reset();
+    },
+    onSaved,
+  });
   const assessmentAction = assessmentT(
-    assessmentKey && savedAssessment === assessmentKey ? 'open' : 'create',
+    useSavedAssessment(session, visible) ? 'open' : 'create',
   );
   const paused = Boolean(session?.paused);
-  const moneyFinished =
-    session?.match_length === 0 &&
-    ['game_over', 'match_over'].includes(session.phase);
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState<unknown>(),
-    // A saved match is restored first; without one, the setup dialog opens.
-    [setup, setSetup] = useState(() => storedSession() === null);
+  const moneyFinished = isMoneyGameFinished(session);
   const review = usePlayReview(session, visible && !setup);
   useEffect(() => {
     if (visible && paused && !busy && !setup && focusResume.current)
       resumeTrigger.current?.focus({ preventScroll: true });
     if (!visible || !busy) focusResume.current = false;
   }, [visible, paused, busy, setup]);
-  const settingsT = useSettingsText();
   const setupChoices = usePlaySetupOptions(settings);
   const {
     options: setupOptions,
@@ -262,190 +186,9 @@ export default function PlayWorkspace({
           )
         : `${session.engine.plies}-ply`);
   const setupOpen = visible && setup;
-  const [idleFlipX, idleFlipY] = boardFlips(
-    human,
-    confirmed?.appearance.bearoff_direction ??
-      settings?.bearoff_direction ??
-      'right',
-  );
-  const [engines, setEngines] = useState<EngineInfo[]>([]);
-  useEffect(() => {
-    if (!setupOpen) return;
-    const abort = new AbortController();
-    void loadEngines(abort.signal)
-      .then((value) => {
-        if (!abort.signal.aborted) setEngines(value);
-      })
-      .catch(() => {
-        /* Engine availability is advisory; creating the match still verifies it. */
-      });
-    return () => abort.abort();
-  }, [setupOpen]);
-  const [liveThreshold, setLiveThreshold] = useState('0.04');
-  const thresholdInput = useDecimalInput({
-    value: liveThreshold,
-    onChange: (value) => {
-      setThresholdStatus('idle');
-      setLiveThreshold(value);
-    },
-    step: 0.01,
-    min: 0,
-    max: 1,
-    onKeyDown: (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        event.currentTarget.blur();
-      }
-    },
-  });
-  const [thresholdStatus, setThresholdStatus] = useState<
-    'idle' | 'saving' | 'saved'
-  >('idle');
-  useEffect(() => {
-    setThresholdStatus('idle');
-  }, [session?.id, setup]);
-  useEffect(() => {
-    if (thresholdStatus !== 'saved') return;
-    const timer = window.setTimeout(() => setThresholdStatus('idle'), 3000);
-    return () => window.clearTimeout(timer);
-  }, [thresholdStatus]);
-  const [steps, setSteps] = useState<CheckerStepWithDie[]>([]);
-  const [hovered, setHovered] = useState<number | null>(null);
-  const [swapped, setSwapped] = useState(false);
-  const generation = useRef(0),
-    locked = useRef(false),
-    initialized = useRef(false);
-  const consumedRequest = useRef<number | undefined>(undefined);
-  const retrySession = useRef<string | null>(null);
-  const initialLoad = useRef<AbortController | null>(null);
-  useEffect(
-    () => () => {
-      initialLoad.current?.abort();
-      initialLoad.current = null;
-      ++generation.current;
-      locked.current = false;
-      initialized.current = false;
-      consumedRequest.current = undefined;
-    },
-    [],
-  );
-  function accept(value: PlaySession, preserveSteps = false) {
-    if (value.id !== session?.id || value.game_no !== session?.game_no)
-      setLearningReviewOpen(false);
-    if (!preserveSteps || value.id !== session?.id) {
-      setHintOpen(false);
-      setResignOpen(false);
-      setForfeitOpen(false);
-      setPauseWarning(false);
-      restoreResignFocus.current = false;
-      restoreHintFocus.current = false;
-    }
-    review.reset();
-    setSession(value);
-    setLiveThreshold(String(value.tutor_threshold ?? 0.04));
-    setSetup(false);
-    if (!preserveSteps) {
-      setSteps([]);
-      setHovered(null);
-      setSwapped(false);
-    }
-    setError(undefined);
-    retrySession.current = value.id;
-    onSaved?.();
-    try {
-      localStorage.setItem(storageKey, value.id);
-    } catch {
-      /* Resume through Match Database remains available. */
-    }
-  }
-  useEffect(() => {
-    if (!visible) return;
-    const requested =
-      requestedSession && consumedRequest.current !== requestedSession.token;
-    // Explicit selection may replace a read; an in-flight native action must finish.
-    if (locked.current && !(requested && initialLoad.current)) return;
-    if (!requested && initialized.current) return;
-    initialized.current = true;
-    if (requested) consumedRequest.current = requestedSession.token;
-    const id = requested ? requestedSession.id : storedSession();
-    if (!id) return;
-    load(id, requested ? requestedSession.resume : false, !requested);
-  }, [visible, requestedSession, busy]);
-  /** `restoring` marks the automatic restore of the last stored session. */
-  function load(id: string, resume = false, restoring = false) {
-    if (locked.current && !initialLoad.current) return;
-    setSetup(false);
-    setError(undefined);
-    retrySession.current = id;
-    initialLoad.current?.abort();
-    const abort = new AbortController(),
-      token = ++generation.current;
-    initialLoad.current = abort;
-    playback.cancel();
-    setBusy(true);
-    locked.current = true;
-    void loadPlaySession(id, abort.signal)
-      .then(async (value) => {
-        if (token !== generation.current) return;
-        if (resume && value.paused) {
-          // Once the mutation starts, a later selection must wait for it.
-          initialLoad.current = null;
-          try {
-            value = await actInPlaySession(value, 'resume');
-          } catch (e) {
-            if (token === generation.current) accept(value);
-            throw e;
-          }
-        }
-        if (token === generation.current) accept(value);
-      })
-      .catch((e) => {
-        if (abort.signal.aborted || token !== generation.current) return;
-        // A deleted session is not an error: forget it and offer a new match.
-        if (
-          restoring &&
-          e instanceof AppError &&
-          String(e.params.status) === '404'
-        ) {
-          forgetStoredSession(id);
-          retrySession.current = null;
-          setSetup(true);
-        } else setError(e);
-      })
-      .finally(() => {
-        if (token === generation.current) {
-          initialLoad.current = null;
-          setBusy(false);
-          locked.current = false;
-        }
-      });
-  }
-  async function run(
-    work: () => Promise<PlaySession>,
-    onSuccess?: (value: PlaySession) => void | Promise<void>,
-    preserveSteps = false,
-  ) {
-    if (locked.current) return;
-    locked.current = true;
-    setBusy(true);
-    setError(undefined);
-    const token = ++generation.current;
-    try {
-      const value = await work();
-      if (token === generation.current) {
-        await onSuccess?.(value);
-        if (token === generation.current) accept(value, preserveSteps);
-      }
-    } catch (e) {
-      if (token === generation.current) setError(e);
-    } finally {
-      if (token === generation.current) {
-        locked.current = false;
-        setPendingRoll(null);
-        setBusy(false);
-      }
-    }
-  }
+  const engines = usePlayEngines(setupOpen);
+  const isBlocked = () => isLocked() || playback.isPlaying();
+  const threshold = usePlayThreshold({ session, setup, isBlocked, run });
   useEffect(() => {
     if (
       !visible ||
@@ -456,7 +199,7 @@ export default function PlayWorkspace({
       session.review ||
       busy ||
       playback.animating ||
-      locked.current
+      isLocked()
     )
       return;
     const key = `${session.id}:${session.game_no}:${session.version}`;
@@ -491,13 +234,13 @@ export default function PlayWorkspace({
   function openMatchSetup() {
     focusSetup.current = true;
     setSetupOptions({});
-    setPauseWarning(false);
-    setForfeitOpen(false);
+    dialogs.setPauseWarning(false);
+    dialogs.setForfeitOpen(false);
     setSetup(true);
     setError(undefined);
   }
   function closeSetup() {
-    if (locked.current) return;
+    if (isLocked()) return;
     setSetup(false);
     setError(undefined);
   }
@@ -533,7 +276,7 @@ export default function PlayWorkspace({
     if (
       !session ||
       paused ||
-      locked.current ||
+      isLocked() ||
       playback.isPlaying() ||
       review.isActive()
     )
@@ -567,109 +310,80 @@ export default function PlayWorkspace({
       !visible ||
       setup ||
       busy ||
-      forfeitOpen ||
+      dialogs.forfeitOpen ||
       review.active ||
       error !== undefined
     )
       return;
     if (session?.phase === 'opening_roll') action('opening_roll');
     if (session?.phase === 'opening_result') action('start_opening_move');
-  }, [visible, setup, busy, forfeitOpen, error, review.active, session]);
+  }, [
+    visible,
+    setup,
+    busy,
+    dialogs.forfeitOpen,
+    error,
+    review.active,
+    session,
+  ]);
 
   function feedback(operation: 'hint' | 'reveal' | 'retry') {
     if (
       !session ||
       paused ||
-      locked.current ||
+      isLocked() ||
       playback.isPlaying() ||
       review.isActive()
     )
       return;
     if (operation === 'hint') {
-      setHintReady(false);
-      setHintOpen(true);
+      dialogs.openHint();
     }
     void run(
       () => updatePlayFeedback(session, operation),
-      operation === 'hint' ? () => setHintReady(true) : undefined,
+      operation === 'hint' ? () => dialogs.setHintReady(true) : undefined,
       operation === 'hint',
     );
   }
-  function closeHint() {
-    restoreHintFocus.current = true;
-    setHintOpen(false);
-  }
   function openResign() {
-    if (locked.current || playback.isPlaying() || review.isActive()) return;
+    if (isBlocked() || review.isActive()) return;
     setError(undefined);
-    setResignOpen(true);
+    dialogs.openResign();
   }
   function closeResign() {
-    if (locked.current) return;
-    restoreResignFocus.current = true;
-    setResignOpen(false);
+    if (isLocked()) return;
+    dialogs.closeResign();
     setError(undefined);
   }
+  function openForfeit() {
+    setError(undefined);
+    dialogs.setForfeitOpen(true);
+  }
   function closeForfeit() {
-    if (locked.current) return;
-    setForfeitOpen(false);
+    if (isLocked()) return;
+    dialogs.setForfeitOpen(false);
+    setError(undefined);
+  }
+  function closePauseWarning() {
+    if (isLocked()) return;
+    dialogs.setPauseWarning(false);
     setError(undefined);
   }
   function switchMode(value: PlayMode) {
-    if (!session || locked.current || playback.isPlaying()) return;
+    if (!session || isBlocked()) return;
     void run(
       () => changePlayMode(session, value),
       (updated) => onModeChanged?.(updated),
       true,
     );
   }
-  function saveThreshold() {
-    if (
-      !session ||
-      locked.current ||
-      playback.isPlaying() ||
-      session.phase === 'match_over'
-    )
-      return;
-    if (!validLiveThreshold) {
-      setLiveThreshold(String(session.tutor_threshold ?? 0.04));
-      return;
-    }
-    if (Number(liveThreshold) === (session.tutor_threshold ?? 0.04)) return;
-    setThresholdStatus('saving');
-    void run(
-      () =>
-        changePlayMode(
-          session,
-          session.play_mode ?? 'competition',
-          Number(liveThreshold),
-        ),
-      () => setThresholdStatus('saved'),
-      true,
-    ).then(() =>
-      setThresholdStatus((status) => (status === 'saving' ? 'idle' : status)),
-    );
-  }
-  const validLiveThreshold =
-    liveThreshold.trim() !== '' &&
-    Number.isFinite(Number(liveThreshold)) &&
-    Number(liveThreshold) > 0 &&
-    Number(liveThreshold) <= 1;
-  const pending = session?.pending_decision;
-  const feedbackMode = session?.play_mode ?? 'competition';
-  const competition = feedbackMode === 'competition';
-  const pendingRoutineRoll =
-    pending?.action === 'roll' &&
-    !pending.warning &&
-    (feedbackMode === 'training' ||
-      (feedbackMode === 'coach' && pending.severity === 'none'))
-      ? pending
-      : null;
-  const awaitingFeedback = Boolean(pending?.action && !pendingRoutineRoll);
-  const selectedSteps =
-    !paused && pending?.action === 'move' && pending.move_index != null
-      ? (session?.legal_moves[pending.move_index]?.steps ?? [])
-      : steps;
+  const {
+    pending,
+    mode: feedbackMode,
+    competition,
+    routineRoll,
+    awaiting: awaitingFeedback,
+  } = playFeedback(session);
   const uiBusy = busy || playback.animating;
   const setupDisabled = uiBusy;
   const canRoll = Boolean(
@@ -677,8 +391,8 @@ export default function PlayWorkspace({
     !setup &&
     !paused &&
     !review.active &&
-    !hintOpen &&
-    !resignOpen &&
+    !dialogs.hintOpen &&
+    !dialogs.resignOpen &&
     !awaitingFeedback &&
     session?.phase === 'roll',
   );
@@ -686,85 +400,35 @@ export default function PlayWorkspace({
     session &&
     !paused &&
     !busy &&
-    !hintOpen &&
-    !resignOpen &&
+    !dialogs.hintOpen &&
+    !dialogs.resignOpen &&
     !awaitingFeedback &&
     !review.active &&
     session.phase === 'move' &&
     session.position.player === session.human_player,
   );
-  const openingFrame =
-    playback.frame?.kind === 'dice' && playback.frame.opening
-      ? playback.frame
+  const turn = usePlayTurn({ session, canMove, playback, review, isLocked });
+  const selectedSteps =
+    !paused && pending?.action === 'move' && pending.move_index != null
+      ? (session?.legal_moves[pending.move_index]?.steps ?? [])
+      : turn.steps;
+  const openingScene =
+    playback.scene?.kind === 'dice' && playback.scene.opening
+      ? playback.scene
       : null;
   const openingPhase =
     !review.active &&
     (session?.phase === 'opening_roll' ||
       session?.phase === 'opening_result') &&
-    (!playback.frame || Boolean(openingFrame));
-  const botRoll = useMemo(() => {
-    if (session?.phase !== 'roll') return undefined;
-    const lastResult = session.game_results?.find(
-      (game) => game.game_no === session.game_no - 1,
-    );
-    if (session.game_no > 1 && !lastResult) return undefined;
-    const first = lastResult ? lastResult.history_index + 1 : 0;
-    for (let index = session.history.length - 1; index >= first; --index) {
-      const turn = session.history[index];
-      if (turn.player !== session.human_player && turn.dice.length === 2)
-        return turn;
-    }
-  }, [session]);
-  const savedDice = session?.position.dice;
-  const turnDice = useMemo(
-    () => (savedDice && swapped ? [...savedDice].reverse() : (savedDice ?? [])),
-    [savedDice, swapped],
-  );
-  const previousRoll =
-    !review.active && !playback.frame && !pendingRoll ? botRoll : undefined;
-  const dice =
-    playback.frame && !openingFrame
-      ? playback.frame.dice
-      : pendingRoll === 'roll'
-        ? waitingFaces
-        : openingPhase
-          ? []
-          : turnDice;
-  const moves = session?.legal_moves.length ? (session.legal_turns ?? []) : [];
-  const missingCheckerPaths =
-    canMove && !moves.length && !!session?.legal_moves.length;
-  const continuations = canMove ? matchingCheckerTurns(moves, steps) : [];
-  const choices = nextCheckerSteps(
-    continuations,
-    steps.length,
-    turnDice[steps.length],
-  );
-  const sources = [...choices.keys()];
-  const hoverStep = hovered === null ? undefined : choices.get(hovered);
-  const hoverDestinations = hoverStep ? [hoverStep.to] : [];
-  const completed = continuations.find(
-    (move) => move.steps.length === steps.length && steps.length > 0,
-  );
-  const forcedPass = canMove && session?.legal_moves.length === 0;
+    (!playback.scene || Boolean(openingScene));
   const canPass =
-    forcedPass &&
+    turn.forcedPass &&
     visible &&
     !setup &&
     !uiBusy &&
     !pendingRoll &&
-    !pauseWarning &&
-    !forfeitOpen;
-  const isDouble = turnDice[0] === turnDice[1];
-  const usedDice = isDouble
-    ? [Math.min(1, steps.length / 2), Math.max(0, (steps.length - 2) / 2)]
-    : turnDice.map((die) => steps.some((step) => step.die === die));
-  const canSwap =
-    canMove &&
-    !forcedPass &&
-    !playback.animating &&
-    steps.length === 0 &&
-    turnDice.length === 2 &&
-    !isDouble;
+    !dialogs.pauseWarning &&
+    !dialogs.forfeitOpen;
   const pendingCoachTurn =
     feedbackMode === 'coach' &&
     (pending?.action === 'move' || pending?.action === 'pass')
@@ -776,104 +440,33 @@ export default function PlayWorkspace({
     !setup &&
     !paused &&
     !uiBusy &&
-    !hintOpen &&
-    !resignOpen &&
-    !forfeitOpen &&
+    !dialogs.hintOpen &&
+    !dialogs.resignOpen &&
+    !dialogs.forfeitOpen &&
     !review.active;
   const canConfirm =
-    (canMove && !uiBusy && Boolean(completed)) ||
+    (canMove && !uiBusy && Boolean(turn.completed)) ||
     (canContinueCoachTurn && pendingCoachTurn?.action === 'move');
   function confirmTurn() {
     if (canContinueCoachTurn && pendingCoachTurn?.action === 'move')
       continueDecision();
-    else if (canConfirm && completed) action('move', completed.move_index);
+    else if (canConfirm && turn.completed)
+      action('move', turn.completed.move_index);
   }
   function rollTurn() {
-    if (boardRollReady) action('roll', undefined, pendingRoutineRoll?.id);
+    if (boardRollReady) action('roll', undefined, routineRoll?.id);
   }
   function doubleCube() {
     if (boardRollReady && session?.can_double) action('double');
-  }
-  function swapDice() {
-    if (!canSwap || review.isActive()) return;
-    setSwapped((value) => !value);
-    setHovered(null);
-  }
-  function point(point: number) {
-    const step = choices.get(point);
-    if (!session || !step || review.isActive()) return;
-    unlockPlayAudio();
-    const board = applySteps(
-      session.position.board,
-      steps,
-      session.human_player,
-    );
-    setSteps((old) => [...old, step]);
-    setHovered(point);
-    void playback.play([checkerFrame(board, step, session.human_player, dice)]);
-  }
-  function undo() {
-    if (
-      !session ||
-      !steps.length ||
-      locked.current ||
-      playback.isPlaying() ||
-      review.isActive()
-    )
-      return;
-    const index = steps.length - 1;
-    const board = applySteps(
-      session.position.board,
-      steps.slice(0, index),
-      session.human_player,
-    );
-    const frame = reverseFrame(
-      checkerFrame(board, steps[index], session.human_player, dice),
-    );
-    setSteps(steps.slice(0, index));
-    setHovered(null);
-    void playback.play([frame]);
   }
   const name = (player: number) =>
     player === session?.human_player
       ? session.human_name || t('you')
       : t('bot');
-  const [flipX, flipY] = boardFlips(
-    session?.human_player ?? 0,
-    session?.bearoff_direction ?? 'right',
-  );
-  const historical = review.entry;
-  const historyView =
-    historical?.kind !== 'checker' && review.view === 'arrows'
-      ? 'after'
-      : review.view;
-  const historicalPosition = historical
-    ? historical.kind === 'checker' || historyView === 'before'
-      ? historical.before
-      : historical.after
-    : null;
-  const historicalProjection = useMemo<MovePreview | undefined>(() => {
-    if (!historical || historical.kind !== 'checker') return undefined;
-    const projected = projectMove(historical.before);
-    return {
-      ok: true,
-      board: historical.after.board,
-      steps: projected.ok ? projected.steps : [],
-      forced: projected.ok && projected.forced,
-    };
-  }, [historical]);
-  const liveBoard = session
-    ? applySteps(session.position.board, selectedSteps, session.human_player)
-    : [];
-  const displayedBoard = historical
-    ? historyView === 'after'
-      ? historical.after.board
-      : historical.before.board
-    : liveBoard;
   // The move history renders on its own changes, not on every animation frame.
   const selectHistory = useLatestCallback((index: number) => {
-    if (locked.current || playback.isPlaying()) return;
-    setHovered(null);
+    if (isBlocked()) return;
+    turn.hover(null);
     review.select(index);
   });
   const cubeContext = session
@@ -895,57 +488,30 @@ export default function PlayWorkspace({
     visible && !setup && !paused && feedbackMode === 'coach' && awaitingFeedback
       ? pending
       : null;
-  const interruption =
-    !visible ||
-    setup ||
-    paused ||
-    review.active ||
-    playback.animating ||
-    pendingRoll
-      ? null
-      : resignOpen
-        ? 'resign'
-        : hintOpen && !competition
-          ? 'hint'
-          : coachDecision
-            ? null
-            : session?.phase === 'double_response'
-              ? 'cube'
-              : awaitingFeedback
-                ? 'feedback'
-                : session?.phase === 'game_over'
-                  ? 'game_over'
-                  : moneyFinished && !session?.money_session_ended
-                    ? 'game_over'
-                    : session?.phase === 'match_over' &&
-                        acknowledgedMatch !== matchResultKey
-                      ? 'match_over'
-                      : null;
-  const returnToTurnControl = restoreResignFocus.current
-    ? resignTrigger
-    : restoreHintFocus.current
-      ? hintTrigger
-      : undefined;
-  useEffect(() => {
-    if (!visible || setup) {
-      restoreResignFocus.current = false;
-      restoreHintFocus.current = false;
-    } else if (!hintOpen && !resignOpen && !uiBusy) {
-      if (!interruption)
-        returnToTurnControl?.current?.focus({ preventScroll: true });
-      restoreResignFocus.current = false;
-      restoreHintFocus.current = false;
-    }
-  }, [
-    visible,
-    setup,
-    hintOpen,
-    resignOpen,
-    uiBusy,
-    interruption,
-    returnToTurnControl,
-  ]);
-  const boardRollReady = canRoll && !uiBusy && !interruption && !pauseWarning;
+  const interruption = playInterruption({
+    session,
+    blocked:
+      !visible ||
+      setup ||
+      paused ||
+      review.active ||
+      playback.animating ||
+      pendingRoll !== null,
+    resignOpen: dialogs.resignOpen,
+    hintOpen: dialogs.hintOpen,
+    coaching: Boolean(coachDecision),
+    acknowledged: acknowledgedMatch === matchResultKey,
+  });
+  usePlayDialogFocus({
+    dialogs,
+    resignTrigger,
+    hintTrigger,
+    hidden: !visible || setup,
+    busy: uiBusy,
+    interrupted: Boolean(interruption),
+  });
+  const boardRollReady =
+    canRoll && !uiBusy && !interruption && !dialogs.pauseWarning;
   const assessmentButton =
     session && session.match_length > 0 && session.phase === 'match_over' ? (
       <ActionButton
@@ -982,30 +548,30 @@ export default function PlayWorkspace({
       (session.phase === 'move' &&
         session.position.player === session.human_player)),
   );
-  const turnHeading = beforeRoll ? 'yourTurn' : forcedPass ? 'pass' : 'move';
-  const canForfeit =
+  const turnHeading = beforeRoll
+    ? 'yourTurn'
+    : turn.forcedPass
+      ? 'pass'
+      : 'move';
+  const canForfeit = Boolean(
     session &&
     session.match_length > 0 &&
     !paused &&
-    session.phase !== 'match_over';
-  const forfeitButton = () =>
-    canForfeit && (
-      <ActionButton
-        type="button"
-        icon="resign"
-        ref={forfeitTrigger}
-        label={resignT('forfeitMatch')}
-        disabled={uiBusy || review.active}
-        aria-haspopup="dialog"
-        onClick={() => {
-          setError(undefined);
-          setForfeitOpen(true);
-        }}
-      />
-    );
+    session.phase !== 'match_over',
+  );
+  const forfeitButton = canForfeit && (
+    <ActionButton
+      type="button"
+      icon="resign"
+      ref={forfeitTrigger}
+      label={resignT('forfeitMatch')}
+      disabled={uiBusy || review.active}
+      aria-haspopup="dialog"
+      onClick={openForfeit}
+    />
+  );
   // Resigning sits beside Pause match so it is found without opening the menu.
-  const resignButton = () =>
-    session &&
+  const resignButton = session &&
     !paused &&
     session.phase !== 'game_over' &&
     session.phase !== 'match_over' && (
@@ -1019,14 +585,8 @@ export default function PlayWorkspace({
         onClick={openResign}
       />
     );
-  const hasPauseDraft = steps.length > 0 && pending?.action !== 'move';
-  function closePauseWarning() {
-    if (locked.current) return;
-    setPauseWarning(false);
-    setError(undefined);
-  }
-  const pauseButton = () =>
-    session &&
+  const hasPauseDraft = turn.steps.length > 0 && pending?.action !== 'move';
+  const pauseButton = session &&
     !paused &&
     !session.money_session_ended &&
     (session.phase !== 'match_over' || moneyFinished) && (
@@ -1040,12 +600,12 @@ export default function PlayWorkspace({
         onClick={() => {
           if (hasPauseDraft) {
             setError(undefined);
-            setPauseWarning(true);
+            dialogs.setPauseWarning(true);
           } else pauseMatch();
         }}
       />
     );
-  const hintButton = () => (
+  const hintButton = (
     <ActionButton
       ref={hintTrigger}
       className="play-hint-button"
@@ -1056,10 +616,6 @@ export default function PlayWorkspace({
       shortcut="H"
     />
   );
-  function closeMenu() {
-    menu.current?.hidePopover();
-  }
-  const cubeDecisionOpen = interruption === 'cube';
   const resignationDeclined =
     error instanceof AppError &&
     String(error.params.status) === '422' &&
@@ -1067,9 +623,6 @@ export default function PlayWorkspace({
       'GNUbg declined this resignation.',
       'The bot declined this resignation.',
     ].some((prefix) => error.diagnostic.startsWith(prefix));
-  const currentResult = session?.game_results?.find(
-    (result) => result.game_no === session.game_no,
-  )?.result;
   const continueDecision = () => {
     if (pending?.action)
       action(
@@ -1080,92 +633,25 @@ export default function PlayWorkspace({
   };
   const errorNotice =
     error === undefined ? null : (
-      <div role="alert" className="play-error">
-        <p>{t(hintOpen ? 'hintError' : 'unknownError')}</p>
-        <p>{formatError(error)}</p>
-        {hintOpen && (
-          <ActionButton
-            disabled={uiBusy}
-            onClick={() => feedback('hint')}
-            icon="reset"
-            label={modeT('retry')}
-          >
-            {modeT('retry')}
-          </ActionButton>
-        )}
-        <ActionButton
-          disabled={uiBusy}
-          onClick={() => {
-            const id = retrySession.current ?? storedSession();
-            if (id) load(id);
-          }}
-          icon="refresh"
-          label={t('retry')}
-        >
-          {t('retry')}
-        </ActionButton>
-      </div>
+      <PlayErrorNotice
+        error={error}
+        hint={dialogs.hintOpen}
+        busy={uiBusy}
+        onHint={() => feedback('hint')}
+        onRetry={retry}
+      />
     );
-  const decisionError = forfeitOpen ? null : errorNotice;
+  const decisionError = dialogs.forfeitOpen ? null : errorNotice;
   const modeControl = session && (
-    <div className="play-mode-control">
-      <label>
-        {modeT('mode')}
-        <Tooltip
-          as="select"
-          text={modeT(`${feedbackMode}Help`)}
-          aria-label={modeT('changeMode')}
-          value={feedbackMode}
-          disabled={
-            uiBusy || paused || session.phase === 'match_over' || moneyFinished
-          }
-          onChange={(event) => switchMode(event.target.value as PlayMode)}
-        >
-          {playModes.map((value) => (
-            <option key={value} value={value}>
-              {modeT(value)}
-            </option>
-          ))}
-        </Tooltip>
-      </label>
-      {feedbackMode === 'tutor' && (
-        <div className="play-threshold-control">
-          <label>
-            {modeT('threshold')}
-            <Tooltip
-              as="input"
-              aria-label={modeT('threshold')}
-              text={modeT('liveThresholdHelp')}
-              {...thresholdInput.inputProps}
-              required
-              disabled={
-                uiBusy ||
-                paused ||
-                session.phase === 'match_over' ||
-                moneyFinished
-              }
-              onChange={(event) => thresholdInput.change(event.target.value)}
-              onBlur={saveThreshold}
-            />
-          </label>
-          <span
-            className="play-threshold-status"
-            role="status"
-            aria-atomic="true"
-            data-state={thresholdStatus}
-          >
-            {thresholdStatus === 'saving'
-              ? modeT('thresholdSaving')
-              : thresholdStatus === 'saved'
-                ? modeT('thresholdSaved')
-                : ''}
-          </span>
-        </div>
-      )}
-      {session.learning_used && feedbackMode === 'competition' && (
-        <small>{modeT('learningUsed')}</small>
-      )}
-    </div>
+    <PlayModeControl
+      session={session}
+      mode={feedbackMode}
+      threshold={threshold}
+      disabled={
+        uiBusy || paused || session.phase === 'match_over' || moneyFinished
+      }
+      onMode={switchMode}
+    />
   );
   const dialogPreferences = session && (
     <details className="play-dialog-preferences">
@@ -1194,23 +680,23 @@ export default function PlayWorkspace({
     if (!session) return '';
     if (review.active) return t('reviewing');
     if (paused) return t('matchPaused');
-    const frame = playback.frame;
-    if (frame?.kind === 'checker')
-      return `${name(frame.player)} · ${t('watchMove')}`;
-    if (openingFrame && !openingFrame.rolling)
-      return openingFrame.tied
+    const { scene } = playback;
+    if (scene?.kind === 'checker')
+      return `${name(scene.player)} · ${t('watchMove')}`;
+    if (openingScene && !openingScene.rolling)
+      return openingScene.tied
         ? t('openingTie')
-        : appT('app.toMove', { player: name(openingFrame.player) });
-    if (pendingRoll || frame?.kind === 'dice')
+        : appT('app.toMove', { player: name(openingScene.player) });
+    if (pendingRoll || scene?.kind === 'dice')
       return openingPhase
         ? t('openingRolling')
-        : `${name(frame?.player ?? session.human_player)} · ${t('rolling')}`;
-    if (busy && !hintOpen)
+        : `${name(scene?.player ?? session.human_player)} · ${t('rolling')}`;
+    if (busy && !dialogs.hintOpen)
       return openingPhase ? t('openingPreparing') : t('thinking');
     if (awaitingFeedback) return modeT('unconfirmed');
     if (session.money_session_ended) return t('sessionEnded');
     if (session.match_forfeited) return resignT('matchForfeited');
-    if (forcedPass) return t('pass');
+    if (turn.forcedPass) return t('pass');
     if (session.phase === 'move' || session.phase === 'roll')
       return session.phase === 'roll' ||
         session.position.player === session.human_player
@@ -1245,31 +731,22 @@ export default function PlayWorkspace({
       </header>
       {!setupOpen &&
         !interruption &&
-        !pauseWarning &&
+        !dialogs.pauseWarning &&
         !coachDecision &&
-        !forfeitOpen &&
+        !dialogs.forfeitOpen &&
         errorNotice}
       {!session && (
-        // The empty table stays visible behind the setup dialog.
-        <div
-          className="play-board play-idle-board"
-          inert={setupOpen}
-          ref={boardAnchor}
-          data-human-player={human}
-          style={
-            {
-              '--play-flip-x': idleFlipX,
-              '--play-flip-y': idleFlipY,
-            } as CSSProperties
+        <PlayIdleBoard
+          anchor={boardAnchor}
+          human={human}
+          direction={
+            confirmed?.appearance.bearoff_direction ??
+            settings?.bearoff_direction ??
+            'right'
           }
-        >
-          <Board
-            position={idlePosition}
-            white={t(human === 0 ? 'you' : 'bot')}
-            black={t(human === 1 ? 'you' : 'bot')}
-            theme={theme}
-          />
-        </div>
+          inert={setupOpen}
+          theme={theme}
+        />
       )}
       {setupOpen && (
         <PlayBoardDialog
@@ -1314,90 +791,22 @@ export default function PlayWorkspace({
             >
               {modeControl}
             </div>
-            <div className="play-actions play-match-actions">
-              {pauseButton() && (
-                <span
-                  className="play-pause-slot"
-                  aria-hidden={Boolean(interruption)}
-                  inert={Boolean(interruption)}
-                >
-                  {resignButton()}
-                  {pauseButton()}
-                </span>
-              )}
-              {paused && (
-                <ActionButton
-                  ref={resumeTrigger}
-                  className="primary"
-                  onClick={resumeMatch}
-                  disabled={uiBusy}
-                  icon="resume"
-                  label={t('resumeMatch')}
-                />
-              )}
-              <ActionButton
-                ref={menuTrigger}
-                type="button"
-                className="play-menu-button"
-                icon="more"
-                label={t('moreActions')}
-                compact
-                popoverTarget={menuId}
-                disabled={uiBusy}
-              />
-              <div
-                id={menuId}
-                ref={menu}
-                popover="auto"
-                role="group"
-                aria-label={t('moreActions')}
-                className="play-menu"
-                onKeyDown={(event) => {
-                  if (event.key !== 'Escape') return;
-                  event.preventDefault();
-                  event.stopPropagation();
-                  closeMenu();
-                  menuTrigger.current?.focus();
-                }}
-              >
-                {canForfeit && !interruption && (
-                  <ActionButton
-                    type="button"
-                    icon="resign"
-                    label={resignT('forfeitMatch')}
-                    disabled={uiBusy || review.active}
-                    aria-haspopup="dialog"
-                    onClick={() => {
-                      closeMenu();
-                      setError(undefined);
-                      setForfeitOpen(true);
-                    }}
-                  />
-                )}
-                {interruption !== 'match_over' && (
-                  <ActionButton
-                    type="button"
-                    onClick={() => {
-                      closeMenu();
-                      openMatchSetup();
-                    }}
-                    disabled={uiBusy}
-                    icon="new-game"
-                    label={t('newMatch')}
-                  />
-                )}
-                <ActionButton
-                  type="button"
-                  onClick={() => {
-                    closeMenu();
-                    onOpenPausedMatches();
-                  }}
-                  disabled={uiBusy}
-                  icon="open"
-                  label={libraryT('pausedMatches')}
-                />
-              </div>
-            </div>
+            <PlayMatchActions
+              pause={pauseButton}
+              resign={resignButton}
+              interrupted={Boolean(interruption)}
+              paused={paused}
+              busy={uiBusy}
+              reviewing={review.active}
+              resumeRef={resumeTrigger}
+              menuRef={menuTrigger}
+              canForfeit={canForfeit}
+              canStartMatch={interruption !== 'match_over'}
+              onResume={resumeMatch}
+              onForfeit={openForfeit}
+              onNewMatch={openMatchSetup}
+              onOpenPausedMatches={onOpenPausedMatches}
+            />
           </div>
           <div className="play-layout" inert={setupOpen}>
             <PlayHistory
@@ -1429,13 +838,13 @@ export default function PlayWorkspace({
                       icon="analysis"
                       label={modeT('review')}
                       onClick={() => {
-                        if (session.review) setLearningReviewOpen(true);
+                        if (session.review) dialogs.setLearningReviewOpen(true);
                         else
                           void run(
                             () => reviewPlaySession(session),
                             () => {
                               if (soundsVisible.current)
-                                setLearningReviewOpen(true);
+                                dialogs.setLearningReviewOpen(true);
                             },
                           );
                       }}
@@ -1450,7 +859,7 @@ export default function PlayWorkspace({
               {visible &&
                 !setup &&
                 (!interruption || moneyResultDialog) &&
-                learningReviewOpen &&
+                dialogs.learningReviewOpen &&
                 session.review && (
                   <LearningReviewDialog
                     anchor={boardAnchor}
@@ -1466,239 +875,104 @@ export default function PlayWorkspace({
                         ? `${t('game')} ${session.review_game_no ?? session.game_no}`
                         : undefined
                     }
-                    onClose={() => setLearningReviewOpen(false)}
+                    onClose={() => dialogs.setLearningReviewOpen(false)}
                   />
                 )}
-              <div
-                className="play-board play-live-board"
-                data-board-actions={showBoardActions}
-                data-play-phase={paused ? undefined : session.phase}
-                ref={boardAnchor}
-                style={
-                  {
-                    '--play-flip-x': flipX,
-                    '--play-flip-y': flipY,
-                  } as CSSProperties
+              <PlayBoardStage
+                anchor={boardAnchor}
+                session={session}
+                theme={theme}
+                name={name}
+                paused={paused}
+                frames={playback.frames}
+                pendingRoll={pendingRoll}
+                review={review}
+                turn={turn}
+                selectedSteps={selectedSteps}
+                canMove={canMove}
+                canConfirm={canConfirm}
+                canPass={canPass}
+                canContinuePass={
+                  canContinueCoachTurn && pendingCoachTurn?.action === 'pass'
                 }
-                data-play-review={review.index ?? undefined}
-                data-play-animation={
-                  playback.frame?.kind ?? (pendingRoll ? 'dice' : 'idle')
+                rollReady={boardRollReady}
+                openingPhase={openingPhase}
+                showActions={showBoardActions}
+                doubleReasonId={doubleReasonId}
+                doubleUnavailableReason={doubleUnavailableReason}
+                turnNotationId={turnNotationId}
+                onRoll={rollTurn}
+                onDouble={doubleCube}
+                onConfirm={confirmTurn}
+                onPass={() => action('pass')}
+                onContinue={continueDecision}
+                before={
+                  <>
+                    {dialogs.pauseWarning && (
+                      <PlayPauseDialog
+                        anchor={boardAnchor}
+                        busy={uiBusy}
+                        returnFocus={pauseTrigger}
+                        error={errorNotice}
+                        onClose={closePauseWarning}
+                        onPause={pauseMatch}
+                      />
+                    )}
+                    {review.index !== null && (
+                      <PlayHistoryReviewToolbar
+                        review={review}
+                        index={review.index}
+                        view={playHistoryView(review)}
+                        onRetry={() => load(session.id)}
+                      />
+                    )}
+                    {coachDecision && (
+                      <PlayCoachFeedback
+                        key={`${session.id}:${coachDecision.id}`}
+                        anchor={boardAnchor}
+                        session={session}
+                        decision={coachDecision}
+                        theme={theme}
+                        white={name(0)}
+                        black={name(1)}
+                        busy={uiBusy}
+                        errorNotice={decisionError}
+                        onContinue={continueDecision}
+                        onRetry={() => feedback('retry')}
+                        onReveal={() => feedback('reveal')}
+                      />
+                    )}
+                    {showBoardActions && (
+                      <PlayTurnToolbar
+                        session={session}
+                        heading={turnHeading}
+                        beforeRoll={beforeRoll}
+                        forcedPass={turn.forcedPass}
+                        rollReady={boardRollReady}
+                        canPass={canPass}
+                        canConfirm={canConfirm}
+                        canMove={canMove}
+                        pendingRoutineRoll={Boolean(routineRoll)}
+                        competition={competition}
+                        hint={hintButton}
+                        busy={uiBusy}
+                        steps={turn.steps}
+                        complete={Boolean(turn.completed)}
+                        missingCheckerPaths={turn.missingCheckerPaths}
+                        doubleReasonId={doubleReasonId}
+                        doubleUnavailableReason={doubleUnavailableReason}
+                        notationId={turnNotationId}
+                        onRoll={rollTurn}
+                        onPass={() => action('pass')}
+                        onConfirm={confirmTurn}
+                        onDouble={doubleCube}
+                        onUndo={turn.undo}
+                        onRetry={() => load(session.id)}
+                      />
+                    )}
+                  </>
                 }
-                data-animation-player={playback.frame?.player}
-                data-animation-dice={playback.frame?.dice.join('-')}
-                data-direction={session.bearoff_direction}
-                data-human-player={session.human_player}
               >
-                {pauseWarning && (
-                  <PlayBoardDialog
-                    anchor={boardAnchor}
-                    heading={t('pauseMatch')}
-                    busy={uiBusy}
-                    returnFocus={pauseTrigger}
-                    onClose={closePauseWarning}
-                  >
-                    <p>{t('pauseDraftHelp')}</p>
-                    {errorNotice}
-                    <div className="play-actions">
-                      <ActionButton
-                        type="button"
-                        icon="close"
-                        label={libraryT('cancel')}
-                        disabled={uiBusy}
-                        onClick={closePauseWarning}
-                      />
-                      <ActionButton
-                        type="button"
-                        className="primary"
-                        icon="pause"
-                        label={t('pauseMatch')}
-                        disabled={uiBusy}
-                        onClick={pauseMatch}
-                      />
-                    </div>
-                  </PlayBoardDialog>
-                )}
-                {review.index !== null && (
-                  <PlayHistoryReviewToolbar
-                    review={review}
-                    index={review.index}
-                    view={historyView}
-                    onRetry={() => load(session.id)}
-                  />
-                )}
-                {coachDecision && (
-                  <PlayCoachFeedback
-                    key={`${session.id}:${coachDecision.id}`}
-                    anchor={boardAnchor}
-                    session={session}
-                    decision={coachDecision}
-                    theme={theme}
-                    white={name(0)}
-                    black={name(1)}
-                    busy={uiBusy}
-                    errorNotice={decisionError}
-                    onContinue={continueDecision}
-                    onRetry={() => feedback('retry')}
-                    onReveal={() => feedback('reveal')}
-                  />
-                )}
-                {showBoardActions && (
-                  <PlayTurnToolbar
-                    session={session}
-                    heading={turnHeading}
-                    beforeRoll={beforeRoll}
-                    forcedPass={forcedPass}
-                    rollReady={boardRollReady}
-                    canPass={canPass}
-                    canConfirm={canConfirm}
-                    canMove={canMove}
-                    pendingRoutineRoll={Boolean(pendingRoutineRoll)}
-                    competition={competition}
-                    hint={hintButton()}
-                    busy={uiBusy}
-                    steps={steps}
-                    complete={Boolean(completed)}
-                    missingCheckerPaths={missingCheckerPaths}
-                    doubleReasonId={doubleReasonId}
-                    doubleUnavailableReason={doubleUnavailableReason}
-                    notationId={turnNotationId}
-                    onRoll={rollTurn}
-                    onPass={() => action('pass')}
-                    onConfirm={confirmTurn}
-                    onDouble={doubleCube}
-                    onUndo={undo}
-                    onRetry={() => load(session.id)}
-                  />
-                )}
-                <Board
-                  position={
-                    historicalPosition ?? {
-                      ...session.position,
-                      dice,
-                      player: playback.frame?.player ?? session.position.player,
-                      board:
-                        playback.frame?.before ??
-                        applySteps(
-                          session.position.board,
-                          selectedSteps,
-                          session.human_player,
-                        ),
-                    }
-                  }
-                  white={name(0)}
-                  black={name(1)}
-                  showPipCounts={
-                    !competition ||
-                    session.phase === 'match_over' ||
-                    moneyFinished
-                  }
-                  theme={theme}
-                  animation={review.active ? null : playback.frame}
-                  preview={historicalProjection}
-                  previewMode={historical ? historyView : undefined}
-                  interaction={{
-                    enabled: sources,
-                    sources,
-                    destinations: hoverDestinations,
-                    board: displayedBoard,
-                    onHover: setHovered,
-                    cube: boardRollReady
-                      ? {
-                          activate:
-                            session.can_double && !pendingRoutineRoll
-                              ? doubleCube
-                              : undefined,
-                          label:
-                            session.can_double && !pendingRoutineRoll
-                              ? t('double')
-                              : doubleUnavailableReason,
-                          descriptionId: session.can_double
-                            ? undefined
-                            : doubleReasonId,
-                        }
-                      : undefined,
-                    dice: {
-                      previousRoll,
-                      roll:
-                        boardRollReady && previousRoll ? rollTurn : undefined,
-                      opening: openingPhase
-                        ? {
-                            values:
-                              openingFrame?.dice ??
-                              (pendingRoll === 'opening_roll'
-                                ? waitingFaces
-                                : session.phase === 'opening_result' &&
-                                    session.opening
-                                  ? [
-                                      session.opening.white_die,
-                                      session.opening.black_die,
-                                    ]
-                                  : [null, null]),
-                            labels: [
-                              name(0) + ' · ' + t('white'),
-                              name(1) + ' · ' + t('black'),
-                            ],
-                            unrolled: t('openingNotRolled'),
-                          }
-                        : undefined,
-                      canSwap,
-                      canConfirm,
-                      confirm: confirmTurn,
-                      pass:
-                        canContinueCoachTurn &&
-                        pendingCoachTurn?.action === 'pass'
-                          ? continueDecision
-                          : canPass
-                            ? () => action('pass')
-                            : undefined,
-                      descriptionId:
-                        canConfirm && steps.length > 0
-                          ? turnNotationId
-                          : undefined,
-                      rolling: Boolean(
-                        playback.frame?.rolling ||
-                        pendingRoll === 'roll' ||
-                        pendingRoll === 'opening_roll',
-                      ),
-                      swap: swapDice,
-                      label:
-                        t(
-                          previousRoll
-                            ? 'roll'
-                            : pendingRoll
-                              ? 'rolling'
-                              : forcedPass ||
-                                  pendingCoachTurn?.action === 'pass'
-                                ? 'pass'
-                                : canConfirm
-                                  ? 'confirm'
-                                  : 'swapDice',
-                        ) +
-                        ' · ' +
-                        (previousRoll?.dice ?? dice).join(', '),
-                      used:
-                        review.active || playback.frame || pendingRoll
-                          ? [false, false]
-                          : previousRoll
-                            ? [true, true]
-                            : usedDice,
-                      active:
-                        playback.frame || pendingRoll || !canMove || completed
-                          ? null
-                          : usedDice.findIndex((used) => Number(used) < 1),
-                    },
-                    human: session.human_player,
-                    onPoint: point,
-                    label: (p) =>
-                      p === -1 || p === 26
-                        ? t('off') + ' · ' + name(p === -1 ? 0 : 1)
-                        : p === 0 || p === 25
-                          ? t('bar') + ' · ' + name(p === 25 ? 0 : 1)
-                          : t('point') +
-                            ' ' +
-                            relativePoint(p, session.human_player),
-                  }}
-                />
                 {interruption === 'resign' && (
                   <PlayResignDialog
                     anchor={boardAnchor}
@@ -1723,7 +997,7 @@ export default function PlayWorkspace({
                       canForfeit
                         ? () => {
                             closeResign();
-                            setForfeitOpen(true);
+                            dialogs.setForfeitOpen(true);
                           }
                         : undefined
                     }
@@ -1733,226 +1007,86 @@ export default function PlayWorkspace({
                   />
                 )}
                 {interruption === 'hint' && (
-                  <PlayBoardDialog
+                  <PlayHintDialog
                     anchor={boardAnchor}
-                    heading={modeT('hint')}
+                    session={session}
+                    theme={theme}
+                    name={name}
                     busy={uiBusy}
-                    className={`play-hint-dialog play-analysis-dialog${hintReady && hasPlayMovePreview(session) ? ' play-analysis-dialog--checker' : ''}`}
-                    onClose={closeHint}
-                  >
-                    {errorNotice}
-                    {busy && <p role="status">{t('hintLoading')}</p>}
-                    {!busy && hintReady && (
-                      <PlayHintView
-                        key={`${session.id}:${pending?.id}`}
-                        session={session}
-                        theme={theme}
-                        white={name(0)}
-                        black={name(1)}
-                      />
-                    )}
-                  </PlayBoardDialog>
+                    loading={busy}
+                    ready={dialogs.hintReady}
+                    error={errorNotice}
+                    onClose={dialogs.closeHint}
+                  />
                 )}
-                {cubeDecisionOpen && (
-                  <PlayCubeDecision
+                {interruption === 'cube' && (
+                  <PlayCubeDialog
                     anchor={boardAnchor}
-                    cube={matchContext(session.position.gnubg_match_id).cube}
+                    session={session}
                     busy={uiBusy}
-                  >
-                    {decisionError}
-                    {feedbackPanel}
-                    {!awaitingFeedback && (
-                      <div className="play-actions play-cube-choices">
-                        <ActionButton
-                          className="primary"
-                          disabled={uiBusy}
-                          onClick={() => action('take')}
-                          icon="take"
-                          label={t('take')}
-                        >
-                          {t('take')}
-                        </ActionButton>
-                        <ActionButton
-                          disabled={uiBusy}
-                          onClick={() => action('drop')}
-                          icon="drop"
-                          label={t('drop')}
-                        >
-                          {t('drop')}
-                        </ActionButton>
-                        {!competition && (
-                          <ActionButton
-                            disabled={uiBusy}
-                            onClick={() => feedback('hint')}
-                            icon="hint"
-                            label={modeT('hint')}
-                          >
-                            {modeT('hint')}
-                          </ActionButton>
-                        )}
-                      </div>
-                    )}
-                    <div className="play-actions play-cube-choices">
-                      {pauseButton()}
-                      {forfeitButton()}
-                    </div>
-                    {dialogPreferences}
-                  </PlayCubeDecision>
+                    error={decisionError}
+                    feedback={feedbackPanel}
+                    awaitingFeedback={awaitingFeedback}
+                    competition={competition}
+                    pause={pauseButton}
+                    forfeit={forfeitButton}
+                    preferences={dialogPreferences}
+                    onTake={() => action('take')}
+                    onDrop={() => action('drop')}
+                    onHint={() => feedback('hint')}
+                  />
                 )}
-                {interruption &&
-                  !cubeDecisionOpen &&
-                  interruption !== 'resign' &&
-                  interruption !== 'hint' && (
-                    <PlayBoardDialog
-                      key={interruption}
-                      className={
-                        interruption === 'feedback' &&
-                        hasPlayMovePreview(session)
-                          ? 'play-analysis-dialog play-analysis-dialog--checker'
-                          : moneyFinished && interruption === 'game_over'
-                            ? 'play-money-result-dialog'
-                            : undefined
-                      }
-                      anchor={boardAnchor}
-                      busy={uiBusy}
-                      heading={
-                        interruption === 'feedback'
-                          ? modeT(feedbackMode)
-                          : interruption === 'match_over' &&
-                              session.money_session_ended
-                            ? t('sessionEnded')
-                            : t(interruption)
-                      }
-                    >
-                      {decisionError}
-                      {feedbackPanel}
-                      {(interruption === 'game_over' ||
-                        interruption === 'match_over') && (
-                        <>
-                          {session.match_forfeited ? (
-                            <p>{resignT('matchForfeited')}</p>
-                          ) : currentResult ? (
-                            <GameResultSummary
-                              result={currentResult}
-                              white={name(0)}
-                              black={name(1)}
-                            />
-                          ) : (
-                            session.winner != null && (
-                              <p>
-                                {t('winner')}: {name(session.winner)}
-                              </p>
-                            )
-                          )}
-                          <div className="play-actions play-cube-choices">
-                            {interruption === 'game_over' ? (
-                              <>
-                                <ActionButton
-                                  className="primary"
-                                  disabled={
-                                    uiBusy ||
-                                    (moneyFinished && !session.review && !error)
-                                  }
-                                  onClick={() => action('next_game')}
-                                  icon="new-game"
-                                  label={t('next_game')}
-                                >
-                                  {t('next_game')}
-                                </ActionButton>
-                                {pauseButton()}
-                                {moneyFinished && (
-                                  <ActionButton
-                                    disabled={uiBusy}
-                                    onClick={() => action('end_session')}
-                                    icon="confirm"
-                                    label={t('endSession')}
-                                  >
-                                    {t('endSession')}
-                                  </ActionButton>
-                                )}
-                                {forfeitButton()}
-                              </>
-                            ) : (
-                              <>
-                                <ActionButton
-                                  className="primary"
-                                  disabled={uiBusy}
-                                  onClick={() => {
-                                    setAcknowledgedMatch(matchResultKey);
-                                    openMatchSetup();
-                                  }}
-                                  icon="new-game"
-                                  label={t('newMatch')}
-                                >
-                                  {t('newMatch')}
-                                </ActionButton>
-                                <ActionButton
-                                  disabled={uiBusy}
-                                  onClick={() =>
-                                    setAcknowledgedMatch(matchResultKey)
-                                  }
-                                  icon="back"
-                                  label={t('backToBoard')}
-                                >
-                                  {t('backToBoard')}
-                                </ActionButton>
-                              </>
-                            )}
-                            {assessmentButton}
-                            {moneyFinished && (
-                              <ActionButton
-                                ref={moneyReviewTrigger}
-                                icon="analysis"
-                                label={modeT('reviewTooltip')}
-                                disabled={uiBusy || !session.review}
-                                onClick={() => setLearningReviewOpen(true)}
-                              >
-                                {modeT('reviewTooltip')}
-                              </ActionButton>
-                            )}
-                          </div>
-                        </>
-                      )}
-                      {interruption !== 'game_over' &&
-                        interruption !== 'match_over' && (
-                          <div className="play-actions play-cube-choices">
-                            {pauseButton()}
-                            {forfeitButton()}
-                          </div>
-                        )}
-                      {dialogPreferences}
-                    </PlayBoardDialog>
-                  )}
-                {forfeitOpen && canForfeit && (
-                  <PlayBoardDialog
+                {interruption === 'feedback' && (
+                  <PlayFeedbackDialog
                     anchor={boardAnchor}
-                    heading={resignT('forfeitMatch')}
+                    session={session}
+                    mode={feedbackMode}
+                    busy={uiBusy}
+                    error={decisionError}
+                    feedback={feedbackPanel}
+                    pause={pauseButton}
+                    forfeit={forfeitButton}
+                    preferences={dialogPreferences}
+                  />
+                )}
+                {(interruption === 'game_over' ||
+                  interruption === 'match_over') && (
+                  <PlayResultDialog
+                    key={interruption}
+                    kind={interruption}
+                    anchor={boardAnchor}
+                    session={session}
+                    name={name}
+                    busy={uiBusy}
+                    error={decisionError}
+                    failed={Boolean(error)}
+                    feedback={feedbackPanel}
+                    pause={pauseButton}
+                    forfeit={forfeitButton}
+                    assessment={assessmentButton}
+                    preferences={dialogPreferences}
+                    moneyReviewRef={moneyReviewTrigger}
+                    onNextGame={() => action('next_game')}
+                    onEndSession={() => action('end_session')}
+                    onNewMatch={() => {
+                      setAcknowledgedMatch(matchResultKey);
+                      openMatchSetup();
+                    }}
+                    onBack={() => setAcknowledgedMatch(matchResultKey)}
+                    onReview={() => dialogs.setLearningReviewOpen(true)}
+                  />
+                )}
+                {dialogs.forfeitOpen && canForfeit && (
+                  <PlayForfeitDialog
+                    anchor={boardAnchor}
                     busy={uiBusy}
                     returnFocus={interruption ? forfeitTrigger : menuTrigger}
+                    error={errorNotice}
                     onClose={closeForfeit}
-                  >
-                    <p>{resignT('forfeitHelp')}</p>
-                    {errorNotice}
-                    <div className="play-actions play-cube-choices">
-                      <ActionButton
-                        type="button"
-                        icon="cancel"
-                        label={resignT('cancel')}
-                        disabled={uiBusy}
-                        onClick={closeForfeit}
-                      />
-                      <ActionButton
-                        type="button"
-                        icon="resign"
-                        label={resignT('forfeitMatch')}
-                        className="play-resign-confirm"
-                        disabled={uiBusy}
-                        onClick={() => action('forfeit_match')}
-                      />
-                    </div>
-                  </PlayBoardDialog>
+                    onForfeit={() => action('forfeit_match')}
+                  />
                 )}
-              </div>
+              </PlayBoardStage>
               {!busy &&
                 !paused &&
                 !review.active &&

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
 import {
   preferredDepth,
@@ -6,7 +6,11 @@ import {
 } from '../../shared/engine/analysis-depth';
 import { useConfirmedConfiguration } from '../../settings/configuration/ConfigurationProvider';
 import { defaultConfiguration } from '../../settings/configuration/configuration-model';
-import type { AppSettings } from '../../settings/settings-api';
+import {
+  loadEngines,
+  type AppSettings,
+  type EngineInfo,
+} from '../../settings/settings-api';
 import type { SageDifficulty } from './play-api';
 import type { PlayMode } from './play-mode-messages';
 
@@ -95,3 +99,21 @@ export function usePlaySetupOptions(settings: AppSettings | undefined) {
 }
 
 export type PlaySetupChoices = ReturnType<typeof usePlaySetupOptions>;
+
+/** The engines the new-match dialog offers, loaded each time it opens. */
+export function usePlayEngines(setupOpen: boolean) {
+  const [engines, setEngines] = useState<EngineInfo[]>([]);
+  useEffect(() => {
+    if (!setupOpen) return;
+    const abort = new AbortController();
+    void loadEngines(abort.signal)
+      .then((value) => {
+        if (!abort.signal.aborted) setEngines(value);
+      })
+      .catch(() => {
+        /* Engine availability is advisory; creating the match still verifies it. */
+      });
+    return () => abort.abort();
+  }, [setupOpen]);
+  return engines;
+}
