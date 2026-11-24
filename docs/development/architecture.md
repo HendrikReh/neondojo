@@ -6,7 +6,7 @@
 | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
 | [`backend/src/api.rs`](../../backend/src/api.rs)                                                                         | REST, SSE, and OpenAPI                                              |
 | [`backend/src/backgammon/`](../../backend/src/backgammon/) | Boards, legal checker turns, and GNUbg identifiers; depends on no other module |
-| [`backend/src/import/`](../../backend/src/import/) | Import formats, replay, and match validation |
+| [`backend/src/import/`](../../backend/src/import/) | Import formats, replay, and match validation. [`format.rs`](../../backend/src/import/format.rs) is the one list of match formats and of what differs between them |
 | [`backend/src/engine.rs`](../../backend/src/engine.rs), [`backend/src/match_analysis.rs`](../../backend/src/match_analysis.rs) | Isolated GNUbg processes and native checker and cube analysis       |
 | [`backend/src/engines/`](../../backend/src/engines/) | Engine providers, capability checks, and NeonGammon sidecar (`worker.py`) |
 | [`backend/src/jobs.rs`](../../backend/src/jobs.rs), [`backend/src/match_jobs.rs`](../../backend/src/match_jobs.rs)             | Job state, progress events, game checkpoints, and player statistics |

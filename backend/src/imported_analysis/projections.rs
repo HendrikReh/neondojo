@@ -34,7 +34,7 @@ pub(crate) async fn ensure_saved(pool: &PgPool, database_id: Option<Uuid>) -> Ap
     struct Row {
         id: Uuid,
         data: Value,
-        format: String,
+        format: crate::import::MatchFormat,
         checker_ply: i32,
         source_revision: i64,
         event: Option<sqlx::types::Json<StoredMove>>,
@@ -57,7 +57,7 @@ pub(crate) async fn ensure_saved(pool: &PgPool, database_id: Option<Uuid>) -> Ap
             let projection = row.event.and_then(|event| {
                 let record=serde_json::from_value::<ImportedAnalysisData>(row.data).ok()?;
                 let source=imported_projection::source_move(&event.0,Some(row.checker_ply))?;
-                let projected=imported_projection::project(&record,&source,event.match_uuid,event.position_uuid,&row.format)?;
+                let projected=imported_projection::project(&record,&source,event.match_uuid,event.position_uuid,row.format)?;
                 Some(serde_json::json!({"decision":projected.decision,"depth":projected.depth,"plies":projected.depth_plies}))
             });
             (row.id,row.source_revision,projection)

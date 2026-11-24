@@ -2,7 +2,7 @@ use crate::json_errors::{Json, Multipart, Path, Query};
 use crate::{
     configuration::ConfigurationIssue,
     engine::{Analysis, Candidate, DiceEvaluation, Distribution, Engine, valid_id},
-    import,
+    import::{self, MatchFormat},
     model::*,
     store,
 };
@@ -364,17 +364,12 @@ async fn upload(
         .next()
         .unwrap_or("")
         .to_ascii_lowercase();
-    // A .txt upload is a plain-text match transcript in the Jellyfish MAT
-    // layout, as published by tournament archives. It is stored as MAT.
-    let format = match extension.as_str() {
-        "txt" => "mat".to_owned(),
-        _ => extension.clone(),
-    };
-    if !["mat", "sgf", "xg", "bgf", "ogxm"].contains(&format.as_str()) {
-        return Err(ApiError::invalid(
-            "Supported formats: .mat, .txt, .sgf, .xg, .bgf, .ogxm",
-        ));
-    }
+    let format = MatchFormat::from_extension(&extension).ok_or_else(|| {
+        ApiError::invalid(format!(
+            "Supported formats: {}",
+            import::supported_extensions()
+        ))
+    })?;
     let bytes = field
         .bytes()
         .await
@@ -390,50 +385,14 @@ async fn upload(
     {
         return Err(ApiError::invalid("Upload one file per request"));
     }
-    let mut warnings = Vec::new();
-    let sgf = match format.as_str() {
-        "mat" => {
-            let converted = Engine::new(crate::settings::load(&state).await?.gnubg_path)
-                .import_mat(&bytes)
-                .await
-                .map_err(|e| {
-                    ApiError::invalid(if extension == "txt" {
-                        format!("TXT import failed; expected a MAT match transcript: {e:#}")
-                    } else {
-                        format!("MAT import failed: {e:#}")
-                    })
-                })?;
-            warnings = converted.warnings;
-            converted.sgf
-        }
-        "sgf" => {
-            String::from_utf8(bytes.to_vec()).map_err(|_| ApiError::invalid("SGF must be UTF-8"))?
-        }
-        "bgf" => {
-            let data = bytes.clone();
-            tokio::task::spawn_blocking(move || import::bgf_to_sgf(&data))
-                .await
-                .map_err(anyhow::Error::from)?
-                .map_err(|e| ApiError::invalid(format!("BGF import failed: {e:#}")))?
-        }
-        "ogxm" => {
-            let data = bytes.clone();
-            tokio::task::spawn_blocking(move || import::ogxm_to_sgf(&data))
-                .await
-                .map_err(anyhow::Error::from)?
-                .map_err(|e| ApiError::invalid(format!("OGXM import failed: {e:#}")))?
-        }
-        "xg" => {
-            let data = bytes.clone();
-            let converted = tokio::task::spawn_blocking(move || import::convert_xg(&data))
-                .await
-                .map_err(anyhow::Error::from)?
-                .map_err(|e| ApiError::invalid(format!("XG import failed: {e:#}")))?;
-            warnings = converted.warnings;
-            converted.sgf
-        }
-        _ => unreachable!(),
+    let gnubg = async {
+        let settings = crate::settings::load(&state).await?;
+        Ok(Engine::new(settings.gnubg_path))
     };
+    let import::ConvertedMatch { sgf, warnings } = format
+        .convert(bytes.clone(), gnubg)
+        .await?
+        .map_err(|e| ApiError::invalid(format.conversion_error(&extension, &e)))?;
     let parse_source = sgf.clone();
     let imported = tokio::task::spawn_blocking(move || import::parse_sgf(&parse_source))
         .await
@@ -452,7 +411,7 @@ async fn upload(
     let mut result = store::import_source_in_database(
         &state.pool,
         &filename,
-        &format,
+        format.id(),
         &bytes,
         &sgf,
         &imported,

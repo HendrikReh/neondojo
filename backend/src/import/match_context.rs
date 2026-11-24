@@ -49,11 +49,3 @@ impl MatchContext {
         .filter_map(|(key, value)| value.map(|value| (key, value)))
     }
 }
-
-pub(crate) fn from_original(format: &str, bytes: &[u8]) -> anyhow::Result<MatchContext> {
-    match format {
-        "xg" => super::xg::read_match_context(bytes),
-        "bgf" => super::bgf::read_match_context(bytes),
-        _ => Ok(MatchContext::default()),
-    }
-}

@@ -4,6 +4,7 @@ use crate::{
     analysis_catalog::{self, SelectedAnalysis},
     backgammon::ids::{self, decode_board},
     engine::Analysis,
+    import::MatchFormat,
     move_assessments::after_play,
     store,
 };
@@ -166,7 +167,7 @@ async fn position_cards(
         position: sqlx::types::Json<Position>,
         white: String,
         black: String,
-        format: String,
+        format: MatchFormat,
         analysis_id: Option<String>,
         job_id: Option<Uuid>,
         job_kind: Option<String>,
@@ -199,7 +200,7 @@ async fn position_cards(
                 event.0,
                 Some(position.ply),
                 players,
-                &row.format,
+                row.format,
             )
         } else if let (Some(job_id), Some(kind), Some(plies), Some(engine)) =
             (row.job_id, row.job_kind, row.plies, row.engine)
@@ -263,7 +264,7 @@ fn imported_card(
     event: crate::move_catalog::StoredMove,
     checker_ply: Option<i32>,
     players: [String; 2],
-    format: &str,
+    format: MatchFormat,
 ) -> Option<CardContent> {
     let record =
         serde_json::from_value::<crate::imported_analysis::ImportedAnalysisData>(value).ok()?;
@@ -358,7 +359,7 @@ pub(super) async fn imported_decision_cards(
         checker_ply: Option<i32>,
         white: String,
         black: String,
-        format: String,
+        format: MatchFormat,
     }
     let rows=sqlx::query_as::<_,Row>("SELECT ia.id,ia.data,to_jsonb(e) AS event,p.ply AS checker_ply,m.white,m.black,m.format FROM primary_imported_analyses ia JOIN matches m ON m.id=ia.match_uuid LEFT JOIN match_moves e ON e.match_uuid=ia.match_uuid AND e.game_no=ia.game_no AND e.move_no=ia.source_move_no AND e.position_uuid IS NOT DISTINCT FROM ia.position_uuid LEFT JOIN positions p ON p.id=e.position_uuid WHERE m.id=$1 AND NOT m.collection_only AND ia.kind IN ('checker','cube') AND ($2::integer IS NULL OR ia.game_no=$2) AND ($3::integer IS NULL OR e.player=$3) ORDER BY ia.game_no,ia.source_move_no,ia.source_ordinal LIMIT 200001")
         .bind(match_id).bind(game_no).bind(player).fetch_all(pool).await.map_err(anyhow::Error::from)?;
@@ -372,7 +373,7 @@ pub(super) async fn imported_decision_cards(
         .map(|row| {
             let card = match row.event {
                 None => Err("The selected imported analysis lacks its original decision context".to_owned()),
-                Some(event) => imported_card(row.id, row.data, event.0, row.checker_ply, [row.white, row.black], &row.format)
+                Some(event) => imported_card(row.id, row.data, event.0, row.checker_ply, [row.white, row.black], row.format)
                     .ok_or_else(|| "The selected imported analysis contains an unsupported solution; select supported positions individually".to_owned()),
             };
             (row.id, card)

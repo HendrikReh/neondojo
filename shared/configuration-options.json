@@ -52,6 +52,14 @@
       }
     }
   },
+  "match_file_extensions": [
+    ".mat",
+    ".txt",
+    ".sgf",
+    ".xg",
+    ".bgf",
+    ".ogxm"
+  ],
   "parallel_analysis_jobs": {
     "min": 1,
     "max": 8,

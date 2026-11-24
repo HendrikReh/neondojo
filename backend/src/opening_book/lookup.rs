@@ -1,4 +1,5 @@
 use super::*;
+use crate::import::{BeaverRule, MatchFormat};
 
 /// None means explicitly browse this book's own engine answers. A cache in front
 /// of native analysis MUST pass the installed engine version; mismatches miss.
@@ -191,7 +192,7 @@ pub(super) async fn source_beaver_rule(
     if length > 0 {
         return Ok(Some(false));
     }
-    let row: Option<(String, String, i32)> =
+    let row: Option<(MatchFormat, String, i32)> =
         sqlx::query_as("SELECT format,sha256,octet_length(original) FROM matches WHERE id=$1")
             .bind(position.match_uuid)
             .fetch_optional(pool)
@@ -199,10 +200,9 @@ pub(super) async fn source_beaver_rule(
     let Some((format, sha, length)) = row else {
         return Ok(None);
     };
-    match format.as_str() {
-        // These public importers reject the beaver rule, including its RU form.
-        "sgf" | "bgf" | "ogxm" => Ok(Some(false)),
-        "xg" => {
+    match format.beaver_rule() {
+        BeaverRule::Off => Ok(Some(false)),
+        BeaverRule::InOriginal(read) => {
             type Rules = std::collections::HashMap<(Uuid, String), Option<bool>>;
             static RULES: std::sync::OnceLock<std::sync::Mutex<Rules>> = std::sync::OnceLock::new();
             let cache = RULES.get_or_init(|| std::sync::Mutex::new(Rules::new()));
@@ -224,10 +224,9 @@ pub(super) async fn source_beaver_rule(
                 .bind(position.match_uuid)
                 .fetch_one(pool)
                 .await?;
-            let rule =
-                tokio::task::spawn_blocking(move || crate::import::xg_beaver_rule(&original))
-                    .await?
-                    .ok();
+            let rule = tokio::task::spawn_blocking(move || read(&original))
+                .await?
+                .ok();
             let mut cache = cache
                 .lock()
                 .map_err(|_| anyhow::anyhow!("Book rule cache unavailable"))?;
@@ -237,7 +236,6 @@ pub(super) async fn source_beaver_rule(
             cache.insert(key, rule);
             Ok(rule)
         }
-        // MAT has no reliable money-session beaver declaration.
-        _ => Ok(None),
+        BeaverRule::Unknown => Ok(None),
     }
 }

@@ -1,16 +1,11 @@
+import configurationOptions from '../../../../../shared/configuration-options.json' with { type: 'json' };
+
 /**
  * Client-side selection of match files for upload. The backend validates
  * every file again; this list only keeps unrelated files in a chosen folder
  * from producing an upload and an error row each.
  */
-export const MATCH_FILE_EXTENSIONS = [
-  '.mat',
-  '.txt',
-  '.sgf',
-  '.xg',
-  '.bgf',
-  '.ogxm',
-] as const;
+export const MATCH_FILE_EXTENSIONS = configurationOptions.match_file_extensions;
 
 export const MATCH_FILE_ACCEPT = MATCH_FILE_EXTENSIONS.join(',');
 
