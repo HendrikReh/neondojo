@@ -1,14 +1,11 @@
 pub(crate) mod catalog;
 // Read-only statistics for exactly one native analysis job and its durable games.
+use crate::json_errors::{Json, Path};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::{Job, MatchAnalysisSummary, PlayerAnalysisSummary},
 };
-use axum::{
-    Json, Router,
-    extract::{Path, State},
-    routing::get,
-};
+use axum::{Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Postgres, QueryBuilder};
 use utoipa::{OpenApi, ToSchema};

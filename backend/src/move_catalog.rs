@@ -1,11 +1,8 @@
 //! Stable played-event identities, independent of engine analysis runs.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::json_errors::{Json, Path};
 use anyhow::{Context, Result};
-use axum::{
-    Json, Router,
-    extract::{Path, State},
-    routing::get,
-};
+use axum::{Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgPool, Postgres, QueryBuilder};
 use std::collections::HashMap;

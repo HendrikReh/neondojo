@@ -3,17 +3,14 @@ use super::{
     BenchmarkRun, Machine, known_protocol_id, machine, reference, reference_for,
     running_engine_version,
 };
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::{Engine, GnubgMoveFilter, resolve_binary},
     engines::EngineId,
     store,
 };
-use axum::{
-    Json, Router,
-    extract::{Path, Query, State, rejection::QueryRejection},
-    routing::get,
-};
+use axum::{Router, extract::State, routing::get};
 use chrono::{DateTime, Utc};
 use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
@@ -109,9 +106,8 @@ fn compatible(run: &BenchmarkRun, machine: &Machine, move_filter: Option<GnubgMo
 async fn estimate(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<EstimateQuery>, QueryRejection>,
+    Query(query): Query<EstimateQuery>,
 ) -> ApiResult<Json<AnalysisTimeEstimate>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     crate::play::require_review_available(&state.pool, id).await?;
     let source = store::get_match(&state.pool, id)
         .await?

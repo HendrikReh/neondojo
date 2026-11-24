@@ -18,9 +18,8 @@ pub(crate) fn routes() -> Router<AppState> {
 
 #[utoipa::path(post,path="/api/play/checker-turns",request_body=CheckerTurnsRequest,responses((status=200,body=Vec<CheckerTurn>,description="Complete paths in absolute coordinates. An empty list means a forced pass."),(status=422,body=ErrorBody)),tag="Playing")]
 pub(super) async fn checker_turns(
-    payload: Result<Json<CheckerTurnsRequest>, JsonRejection>,
+    Json(request): Json<CheckerTurnsRequest>,
 ) -> ApiResult<Json<Vec<CheckerTurn>>> {
-    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
     let result = tokio::task::spawn_blocking(move || {
         crate::import::sgf::checker_paths(&request.board, request.player, request.dice).map(
             |paths| {
@@ -71,7 +70,7 @@ pub(super) async fn get_session(
 pub(super) async fn history_snapshots(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Query(query): crate::json_errors::Query<HistoryQuery>,
+    Query(query): Query<HistoryQuery>,
 ) -> ApiResult<Json<PlayHistorySnapshots>> {
     // Fetch state and its exact raw checkpoint together. No archive lookup or
     // native replay: detached sessions and unavailable engines remain readable.
@@ -93,7 +92,7 @@ pub(super) async fn history_snapshots(
 #[utoipa::path(post,path="/api/play/sessions",request_body=CreatePlaySession,responses((status=201,body=PlaySession),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Playing")]
 pub(super) async fn create_session(
     State(state): State<AppState>,
-    crate::json_errors::Json(request): crate::json_errors::Json<CreatePlaySession>,
+    Json(request): Json<CreatePlaySession>,
 ) -> ApiResult<(StatusCode, Json<PlaySession>)> {
     if !(0..=1).contains(&request.human_player) || !(0..=25).contains(&request.match_length) {
         return Err(ApiError::invalid(
@@ -273,7 +272,8 @@ pub(super) fn native_error(error: anyhow::Error) -> ApiError {
         StatusCode::SERVICE_UNAVAILABLE,
         format!(
             "The engines could not complete this action; the saved session is unchanged. {error}"
-        ),
+        )
+        .into(),
     )
 }
 
@@ -281,7 +281,7 @@ pub(super) fn native_error(error: anyhow::Error) -> ApiError {
 pub(super) async fn change_mode(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(request): crate::json_errors::Json<PlayModeRequest>,
+    Json(request): Json<PlayModeRequest>,
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     let mut session = previous.state.0;
@@ -341,7 +341,7 @@ pub(super) async fn change_mode(
 pub(super) async fn act(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(request): crate::json_errors::Json<PlayActionRequest>,
+    Json(request): Json<PlayActionRequest>,
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     if request.version != previous.state.version {
@@ -513,7 +513,7 @@ pub(super) async fn act(
 pub(super) async fn feedback(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(request): crate::json_errors::Json<PlayFeedbackRequest>,
+    Json(request): Json<PlayFeedbackRequest>,
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     let mut session = previous.state.0;
@@ -601,7 +601,7 @@ pub(super) async fn feedback(
 pub(super) async fn review(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(request): crate::json_errors::Json<PlayReviewRequest>,
+    Json(request): Json<PlayReviewRequest>,
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     let mut session = previous.state.0;

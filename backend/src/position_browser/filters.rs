@@ -48,9 +48,8 @@ pub(super) async fn list_filters(
 #[utoipa::path(post,path="/api/position-filters",request_body=CreatePositionFilter,responses((status=201,body=SavedPositionFilter),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Positions")]
 pub(super) async fn create_filter(
     State(s): State<AppState>,
-    value: Result<Json<CreatePositionFilter>, JsonRejection>,
+    Json(input): Json<CreatePositionFilter>,
 ) -> ApiResult<(StatusCode, Json<SavedPositionFilter>)> {
-    let input = json(value)?;
     let name = validate_name(input.name)?;
     let definition = input.definition.validate()?;
     database_exists(&s.pool, definition.database_id).await?;
@@ -90,9 +89,8 @@ pub(super) async fn create_filter(
 pub(super) async fn update_filter(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
-    value: Result<Json<UpdatePositionFilter>, JsonRejection>,
+    Json(input): Json<UpdatePositionFilter>,
 ) -> ApiResult<Json<SavedPositionFilter>> {
-    let input = json(value)?;
     let name = validate_name(input.name)?;
     let definition = input.definition.validate()?;
     if input.expected_version < 1 {
@@ -121,9 +119,8 @@ pub(super) async fn update_filter(
 pub(super) async fn delete_filter(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
-    value: Result<Query<DeletePositionFilter>, QueryRejection>,
+    Query(input): Query<DeletePositionFilter>,
 ) -> ApiResult<StatusCode> {
-    let input = query(value)?;
     if input.expected_version < 1 {
         return Err(ApiError::invalid("expected_version must be positive"));
     }

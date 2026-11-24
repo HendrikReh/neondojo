@@ -63,7 +63,7 @@ impl Client {
                 Some("staleSession" | "editorConflict" | "conflict" | "busy") => {
                     return Err(ApiError(
                         StatusCode::CONFLICT,
-                        sanitize(error, self.key.as_deref()),
+                        sanitize(error, self.key.as_deref()).into(),
                     ));
                 }
                 _ => {}
@@ -99,7 +99,7 @@ impl Client {
     }
 }
 
-pub(super) fn upstream_error(message: impl Into<String>) -> ApiError {
+pub(super) fn upstream_error(message: impl Into<ErrorBody>) -> ApiError {
     ApiError(StatusCode::BAD_GATEWAY, message.into())
 }
 
@@ -119,7 +119,7 @@ fn sanitize(error: &str, key: Option<&str>) -> String {
 pub(super) async fn send(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(query): crate::json_errors::Json<ExportQuery>,
+    Json(query): Json<ExportQuery>,
 ) -> ApiResult<StatusCode> {
     let _transfer = reserve()?;
     let bytes = build_deck_package(&state, id, query).await?;

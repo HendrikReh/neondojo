@@ -7,6 +7,7 @@ mod tests;
 pub(crate) use runner::ENGINE_DUELS_DATABASE_ID;
 pub use runner::worker;
 
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::{Engine, resolve_binary},
@@ -16,8 +17,8 @@ use crate::{
     store,
 };
 use axum::{
-    Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    Router,
+    extract::State,
     http::{StatusCode, header},
     response::IntoResponse,
     routing::{get, post},
@@ -279,7 +280,7 @@ pub(crate) fn routes() -> Router<AppState> {
 #[utoipa::path(get, path="/api/engine-matches", params(("before"=Option<Uuid>, Query)), responses((status=200, body=SeriesPage),(status=422, body=ErrorBody)), tag="Engine matches")]
 async fn list(
     State(state): State<AppState>,
-    crate::json_errors::Query(query): crate::json_errors::Query<HistoryQuery>,
+    Query(query): Query<HistoryQuery>,
 ) -> ApiResult<Json<SeriesPage>> {
     let mut runs: Vec<Series> = sqlx::query_as(
         "SELECT * FROM engine_match_runs
@@ -304,9 +305,8 @@ async fn list(
 #[utoipa::path(post, path="/api/engine-matches", request_body=CreateSeries, responses((status=201, body=Series),(status=422, body=ErrorBody)), tag="Engine matches")]
 async fn create(
     State(state): State<AppState>,
-    payload: Result<Json<CreateSeries>, JsonRejection>,
+    Json(request): Json<CreateSeries>,
 ) -> ApiResult<(StatusCode, Json<Series>)> {
-    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
     if !(1..=1000).contains(&request.count) {
         return Err(ApiError::invalid("Count must be 1–1000"));
     }
@@ -426,7 +426,7 @@ async fn create(
 async fn details(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Query(page): crate::json_errors::Query<ResultPage>,
+    Query(page): Query<ResultPage>,
 ) -> ApiResult<Json<SeriesDetails>> {
     if !(0..=2000).contains(&page.offset) {
         return Err(ApiError::invalid("Invalid result offset"));

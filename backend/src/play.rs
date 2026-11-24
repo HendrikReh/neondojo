@@ -35,6 +35,7 @@ pub(crate) use routes::{PlayDoc, routes};
 use service::*;
 pub(crate) use service::{build_history_snapshots, named_export};
 
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::{Engine, resolve_binary},
@@ -43,8 +44,8 @@ use crate::{
 };
 use anyhow::{Context, ensure};
 use axum::{
-    Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    Router,
+    extract::State,
     http::{StatusCode, header},
     routing::{get, post},
 };

@@ -5,8 +5,9 @@
 //! engine's equities remain the measure of which play is better.
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::json_errors::Json;
 use crate::move_assessments::after_checker_play;
-use axum::{Json, Router, extract::rejection::JsonRejection, routing::post};
+use axum::{Router, routing::post};
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 
@@ -249,9 +250,8 @@ pub fn routes() -> Router<AppState> {
     responses((status = 200, body = MoveExplanation), (status = 422, body = ErrorBody)),
     tag = "Positions")]
 async fn move_explanations(
-    payload: Result<Json<MoveExplanationRequest>, JsonRejection>,
+    Json(request): Json<MoveExplanationRequest>,
 ) -> ApiResult<Json<MoveExplanation>> {
-    let Json(request) = payload.map_err(|error| ApiError::invalid(error.body_text()))?;
     explain(&request).map(Json).map_err(ApiError::invalid)
 }
 

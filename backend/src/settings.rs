@@ -1,12 +1,13 @@
 //! Persisted preferences and immutable engine configuration for new work.
 pub(crate) mod open_sage;
 use crate::engines::{AnalysisEngine, EngineFork, EngineId, SageEngine, SageSnapshot};
+use crate::json_errors::Json;
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::Engine,
 };
 use axum::{
-    Json, Router,
+    Router,
     extract::State,
     http::StatusCode,
     routing::{get, post},
@@ -430,9 +431,9 @@ async fn get_settings(State(state): State<AppState>) -> ApiResult<Json<AppSettin
 #[utoipa::path(put, path="/api/settings", request_body=AppSettings, responses((status=200,body=AppSettings),(status=409,body=ErrorBody),(status=422,body=ErrorBody)), tag="Settings")]
 async fn put_settings(
     State(state): State<AppState>,
-    payload: Result<Json<SettingsUpdate>, axum::extract::rejection::JsonRejection>,
+    Json(update): Json<SettingsUpdate>,
 ) -> ApiResult<Json<AppSettings>> {
-    let Json(SettingsUpdate {
+    let SettingsUpdate {
         mut settings,
         play_top_two,
         gnubg_threads,
@@ -440,7 +441,7 @@ async fn put_settings(
         open_sage_threads,
         open_sage_play_threads,
         parallel_analysis_jobs,
-    }) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
+    } = update;
     settings.play_top_two = play_top_two.unwrap_or(false);
     validate(&settings)?;
     let current = load(&state).await?;
@@ -526,9 +527,7 @@ async fn put_settings(
         .bind(settings.play_top_two)
         .fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
     let saved = saved.ok_or_else(conflict)?;
-    crate::configuration::store::legacy_app(&mut tx, &saved)
-        .await
-        .map_err(crate::configuration::store::legacy_error)?;
+    crate::configuration::store::legacy_app(&mut tx, &saved).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(saved))
 }
@@ -631,9 +630,8 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
 }
 #[utoipa::path(post, path="/api/engines/gnubg/check", request_body=EngineCheckRequest, responses((status=200,body=EngineCheckResponse),(status=422,body=ErrorBody)), tag="Settings")]
 async fn check_engine(
-    payload: Result<Json<EngineCheckRequest>, axum::extract::rejection::JsonRejection>,
+    Json(request): Json<EngineCheckRequest>,
 ) -> ApiResult<Json<EngineCheckResponse>> {
-    let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     validate_path(&request.path)?;
     validate_threads(EngineId::Gnubg, request.threads)?;
     let version = Engine::new(request.path)

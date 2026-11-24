@@ -2,17 +2,13 @@
 mod evidence;
 mod openai;
 
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     configuration::ConfigurationLocale,
     play::PlaySession,
 };
-use axum::{
-    Json, Router,
-    extract::{Path, State},
-    http::StatusCode,
-    routing::get,
-};
+use axum::{Router, extract::State, http::StatusCode, routing::get};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json as DbJson;
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -187,7 +183,7 @@ fn availability(session: &PlaySession) -> Availability {
 async fn get_assessment(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Query(query): crate::json_errors::Query<AssessmentQuery>,
+    Query(query): Query<AssessmentQuery>,
 ) -> ApiResult<Json<AssessmentState>> {
     let (session, _) = crate::study::report_checkpoint(&state.pool, id).await?;
     let language = crate::configuration::validation::enum_string(&query.language);
@@ -202,8 +198,8 @@ async fn get_assessment(
 async fn start_assessment(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Query(query): crate::json_errors::Query<AssessmentQuery>,
-    crate::json_errors::Json(request): crate::json_errors::Json<StartAssessment>,
+    Query(query): Query<AssessmentQuery>,
+    Json(request): Json<StartAssessment>,
 ) -> ApiResult<Json<AssessmentState>> {
     let (session, _) = crate::study::report_checkpoint(&state.pool, id).await?;
     if session.version != request.report_version {

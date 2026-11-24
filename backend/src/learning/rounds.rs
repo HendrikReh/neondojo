@@ -94,12 +94,9 @@ pub(super) fn routes() -> Router<AppState> {
 #[utoipa::path(post, path="/api/study/card-rounds", params(CardQuery), responses((status=201,body=PracticeRound),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn start(
     State(state): State<AppState>,
-    query: Result<Query<CardQuery>, QueryRejection>,
+    Query(query): Query<CardQuery>,
 ) -> ApiResult<(StatusCode, Json<PracticeRound>)> {
-    let filters = query
-        .map_err(|error| ApiError::invalid(error.body_text()))?
-        .0
-        .validate()?;
+    let filters = query.validate()?;
     let limit = filters.limit.unwrap_or(10);
     if filters.after.is_some() || !matches!(limit, 10 | 20) {
         return Err(ApiError::invalid(
@@ -306,7 +303,7 @@ pub(super) async fn read(
 pub(super) async fn answer(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<RoundAnswer>,
+    Json(body): Json<RoundAnswer>,
 ) -> ApiResult<Json<PracticeRound>> {
     let submitted = body
         .answer
@@ -403,7 +400,7 @@ pub(super) async fn answer(
 pub(super) async fn advance(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<RoundAdvance>,
+    Json(body): Json<RoundAdvance>,
 ) -> ApiResult<Json<PracticeRound>> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let round = lock(&mut tx, id).await?;
@@ -439,7 +436,7 @@ pub(super) async fn advance(
 pub(super) async fn mark(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<RoundAdvance>,
+    Json(body): Json<RoundAdvance>,
 ) -> ApiResult<Json<PracticeRound>> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let round = lock(&mut tx, id).await?;
@@ -467,7 +464,7 @@ pub(super) async fn mark(
 pub(super) async fn retry(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<RoundVersion>,
+    Json(body): Json<RoundVersion>,
 ) -> ApiResult<Json<PracticeRound>> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let round = lock(&mut tx, id).await?;

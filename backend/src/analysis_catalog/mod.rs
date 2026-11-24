@@ -4,13 +4,14 @@ mod selection;
 
 pub(crate) use selection::{SelectedAnalysis, resolve_selection, resolve_selection_on};
 
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::Job,
 };
 use axum::{
-    Json, Router,
-    extract::{Path, Query, State},
+    Router,
+    extract::State,
     http::StatusCode,
     routing::{delete, get, put},
 };
@@ -140,9 +141,8 @@ async fn entry_on(
 async fn catalog(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<AnalysisCatalogQuery>, axum::extract::rejection::QueryRejection>,
+    Query(query): Query<AnalysisCatalogQuery>,
 ) -> ApiResult<Json<AnalysisCatalogPage>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     let limit = query.limit.unwrap_or(50);
     if !(1..=100).contains(&limit) {
         return Err(ApiError::invalid("limit must be between 1 and 100"));
@@ -250,9 +250,8 @@ async fn catalog(
 async fn delete_analysis(
     State(state): State<AppState>,
     Path((id, analysis_id)): Path<(Uuid, String)>,
-    query: Result<Query<DeleteAnalysisQuery>, axum::extract::rejection::QueryRejection>,
+    Query(query): Query<DeleteAnalysisQuery>,
 ) -> ApiResult<StatusCode> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     if query.source_revision < 0 {
         return Err(ApiError::invalid("Source revision must be nonnegative"));
     }
@@ -316,7 +315,7 @@ async fn delete_analysis(
 async fn update_selection(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(request): crate::json_errors::Json<AnalysisSelectionUpdate>,
+    Json(request): Json<AnalysisSelectionUpdate>,
 ) -> ApiResult<Json<AnalysisSelection>> {
     crate::play::require_review_available(&state.pool, id).await?;
     if !crate::imported_analysis::ensure_catalog(&state.pool, id).await? {

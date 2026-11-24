@@ -1,4 +1,5 @@
 //! Read-only questions and aggregates from native and immutable imported analyses.
+use crate::json_errors::{Json, Query};
 use crate::player_scope;
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
@@ -11,11 +12,8 @@ use crate::{
     },
 };
 use axum::{
-    Json, Router,
-    extract::{
-        Query, State,
-        rejection::{JsonRejection, QueryRejection},
-    },
+    Router,
+    extract::State,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
@@ -274,9 +272,8 @@ fn can_practice_correct_cube(row: &SourceDecision) -> bool {
 #[utoipa::path(get,path="/api/study/mistakes",params(MistakesQuery),responses((status=200,body=Mistakes),(status=422,body=ErrorBody)),tag="Study")]
 async fn list(
     State(s): State<AppState>,
-    input: Result<Query<MistakesQuery>, QueryRejection>,
+    Query(q): Query<MistakesQuery>,
 ) -> ApiResult<Json<Mistakes>> {
-    let q = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
     let (player, loss) = validate(q.player, q.min_loss)?;
     let players = players(&s.pool, q.database_id).await?;
     let mut result = Mistakes {
@@ -320,9 +317,8 @@ async fn list(
 #[utoipa::path(post,path="/api/study/mistakes/practice",request_body=MistakePracticeRequest,responses((status=200,body=MistakePractice),(status=422,body=ErrorBody)),tag="Study")]
 async fn practice(
     State(s): State<AppState>,
-    input: Result<Json<MistakePracticeRequest>, JsonRejection>,
+    Json(q): Json<MistakePracticeRequest>,
 ) -> ApiResult<Json<MistakePractice>> {
-    let q = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
     let (player, loss) = validate(Some(q.player), q.min_loss)?;
     let player = player.unwrap();
     let names = player_scope::names(&s.pool, &player).await?;
@@ -422,18 +418,16 @@ fn select_practice_questions(
 #[utoipa::path(post,path="/api/study/mistakes/reveal",request_body=MistakeReference,responses((status=200,body=MistakeAnswer),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Study")]
 async fn reveal(
     State(s): State<AppState>,
-    input: Result<Json<MistakeReference>, JsonRejection>,
+    Json(reference): Json<MistakeReference>,
 ) -> ApiResult<Json<MistakeAnswer>> {
-    let reference = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
     Ok(Json(original_answer(load_question(&s, &reference).await?)))
 }
 
 #[utoipa::path(post,path="/api/study/mistakes/attempt",request_body=MistakeAttemptRequest,responses((status=200,body=MistakeAttempt),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Study")]
 async fn attempt(
     State(s): State<AppState>,
-    input: Result<Json<MistakeAttemptRequest>, JsonRejection>,
+    Json(input): Json<MistakeAttemptRequest>,
 ) -> ApiResult<Json<MistakeAttempt>> {
-    let Json(input) = input.map_err(|e| ApiError::invalid(e.body_text()))?;
     let row = load_question(&s, &input.reference).await?;
     let native = matches!(row.question.source, Some(MistakeSource::Native));
     let position = evaluation_position(&row.question)?;

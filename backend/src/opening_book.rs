@@ -3,11 +3,12 @@
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use crate::engine::Candidate;
+use crate::json_errors::{Json, Path};
 use crate::model::Position;
 use anyhow::{Context, Result, ensure};
 use axum::{
-    Json, Router,
-    extract::{Path, State, rejection::JsonRejection},
+    Router,
+    extract::State,
     http::StatusCode,
     routing::{get, post},
 };

@@ -2,6 +2,7 @@ use super::{
     entry_on,
     selection::{SelectedAnalysis, resolve_selection_on},
 };
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody, MatchAnalysisEngine},
     engine::Analysis,
@@ -9,11 +10,7 @@ use crate::{
     match_analysis::Decision,
     model::{Job, Position},
 };
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-    http::StatusCode,
-};
+use axum::{extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::{IntoParams, ToSchema};
@@ -43,9 +40,8 @@ pub struct SelectedPositionAnalysis {
 pub(super) async fn position_result(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<PositionResultQuery>, axum::extract::rejection::QueryRejection>,
+    Query(query): Query<PositionResultQuery>,
 ) -> ApiResult<Json<Option<SelectedPositionAnalysis>>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     let position = crate::store::get_position(&state.pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;
@@ -129,9 +125,8 @@ pub(super) struct PositionJobsQuery {
 pub(super) async fn position_jobs(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<PositionJobsQuery>, axum::extract::rejection::QueryRejection>,
+    Query(query): Query<PositionJobsQuery>,
 ) -> ApiResult<Json<Vec<Job>>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     let position = crate::store::get_position(&state.pool, id)
         .await?
         .ok_or_else(ApiError::missing)?;

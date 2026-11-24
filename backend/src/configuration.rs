@@ -2,10 +2,11 @@
 pub(crate) mod store;
 pub(crate) mod validation;
 
-use crate::api::AppState;
+use crate::api::{ApiError, AppState, ErrorBody};
+use crate::json_errors::Json;
 use axum::{
-    Json, Router,
-    extract::{State, rejection::JsonRejection},
+    Router,
+    extract::State,
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -381,22 +382,17 @@ pub struct ConfigurationIssue {
     pub code: String,
     pub message: String,
 }
-#[derive(Debug, Serialize, ToSchema)]
-pub struct ConfigurationErrorBody {
-    pub error: String,
-    pub code: String,
-    pub issues: Vec<ConfigurationIssue>,
-}
-pub(crate) struct ConfigurationError(pub StatusCode, pub ConfigurationErrorBody);
+/// A configuration error always has a `code` and `issues`.
+pub(crate) struct ConfigurationError(pub StatusCode, pub ErrorBody);
 pub(crate) type Result<T> = std::result::Result<T, ConfigurationError>;
 impl ConfigurationError {
     pub(crate) fn new(status: StatusCode, code: &str, error: impl Into<String>) -> Self {
         Self(
             status,
-            ConfigurationErrorBody {
+            ErrorBody {
                 error: error.into(),
-                code: code.into(),
-                issues: vec![],
+                code: Some(code.into()),
+                issues: Some(vec![]),
             },
         )
     }
@@ -411,24 +407,24 @@ impl ConfigurationError {
         let message = message.into();
         Self(
             StatusCode::UNPROCESSABLE_ENTITY,
-            ConfigurationErrorBody {
+            ErrorBody {
                 error: message.clone(),
-                code: "invalid_configuration".into(),
-                issues: vec![ConfigurationIssue {
+                code: Some("invalid_configuration".into()),
+                issues: Some(vec![ConfigurationIssue {
                     path: path.into(),
                     code: "invalid_value".into(),
                     message,
-                }],
+                }]),
             },
         )
     }
     pub(crate) fn resources(issues: Vec<ConfigurationIssue>) -> Self {
         Self(
             StatusCode::UNPROCESSABLE_ENTITY,
-            ConfigurationErrorBody {
+            ErrorBody {
                 error: "Configuration resources are unavailable".into(),
-                code: "unavailable_resources".into(),
-                issues,
+                code: Some("unavailable_resources".into()),
+                issues: Some(issues),
             },
         )
     }
@@ -464,15 +460,20 @@ impl From<anyhow::Error> for ConfigurationError {
         )
     }
 }
-impl IntoResponse for ConfigurationError {
-    fn into_response(self) -> Response {
-        (self.0, Json(self.1)).into_response()
+impl From<ConfigurationError> for ApiError {
+    fn from(error: ConfigurationError) -> Self {
+        Self(error.0, error.1)
     }
 }
-pub(crate) fn payload<T>(value: std::result::Result<Json<T>, JsonRejection>) -> Result<T> {
+impl IntoResponse for ConfigurationError {
+    fn into_response(self) -> Response {
+        ApiError::from(self).into_response()
+    }
+}
+pub(crate) fn payload<T>(value: std::result::Result<Json<T>, ApiError>) -> Result<T> {
     value
         .map(|Json(v)| v)
-        .map_err(|e| ConfigurationError::invalid("configuration", e.body_text()))
+        .map_err(|e| ConfigurationError::invalid("configuration", e.1.error))
 }
 
 #[derive(Debug, Deserialize, ToSchema)]
@@ -520,7 +521,7 @@ pub(crate) fn routes() -> Router<AppState> {
             get(configuration_availability),
         )
 }
-#[utoipa::path(get,path="/api/configuration/availability",responses((status=200,body=ConfigurationAvailability),(status=409,body=ConfigurationErrorBody)),tag="Configuration")]
+#[utoipa::path(get,path="/api/configuration/availability",responses((status=200,body=ConfigurationAvailability),(status=409,body=ErrorBody)),tag="Configuration")]
 async fn configuration_availability(
     State(app): State<AppState>,
 ) -> Result<Json<ConfigurationAvailability>> {
@@ -535,28 +536,28 @@ async fn configuration_availability(
         issues,
     }))
 }
-#[utoipa::path(get,path="/api/configuration",responses((status=200,body=ConfigurationState),(status=409,body=ConfigurationErrorBody)),tag="Configuration")]
+#[utoipa::path(get,path="/api/configuration",responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody)),tag="Configuration")]
 async fn get_configuration(State(state): State<AppState>) -> Result<Json<ConfigurationState>> {
     Ok(Json(store::read(&state.pool).await?))
 }
-#[utoipa::path(post,path="/api/configuration/initialize",request_body=InitializeConfiguration,responses((status=200,body=ConfigurationState),(status=409,body=ConfigurationErrorBody),(status=422,body=ConfigurationErrorBody)),tag="Configuration")]
+#[utoipa::path(post,path="/api/configuration/initialize",request_body=InitializeConfiguration,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Configuration")]
 async fn initialize_configuration(
     State(state): State<AppState>,
-    input: std::result::Result<Json<InitializeConfiguration>, JsonRejection>,
+    input: std::result::Result<Json<InitializeConfiguration>, ApiError>,
 ) -> Result<Json<ConfigurationState>> {
     Ok(Json(store::initialize(&state, payload(input)?).await?))
 }
-#[utoipa::path(put,path="/api/configuration",request_body=UpdateConfiguration,responses((status=200,body=ConfigurationState),(status=409,body=ConfigurationErrorBody),(status=422,body=ConfigurationErrorBody)),tag="Configuration")]
+#[utoipa::path(put,path="/api/configuration",request_body=UpdateConfiguration,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Configuration")]
 async fn put_configuration(
     State(state): State<AppState>,
-    input: std::result::Result<Json<UpdateConfiguration>, JsonRejection>,
+    input: std::result::Result<Json<UpdateConfiguration>, ApiError>,
 ) -> Result<Json<ConfigurationState>> {
     Ok(Json(store::update(&state, payload(input)?).await?))
 }
-#[utoipa::path(post,path="/api/configuration/restore-profile",request_body=RestoreConfiguration,responses((status=200,body=ConfigurationState),(status=409,body=ConfigurationErrorBody),(status=422,body=ConfigurationErrorBody)),tag="Configuration")]
+#[utoipa::path(post,path="/api/configuration/restore-profile",request_body=RestoreConfiguration,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Configuration")]
 async fn restore_configuration(
     State(state): State<AppState>,
-    input: std::result::Result<Json<RestoreConfiguration>, JsonRejection>,
+    input: std::result::Result<Json<RestoreConfiguration>, ApiError>,
 ) -> Result<Json<ConfigurationState>> {
     Ok(Json(store::restore(&state, payload(input)?).await?))
 }
@@ -613,7 +614,6 @@ pub fn differences(
         ConfigurationState,
         ConfigurationProfile,
         ConfigurationDifference,
-        ConfigurationErrorBody,
         ConfigurationIssue,
         InitializeConfiguration,
         UpdateConfiguration,
@@ -626,6 +626,40 @@ pub struct ConfigurationDoc;
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn configuration_errors_keep_their_code_and_issues_as_api_errors() {
+        let body = |error: ConfigurationError| {
+            let ApiError(status, body) = error.into();
+            (status.as_u16(), serde_json::to_value(body).unwrap())
+        };
+        assert_eq!(
+            body(ConfigurationError::invalid(
+                "play.engine",
+                "Unsupported value"
+            )),
+            (
+                422,
+                serde_json::json!({
+                    "error": "Unsupported value",
+                    "code": "invalid_configuration",
+                    "issues": [{
+                        "path": "play.engine",
+                        "code": "invalid_value",
+                        "message": "Unsupported value",
+                    }],
+                })
+            )
+        );
+        let (status, conflict) = body(ConfigurationError::conflict());
+        assert_eq!(status, 409);
+        assert_eq!(conflict["code"], "revision_conflict");
+        assert_eq!(conflict["issues"], serde_json::json!([]));
+        // Other errors have neither.
+        assert_eq!(
+            serde_json::to_value(ApiError::missing().1).unwrap(),
+            serde_json::json!({"error": "Not found"})
+        );
+    }
     #[test]
     fn analysis_board_widths_are_optional_and_bounded() {
         let fixture: Value = serde_json::from_str(include_str!(

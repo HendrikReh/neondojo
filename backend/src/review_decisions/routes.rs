@@ -8,9 +8,8 @@ pub fn routes() -> Router<AppState> {
 pub(super) async fn review(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<ReviewQuery>, axum::extract::rejection::QueryRejection>,
+    Query(query): Query<ReviewQuery>,
 ) -> ApiResult<Json<ReviewDecisionPage>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     Ok(Json(load_review(&state, id, query).await?))
 }
 

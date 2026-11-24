@@ -1,16 +1,13 @@
 //! Statistics of the chosen catalog result. Imported summaries use the same
 //! validated decisions as review; unknown depth and missing coverage stay absent.
 use super::{GameAnalysisStatistics, PlayerErrorBreakdown};
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     analysis_catalog::{SelectedAnalysis, resolve_selection},
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::{MatchAnalysisSummary, PerformanceRatingSummary, PlayerAnalysisSummary, Position},
 };
-use axum::{
-    Json, Router,
-    extract::{Path, Query, State},
-    routing::get,
-};
+use axum::{Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -86,9 +83,8 @@ pub fn routes() -> Router<AppState> {
 async fn statistics(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<CatalogStatisticsQuery>, axum::extract::rejection::QueryRejection>,
+    Query(query): Query<CatalogStatisticsQuery>,
 ) -> ApiResult<Json<MatchAnalysisStatistics>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     if query.game_no.is_some_and(|g| g <= 0) {
         return Err(ApiError::invalid("game_no must be positive"));
     }

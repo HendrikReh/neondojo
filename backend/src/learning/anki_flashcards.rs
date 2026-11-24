@@ -1,8 +1,9 @@
 //! Rendered Anki cards share the ordinary deck and review tables. Card faces and
 //! media are loaded separately from card lists and the learning queue.
 use super::*;
+use crate::json_errors::Multipart;
 use anyhow::{Context, Result, ensure};
-use axum::extract::{DefaultBodyLimit, Multipart};
+use axum::extract::DefaultBodyLimit;
 use axum::response::Response;
 use sqlx::{PgConnection, Postgres, Transaction};
 use std::{path::Path as FilePath, process::Stdio, time::Duration};
@@ -61,7 +62,7 @@ pub(super) struct ImportedAnkiDeck {
     responses((status=201,body=Vec<ImportedAnkiDeck>),(status=413,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Learning")]
 pub(super) async fn upload(
     State(state): State<AppState>,
-    mut multipart: Multipart,
+    Multipart(mut multipart): Multipart,
 ) -> ApiResult<(StatusCode, Json<Vec<ImportedAnkiDeck>>)> {
     let _permit = PACKAGE_IMPORT.try_acquire().map_err(|_| {
         ApiError(
@@ -72,7 +73,7 @@ pub(super) async fn upload(
     let mut field = multipart
         .next_field()
         .await
-        .map_err(|error| ApiError(error.status(), error.body_text()))?
+        .map_err(|error| ApiError(error.status(), error.body_text().into()))?
         .filter(|field| field.name() == Some("file"))
         .ok_or_else(|| ApiError::invalid("Select an Anki package"))?;
     let directory = tempfile::tempdir().map_err(anyhow::Error::from)?;
@@ -84,7 +85,7 @@ pub(super) async fn upload(
     while let Some(chunk) = field
         .chunk()
         .await
-        .map_err(|error| ApiError(error.status(), error.body_text()))?
+        .map_err(|error| ApiError(error.status(), error.body_text().into()))?
     {
         size += chunk.len();
         if size > MAX_UPLOAD {
@@ -330,7 +331,7 @@ async fn save_card(
     for tag in input.tags {
         // A comma separates terms in the NeonDojo topic filter.
         let tag = tag.replace(',', " ");
-        tags.extend(topics::tags(vec![tag]).map_err(|error| anyhow::anyhow!("{}", error.1))?);
+        tags.extend(topics::tags(vec![tag]).map_err(|error| anyhow::anyhow!("{}", error.1.error))?);
     }
     let signature = format!("anki:{}:{}", input.guid, input.template_number);
     let payload = serde_json::to_value(AnkiCard {
@@ -379,7 +380,7 @@ async fn save_card(
 }
 
 async fn source_deck(tx: &mut Transaction<'_, Postgres>, name: &str) -> Result<Uuid> {
-    deck_name(name).map_err(|error| anyhow::anyhow!("{}", error.1))?;
+    deck_name(name).map_err(|error| anyhow::anyhow!("{}", error.1.error))?;
     if let Some(id) =
         sqlx::query_scalar("SELECT deck_id FROM anki_source_decks WHERE source_name=$1")
             .bind(name)
@@ -494,7 +495,7 @@ pub async fn import_rendered_package(
         );
         check_deck_capacity(&mut tx, id)
             .await
-            .map_err(|error| anyhow::anyhow!("{}", error.1))?;
+            .map_err(|error| anyhow::anyhow!("{}", error.1.error))?;
         if added {
             sqlx::query("UPDATE decks SET version=version+1 WHERE id=$1")
                 .bind(id)

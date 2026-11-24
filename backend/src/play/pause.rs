@@ -1,7 +1,8 @@
 //! Moves the existing library entry together with the versioned play checkpoint.
 use super::{PlayPhase, PlaySession, Saved, library, present_with_results};
 use crate::api::{ApiError, ApiResult, AppState};
-use axum::{Json, http::StatusCode};
+use crate::json_errors::Json;
+use axum::http::StatusCode;
 use uuid::Uuid;
 
 fn conflict(message: &str) -> ApiError {

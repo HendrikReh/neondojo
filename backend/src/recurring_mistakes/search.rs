@@ -5,15 +5,13 @@
 use super::{
     MistakeKind, MistakePracticeQuestion, kind as mistake_kind, source::SourceDecision, validate,
 };
+use crate::json_errors::{Json, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     cube_context::cube_context,
     game_plan::GamePlan,
 };
-use axum::{
-    Json,
-    extract::{Query, State, rejection::QueryRejection},
-};
+use axum::extract::State;
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgPool, Postgres, postgres::PgArguments, query::QueryScalar};
 use utoipa::{IntoParams, ToSchema};
@@ -391,9 +389,8 @@ impl Search {
     tag = "Study")]
 pub(super) async fn search(
     State(s): State<AppState>,
-    input: Result<Query<DecisionSearchQuery>, QueryRejection>,
+    Query(q): Query<DecisionSearchQuery>,
 ) -> ApiResult<Json<DecisionSearchPage>> {
-    let q = input.map_err(|e| ApiError::invalid(e.body_text()))?.0;
     let search = Search::new(&s.pool, q).await?;
     super::index::ensure(&s.pool, search.database(), search.player()).await?;
     let mut tx = super::source::read_snapshot(&s.pool).await?;
@@ -415,7 +412,7 @@ mod tests {
         "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])";
 
     fn ok<T>(result: ApiResult<T>) -> T {
-        result.unwrap_or_else(|ApiError(status, message)| panic!("{status}: {message}"))
+        result.unwrap_or_else(|ApiError(status, body)| panic!("{status}: {}", body.error))
     }
 
     fn search(database: Option<Uuid>, limit: usize) -> Search {

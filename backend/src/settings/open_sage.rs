@@ -114,9 +114,8 @@ async fn get_installation(State(state): State<AppState>) -> ApiResult<Json<Insta
 #[utoipa::path(put,path="/api/engines/bgsage",request_body=InstallationRequest,responses((status=200,body=Installation),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Settings")]
 async fn put_installation(
     State(state): State<AppState>,
-    payload: Result<Json<InstallationRequest>, axum::extract::rejection::JsonRejection>,
+    Json(request): Json<InstallationRequest>,
 ) -> ApiResult<Json<Installation>> {
-    let Json(request) = payload.map_err(|e| ApiError::invalid(e.body_text()))?;
     if request.version < 0 || request.version == i64::MAX {
         return Err(ApiError::invalid("Invalid installation revision"));
     }

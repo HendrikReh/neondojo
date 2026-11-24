@@ -1,15 +1,12 @@
 //! Durable confirmed work and read-only adaptive job estimates.
+use crate::json_errors::{Json, Path};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::{Job, JobStatus},
     store,
 };
 use anyhow::{Result, ensure};
-use axum::{
-    Json, Router,
-    extract::{Path, State},
-    routing::get,
-};
+use axum::{Router, extract::State, routing::get};
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::{PgPool, Postgres, Transaction};

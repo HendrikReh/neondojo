@@ -264,7 +264,7 @@ impl FinishedSync {
 pub(super) async fn act(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(input): crate::json_errors::Json<SyncActionRequest>,
+    Json(input): Json<SyncActionRequest>,
 ) -> ApiResult<axum::response::Response> {
     if input.include_result && !matches!(input.action, SyncAction::RetryOpenErrors) {
         return Err(ApiError::invalid(
@@ -367,7 +367,7 @@ pub(super) async fn settings(
 pub(super) async fn set_settings(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(input): crate::json_errors::Json<SetAutoSync>,
+    Json(input): Json<SetAutoSync>,
 ) -> ApiResult<Json<AutoSyncSettings>> {
     if !input.enabled {
         require_deck(&state.pool, id).await?;
@@ -554,6 +554,7 @@ async fn finish(
     let detail = error.map(|error| {
         error
             .1
+            .error
             .chars()
             .filter(|c| !c.is_control())
             .take(300)

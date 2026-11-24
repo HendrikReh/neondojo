@@ -1,4 +1,5 @@
 //! Checker marks use the same selected, validated decisions as review and statistics.
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     engine::Analysis,
@@ -6,11 +7,7 @@ use crate::{
     model::{MoveSeverity, Position},
     review_decisions::load_all_review,
 };
-use axum::{
-    Json, Router,
-    extract::{Path, Query, State},
-    routing::get,
-};
+use axum::{Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -56,9 +53,8 @@ pub fn routes() -> Router<AppState> {
 async fn assessments(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    query: Result<Query<MoveAssessmentQuery>, axum::extract::rejection::QueryRejection>,
+    Query(query): Query<MoveAssessmentQuery>,
 ) -> ApiResult<Json<GameMoveAssessments>> {
-    let Query(query) = query.map_err(|e| ApiError::invalid(e.body_text()))?;
     if query.game_no <= 0 {
         return Err(ApiError::invalid("game_no must be positive"));
     }

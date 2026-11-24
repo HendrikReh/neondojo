@@ -3,12 +3,9 @@
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use crate::import::ids::{Field, MatchId};
+use crate::json_errors::Json;
 use crate::practice::evaluation::CubeChances;
-use axum::{
-    Json, Router,
-    extract::{State, rejection::JsonRejection},
-    routing::post,
-};
+use axum::{Router, extract::State, routing::post};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;
 use utoipa::{OpenApi, ToSchema};
@@ -219,7 +216,7 @@ pub fn routes() -> Router<AppState> {
     tag = "Match analysis")]
 async fn chances(
     State(state): State<AppState>,
-    request: Result<Json<CubeChancesRequest>, JsonRejection>,
+    request: Result<Json<CubeChancesRequest>, ApiError>,
 ) -> ApiResult<Json<CubeChances>> {
     let Json(request) = request.map_err(|_| ApiError::invalid("Invalid cube chances request"))?;
     crate::practice::evaluation::cube_chances(&state, &request.position, request.response)
@@ -232,7 +229,7 @@ async fn chances(
     responses((status = 200, body = CubeContext), (status = 422, body = ErrorBody)),
     tag = "Match analysis")]
 async fn context(
-    request: Result<Json<CubeContextRequest>, JsonRejection>,
+    request: Result<Json<CubeContextRequest>, ApiError>,
 ) -> ApiResult<Json<CubeContext>> {
     let Json(request) = request.map_err(|_| ApiError::invalid("Invalid cube context request"))?;
     cube_context(&request.match_id, request.doubler)

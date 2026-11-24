@@ -172,7 +172,7 @@ async fn insert_memberships(
 pub(super) async fn add_deck_cards(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<AddDeckCards>,
+    Json(body): Json<AddDeckCards>,
 ) -> ApiResult<Json<AddDeckCardsResult>> {
     validate_selection(&body.card_ids)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
@@ -203,7 +203,7 @@ pub(super) async fn add_deck_cards(
 pub(super) async fn move_cards(
     State(state): State<AppState>,
     Path(source_id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<MoveCards>,
+    Json(body): Json<MoveCards>,
 ) -> ApiResult<Json<MoveCardsResult>> {
     validate_selection(&body.card_ids)?;
     if source_id == body.target_id {
@@ -237,7 +237,7 @@ pub(super) async fn move_cards(
 pub(super) async fn remove_cards(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    crate::json_errors::Json(body): crate::json_errors::Json<RemoveCards>,
+    Json(body): Json<RemoveCards>,
 ) -> ApiResult<StatusCode> {
     validate_selection(&body.card_ids)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
@@ -260,7 +260,7 @@ async fn lock_decks(tx: &mut Transaction<'_, Postgres>, ids: &[Uuid]) -> ApiResu
 #[utoipa::path(post,path="/api/cards/delete",request_body=DeleteCards,responses((status=204),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn delete_cards(
     State(state): State<AppState>,
-    crate::json_errors::Json(body): crate::json_errors::Json<DeleteCards>,
+    Json(body): Json<DeleteCards>,
 ) -> ApiResult<StatusCode> {
     let ids: Vec<_> = body.cards.iter().map(|card| card.id).collect();
     validate_selection(&ids)?;
@@ -322,9 +322,8 @@ pub(super) async fn delete_cards(
 #[utoipa::path(get,path="/api/cards/duplicates",params(DuplicateQuery),responses((status=200,body=DuplicatePage),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn duplicates(
     State(state): State<AppState>,
-    query: Result<Query<DuplicateQuery>, QueryRejection>,
+    Query(query): Query<DuplicateQuery>,
 ) -> ApiResult<Json<DuplicatePage>> {
-    let Query(query) = query.map_err(|error| ApiError::invalid(error.body_text()))?;
     const LIMIT: usize = 50;
     let offset = crate::search::page_offset(query.page, query.after.is_some(), LIMIT as i64)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
@@ -453,7 +452,7 @@ async fn memberships(tx: &mut Transaction<'_, Postgres>, card_id: Uuid) -> ApiRe
 #[utoipa::path(post,path="/api/cards/duplicates/resolve",request_body=ResolveDuplicate,responses((status=204),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn resolve_duplicate(
     State(state): State<AppState>,
-    crate::json_errors::Json(body): crate::json_errors::Json<ResolveDuplicate>,
+    Json(body): Json<ResolveDuplicate>,
 ) -> ApiResult<StatusCode> {
     if body.keep_id == body.delete_id || body.keep_version < 0 || body.delete_version < 0 {
         return Err(ApiError::invalid(

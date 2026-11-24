@@ -3,11 +3,12 @@ mod archive;
 mod restore;
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::json_errors::{Json, Query};
 use anyhow::{Context, Result};
 use axum::{
-    Json, Router,
+    Router,
     body::Body,
-    extract::{Query, State},
+    extract::State,
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
     routing::{get, post},
@@ -557,11 +558,11 @@ struct RestoreQuery {
 )]
 async fn import(
     State(state): State<AppState>,
-    query: Result<Query<RestoreQuery>, axum::extract::rejection::QueryRejection>,
+    Query(query): Query<RestoreQuery>,
     headers: HeaderMap,
     body: Body,
 ) -> ApiResult<StatusCode> {
-    if !crate::databases::query(query)?.replace {
+    if !query.replace {
         return Err(ApiError::invalid(
             "Replacing the target database must be confirmed",
         ));
@@ -589,7 +590,8 @@ async fn import(
             StatusCode::CONFLICT,
             format!(
                 "Database is busy; retry the restore when current work finishes ({running} running)"
-            ),
+            )
+            .into(),
         )
     })?;
     // Analysis jobs can hold their read access for hours, and the restore

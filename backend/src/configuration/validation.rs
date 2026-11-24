@@ -418,7 +418,7 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         .positions
         .definition
         .validate()
-        .map_err(|e| ConfigurationError::invalid("positions.definition", e.1))?;
+        .map_err(|e| ConfigurationError::invalid("positions.definition", e.1.error))?;
     let f = &mut config.learning.filters;
     choice(
         "learning.filters.game_plan",

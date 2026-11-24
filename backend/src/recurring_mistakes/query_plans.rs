@@ -3,7 +3,7 @@
 //! the measured plans are the production ones.
 use super::{imported, index, search};
 use crate::api::{ApiError, ApiResult};
-use axum::{extract::Query, http::Uri};
+use axum::http::Uri;
 use serde_json::Value;
 use sqlx::PgPool;
 
@@ -24,7 +24,12 @@ pub async fn decision_search(pool: &PgPool, query: &str) -> ApiResult<Vec<(&'sta
     let uri: Uri = format!("/api/study/decisions?{query}")
         .parse()
         .map_err(|_| ApiError::invalid("Invalid query"))?;
-    let Query(query) = Query::try_from_uri(&uri).map_err(|e| ApiError::invalid(e.body_text()))?;
+    #[expect(
+        clippy::disallowed_types,
+        reason = "there is no request to extract from"
+    )]
+    let axum::extract::Query(query) =
+        axum::extract::Query::try_from_uri(&uri).map_err(|e| ApiError::invalid(e.body_text()))?;
     let search = search::Search::new(pool, query).await?;
     let player = search.player().to_vec();
     let mut plans = Vec::new();

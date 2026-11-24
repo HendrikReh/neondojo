@@ -1,0 +1,7 @@
+# Axum's extractors reject with plain text; these reject with the API's ErrorBody.
+disallowed-types = [
+    { path = "axum::Json", replacement = "crate::json_errors::Json" },
+    { path = "axum::extract::Path", replacement = "crate::json_errors::Path" },
+    { path = "axum::extract::Query", replacement = "crate::json_errors::Query" },
+    { path = "axum::extract::Multipart", replacement = "crate::json_errors::Multipart" },
+]

@@ -522,7 +522,7 @@ mod tests {
         "(;GM[6]FF[4]PW[Alice]PB[Bob]MI[length:7][ws:0][bs:0];W[31hefe];B[42qusu])";
 
     fn ok<T>(result: ApiResult<T>) -> T {
-        result.unwrap_or_else(|ApiError(status, message)| panic!("{status}: {message}"))
+        result.unwrap_or_else(|ApiError(status, body)| panic!("{status}: {}", body.error))
     }
 
     async fn current(pool: &PgPool, id: Uuid) -> Candidate {

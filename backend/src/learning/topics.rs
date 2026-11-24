@@ -81,7 +81,7 @@ pub(super) async fn suggest_tags(State(state): State<AppState>) -> ApiResult<Jso
 #[utoipa::path(put,path="/api/cards/tags",request_body=EditCardTags,responses((status=200,body=Vec<CardTags>),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn edit_tags(
     State(state): State<AppState>,
-    crate::json_errors::Json(body): crate::json_errors::Json<EditCardTags>,
+    Json(body): Json<EditCardTags>,
 ) -> ApiResult<Json<Vec<CardTags>>> {
     if !(1..=200).contains(&body.cards.len()) {
         return Err(ApiError::invalid("Select between 1 and 200 cards"));
@@ -150,7 +150,7 @@ pub(super) async fn list_topics(State(state): State<AppState>) -> ApiResult<Json
 #[utoipa::path(post,path="/api/study/card-topics",request_body=SaveCardTopic,responses((status=201,body=CardTopic),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn save_topic(
     State(state): State<AppState>,
-    crate::json_errors::Json(body): crate::json_errors::Json<SaveCardTopic>,
+    Json(body): Json<SaveCardTopic>,
 ) -> ApiResult<(StatusCode, Json<CardTopic>)> {
     let name = body.name.trim();
     if name.is_empty() || name.chars().count() > 120 || name.chars().any(char::is_control) {

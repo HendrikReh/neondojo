@@ -2,16 +2,14 @@
 //! real profile belongs to at most one virtual profile; removing a member or
 //! deleting the virtual profile leaves every real profile as it was.
 use super::{DISPLAY_NAME, PlayerAlias, PlayerRating, PlayerRatingPoint, clean_name, ratings};
+use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    databases::{conflict, json, query},
+    databases::conflict,
 };
 use axum::{
-    Json, Router,
-    extract::{
-        Path, Query, State,
-        rejection::{JsonRejection, QueryRejection},
-    },
+    Router,
+    extract::State,
     http::StatusCode,
     routing::{delete, get, post},
 };
@@ -154,9 +152,8 @@ async fn list(State(state): State<AppState>) -> ApiResult<Json<VirtualPlayerList
 #[utoipa::path(post,path="/api/virtual-players",request_body=VirtualPlayerCreate,responses((status=201,body=VirtualPlayerDetails),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Players")]
 async fn create(
     State(state): State<AppState>,
-    body: Result<Json<VirtualPlayerCreate>, JsonRejection>,
+    Json(body): Json<VirtualPlayerCreate>,
 ) -> ApiResult<(StatusCode, Json<VirtualPlayerDetails>)> {
-    let body = json(body)?;
     let name = virtual_name(&body.name)?;
     let id: Option<Uuid> = sqlx::query_scalar(
         "INSERT INTO virtual_player_profiles(name) VALUES($1)
@@ -217,9 +214,8 @@ async fn details(pool: &PgPool, id: Uuid) -> ApiResult<VirtualPlayerDetails> {
 async fn rename(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    body: Result<Json<VirtualPlayerRename>, JsonRejection>,
+    Json(body): Json<VirtualPlayerRename>,
 ) -> ApiResult<Json<VirtualPlayerDetails>> {
-    let body = json(body)?;
     let name = virtual_name(&body.name)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     lock(&mut tx, id, body.version).await?;
@@ -241,9 +237,8 @@ async fn rename(
 async fn remove(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    version: Result<Query<VirtualPlayerVersion>, QueryRejection>,
+    Query(VirtualPlayerVersion { version }): Query<VirtualPlayerVersion>,
 ) -> ApiResult<StatusCode> {
-    let version = query(version)?.version;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     lock(&mut tx, id, version).await?;
     // Members cascade; the real profiles stay untouched.
@@ -260,9 +255,8 @@ async fn remove(
 async fn add_member(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    body: Result<Json<VirtualPlayerMemberWrite>, JsonRejection>,
+    Json(body): Json<VirtualPlayerMemberWrite>,
 ) -> ApiResult<Json<VirtualPlayerDetails>> {
-    let body = json(body)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     lock(&mut tx, id, body.version).await?;
     // Lock the real profile so a concurrent merge cannot delete it meanwhile.
@@ -317,9 +311,8 @@ async fn add_member(
 async fn remove_member(
     State(state): State<AppState>,
     Path((id, profile_id)): Path<(Uuid, Uuid)>,
-    version: Result<Query<VirtualPlayerVersion>, QueryRejection>,
+    Query(VirtualPlayerVersion { version }): Query<VirtualPlayerVersion>,
 ) -> ApiResult<Json<VirtualPlayerDetails>> {
-    let version = query(version)?.version;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     lock(&mut tx, id, version).await?;
     let removed =
@@ -348,9 +341,8 @@ async fn me(State(state): State<AppState>) -> ApiResult<Json<MyPlayerProfile>> {
 #[utoipa::path(put,path="/api/virtual-players/me",request_body=MyPlayerProfileWrite,responses((status=200,body=MyPlayerProfile),(status=422,body=ErrorBody)),tag="Players")]
 async fn set_me(
     State(state): State<AppState>,
-    body: Result<Json<MyPlayerProfileWrite>, JsonRejection>,
+    Json(body): Json<MyPlayerProfileWrite>,
 ) -> ApiResult<Json<MyPlayerProfile>> {
-    let body = json(body)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     // Serializes concurrent choices, the only writers of `is_me`; the partial
     // unique index enforces one "me". Other edits lock only their own row.
