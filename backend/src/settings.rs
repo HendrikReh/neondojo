@@ -518,16 +518,28 @@ async fn put_settings(
     crate::configuration::store::lock(&mut tx)
         .await
         .map_err(anyhow::Error::from)?;
-    let saved: Option<AppSettings> = sqlx::query_as("UPDATE app_settings SET version=version+1,player_name=$2,analysis_engine=$3,analysis_plies=$4,play_engine=$5,play_plies=$6,gnubg_path=$7,gnubg_version=$8,bearoff_direction=$9,default_play_mode=$10,tutor_threshold=$11,training_auto_analysis=$12,gnubg_threads=$13,open_sage_threads=$14,gnubg_play_threads=$15,open_sage_play_threads=$16,parallel_analysis_jobs=$17,play_top_two=$18 WHERE singleton=true AND version=$1 RETURNING *")
-        .bind(settings.version).bind(settings.player_name).bind(settings.analysis_engine).bind(settings.analysis_plies)
-        .bind(settings.play_engine).bind(settings.play_plies).bind(settings.gnubg_path).bind(version).bind(settings.bearoff_direction).bind(settings.default_play_mode).bind(settings.tutor_threshold).bind(settings.training_auto_analysis)
-        .bind(settings.gnubg_threads).bind(settings.open_sage_threads)
-        .bind(settings.gnubg_play_threads).bind(settings.open_sage_play_threads)
+    let latest: Option<i64> =
+        sqlx::query_scalar("SELECT version FROM app_settings WHERE singleton=true FOR UPDATE")
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    if latest != Some(settings.version) {
+        return Err(conflict());
+    }
+    crate::configuration::store::save_app(&mut tx, &settings).await?;
+    // The rest belongs to this installation, not to a profile.
+    let saved: AppSettings = sqlx::query_as("UPDATE app_settings SET version=$1+1,gnubg_path=$2,gnubg_version=$3,gnubg_threads=$4,open_sage_threads=$5,gnubg_play_threads=$6,open_sage_play_threads=$7,parallel_analysis_jobs=$8 WHERE singleton=true RETURNING *")
+        .bind(settings.version)
+        .bind(settings.gnubg_path)
+        .bind(version)
+        .bind(settings.gnubg_threads)
+        .bind(settings.open_sage_threads)
+        .bind(settings.gnubg_play_threads)
+        .bind(settings.open_sage_play_threads)
         .bind(settings.parallel_analysis_jobs)
-        .bind(settings.play_top_two)
-        .fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
-    let saved = saved.ok_or_else(conflict)?;
-    crate::configuration::store::legacy_app(&mut tx, &saved).await?;
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(saved))
 }

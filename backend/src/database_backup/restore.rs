@@ -165,8 +165,9 @@ async fn preserve_host_settings(connection: &mut PgConnection, binary: &str) -> 
     .bind(crate::xg_book::default_path())
     .execute(&mut *connection)
     .await?;
-    // The JSON configuration mirrors the settings; profile paths are also
-    // rebound so applying a moved profile keeps the target's book locations.
+    // The configuration owns the book choice and the settings table repeats
+    // it, so both get the target's paths. Profile paths are also rebound so
+    // applying a moved profile keeps the target's book locations.
     for (table, column) in [
         ("configuration_state", "current_configuration"),
         ("configuration_profiles", "configuration"),

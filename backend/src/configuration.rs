@@ -387,6 +387,7 @@ pub struct ConfigurationIssue {
     pub engine: Option<ConfigurationEngine>,
 }
 /// A configuration error always has a `code` and `issues`.
+#[derive(Debug)]
 pub(crate) struct ConfigurationError(pub StatusCode, pub ErrorBody);
 pub(crate) type Result<T> = std::result::Result<T, ConfigurationError>;
 impl ConfigurationError {
