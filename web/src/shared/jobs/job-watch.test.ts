@@ -180,6 +180,38 @@ test('a lost connection resynchronises once and a closed stream falls back to re
   stop();
 });
 
+test.each([200, 404])(
+  'stream closure reconciles final HTTP %s once and stops retrying',
+  async (finalStatus) => {
+    const seen = vi.fn();
+    const errors = vi.fn();
+    const stop = watchJob('job-1', seen, errors);
+    try {
+      await flush();
+      const [stream] = FakeEventSource.instances;
+      served = job({ status: 'completed', progress: 100 });
+      status = finalStatus;
+      // EOF can start a reconnect while the final status read is in flight.
+      stream.fail(FakeEventSource.CONNECTING);
+      stream.fail(FakeEventSource.CLOSED);
+      await vi.advanceTimersByTimeAsync(JOB_SAFETY_READ_MS * 2);
+      expect(reads).toBe(2);
+      expect(FakeEventSource.instances).toHaveLength(1);
+      if (finalStatus === 404) {
+        expect(errors).toHaveBeenCalledTimes(1);
+        expect(errors.mock.calls[0][0]).toMatchObject({
+          params: { status: '404' },
+        });
+      } else {
+        expect(seen).toHaveBeenCalledTimes(2);
+        expect(seen).toHaveBeenLastCalledWith(served);
+      }
+    } finally {
+      stop();
+    }
+  },
+);
+
 test('a deleted job reports its error once and stops watching', async () => {
   status = 404;
   const errors: unknown[] = [];

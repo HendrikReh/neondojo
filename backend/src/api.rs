@@ -1022,7 +1022,7 @@ async fn job_status_batch(
     }))
 }
 
-#[utoipa::path(get, path="/api/jobs/{id}/events", params(("id"=Uuid, Path),("Last-Event-ID"=Option<i64>, Header, description="Resume after this persisted event ID")), responses((status=200, body=String, content_type="text/event-stream", description="SSE wire format: id: <persisted integer>\\nevent: <queued|running|progress|completed|failed>\\ndata: <JobProgress JSON>\\n\\n. Each data field conforms to components.schemas.JobProgress. Stream ends after terminal event or service shutdown; reconnect resumes via Last-Event-ID."),(status=404, body=ErrorBody),(status=422,body=ErrorBody)), tag="Analysis")]
+#[utoipa::path(get, path="/api/jobs/{id}/events", params(("id"=Uuid, Path),("Last-Event-ID"=Option<i64>, Header, description="Resume after this persisted event ID")), responses((status=200, body=String, content_type="text/event-stream", description="SSE wire format: id: <persisted integer>\\nevent: <queued|running|progress|completed|failed>\\ndata: <JobProgress JSON>\\n\\n. Each data field conforms to components.schemas.JobProgress. Replay ends when the job disappears, its terminal history is exhausted, or the service shuts down. On disconnect, read the job status. Reconnect to an active job with Last-Event-ID."),(status=404, body=ErrorBody),(status=422,body=ErrorBody)), tag="Analysis")]
 async fn events(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -1057,13 +1057,22 @@ async fn events(
                         if terminal { return; }
                     }
                     if count==100 { continue; }
-                    // Check the committed terminal event ID as well as status: a completion
-                    // may have committed between the replay query and this status query.
-                    if let Ok(Some(job))=store::get_job(&state.pool,id).await
-                        && (job.status=="completed" || job.status=="failed") {
-                            let last: Result<Option<i64>,_> = sqlx::query_scalar("SELECT max(id) FROM job_events WHERE job_id=$1").bind(id).fetch_one(&state.pool).await;
-                            if let Ok(Some(last)) = last && after>=last { return; }
+                    match store::get_job(&state.pool, id).await {
+                        Ok(None) => return,
+                        Ok(Some(job)) if matches!(job.status.as_str(), "completed" | "failed") => {
+                            // Completion may have committed between the replay and status reads.
+                            let last = sqlx::query_scalar::<_, Option<i64>>(
+                                "SELECT max(id) FROM job_events WHERE job_id=$1"
+                            ).bind(id).fetch_one(&state.pool).await;
+                            match last {
+                                Ok(Some(last)) if last > after => continue,
+                                Ok(_) => return,
+                                Err(error) => tracing::warn!(%error, "SSE final event lookup failed"),
+                            }
                         }
+                        Ok(Some(_)) => {}
+                        Err(error) => tracing::warn!(%error, "SSE job lookup failed"),
+                    }
                 },
                 Err(error) => { tracing::warn!(%error,"SSE database read failed"); return; }
             }

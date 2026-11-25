@@ -9717,7 +9717,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description SSE wire format: id: <persisted integer>\nevent: <queued|running|progress|completed|failed>\ndata: <JobProgress JSON>\n\n. Each data field conforms to components.schemas.JobProgress. Stream ends after terminal event or service shutdown; reconnect resumes via Last-Event-ID. */
+            /** @description SSE wire format: id: <persisted integer>\nevent: <queued|running|progress|completed|failed>\ndata: <JobProgress JSON>\n\n. Each data field conforms to components.schemas.JobProgress. Replay ends when the job disappears, its terminal history is exhausted, or the service shuts down. On disconnect, read the job status. Reconnect to an active job with Last-Event-ID. */
             200: {
                 headers: {
                     [name: string]: unknown;
