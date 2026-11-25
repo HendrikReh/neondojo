@@ -1,3 +1,8 @@
+mod decision_batch;
+mod match_cards;
+pub(super) use decision_batch::decision_cards;
+use match_cards::MatchCardSource;
+
 use super::*;
 use crate::recurring_mistakes::MistakeReference;
 use crate::{
@@ -318,7 +323,8 @@ async fn imported_match(
     match_id: Uuid,
     request: &AddCards,
 ) -> ApiResult<Vec<CardContent>> {
-    let cards = imported_decision_cards(pool, match_id, request.game_no, request.player).await?;
+    let cards =
+        imported_decision_cards(pool, match_id, request.game_no, request.player, None).await?;
     let mut output = Vec::new();
     for (_, card) in cards {
         let card = card.map_err(ApiError::invalid)?;
@@ -348,11 +354,12 @@ async fn imported_match(
 /// The cards of a match's primary imported analysis, in source order, keyed
 /// by imported analysis row. A row without a supported card has an error
 /// message instead.
-pub(super) async fn imported_decision_cards(
+async fn imported_decision_cards(
     pool: &PgPool,
     match_id: Uuid,
     game_no: Option<i32>,
     player: Option<i32>,
+    ids: Option<&[Uuid]>,
 ) -> ApiResult<Vec<(Uuid, Result<CardContent, String>)>> {
     crate::move_catalog::ensure_catalog(pool, match_id).await?;
     #[derive(FromRow)]
@@ -366,8 +373,40 @@ pub(super) async fn imported_decision_cards(
         black: String,
         format: MatchFormat,
     }
-    let rows=sqlx::query_as::<_,Row>("SELECT g.cube_enabled,ia.id,ia.data,to_jsonb(e) AS event,p.ply AS checker_ply,m.white,m.black,m.format FROM primary_imported_analyses ia JOIN matches m ON m.id=ia.match_uuid LEFT JOIN match_moves e ON e.match_uuid=ia.match_uuid AND e.game_no=ia.game_no AND e.move_no=ia.source_move_no AND e.position_uuid IS NOT DISTINCT FROM ia.position_uuid LEFT JOIN positions p ON p.id=e.position_uuid JOIN match_games g ON g.match_uuid=ia.match_uuid AND g.game_no=ia.game_no WHERE m.id=$1 AND NOT m.collection_only AND (g.cube_enabled OR ia.kind='checker') AND ia.kind IN ('checker','cube') AND ($2::integer IS NULL OR ia.game_no=$2) AND ($3::integer IS NULL OR e.player=$3) ORDER BY ia.game_no,ia.source_move_no,ia.source_ordinal LIMIT 200001")
-        .bind(match_id).bind(game_no).bind(player).fetch_all(pool).await.map_err(anyhow::Error::from)?;
+    // Starting at the requested IDs bounds primary ranking to their source moves.
+    // Filtering the competing evaluations by ID before ranking would make a
+    // secondary evaluation look primary.
+    let rows = sqlx::query_as::<_, Row>(
+        "WITH selected AS (
+             SELECT ia.* FROM primary_imported_analyses ia WHERE $4::uuid[] IS NULL
+             UNION ALL
+             SELECT winner.* FROM imported_analyses requested
+             JOIN LATERAL (
+                 SELECT ia.* FROM primary_imported_analyses ia
+                 WHERE ia.match_uuid=requested.match_uuid AND ia.game_no=requested.game_no
+                   AND ia.source_move_no=requested.source_move_no
+             ) winner ON winner.id=requested.id
+             WHERE requested.id=ANY($4)
+         )
+         SELECT g.cube_enabled,ia.id,ia.data,to_jsonb(e) AS event,p.ply AS checker_ply,
+                m.white,m.black,m.format
+         FROM selected ia JOIN matches m ON m.id=ia.match_uuid
+         LEFT JOIN match_moves e ON e.match_uuid=ia.match_uuid AND e.game_no=ia.game_no
+             AND e.move_no=ia.source_move_no AND e.position_uuid IS NOT DISTINCT FROM ia.position_uuid
+         LEFT JOIN positions p ON p.id=e.position_uuid
+         JOIN match_games g ON g.match_uuid=ia.match_uuid AND g.game_no=ia.game_no
+         WHERE m.id=$1 AND NOT m.collection_only AND (g.cube_enabled OR ia.kind='checker')
+           AND ia.kind IN ('checker','cube') AND ($2::integer IS NULL OR ia.game_no=$2)
+           AND ($3::integer IS NULL OR e.player=$3)
+         ORDER BY ia.game_no,ia.source_move_no,ia.source_ordinal LIMIT 200001",
+    )
+    .bind(match_id)
+    .bind(game_no)
+    .bind(player)
+    .bind(ids)
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
     if rows.len() > 200000 {
         return Err(ApiError::invalid(
             "Analysis exceeds supported decision count",
@@ -386,114 +425,15 @@ pub(super) async fn imported_decision_cards(
         .collect())
 }
 
-/// Cards of individual analysed decisions. A reference is absent when its
-/// analysis or decision does not exist, and has an error message when the
-/// analysis has no supported card for it.
-pub(super) async fn decision_cards(
-    pool: &PgPool,
-    references: &[MistakeReference],
-) -> ApiResult<std::collections::HashMap<MistakeReference, Result<CardContent, String>>> {
-    use std::collections::{BTreeMap, HashMap, HashSet};
-    let mut native: BTreeMap<(Uuid, i32), BTreeSet<i32>> = BTreeMap::new();
-    let mut imported_ids = BTreeSet::new();
-    for reference in references {
-        if let Some(job) = reference.job_id {
-            native
-                .entry((job, reference.game_no))
-                .or_default()
-                .insert(reference.decision_no);
-        } else if let Some(id) = reference.imported_analysis_id {
-            imported_ids.insert(id);
-        }
-    }
-    let mut output = HashMap::new();
-    let wanted: HashSet<&MistakeReference> = references.iter().collect();
-    // A failing analysis marks only its own decisions; other errors fail the request.
-    let fail = |output: &mut HashMap<_, _>,
-                error: ApiError,
-                matches: &dyn Fn(&MistakeReference) -> bool| {
-        if error.0 == axum::http::StatusCode::UNPROCESSABLE_ENTITY {
-            for reference in wanted.iter().filter(|r| matches(r)) {
-                output.insert((*reference).clone(), Err(error.1.error.clone()));
-            }
-            Ok(())
-        } else if error.0 == axum::http::StatusCode::NOT_FOUND {
-            Ok(())
-        } else {
-            Err(error)
-        }
-    };
-    for ((job, game_no), decisions) in native {
-        let keep = decisions.clone();
-        match match_decision_cards(pool, job, Some(game_no), move |d| {
-            keep.contains(&d.decision_no)
-        })
-        .await
-        {
-            Ok(cards) => {
-                for (decision_no, card) in cards {
-                    output.insert(
-                        MistakeReference {
-                            job_id: Some(job),
-                            imported_analysis_id: None,
-                            game_no,
-                            decision_no,
-                        },
-                        card,
-                    );
-                }
-            }
-            Err(error) => fail(&mut output, error, &|r| {
-                r.job_id == Some(job) && r.game_no == game_no
-            })?,
-        }
-    }
-    let groups: Vec<(Uuid, i32)> = sqlx::query_as(
-        "SELECT DISTINCT match_uuid, game_no FROM imported_analyses WHERE id = ANY($1)",
-    )
-    .bind(imported_ids.into_iter().collect::<Vec<_>>())
-    .fetch_all(pool)
-    .await
-    .map_err(anyhow::Error::from)?;
-    for (match_id, game_no) in groups {
-        match imported_decision_cards(pool, match_id, Some(game_no), None).await {
-            Ok(cards) => {
-                for (id, card) in cards {
-                    let decision_no = match &card {
-                        Ok(content) => content.source.decision_no,
-                        Err(_) => None,
-                    };
-                    // An unsupported row still answers the references to it.
-                    for reference in wanted.iter().filter(|r| {
-                        r.imported_analysis_id == Some(id)
-                            && r.game_no == game_no
-                            && decision_no.is_none_or(|n| n == r.decision_no)
-                    }) {
-                        output.insert((*reference).clone(), card.clone());
-                    }
-                }
-            }
-            Err(error) => fail(&mut output, error, &|r| {
-                r.imported_analysis_id.is_some() && r.game_no == game_no
-            })?,
-        }
-    }
-    Ok(output)
-}
-
-#[derive(FromRow)]
-struct DecisionRow {
-    position_uuid: Option<Uuid>,
-    game_no: i32,
-    data: serde_json::Value,
-}
 async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Vec<CardContent>> {
     let player = request.player;
     let min_loss = request.min_loss.unwrap_or(0.0);
-    let cards = match_decision_cards(pool, id, request.game_no, move |d| {
-        player.is_none_or(|p| p == d.player) && d.equity_loss >= min_loss
-    })
-    .await?;
+    let source = MatchCardSource::load(pool, id).await?;
+    let cards = source
+        .cards(pool, request.game_no, move |d| {
+            player.is_none_or(|p| p == d.player) && d.equity_loss >= min_loss
+        })
+        .await?;
     let mut output = Vec::new();
     for (_, card) in cards {
         if output.len() >= MAX_CARDS as usize {
@@ -504,118 +444,6 @@ async fn from_match(pool: &PgPool, id: Uuid, request: &AddCards) -> ApiResult<Ve
         output.push(card.map_err(ApiError::invalid)?);
     }
     Ok(output)
-}
-
-/// The cards of one saved match analysis, in decision order, for the
-/// decisions `keep` selects. A decision without a supported card has an
-/// error message instead; a broken source fails the whole request.
-pub(super) async fn match_decision_cards(
-    pool: &PgPool,
-    id: Uuid,
-    game_no: Option<i32>,
-    keep: impl Fn(&Decision) -> bool + Send + 'static,
-) -> ApiResult<Vec<(i32, Result<CardContent, String>)>> {
-    let job = store::get_job(pool, id)
-        .await?
-        .ok_or_else(ApiError::missing)?;
-    if job.kind != "match" {
-        return Err(ApiError::invalid(
-            "job_id must refer to a saved match analysis",
-        ));
-    }
-    let match_id = job.match_uuid.context("Match job lacks match UUID")?;
-    if !store::get_match(pool, match_id)
-        .await?
-        .is_some_and(|m| m.source_available)
-    {
-        return Err(ApiError::invalid(
-            "The source match was removed; add its saved positions instead",
-        ));
-    }
-    if game_no.is_some_and(|n| job.game_no.is_some_and(|scope| scope != n)) {
-        return Err(ApiError::invalid("game_no does not match this job's scope"));
-    }
-    if let Some(game_no) = game_no {
-        let games = store::match_games(pool, match_id)
-            .await?
-            .ok_or_else(ApiError::missing)?;
-        if !games.iter().any(|g| g.game_no == game_no) {
-            return Err(ApiError::invalid("game_no is outside this match"));
-        }
-    }
-    let (sgf, white, black): (String, String, String) =
-        sqlx::query_as("SELECT sgf,white,black FROM matches WHERE id=$1")
-            .bind(match_id)
-            .fetch_one(pool)
-            .await
-            .map_err(anyhow::Error::from)?;
-    let rows:Vec<DecisionRow>=sqlx::query_as("SELECT ma.position_uuid,ma.game_no,ma.data FROM move_analyses ma JOIN match_analysis_games c ON c.job_id=ma.job_id AND c.game_no=ma.game_no WHERE ma.job_id=$1 AND ($2::integer IS NULL OR ma.game_no=$2) ORDER BY ma.game_no,ma.decision_no LIMIT 200001").bind(id).bind(game_no).fetch_all(pool).await.map_err(anyhow::Error::from)?;
-    if rows.len() > 200000 {
-        return Err(ApiError::invalid(
-            "Analysis exceeds supported decision count",
-        ));
-    }
-    let engine: String = sqlx::query_scalar(
-        "SELECT engine FROM analysis_catalog_sources WHERE match_id=$1 AND job_id=$2",
-    )
-    .bind(match_id)
-    .bind(id)
-    .fetch_optional(pool)
-    .await
-    .map_err(anyhow::Error::from)?
-    .ok_or_else(|| ApiError::invalid("The selected analysis is no longer available"))?;
-    let contents = tokio::task::spawn_blocking(
-        move || -> anyhow::Result<Vec<(i32, Result<CardContent, String>)>> {
-            let (_, contexts) = crate::import::sgf::parse_sgf_with_context(&sgf)?;
-            let mut output = Vec::new();
-            let mut last_game = 0;
-            let mut action = 0;
-            for row in rows {
-                let d: Decision = serde_json::from_value(row.data)?;
-                if row.game_no != last_game {
-                    last_game = row.game_no;
-                    action = 0;
-                }
-                let context = contexts
-                    .get(usize::try_from(row.game_no - 1)?)
-                    .context("Missing original game context")?;
-                let (position_id, match_state_id) = context
-                    .decision_ids
-                    .get(action)
-                    .context("Missing original decision state")?;
-                if d.played != "no double" {
-                    action += 1;
-                }
-                // Advance through every decision before filtering: cube responses have their own IDs.
-                if !keep(&d) || (d.kind == "cube" && !context.cube_enabled) {
-                    continue;
-                }
-                let decision_no = d.decision_no;
-                let card = decision_card(
-                    row.position_uuid,
-                    row.game_no,
-                    match_id,
-                    position_id,
-                    match_state_id,
-                    [white.clone(), black.clone()],
-                    id,
-                    engine.clone(),
-                    job.plies,
-                    d,
-                )
-                .map(|mut card| {
-                    card.position.cube_enabled = Some(context.cube_enabled);
-                    card
-                })
-                .map_err(|error| error.to_string());
-                output.push((decision_no, card));
-            }
-            Ok(output)
-        },
-    )
-    .await
-    .map_err(anyhow::Error::from)?;
-    contents.map_err(|error| ApiError::invalid(error.to_string()))
 }
 
 /// One decision of a saved match analysis as a card, with the board and match
