@@ -219,8 +219,8 @@ pub(super) async fn sync(
         insert.build().persistent(false).execute(&mut **tx).await?;
     }
     for game in &imported.games {
-        sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(match_uuid,game_no) DO UPDATE SET position_count=EXCLUDED.position_count,white_score=EXCLUDED.white_score,black_score=EXCLUDED.black_score,crawford=EXCLUDED.crawford")
-            .bind(id).bind(game.game_no).bind(game.position_count).bind(game.white_score).bind(game.black_score).bind(game.crawford).execute(&mut **tx).await?;
+        sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford,cube_enabled) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(match_uuid,game_no) DO UPDATE SET position_count=EXCLUDED.position_count,white_score=EXCLUDED.white_score,black_score=EXCLUDED.black_score,crawford=EXCLUDED.crawford,cube_enabled=EXCLUDED.cube_enabled")
+            .bind(id).bind(game.game_no).bind(game.position_count).bind(game.white_score).bind(game.black_score).bind(game.crawford).bind(game.cube_enabled).execute(&mut **tx).await?;
     }
     sqlx::query("UPDATE matches SET sha256=$2,original=$3,sgf=$4,white=$5,black=$6,position_count=$7,metadata_version=metadata_version+CASE WHEN result_state IS DISTINCT FROM $8 OR white_score IS DISTINCT FROM $9 OR black_score IS DISTINCT FROM $10 THEN 1 ELSE 0 END,result_state=$8,white_score=$9,black_score=$10,moves_cataloged=CASE WHEN sgf<>$4 THEN false ELSE moves_cataloged END,source_revision=source_revision+CASE WHEN sgf<>$4 THEN 1 ELSE 0 END WHERE id=$1")
         .bind(id).bind(hash).bind(sgf.as_bytes()).bind(&sgf).bind(&imported.players[0]).bind(&imported.players[1]).bind(imported.positions.len() as i32).bind(result).bind(session.scores[0]).bind(session.scores[1]).execute(&mut **tx).await?;

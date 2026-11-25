@@ -36,6 +36,36 @@ pub async fn run(pool: &PgPool) -> Result<()> {
         .await
         .context("Adopting the consolidated migration history")?;
     MIGRATOR.run(pool).await.context("Applying migrations")?;
+    let mut tx = pool.begin().await?;
+    resolve_game_cube_rules(&mut tx).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+/// Only candidate sources marked by migration 0095 need to be replayed.
+/// Repeated startup and concurrent backfills keep all analysis rows intact.
+pub(super) async fn resolve_game_cube_rules(connection: &mut sqlx::PgConnection) -> Result<()> {
+    let matches: Vec<uuid::Uuid> = sqlx::query_scalar("SELECT DISTINCT match_uuid FROM match_games WHERE cube_enabled IS NULL ORDER BY match_uuid")
+        .fetch_all(&mut *connection).await?;
+    for id in matches {
+        let source: Option<String> =
+            sqlx::query_scalar("SELECT coalesce(origin.sgf,m.sgf) FROM matches m LEFT JOIN matches origin ON m.collection_only AND origin.id=m.source_match_id WHERE m.id=$1 FOR UPDATE OF m")
+                .bind(id)
+                .fetch_optional(&mut *connection)
+                .await?;
+        let Some(source) = source else { continue };
+        let rules = tokio::task::spawn_blocking(move || {
+            crate::import::sgf::parse_sgf_with_context(&source).map(|(_, games)| {
+                games
+                    .into_iter()
+                    .map(|g| g.cube_enabled)
+                    .collect::<Vec<_>>()
+            })
+        })
+        .await??;
+        sqlx::query("UPDATE match_games g SET cube_enabled=r.enabled FROM unnest($2::boolean[]) WITH ORDINALITY r(enabled,n) WHERE g.match_uuid=$1 AND g.game_no=r.n AND g.cube_enabled IS NULL")
+            .bind(id).bind(rules).execute(&mut *connection).await?;
+    }
     Ok(())
 }
 

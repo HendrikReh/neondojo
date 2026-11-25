@@ -78,6 +78,9 @@ pub struct GameResult {
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct MatchGame {
+    /// Whether the game rules allow a doubling cube, independently of ownership and score.
+    #[serde(default = "default_cube_enabled")]
+    pub cube_enabled: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[sqlx(skip)]
     /// Terminal source evidence, an explicit award, or an unambiguous delta established by both explicit next-game scores.
@@ -87,6 +90,10 @@ pub struct MatchGame {
     pub white_score: i32,
     pub black_score: i32,
     pub crawford: bool,
+}
+
+pub(crate) fn default_cube_enabled() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]

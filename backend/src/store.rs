@@ -231,7 +231,7 @@ async fn insert_games(
 ) -> Result<()> {
     for batch in games.chunks(500) {
         let mut query = QueryBuilder::<Postgres>::new(
-            "INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford) ",
+            "INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford,cube_enabled) ",
         );
         query.push_values(batch, |mut q, game| {
             q.push_bind(match_id)
@@ -239,7 +239,8 @@ async fn insert_games(
                 .push_bind(game.position_count)
                 .push_bind(game.white_score)
                 .push_bind(game.black_score)
-                .push_bind(game.crawford);
+                .push_bind(game.crawford)
+                .push_bind(game.cube_enabled);
         });
         query.build().execute(&mut **tx).await?;
     }
@@ -250,7 +251,7 @@ async fn insert_games(
 /// under the match row lock for libraries created before the catalog migration.
 /// The game catalog of a match, built once from the stored SGF for older
 /// imports. Results are not derived; scope checks need only the games.
-const GAME_CATALOG: &str = "SELECT game_no,position_count,white_score,black_score,crawford FROM match_games WHERE match_uuid=$1 ORDER BY game_no";
+const GAME_CATALOG: &str = "SELECT game_no,position_count,white_score,black_score,crawford,cube_enabled FROM match_games WHERE match_uuid=$1 ORDER BY game_no";
 pub async fn game_catalog(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<MatchGame>>> {
     let games = sqlx::query_as::<_, MatchGame>(GAME_CATALOG)
         .bind(match_id)

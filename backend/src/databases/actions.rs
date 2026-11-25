@@ -226,7 +226,7 @@ pub(super) async fn copy_children(
         .execute(&mut **tx).await.map_err(anyhow::Error::from)?;
     let games = new_ids(tx, "SELECT id FROM match_games WHERE match_uuid=$1", source).await?;
     let (old_games, new_games) = id_arrays(&games);
-    sqlx::query("INSERT INTO match_games(id,match_uuid,game_no,position_count,white_score,black_score,crawford) SELECT m.new,$3,g.game_no,g.position_count,g.white_score,g.black_score,g.crawford FROM unnest($1::uuid[],$2::uuid[]) AS m(old,new) JOIN match_games g ON g.id=m.old")
+    sqlx::query("INSERT INTO match_games(id,match_uuid,game_no,position_count,white_score,black_score,crawford,cube_enabled) SELECT m.new,$3,g.game_no,g.position_count,g.white_score,g.black_score,g.crawford,g.cube_enabled FROM unnest($1::uuid[],$2::uuid[]) AS m(old,new) JOIN match_games g ON g.id=m.old")
         .bind(&old_games).bind(&new_games).bind(target)
         .execute(&mut **tx).await.map_err(anyhow::Error::from)?;
     crate::imported_analysis::copy_records(tx, source, target, &positions).await?;
