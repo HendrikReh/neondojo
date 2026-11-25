@@ -40,6 +40,27 @@ async fn check_result(
     )
 }
 
+async fn migrate_through(pool: &PgPool, version: i64) {
+    let mut migrations = sqlx::migrate!("./migrations");
+    migrations
+        .migrations
+        .to_mut()
+        .retain(|m| m.version <= version);
+    migrations.run(pool).await.unwrap();
+}
+
+async fn export_archive(app: &axum::Router) -> Bytes {
+    let response = app
+        .clone()
+        .oneshot(Request::get(BACKUP).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    to_bytes(response.into_body(), 16 * 1024 * 1024)
+        .await
+        .unwrap()
+}
+
 async fn insert_match(pool: &PgPool, name: &str) -> (uuid::Uuid, i64) {
     sqlx::query_as(
         "INSERT INTO matches (id,filename,format,sha256,white,black,match_length,position_count,original,sgf,source_metadata_loaded)
@@ -57,6 +78,7 @@ async fn analysis_snapshot(pool: &PgPool, match_id: uuid::Uuid) -> serde_json::V
     sqlx::query_scalar(
         "SELECT jsonb_build_object(
              'source_revision',m.source_revision,
+             'effective_selection',(SELECT to_jsonb(e) FROM effective_analysis_selections e WHERE e.match_id=m.id),
              'selection',(SELECT to_jsonb(s) FROM analysis_selections s WHERE s.match_id=m.id),
              'jobs',(SELECT jsonb_agg(to_jsonb(j) ORDER BY j.id) FROM jobs j
                  WHERE j.match_uuid=m.id AND j.status='completed'),
@@ -80,9 +102,7 @@ async fn analysis_snapshot(pool: &PgPool, match_id: uuid::Uuid) -> serde_json::V
 #[sqlx::test(migrations = false)]
 async fn restores_pre_cube_rule_archive_using_each_games_sgf(pool: PgPool) {
     // Export real pre-0095 COPY rows and their original manifest fingerprint.
-    let mut previous = sqlx::migrate!("./migrations");
-    previous.migrations.to_mut().retain(|m| m.version <= 94);
-    previous.run(&pool).await.unwrap();
+    migrate_through(&pool, 94).await;
     let (id, _) = insert_match(&pool, "mixed-rules.sgf").await;
     let sgf = r"(;GM[6]MI[length:0]RU[No\Cube];W[31hefe])(;GM[6]MI[length:0];W[31hefe])";
     sqlx::query("UPDATE matches SET sgf=$2 WHERE id=$1")
@@ -95,17 +115,8 @@ async fn restores_pre_cube_rule_archive_using_each_games_sgf(pool: PgPool) {
         SELECT gen_random_uuid(),$1,n,1,0,0,false FROM generate_series(1,2) n")
         .bind(id).execute(&pool).await.unwrap();
     let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
-    let response = app
-        .clone()
-        .oneshot(Request::get(BACKUP).body(Body::empty()).unwrap())
-        .await
-        .unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
-    let archive = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
-
-    let mut target = sqlx::migrate!("./migrations");
-    target.migrations.to_mut().retain(|m| m.version <= 96);
-    target.run(&pool).await.unwrap();
+    let archive = export_archive(&app).await;
+    migrate_through(&pool, 96).await;
     sqlx::query("DELETE FROM match_games WHERE match_uuid=$1")
         .bind(id)
         .execute(&pool)
@@ -142,6 +153,47 @@ async fn restores_pre_cube_rule_archive_using_each_games_sgf(pool: PgPool) {
         check_result(&app, archive).await.1["status"],
         "incompatible_schema"
     );
+}
+
+#[sqlx::test(migrations = false)]
+async fn restores_selected_import_from_before_selection_indexes(pool: PgPool) {
+    migrate_through(&pool, 95).await;
+    let (match_id, _) = crate::support::foreign_analysis(&pool).await;
+    let selected = format!("imported:{match_id}");
+    sqlx::query(
+        "INSERT INTO analysis_selections(match_id, analysis_id, source_revision)
+         SELECT id, $2, source_revision FROM matches WHERE id=$1",
+    )
+    .bind(match_id)
+    .bind(&selected)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let before = analysis_snapshot(&pool, match_id).await;
+    assert_eq!(before["effective_selection"]["analysis_id"], selected);
+    assert_eq!(before["imports"].as_array().unwrap().len(), 2);
+    let app = router(AppState::new(pool.clone(), Engine::new("unused".into())));
+    let archive = export_archive(&app).await;
+
+    migrate_through(&pool, 96).await;
+    sqlx::query("DELETE FROM matches WHERE id=$1")
+        .bind(match_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        check_result(&app, archive.clone()).await.1["status"],
+        "compatible"
+    );
+    let response = app.oneshot(restore(archive, true)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(analysis_snapshot(&pool, match_id).await, before);
+    let source: Vec<u8> = sqlx::query_scalar("SELECT original FROM matches WHERE id=$1")
+        .bind(match_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(source, crate::support::FOREIGN_SOURCE.as_bytes());
 }
 
 #[sqlx::test(migrations = "./migrations")]
