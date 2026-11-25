@@ -71,9 +71,24 @@ export default function PositionComparison({
     return { engine, options, entry };
   });
   const positionId = active ? position.id : undefined;
-  const xg = useAnalysisResult(positionId, columns[0].entry?.id, revision);
-  const gnubg = useAnalysisResult(positionId, columns[1].entry?.id, revision);
-  const sage = useAnalysisResult(positionId, columns[2].entry?.id, revision);
+  const xg = useAnalysisResult(
+    positionId,
+    columns[0].entry?.id,
+    revision,
+    catalog.sourceRevision,
+  );
+  const gnubg = useAnalysisResult(
+    positionId,
+    columns[1].entry?.id,
+    revision,
+    catalog.sourceRevision,
+  );
+  const sage = useAnalysisResult(
+    positionId,
+    columns[2].entry?.id,
+    revision,
+    catalog.sourceRevision,
+  );
   const results = [xg, gnubg, sage];
   const candidates = useMemo(
     () => [

@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import {
   openFullMatchAnalysis,
   openMatchAnalysisOptions,
+  openPositionCalculation,
   submitFullMatchAnalysis,
 } from './analysis-controls';
 import { sql } from './stack';
@@ -328,6 +329,45 @@ test('late move ratings keep the place the user scrolled to', async ({
     .click();
   await expect(page.locator('.board-navigation')).toContainText('2 / 65');
   await expect(rows.nth(1)).toBeInViewport({ ratio: 0.99 });
+});
+
+test('reading the displayed analysis again keeps its candidate table', async ({
+  page,
+}) => {
+  await page.goto('/');
+  let shown = '';
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname.endsWith('/analysis-result'))
+      shown ||= request.url();
+  });
+  await page
+    .getByLabel('Matchdatei')
+    .setInputFiles('../backend/tests/fixtures/WC2014.xg');
+  const row = page
+    .locator('.analysis-panel .candidate-comparison-table tbody tr')
+    .first();
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await row.evaluate((element) => element.setAttribute('data-kept', ''));
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reads = new Set<string>();
+  await page.route('**/api/positions/*/analysis-result?*', async (route) => {
+    reads.add(route.request().url());
+    await held;
+    await route.continue();
+  });
+  // A finished calculation makes the workspace read its displayed result again.
+  const dialog = await openPositionCalculation(page);
+  await dialog.getByRole('combobox').last().selectOption('1');
+  await dialog
+    .getByRole('button', { name: 'Position analysieren', exact: true })
+    .click();
+  await expect.poll(() => [...reads], { timeout: 30_000 }).toEqual([shown]);
+  await expect(page.locator('.analysis-panel [data-kept]')).toBeVisible();
+  release();
+  await expect(page.locator('.analysis-panel [data-kept]')).toBeVisible();
 });
 
 test('changing Cube filters resets the decision count', async ({ page }) => {

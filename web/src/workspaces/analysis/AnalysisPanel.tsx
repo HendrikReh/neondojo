@@ -101,6 +101,7 @@ export default function AnalysisPanel({
     positionId,
     catalog.analysisId,
     analysisRevision,
+    catalog.sourceRevision,
   );
   const resetPreview = useEffectEvent(() => onPreview?.(null));
   const [bookOpen, setBookOpen] = useState(false);

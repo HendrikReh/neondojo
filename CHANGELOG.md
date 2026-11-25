@@ -44,6 +44,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ### Fixed
 
+- **Candidate table stays in place.** The move candidates and **Compare moves** were replaced by a loading note whenever their result was read again, for example while the page was starting or when any match or position analysis finished. They now stay visible until the new result arrives.
 - **Analysis move list stays where you scrolled it.** Move ratings that arrived while a game was loading scrolled the list back to the current move, so a click at that moment could select nothing. The list now only follows the current move when you change the move, the tab or the filter, or have not scrolled it yourself. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
 - **No waiting for a running NeonGammon analysis.** Starting a match against NeonGammon, submitting another NeonGammon analysis and loading the engine list waited until the current game of a running NeonGammon analysis was finished. During a 4-ply analysis on a Mac mini M4 Pro, starting a match took 32 s and now takes 0.5 s. The installation check no longer waits for the worker of the analysis. [NeonGammon setup](docs/open-sage-local.md#application-adapter-and-numerical-limits)
 - **Top-two in a saved profile.** Saving the current settings into a profile checked the engine when the engine or depth changed, but not when only NeonGammon **2-ply + Top-2** was switched on or off. It now checks the same changes as **Apply** and names an unavailable engine.
