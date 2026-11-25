@@ -89,10 +89,26 @@ pub(super) async fn history_snapshots(
     Ok(Json(response))
 }
 
-#[utoipa::path(post,path="/api/play/sessions",request_body=CreatePlaySession,responses((status=201,body=PlaySession),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Playing")]
+#[utoipa::path(post,path="/api/play/sessions",request_body=CreatePlaySession,responses((status=201,body=PlaySession),(status=409,body=ErrorBody,description="A benchmark is using the engines"),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Playing")]
 pub(super) async fn create_session(
     State(state): State<AppState>,
     Json(request): Json<CreatePlaySession>,
+) -> ApiResult<(StatusCode, Json<PlaySession>)> {
+    crate::engine::try_play_start(start_session(state, request))
+        .await
+        .ok_or_else(benchmark_conflict)?
+}
+
+fn benchmark_conflict() -> ApiError {
+    ApiError(
+        StatusCode::CONFLICT,
+        "A benchmark is using the engines; retry after it finishes".into(),
+    )
+}
+
+async fn start_session(
+    state: AppState,
+    request: CreatePlaySession,
 ) -> ApiResult<(StatusCode, Json<PlaySession>)> {
     if !(0..=1).contains(&request.human_player) || !(0..=25).contains(&request.match_length) {
         return Err(ApiError::invalid(
@@ -109,8 +125,11 @@ pub(super) async fn create_session(
             "tutor_threshold must be greater than 0 and at most 1",
         ));
     }
+    if crate::benchmarks::has_live_run(&state.pool).await? {
+        return Err(benchmark_conflict());
+    }
     let pinned_path = resolve_binary(&settings.gnubg_path).map_err(native_error)?;
-    let engine = Engine::new(pinned_path.clone());
+    let engine = Engine::new(pinned_path.clone()).interactive();
     let rules_version = engine.version().await.map_err(native_error)?;
     let rules = crate::settings::EngineSnapshot {
         engine_id: EngineId::Gnubg.id().into(),
@@ -123,16 +142,28 @@ pub(super) async fn create_session(
         gnubg_move_filter: None,
         open_sage: None,
     };
-    let bot = crate::settings::snapshot_for(
-        &state,
+    let play_snapshot = async |id: &str,
+                               gnubg_threads: Option<i32>,
+                               sage_threads: u32,
+                               plies: i32|
+           -> ApiResult<crate::settings::EngineSnapshot> {
+        if id == EngineId::Gnubg.id() {
+            return Ok(crate::settings::EngineSnapshot {
+                gnubg_threads: gnubg_threads.filter(|&n| n != 1),
+                ..rules.clone()
+            });
+        }
+        crate::settings::snapshot_for(&state, id, &pinned_path, gnubg_threads, sage_threads, plies)
+            .await
+            .map_err(native_error)
+    };
+    let bot = play_snapshot(
         &settings.play_engine,
-        &pinned_path,
         settings.gnubg_play_threads,
         settings.sage_play_threads(),
         settings.play_plies,
     )
-    .await
-    .map_err(native_error)?;
+    .await?;
     if request.play_difficulty.is_some()
         && !bot
             .open_sage
@@ -143,16 +174,21 @@ pub(super) async fn create_session(
             "NeonGammon difficulty presets require NeonGammon 3.1.0 or newer",
         ));
     }
-    let analysis = crate::settings::snapshot_for(
-        &state,
-        &settings.analysis_engine,
-        &pinned_path,
-        settings.gnubg_threads,
-        settings.sage_analysis_threads(),
-        settings.analysis_plies,
-    )
-    .await
-    .map_err(native_error)?;
+    let analysis = if let Some(profile) = &bot.open_sage
+        && settings.analysis_engine == settings.play_engine
+        && settings.analysis_plies == profile.plies
+        && settings.sage_analysis_threads() == profile.threads
+    {
+        bot.clone()
+    } else {
+        play_snapshot(
+            &settings.analysis_engine,
+            settings.gnubg_threads,
+            settings.sage_analysis_threads(),
+            settings.analysis_plies,
+        )
+        .await?
+    };
     let version = bot
         .engine_version
         .clone()

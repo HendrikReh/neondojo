@@ -2,11 +2,11 @@ use super::{EngineCost, SageSnapshot};
 use crate::engine_process::{reap_child, terminate_and_reap};
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-use std::{process::Stdio, sync::LazyLock, time::Duration};
+use std::{process::Stdio, time::Duration};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdin, ChildStdout, Command},
-    sync::{Mutex, MutexGuard, Semaphore, SemaphorePermit},
+    sync::{Mutex, MutexGuard},
 };
 
 const MAX_REQUEST: usize = 262_144;
@@ -31,21 +31,13 @@ static INTERACTIVE: Mutex<Option<Worker>> = Mutex::const_new(None);
 /// for none of these workers, so a game analysis does not delay a new match, the
 /// engine list or the submission of another analysis.
 static PROBE: Mutex<()> = Mutex::const_new(());
-static CPU_BUDGET: LazyLock<(u32, Semaphore)> = LazyLock::new(|| {
-    let capacity = crate::configuration::available_cpu_threads()
-        .and_then(|count| u32::try_from(count).ok())
-        .unwrap_or(1);
-    (capacity, Semaphore::new(capacity as usize))
-});
+use crate::engine::cpu::{CpuPermit, HostCpuBudget, Workload};
 
-async fn acquire_threads(profile: &SageSnapshot) -> Result<SemaphorePermit<'static>> {
-    let (capacity, permits) = &*CPU_BUDGET;
-    // A profile from a larger host keeps its configured thread count and
-    // runs alone here. It must never queue for more permits than exist.
-    permits
-        .acquire_many(profile.threads.clamp(1, *capacity))
+async fn acquire_threads(profile: &SageSnapshot, workload: Workload) -> Result<CpuPermit<'static>> {
+    HostCpuBudget::host()
         .await
-        .context("NeonGammon CPU budget is unavailable")
+        .acquire(profile.threads, workload)
+        .await
 }
 
 #[derive(Clone, Copy)]
@@ -57,6 +49,13 @@ pub(super) enum Slot {
 }
 
 impl Slot {
+    fn workload(self) -> Workload {
+        match self {
+            Self::General => Workload::Background,
+            Self::Play | Self::Interactive => Workload::Foreground,
+        }
+    }
+
     fn worker(self) -> &'static Mutex<Option<Worker>> {
         match self {
             Self::General => &GENERAL,
@@ -125,7 +124,7 @@ impl Worker {
             include_str!("worker.py")
         );
         let mut child = Command::new(&profile.python)
-            .args(["-I", "-u", "-c", &script])
+            .args(["-I", "-B", "-u", "-c", &script])
             .envs(SINGLE_THREADED_MATH)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -230,7 +229,7 @@ impl Worker {
     }
 
     async fn batch_exchange(self, payload: Value) -> Result<(Self, (Value, Option<EngineCost>))> {
-        let _threads = acquire_threads(&self.profile).await?;
+        let _threads = acquire_threads(&self.profile, Workload::Background).await?;
         // The worker is dropped before its reservation if an exchange fails or is cancelled.
         let mut worker = self;
         let result = worker.validated_exchange(payload).await?;
@@ -250,7 +249,7 @@ impl VerifiedBatch {
     pub(super) async fn begin(profile: &SageSnapshot) -> Result<Self> {
         let mut cache = GENERAL.lock().await;
         let worker = tokio::time::timeout(Duration::from_secs(120), async {
-            let _threads = acquire_threads(profile).await?;
+            let _threads = acquire_threads(profile, Workload::Background).await?;
             reap_other_runtime(&mut cache).await?;
             let mut worker = Worker::checkout(&mut cache, profile).await?;
             worker
@@ -330,7 +329,7 @@ pub(super) async fn request_costed(
     );
     crate::engine::with_shared_access_timeout(timeout, async {
         let mut cache = slot.worker().lock().await;
-        let _threads = acquire_threads(profile).await?;
+        let _threads = acquire_threads(profile, slot.workload()).await?;
         reap_other_runtime(&mut cache).await?;
         // Own the worker while awaiting I/O so cancellation discards its stream.
         let mut worker = Worker::checkout(&mut cache, profile).await?;
@@ -346,7 +345,7 @@ pub(super) async fn probe(profile: &SageSnapshot) -> Result<Value> {
     crate::engine::with_shared_access(async {
         tokio::time::timeout(Duration::from_secs(120), async {
             let _single = PROBE.lock().await;
-            let _threads = acquire_threads(profile).await?;
+            let _threads = acquire_threads(profile, Workload::Foreground).await?;
             let mut worker = Worker::start(profile).await?;
             let (identity, _) = worker
                 .exchange(json!({"operation":"initialize", "profile":profile}))
@@ -366,7 +365,7 @@ pub(super) async fn restart(profile: &SageSnapshot) -> Result<()> {
     crate::engine::with_shared_access(async {
         let mut cache = GENERAL.lock().await;
         tokio::time::timeout(Duration::from_secs(120), async {
-            let _threads = acquire_threads(profile).await?;
+            let _threads = acquire_threads(profile, Workload::Background).await?;
             reap_other_runtime(&mut cache).await?;
             if let Some(previous) = cache.take() {
                 previous.shutdown().await?;
@@ -395,7 +394,7 @@ pub(super) async fn warm_play(profile: &SageSnapshot) -> Result<()> {
             {
                 return Ok(());
             }
-            let _threads = acquire_threads(profile).await?;
+            let _threads = acquire_threads(profile, Workload::Foreground).await?;
             let worker = Worker::checkout(&mut cache, profile).await?;
             *cache = Some(worker);
             Ok(())
@@ -1265,7 +1264,8 @@ for line in sys.stdin:
         let analysis = FakeWorker::new("batch_healthy");
         let check = FakeWorker::new("healthy");
         let batch = VerifiedBatch::begin(&analysis.profile).await.unwrap();
-        let checks = async { tokio::join!(probe(&check.profile), probe(&check.profile)) };
+        let engine = AnalysisEngine::OpenSage(SageEngine::new(check.profile.clone()).unwrap());
+        let checks = async { tokio::join!(probe(&check.profile), engine.check_installation()) };
         let (first, second) = tokio::time::timeout(Duration::from_secs(5), checks)
             .await
             .expect("An installation check waited for the analysis block");
@@ -1509,10 +1509,52 @@ for line in sys.stdin:
     }
 
     #[tokio::test]
+    async fn gnubg_calculation_occupies_the_same_budget_as_a_sage_probe() {
+        let _serial = TEST_LOCK.lock().await;
+        let work = tempfile::tempdir().unwrap();
+        let binary = work.path().join("blocking-gnubg");
+        let capacity = HostCpuBudget::host().await.capacity();
+        std::fs::write(&binary, format!(
+            "#!/bin/sh\ntouch started\nwhile [ ! -f release ]; do sleep 0.01; done\necho '{capacity} calculation threads.'\n"
+        )).unwrap();
+        std::fs::set_permissions(&binary, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let gnubg = crate::engine::Engine::new(binary.to_string_lossy().into())
+            .with_threads(Some(i32::try_from(capacity).unwrap()));
+        let check = FakeWorker::new("healthy");
+        crate::engine::with_shared_access(async {
+            let observe = async {
+                tokio::time::timeout(Duration::from_secs(5), async {
+                    while !work.path().join("started").exists() {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                })
+                .await
+                .unwrap();
+                let probe = probe(&check.profile);
+                tokio::pin!(probe);
+                assert!(
+                    tokio::time::timeout(Duration::from_millis(100), &mut probe)
+                        .await
+                        .is_err(),
+                    "a foreground probe bypassed the active full-width GNUbg calculation"
+                );
+                assert!(!check.directory.path().join("pid").exists());
+                std::fs::write(work.path().join("release"), "").unwrap();
+                probe.await.unwrap();
+            };
+            let (result, ()) = tokio::join!(
+                gnubg.run_with_timeout(work.path(), "", Duration::from_secs(6)),
+                observe
+            );
+            result.unwrap();
+        })
+        .await;
+    }
+
+    #[tokio::test]
     async fn waiting_requests_share_budget_between_verified_evaluations() {
         let _serial = TEST_LOCK.lock().await;
-        let capacity =
-            u32::try_from(crate::configuration::available_cpu_threads().unwrap_or(1)).unwrap();
+        let capacity = HostCpuBudget::host().await.capacity();
         crate::engine::with_shared_access(async {
             for (slot, threads, waits) in [Slot::Play, Slot::Interactive]
                 .into_iter()
@@ -1615,8 +1657,7 @@ for line in sys.stdin:
 
         let _serial = TEST_LOCK.lock().await;
         let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
-        let capacity =
-            u32::try_from(crate::configuration::available_cpu_threads().unwrap()).unwrap();
+        let capacity = HostCpuBudget::host().await.capacity();
         assert!(capacity >= 6, "Benchmark needs at least six logical CPUs");
         let profile = SageEngine::probe_profile(python, 3, 2).await.unwrap();
         let play = SageEngine::for_play(profile.clone()).unwrap();

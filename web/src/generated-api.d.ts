@@ -11368,6 +11368,15 @@ export interface operations {
                     "application/json": components["schemas"]["PlaySession"];
                 };
             };
+            /** @description A benchmark is using the engines */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
             422: {
                 headers: {
                     [name: string]: unknown;

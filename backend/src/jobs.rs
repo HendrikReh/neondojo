@@ -37,7 +37,7 @@ pub(crate) struct RunningJobs(std::sync::Mutex<Running>);
 
 #[derive(Default)]
 struct Running {
-    jobs: std::collections::HashMap<Uuid, Stop>,
+    jobs: std::collections::HashMap<(Uuid, Uuid), Stop>,
     /// Set while a database restore drains running work. A job that a worker
     /// claimed before the restore began but registers only now is stopped at
     /// once with this reason instead of slipping past the drain.
@@ -55,6 +55,20 @@ impl Stop {
     fn stop(&self, reason: &'static str) {
         let _ = self.reason.set(reason);
         self.token.cancel();
+    }
+}
+
+/// A reclaimed job may have two tasks briefly. Dropping either task removes
+/// only its own registration, including when the worker aborts it.
+struct RegisteredClaim<'a> {
+    registry: &'a RunningJobs,
+    claim: (Uuid, Uuid),
+    stop: Stop,
+}
+
+impl Drop for RegisteredClaim<'_> {
+    fn drop(&mut self) {
+        self.registry.lock().jobs.remove(&self.claim);
     }
 }
 
@@ -79,23 +93,26 @@ impl RunningJobs {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
-    fn register(&self, id: Uuid) -> Stop {
+    fn register(&self, id: Uuid, lease: Uuid) -> RegisteredClaim<'_> {
         let stop = Stop::default();
         let mut running = self.lock();
         if let Some(reason) = running.draining {
             stop.stop(reason);
         }
-        running.jobs.insert(id, stop.clone());
-        stop
-    }
-
-    fn remove(&self, id: Uuid) {
-        self.lock().jobs.remove(&id);
+        let claim = (id, lease);
+        running.jobs.insert(claim, stop.clone());
+        RegisteredClaim {
+            registry: self,
+            claim,
+            stop,
+        }
     }
 
     fn cancel(&self, id: Uuid) {
-        if let Some(token) = self.lock().jobs.get(&id) {
-            token.stop(CANCELLED_ERROR);
+        for ((job, _), stop) in &self.lock().jobs {
+            if *job == id {
+                stop.stop(CANCELLED_ERROR);
+            }
         }
     }
 
@@ -324,7 +341,7 @@ async fn run_claimed(state: &AppState, claimed: Claimed) -> Result<bool> {
 }
 
 async fn execute_with_heartbeat(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
-    let cancelled = state.running_jobs.register(job.id);
+    let claim = state.running_jobs.register(job.id, token);
     // The job future is large; keep it on the heap rather than in this frame.
     let work = Box::pin(with_heartbeat(
         &state.pool,
@@ -335,15 +352,13 @@ async fn execute_with_heartbeat(state: &AppState, job: &Job, token: Uuid) -> Res
     ));
     // Dropping the work on cancellation terminates its engine processes. A
     // job stopped before it registered never starts its work.
-    let result = tokio::select! {
+    tokio::select! {
         biased;
-        () = cancelled.token.cancelled() => Err(anyhow::anyhow!(
-            cancelled.reason.get().copied().unwrap_or(CANCELLED_ERROR)
+        () = claim.stop.token.cancelled() => Err(anyhow::anyhow!(
+            claim.stop.reason.get().copied().unwrap_or(CANCELLED_ERROR)
         )),
         result = work => result,
-    };
-    state.running_jobs.remove(job.id);
-    result
+    }
 }
 
 async fn with_heartbeat(
@@ -399,7 +414,8 @@ fn may_retry_renewal(since_renewal: Duration, interval: Duration) -> bool {
 }
 
 async fn execute(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
-    let configured_engine = store::job_engine(&state.pool, job.id, &state.engine).await?;
+    let configured_engine =
+        store::claimed_job_engine(&state.pool, job.id, token, &state.engine).await?;
     if job.kind == "match" {
         return crate::match_jobs::execute(state, job, token, &configured_engine).await;
     }
@@ -567,6 +583,37 @@ mod tests {
     }
 
     #[sqlx::test(migrations = "./migrations")]
+    async fn cancelling_between_claim_and_registration_never_starts_the_engine(pool: PgPool) {
+        let engine = SleepingEngine::new();
+        let state = AppState::new(pool.clone(), engine.engine());
+        let id = queued_position_job(&pool).await;
+        let claimed = claim(&state).await.unwrap().unwrap();
+        assert_eq!(claimed.job.id, id);
+
+        let (release, gate) = tokio::sync::oneshot::channel();
+        let worker = tokio::spawn({
+            let state = state.clone();
+            async move {
+                gate.await.unwrap();
+                run_claimed(&state, claimed).await
+            }
+        });
+        assert!(cancel(&state, id).await.unwrap().unwrap().0);
+        release.send(()).unwrap();
+        tokio::select! {
+            _ = engine.pid() => panic!("the engine started after cancellation"),
+            result = worker => assert!(result.unwrap().unwrap()),
+        }
+        assert!(!engine.directory.path().join("engine.pid").exists());
+        assert_eq!(event_names(&pool, id).await, ["running", "failed"]);
+        assert_eq!(
+            status(&pool, id).await,
+            ("failed".into(), Some(CANCELLED_ERROR.into()), None)
+        );
+        assert!(state.running_jobs.lock().jobs.is_empty());
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
     async fn cancelling_a_running_job_stops_its_engine_process(pool: PgPool) {
         let engine = SleepingEngine::new();
         let state = AppState::new(pool.clone(), engine.engine());
@@ -635,16 +682,28 @@ mod tests {
     }
 
     #[test]
+    fn an_expired_claim_cannot_unregister_its_successor() {
+        let jobs = RunningJobs::default();
+        let id = Uuid::new_v4();
+        let expired = Uuid::new_v4();
+        let successor = jobs.register(id, Uuid::new_v4());
+        // The earlier worker starts late, discovers its lease has expired and exits.
+        drop(jobs.register(id, expired));
+        jobs.cancel(id);
+        assert!(successor.stop.token.is_cancelled());
+    }
+
+    #[test]
     fn a_job_registering_during_a_drain_is_stopped_until_the_drain_ends() {
         let jobs = RunningJobs::default();
         let drain = jobs.drain(RESTORE_INTERRUPTED_ERROR);
         assert_eq!(drain.interrupted, 0);
-        let late = jobs.register(Uuid::new_v4());
-        assert!(late.token.is_cancelled());
-        assert_eq!(late.reason.get(), Some(&RESTORE_INTERRUPTED_ERROR));
+        let late = jobs.register(Uuid::new_v4(), Uuid::new_v4());
+        assert!(late.stop.token.is_cancelled());
+        assert_eq!(late.stop.reason.get(), Some(&RESTORE_INTERRUPTED_ERROR));
         drop(drain);
-        let after = jobs.register(Uuid::new_v4());
-        assert!(!after.token.is_cancelled());
+        let after = jobs.register(Uuid::new_v4(), Uuid::new_v4());
+        assert!(!after.stop.token.is_cancelled());
     }
 
     #[sqlx::test(migrations = "./migrations")]

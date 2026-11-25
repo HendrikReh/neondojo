@@ -533,3 +533,53 @@ async fn imported_match_cards_add_for_the_whole_match_and_one_player(pool: PgPoo
     .unwrap();
     assert!(!players.is_empty());
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn decision_batch_reads_only_requested_primary_imports(pool: PgPool) {
+    let (_, ids) = imported(&pool).await;
+    // A secondary evaluation for the requested move must stay secondary even
+    // when the client explicitly names its ID.
+    let secondary = Uuid::new_v4();
+    sqlx::query("INSERT INTO imported_analyses(id, match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data)
+        SELECT $2,match_uuid,position_uuid,90,game_no,source_move_no,kind,data FROM imported_analyses WHERE id=$1")
+        .bind(ids[0]).bind(secondary).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO imported_analyses(match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data)
+        SELECT match_uuid,position_uuid,91,game_no,2,kind,data FROM imported_analyses WHERE id=$1")
+        .bind(ids[0]).execute(&pool).await.unwrap();
+    // Evaluating the unrequested primary row's payload raises a database
+    // error. The selected row and its primary/secondary ranking stay real.
+    sqlx::raw_sql("ALTER VIEW primary_imported_analyses RENAME TO fixture_primary_analyses;
+        CREATE VIEW primary_imported_analyses AS SELECT id, match_uuid, position_uuid, source_ordinal, game_no, source_move_no, kind,
+        CASE WHEN source_ordinal = 91 THEN to_jsonb(id::text::integer) ELSE data END AS data FROM fixture_primary_analyses")
+        .execute(&pool).await.unwrap();
+    let router = app(&pool);
+    let (_, deck) = call(
+        &router,
+        "POST",
+        "/api/decks",
+        json!({"name":"Selected imports"}),
+    )
+    .await;
+    let requested = [(ids[0], 1, 1), (ids[0], 1, 77), (secondary, 1, 1), (ids[0], 2, 1), (ids[0], 1, 1)]
+        .map(|(id, game, decision)| json!({"imported_analysis_id":id,"game_no":game,"decision_no":decision}));
+    let (status, result) = call(
+        &router,
+        "POST",
+        &format!("/api/decks/{}/decisions", deck["id"].as_str().unwrap()),
+        json!({"decisions":requested}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    let items = result["items"].as_array().unwrap();
+    assert_eq!(items.len(), requested.len());
+    for ((item, reference), expected) in items.iter().zip(requested).zip([
+        "added",
+        "not_found",
+        "not_found",
+        "not_found",
+        "duplicate",
+    ]) {
+        assert_eq!(item["reference"], reference);
+        assert_eq!(item["status"], expected, "{result}");
+    }
+}

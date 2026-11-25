@@ -149,6 +149,11 @@ async fn checkpoint(
     summary: &mut MatchAnalysisSummary,
     started: Option<Instant>,
 ) -> Result<()> {
+    let id = job
+        .engine_snapshot
+        .as_ref()
+        .map_or("gnubg", |s| s.engine_id.as_str());
+    let provider = crate::engines::EngineId::require(id)?.display_name();
     ensure!(
         game.game_no == job.game_no.unwrap_or(summary.completed_games + 1)
             && summary.completed_games < job.total_games,
@@ -168,7 +173,7 @@ async fn checkpoint(
         .collect();
     ensure!(
         checkers.len() == positions.len(),
-        "Game {}: GNUbg returned {} of {} checker decisions",
+        "Game {}: {provider} returned {} of {} checker decisions",
         game.game_no,
         checkers.len(),
         positions.len()
@@ -178,7 +183,7 @@ async fn checkpoint(
             decision.checker_no == Some(index as i32 + 1)
                 && decision.player == position.player
                 && decision.dice == Some([position.dice[0], position.dice[1]]),
-            "Game {}: GNUbg checker decision {} does not match the imported game",
+            "Game {}: {provider} checker decision {} does not match the imported game",
             game.game_no,
             index + 1
         );
@@ -223,7 +228,7 @@ async fn checkpoint(
             let number = batch_index * CHECKPOINT_BATCH_SIZE + index + 1;
             ensure!(
                 decision.decision_no == number as i32 && (0..=1).contains(&decision.player),
-                "Invalid GNUbg decision order/player"
+                "Invalid {provider} decision order/player"
             );
             ensure!(
                 decision.equity_loss.is_finite() && decision.equity_loss >= 0.0,

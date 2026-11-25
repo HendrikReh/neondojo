@@ -1886,3 +1886,67 @@ async fn decision_search_hits_become_cards_in_one_request(pool: PgPool) {
     .await;
     assert_eq!(status, 404);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn decision_batch_reuses_one_native_replay_and_preserves_game_errors(pool: PgPool) {
+    let match_id = source(&pool).await;
+    let mut decisions = game1(0.12);
+    decisions.extend([
+        (2, decision(1, 1, "double", "no double", 0.25)),
+        (2, decision(2, 0, "drop", "take", 0.35)),
+    ]);
+    let job_id = job(&pool, match_id, 2, None, &decisions).await;
+    let router = app(&pool);
+    let (_, deck) = call(&router, "POST", "/api/decks", json!({"name":"Multi-game"})).await;
+    // Instrument reads of the full source in this disposable database only.
+    sqlx::raw_sql(
+        r#"
+        -- Existing views still resolve their base table. An explicit imported
+        -- ownership lookup on this native-only request would fail.
+        ALTER TABLE imported_analyses RENAME TO fixture_imported_analyses;
+        ALTER TABLE matches RENAME TO fixture_matches;
+        ALTER TABLE fixture_matches RENAME COLUMN sgf TO fixture_sgf;
+        CREATE SEQUENCE fixture_sgf_reads;
+        CREATE FUNCTION fixture_read_sgf(text) RETURNS text LANGUAGE plpgsql STABLE AS $$
+        BEGIN PERFORM nextval('fixture_sgf_reads'); RETURN $1; END $$;
+        CREATE VIEW matches AS SELECT m.*,fixture_read_sgf(m.fixture_sgf) AS sgf
+            FROM fixture_matches m;
+    "#,
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    let requested = [(2, 2), (3, 1), (1, 2), (2, 2), (1, 99)]
+        .map(|(game, decision)| json!({"job_id":job_id,"game_no":game,"decision_no":decision}));
+    let (status, result) = call(
+        &router,
+        "POST",
+        &format!("/api/decks/{}/decisions", deck["id"].as_str().unwrap()),
+        json!({"decisions":requested}),
+    )
+    .await;
+    assert_eq!(status, 200, "{result}");
+    let items = result["items"].as_array().unwrap();
+    assert_eq!(items.len(), requested.len());
+    for ((item, reference), expected) in
+        items
+            .iter()
+            .zip(requested)
+            .zip(["added", "unavailable", "added", "duplicate", "not_found"])
+    {
+        assert_eq!(item["reference"], reference);
+        assert_eq!(item["status"], expected, "{result}");
+    }
+    assert_eq!(
+        result["items"][1]["message"],
+        "game_no is outside this match"
+    );
+    let reads: i64 = sqlx::query_scalar("SELECT last_value FROM fixture_sgf_reads")
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        reads, 1,
+        "the full source is needed once across selected games"
+    );
+}

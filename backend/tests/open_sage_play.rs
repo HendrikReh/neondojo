@@ -49,6 +49,23 @@ async fn action(app: &axum::Router, session: &Value, name: &str, extra: Value) -
     .await
 }
 
+async fn first_checker_decision(app: &axum::Router, mut session: Value) -> Value {
+    for _ in 0..5 {
+        let next = match session["phase"].as_str().unwrap() {
+            "opening_roll" => "opening_roll",
+            "opening_result" => "start_opening_move",
+            "roll" => "roll",
+            "move" => break,
+            phase => panic!("Unexpected setup phase {phase}"),
+        };
+        let (status, result) = action(app, &session, next, json!({})).await;
+        assert_eq!(status, 200, "{result}");
+        session = result;
+    }
+    assert_eq!(session["phase"], "move");
+    session
+}
+
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires isolated PostgreSQL, GNUbg Python, locked OPEN_SAGE_TEST_PYTHON"]
 async fn sage_full_game_both_colors_restores_pinned_engines_and_has_no_gnubg_pr(pool: PgPool) {
@@ -313,19 +330,7 @@ async fn bot_and_hint_engines_are_independent_in_both_directions(pool: PgPool) {
             session["engine_snapshots"]["analysis"]["engine_id"],
             analysis
         );
-        for _ in 0..5 {
-            let next = match session["phase"].as_str().unwrap() {
-                "opening_roll" => "opening_roll",
-                "opening_result" => "start_opening_move",
-                "roll" => "roll",
-                "move" => break,
-                phase => panic!("Unexpected setup phase {phase}"),
-            };
-            let (status, result) = action(&app, &session, next, json!({})).await;
-            assert_eq!(status, 200, "{result}");
-            session = result;
-        }
-        assert_eq!(session["phase"], "move");
+        session = first_checker_decision(&app, session).await;
         let (status, hinted) = call(
             app.clone(),
             "POST",
@@ -356,5 +361,174 @@ async fn bot_and_hint_engines_are_independent_in_both_directions(pool: PgPool) {
                     .all(|candidate| candidate["rating_decisions"] == 0)
             );
         }
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires GNUbg Python and locked OPEN_SAGE_TEST_PYTHON, run serially"]
+async fn benchmark_hint_and_practice_finish_while_a_verified_batch_owns_general(pool: PgPool) {
+    use neondojo::{engines::SageEngine, import, store};
+    use tokio::{
+        sync::Notify,
+        time::{Duration, timeout},
+    };
+
+    let app = setup(&pool).await;
+    let (status, session) = call(app.clone(), "POST", "/api/play/sessions",
+        json!({"human_player":0,"match_length":1,"play_mode":"training","training_auto_analysis":false})).await;
+    assert_eq!(status, 201, "{session}");
+    let session = first_checker_decision(&app, session).await;
+    let engine = SageEngine::new(
+        serde_json::from_value(session["engine_snapshots"]["analysis"]["open_sage"].clone())
+            .unwrap(),
+    )
+    .unwrap();
+    let sgf = "(;GM[6]MI[length:7];W[31hefe])";
+    let match_id = store::import_match(
+        &pool,
+        "admission.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    let position = store::positions(&pool, Some(match_id), None, None, 1)
+        .await
+        .unwrap()
+        .items
+        .pop()
+        .unwrap();
+
+    // The progress callback runs after a real evaluation, while the batch still
+    // owns the General worker. Hold it until all three HTTP responses arrive.
+    let held = Notify::new();
+    let release = Notify::new();
+    let batch = engine.analyze_rolls(
+        &position.position_id,
+        &position.gnubg_match_id,
+        2,
+        &[[3, 1]],
+        |_| async {
+            held.notify_one();
+            release.notified().await;
+            Ok(())
+        },
+    );
+    let requests = async {
+        held.notified().await;
+        let hint = format!(
+            "/api/play/sessions/{}/feedback",
+            session["id"].as_str().unwrap()
+        );
+        let practice = format!("/api/positions/{}/practice-score", position.id);
+        let post = async |uri: &str, body: Value, expected: u16| {
+            let (status, result) =
+                timeout(Duration::from_secs(1), call(app.clone(), "POST", uri, body))
+                    .await
+                    .unwrap_or_else(|_| {
+                        panic!("POST {uri} exceeded one second with General occupied")
+                    });
+            assert_eq!(status, expected, "POST {uri} returned {result}");
+            result
+        };
+        let feedback = post(
+            &hint,
+            json!({"version":session["version"],"operation":"hint"}),
+            200,
+        )
+        .await;
+        assert!(feedback["pending_decision"]["alternatives"][0]["equity"].is_number());
+        let score = post(
+            &practice,
+            json!({"steps":[{"from":8,"to":5},{"from":6,"to":5}]}),
+            200,
+        )
+        .await;
+        assert!(score["best_equity"].is_number());
+        let runs = post(
+            "/api/benchmarks",
+            json!({"engine_id":"bgsage","plies":[2]}),
+            202,
+        )
+        .await;
+        assert_eq!(runs[0]["engine_id"], "bgsage");
+        release.notify_one();
+        Ok::<(), anyhow::Error>(())
+    };
+    let (rolls, ()) = tokio::try_join!(batch, requests).unwrap();
+    assert_eq!(rolls.len(), 1);
+}
+
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+async fn session_probes_each_distinct_neongammon_profile_once(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let rules = temp.path().join("rules");
+    let sage = temp.path().join("sidecar");
+    std::fs::write(&rules, "#!/bin/sh\necho 'GNU Backgammon test'\nif [ \"$1\" != --version ]; then printf ready > ready.txt; fi\n").unwrap();
+    std::fs::write(&sage, r#"#!/usr/bin/env python3
+import json, pathlib, sys
+for line in sys.stdin:
+    q = json.loads(line)
+    profile = q['profile']
+    if not profile['artifact_fingerprint']:
+        with pathlib.Path(__file__).with_name('probes').open('a') as probes:
+            print(profile['plies'], profile['threads'], file=probes)
+    print(json.dumps({'id': q['id'], 'result': {'package_version': '3.2.0', 'artifact_fingerprint': 'a' * 64}}), flush=True)
+"#).unwrap();
+    for path in [&rules, &sage] {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let profile = json!({"python":sage, "artifact_fingerprint":"a".repeat(64), "package_version":"3.2.0",
+        "plies":2, "threads":2, "adapter_version":1, "one_ply_verified":true});
+    sqlx::query(
+        "UPDATE engine_installations SET python_path=$1,snapshot=$2 WHERE engine_id='bgsage'",
+    )
+    .bind(sage.to_str().unwrap())
+    .bind(profile)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO app_settings(singleton,gnubg_path,play_engine,analysis_engine,play_plies,analysis_plies,open_sage_play_threads,open_sage_threads)
+        VALUES(true,$1,'bgsage','bgsage',2,2,2,2)")
+        .bind(rules.to_str().unwrap()).execute(&pool).await.unwrap();
+    let app = api::router(AppState::new(
+        pool.clone(),
+        Engine::new(rules.to_string_lossy().into()),
+    ));
+    for (depth, threads, expected) in [(2, 2, "2 2\n"), (3, 2, "2 2\n3 2\n"), (2, 3, "2 2\n2 3\n")]
+    {
+        std::fs::write(temp.path().join("probes"), "").unwrap();
+        sqlx::query("UPDATE app_settings SET analysis_plies=$1,open_sage_threads=$2")
+            .bind(depth)
+            .bind(threads)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (status, session) = call(
+            app.clone(),
+            "POST",
+            "/api/play/sessions",
+            json!({"human_player":0,"match_length":5}),
+        )
+        .await;
+        assert_eq!(status, 201, "{session}");
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("probes")).unwrap(),
+            expected
+        );
+        assert_eq!(
+            session["engine_snapshots"]["analysis"]["open_sage"]["plies"],
+            depth
+        );
+        assert_eq!(
+            session["engine_snapshots"]["analysis"]["open_sage"]["threads"],
+            threads
+        );
     }
 }
