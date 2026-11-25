@@ -6,6 +6,13 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-11-25
+
+### Fixed
+
+- The local-access guard now covers the web interface and its assets as well as the API.
+- Saving host-only settings or saving the same opening book again preserves open profile drafts. Concurrent edits to profile settings still receive a conflict.
+
 ## [1.4.0] - 2026-11-25
 
 NeonDojo now carries each game's cube rule through import, analysis, statistics and practice. The recommended NeonGammon release is 3.2.0. Migrations `0095_game_cube_rules` and `0096_analysis_selection_probes` run at startup. Backups from 1.3.0 remain restorable.
@@ -302,7 +309,8 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/neondojo/pull/4) · [#5](https://github.com/HendrikReh/neondojo/pull/5) · [#6](https://github.com/HendrikReh/neondojo/pull/6) · [#7](https://github.com/HendrikReh/neondojo/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/HendrikReh/neondojo/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/HendrikReh/neondojo/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/HendrikReh/neondojo/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/HendrikReh/neondojo/compare/v1.1.0...v1.2.0
