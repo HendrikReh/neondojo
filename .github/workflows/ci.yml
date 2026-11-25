@@ -4,11 +4,13 @@ name: CI
 # GNUbg, NeonGammon, import corpora, the BGBlitz theme archives, and the
 # Playwright suite are not available here; run them locally
 # (docs/development/testing.md#verification).
+#
+# Pull requests do not trigger a run; run the checks locally before merging, or
+# start a run by hand: gh workflow run ci.yml --ref <branch>
 
 on:
   push:
     branches: [main, 'release/**']
-  pull_request:
   workflow_dispatch:
 
 concurrency:
