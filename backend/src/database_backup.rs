@@ -670,22 +670,52 @@ pub(crate) struct BackupDoc;
 mod tests {
     use super::TABLES;
 
-    #[sqlx::test(migrations = "./migrations")]
-    async fn derived_and_notification_migrations_keep_backup_fingerprint(pool: sqlx::PgPool) {
-        let mut tx = pool.begin().await.unwrap();
-        let after = super::schema(&mut tx).await.unwrap();
-        let removed = sqlx::query("DELETE FROM _sqlx_migrations WHERE version = ANY($1)")
-            .bind(super::ARCHIVE_COMPATIBLE_MIGRATIONS)
-            .execute(&mut *tx)
-            .await
-            .unwrap();
-        assert_eq!(
-            removed.rows_affected(),
-            super::ARCHIVE_COMPATIBLE_MIGRATIONS.len() as u64
-        );
-        let before = super::schema(&mut tx).await.unwrap();
-        tx.rollback().await.unwrap();
-        assert_eq!(before, after);
+    // Text COPY has no column headers. Include names and types in wire order
+    // so that even a swap between two identically typed columns is detectable.
+    async fn copy_layout(connection: &mut sqlx::PgConnection) -> Vec<(String, String, String)> {
+        sqlx::query_as(
+            "SELECT c.relname::text, a.attname::text, format_type(a.atttypid, a.atttypmod)
+             FROM pg_class c JOIN pg_attribute a ON a.attrelid=c.oid
+             WHERE c.relnamespace='public'::regnamespace AND c.relname::text=ANY($1)
+               AND a.attnum>0 AND NOT a.attisdropped AND a.attgenerated=''
+             ORDER BY c.relname, a.attnum",
+        )
+        .bind(TABLES)
+        .fetch_all(connection)
+        .await
+        .unwrap()
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn compatible_migrations_preserve_archive_layout_and_fingerprint(pool: sqlx::PgPool) {
+        use sqlx::migrate::Migrate;
+
+        let mut db = pool.acquire().await.unwrap();
+        db.ensure_migrations_table().await.unwrap();
+        let mut checked = 0;
+        for migration in crate::schema_migrations::MIGRATOR.iter() {
+            if !super::ARCHIVE_COMPATIBLE_MIGRATIONS.contains(&migration.version) {
+                db.apply(migration).await.unwrap();
+                continue;
+            }
+            let layout = copy_layout(&mut db).await;
+            let fingerprint = super::schema(&mut db).await.unwrap();
+            db.apply(migration).await.unwrap();
+            assert_eq!(
+                copy_layout(&mut db).await,
+                layout,
+                "COPY layout changed in migration {}",
+                migration.version
+            );
+            assert_eq!(
+                super::schema(&mut db).await.unwrap(),
+                fingerprint,
+                "archive fingerprint changed in migration {}",
+                migration.version
+            );
+            checked += 1;
+        }
+        assert_eq!(checked, super::ARCHIVE_COMPATIBLE_MIGRATIONS.len());
     }
 
     #[sqlx::test(migrations = "./migrations")]
