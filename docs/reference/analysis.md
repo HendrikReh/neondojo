@@ -4,7 +4,7 @@ How the **Analysis** workspace, saved and imported analyses, game plans, error s
 
 ## Analysis workspace
 
-The header lists **Playing**, **Analysis**, **Study**, **Positions**, **Match database**, **Player database**, and **Extras** from left to right, with **Settings** on the right. With a header tab focused, Left and Right select the previous and next tabs. Home selects **Playing** and End selects **Extras**. The app opens **Analysis** by default. The **Study** workspace is named **Lernen**, **Estudio**, **Étude**, **Nauka** and **Studio** in German, Spanish, French, Polish and Italian.
+The header lists **Playing**, **Analysis**, **Study**, **Positions**, **Match database**, **Player database**, and **Extras** from left to right, with **Settings** on the right. With a header tab focused, Left and Right select the previous and next tabs. Home selects **Playing** and End selects **Extras**. The first visit opens **Home**. Opening the NeonDojo logo returns there and keeps the analysis selection. Reloading Home keeps the start page visible. Opening the app with a saved analysis selection restores it in **Analysis**. The **Study** workspace is named **Lernen**, **Estudio**, **Étude**, **Nauka** and **Studio** in German, Spanish, French, Polish and Italian.
 
 Arrow keys and Home/End also navigate the detail tabs. The app restores the last match, game, and position locally. If that match or position no longer exists, the app forgets it and starts from the empty workspace without an error. Switching tabs preserves filters, note drafts, and SSE subscriptions. A submitted job continues to be tracked if you change the selected game or position while the request is pending.
 

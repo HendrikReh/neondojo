@@ -47,6 +47,7 @@ import '../workspaces/study/reports/match-assessment.css';
 import '../workspaces/study/study.css';
 import '../settings/settings.css';
 import '../app/workspace.css';
+import '../app/home.css';
 import '../workspaces/positions/decision-search.css';
 import './style.css';
 import './desktop-analysis.css';

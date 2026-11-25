@@ -42,7 +42,11 @@ import { useJobs } from '../shared/jobs/useJobs';
 import { useBackgroundJobs } from './useBackgroundJobs';
 import { useI18n } from '../shared/i18n/i18n';
 import { useWorkspaceText } from '../shared/i18n/workspace-messages';
-import { decodeBulkAnalysisSession, clearSelection } from './workspace-state';
+import {
+  decodeBulkAnalysisSession,
+  clearSelection,
+  readSelection,
+} from './workspace-state';
 import { AppError } from '../shared/i18n/i18n-core';
 import type { AnnotationHit } from '../workspaces/analysis/notes/AnnotationSearch';
 import type { AnnotationKind } from '../workspaces/analysis/notes/annotation-api';
@@ -53,6 +57,7 @@ import {
   type StoredMove,
   type LibraryMatch,
 } from '../workspaces/library/library-api';
+import type { PlaySessionRequest } from '../workspaces/play/usePlaySession';
 import type { PlaySession } from '../workspaces/play/play-api';
 import { DEFAULT_ANALYSIS_PLIES } from '../shared/engine/analysis-depth';
 import type { MoveNotesTarget } from '../workspaces/analysis/notes/MoveNotesDialog';
@@ -69,7 +74,7 @@ import { useMatchImporter } from './useMatchImporter';
 import { usePositionKeys } from './usePositionKeys';
 import { useSelectionRestore } from './useSelectionRestore';
 
-// A fresh library shows the welcome screen until the first match opens.
+const HomePage = lazy(() => import('./HomePage'));
 const AnalysisWorkspace = lazy(
   () => import('../workspaces/analysis/AnalysisWorkspace'),
 );
@@ -129,11 +134,9 @@ export default function App() {
   const benchmarkActivity = useBenchmarkActivity();
   const [extrasTool, setExtrasTool] = useState(readExtrasTool);
   useEffect(() => saveExtrasTool(extrasTool), [extrasTool]);
-  const [requestedPlaySession, setRequestedPlaySession] = useState<{
-    id: string;
-    token: number;
-    resume?: boolean;
-  }>();
+  const [restoredPlayId, setRestoredPlayId] = useState<string>();
+  const [requestedPlaySession, setRequestedPlaySession] =
+    useState<PlaySessionRequest>();
   const { t, setLocale } = useI18n();
   const w = useWorkspaceText();
   const { appearance, applyAppearance } = useUiAppearance();
@@ -166,11 +169,22 @@ export default function App() {
     decodeBulkAnalysisSession,
   );
   const bulkJobIds = Object.keys(bulkAnalysis.jobs);
-  const [view, setView] = useState<View>(() =>
-    bulkAnalysis.showMatchList && bulkJobIds.length ? 'database' : 'analysis',
-  );
+  const [view, setView] = useState<View | 'home'>(() => {
+    if (window.location.hash === '#home') return 'home';
+    if (bulkAnalysis.showMatchList && bulkJobIds.length) return 'database';
+    return readSelection() ? 'analysis' : 'home';
+  });
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (view === 'home') url.hash = 'home';
+    else if (url.hash === '#home') url.hash = '';
+    if (url.href !== window.location.href)
+      window.history.replaceState(window.history.state, '', url);
+  }, [view]);
+  const [playSetupRequest, setPlaySetupRequest] = useState(0);
+  const homeVisits = useRef(0);
   // Workspaces visited so far; they stay mounted while hidden.
-  const [visited, setVisited] = useState<ReadonlySet<View>>(
+  const [visited, setVisited] = useState<ReadonlySet<View | 'home'>>(
     () => new Set([view]),
   );
   useEffect(() => {
@@ -237,13 +251,14 @@ export default function App() {
   const { restoring, cancelRestoration } = useSelectionRestore(
     navigation,
     (id) => {
+      setRestoredPlayId(id);
       setRequestedPlaySession({ id, token: Date.now() });
       setView((current) => (current === 'analysis' ? 'play' : current));
     },
   );
   const importer = useMatchImporter({
     databaseId,
-    intent: navigation.intent,
+    intent: () => navigation.intent() + homeVisits.current,
     onStart: cancelRestoration,
     onOpen: (match) => {
       setView('analysis');
@@ -321,15 +336,12 @@ export default function App() {
     )
       return;
     event.preventDefault();
-    cancelRestoration();
+    homeVisits.current++;
     annotationNavigation.current?.abort();
-    navigation.clear();
-    setView('analysis');
-    setDetail('overview');
+    setView('home');
     setError(undefined);
     importer.closeNotice();
     setMoveNotes(undefined);
-    clearSelection();
     window.scrollTo(0, 0);
   }
   function openMatch(match: Match, gameNo?: number, result?: Job) {
@@ -477,7 +489,8 @@ export default function App() {
       <header className="app-header">
         <a
           className="brand"
-          href="/"
+          href="/#home"
+          aria-current={view === 'home' ? 'page' : undefined}
           aria-label={t('app.home')}
           onClick={goHome}
         >
@@ -503,7 +516,9 @@ export default function App() {
               id={`workspace-tab-${tab}`}
               aria-controls={`workspace-panel-${tab}`}
               aria-selected={view === tab}
-              tabIndex={view === tab ? 0 : -1}
+              tabIndex={
+                view === tab || (view === 'home' && tab === views[0]) ? 0 : -1
+              }
               ref={(el) => {
                 tabs.current[tab] = el;
               }}
@@ -553,6 +568,48 @@ export default function App() {
           }}
           onRetrySettings={reloadSettings}
         />
+        {view === 'home' && (
+          <LazyPanel>
+            <HomePage
+              match={navigation.match}
+              position={navigation.gameLoaded ? navigation.position : undefined}
+              theme={theme}
+              loading={restoring || navigation.loading}
+              importer={importer}
+              restoredPlayId={restoredPlayId}
+              onContinue={() => {
+                setDetail('overview');
+                setView('analysis');
+              }}
+              onOpenLibrary={() => {
+                cancelRestoration();
+                setView('database');
+              }}
+              onPlay={() => {
+                cancelRestoration();
+                setPlaySetupRequest((n) => n + 1);
+                setView('play');
+              }}
+              onResumePlay={(session) => {
+                cancelRestoration();
+                setRequestedPlaySession((previous) => ({
+                  id: session.id,
+                  resume: session.paused,
+                  keepTurnAtVersion: session.version,
+                  token: (previous?.token ?? 0) + 1,
+                }));
+                setView('play');
+              }}
+              onSearch={() => {
+                cancelRestoration();
+                setSimilarTarget(undefined);
+                setPositionScope('all');
+                setView('positions');
+              }}
+              onStudy={openStudyDeck}
+            />
+          </LazyPanel>
+        )}
         {/* Global errors, notices and import progress stay above every workspace. */}
         <section
           className="workspace-panel"
@@ -570,7 +627,11 @@ export default function App() {
                     settings={settings}
                     theme={theme}
                     requestedSession={requestedPlaySession}
-                    onSaved={() => setRevision((n) => n + 1)}
+                    setupRequest={playSetupRequest}
+                    onSaved={() => {
+                      setRestoredPlayId(undefined);
+                      setRevision((n) => n + 1);
+                    }}
                     onModeChanged={playModeChanged}
                     onOpenPlaySettings={() => {
                       setSettingsCategory('play');
@@ -666,7 +727,9 @@ export default function App() {
               />
             </LazyPanel>
           ) : (
-            <section className="analysis-workspace">{welcome}</section>
+            view === 'analysis' && (
+              <section className="analysis-workspace">{welcome}</section>
+            )
           )}
           {view === 'analysis' && analysisDialogs}
         </div>

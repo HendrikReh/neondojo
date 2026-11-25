@@ -98,6 +98,8 @@ flowchart LR
 
 **Navigation style:** The current tab is shown with the accent color and an underline. Buttons with an icon show a tooltip when you hover over them or focus them with **Tab**. If a button has a keyboard shortcut, the tooltip names it.
 
+**Home:** Select the NeonDojo logo to see the last analysis board and continue at the displayed game and move. Quick start opens computer match setup and position search. You can also reopen your unfinished computer match or study available cards. On your first visit, select **Import match**, drop a file or folder, or open an existing match from the database.
+
 **What NeonDojo remembers:** Each browser tab keeps its own database selection, search filters, sort order, study deck and analysis filters. Column choices, column widths and board sizes are stored in the browser. The selected match, game and move are restored after a reload. Details: [Configuration profiles](../reference/settings.md#configuration-profiles)
 
 ### The typical workflow

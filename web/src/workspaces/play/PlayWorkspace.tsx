@@ -55,7 +55,7 @@ import {
 } from './play-interruption';
 import { usePlayAnimation } from './usePlayAnimation';
 import { usePlayDialogFocus, usePlayDialogs } from './usePlayDialogs';
-import { usePlaySession } from './usePlaySession';
+import { usePlaySession, type PlaySessionRequest } from './usePlaySession';
 import { usePlayThreshold } from './usePlayThreshold';
 import { usePlayTurn } from './usePlayTurn';
 import { useSavedAssessment } from './useSavedAssessment';
@@ -74,6 +74,7 @@ export default function PlayWorkspace({
   settings,
   theme,
   requestedSession,
+  setupRequest,
   onSaved,
   onModeChanged,
   onOpenPausedMatches,
@@ -83,7 +84,8 @@ export default function PlayWorkspace({
   visible: boolean;
   settings?: AppSettings;
   theme: Theme;
-  requestedSession?: { id: string; token: number; resume?: boolean };
+  setupRequest?: number;
+  requestedSession?: PlaySessionRequest;
   onSaved?: () => void;
   onModeChanged?: (session: PlaySession) => void;
   onOpenPausedMatches: () => void;
@@ -239,6 +241,28 @@ export default function PlayWorkspace({
     setSetup(true);
     setError(undefined);
   }
+  const consumedSetup = useRef(0);
+  const openRequestedSetup = useLatestCallback(openMatchSetup);
+  useEffect(() => {
+    if (
+      !visible ||
+      !setupRequest ||
+      consumedSetup.current === setupRequest ||
+      busy ||
+      playback.animating ||
+      isLocked()
+    )
+      return;
+    consumedSetup.current = setupRequest;
+    openRequestedSetup();
+  }, [
+    visible,
+    setupRequest,
+    busy,
+    playback.animating,
+    isLocked,
+    openRequestedSetup,
+  ]);
   function closeSetup() {
     if (isLocked()) return;
     setSetup(false);

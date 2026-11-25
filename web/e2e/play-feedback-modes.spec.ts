@@ -722,12 +722,29 @@ test('Home cancels a delayed startup Competition redirect', async ({
   await page.goto('/');
   await page.getByRole('link', { name: 'NeonDojo home', exact: true }).click();
   release();
-  await expect(page.locator('.analysis-welcome')).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Home', exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole('tab', { name: 'Analysis', exact: true }),
-  ).toHaveAttribute('aria-selected', 'true');
+  ).toHaveAttribute('aria-selected', 'false');
   await expect(page.getByRole('alert')).toHaveCount(0);
 });
+test('continuing play from Home preserves a partial checker turn', async ({
+  page,
+}) => {
+  await resume(page, saved('training'));
+  await page.locator('[data-play-point="8"]').click();
+  await page.getByRole('link', { name: 'NeonDojo home' }).click();
+  await page
+    .getByRole('button', { name: 'Continue playing', exact: true })
+    .click();
+  await expect(page.locator('[data-play-point="6"]')).toHaveAttribute(
+    'data-enabled',
+    'true',
+  );
+});
+
 test('mode switching preserves partial checker steps', async ({ page }) => {
   const state = saved('training');
   await resume(page, state);

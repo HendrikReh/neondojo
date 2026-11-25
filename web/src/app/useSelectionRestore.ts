@@ -17,10 +17,11 @@ export function useSelectionRestore(
   onPlaySession: (id: string) => void,
 ) {
   const [restoring, setRestoring] = useState(false);
+  const restoreCancelled = useRef(false);
   const restorationRequest = useRef<AbortController | null>(null);
   useEffect(() => {
     const previous = readSelection();
-    if (!previous) return;
+    if (!previous || restoreCancelled.current) return;
     const abort = new AbortController();
     restorationRequest.current = abort;
     const intent = navigation.intent();
@@ -103,6 +104,7 @@ export function useSelectionRestore(
     navigation.position,
   ]);
   function cancelRestoration() {
+    restoreCancelled.current = true;
     if (!restorationRequest.current) return;
     restorationRequest.current.abort();
     restorationRequest.current = null;

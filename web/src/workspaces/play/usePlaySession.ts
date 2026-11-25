@@ -8,7 +8,7 @@ import {
 } from './play-api';
 
 const storageKey = 'neondojo.play-session';
-function storedSession() {
+export function storedSession() {
   try {
     return localStorage.getItem(storageKey);
   } catch {
@@ -23,6 +23,13 @@ function forgetStoredSession(id: string) {
     /* Nothing is restored automatically without storage. */
   }
 }
+
+export type PlaySessionRequest = {
+  id: string;
+  token: number;
+  resume?: boolean;
+  keepTurnAtVersion?: number;
+};
 
 /** How an accepted checkpoint relates to the one it replaces. */
 export interface AcceptedSession {
@@ -44,7 +51,7 @@ export function usePlaySession({
   onSaved,
 }: {
   visible: boolean;
-  requestedSession?: { id: string; token: number; resume?: boolean };
+  requestedSession?: PlaySessionRequest;
   /** Before another match loads. */
   onLoad: () => void;
   /** Before a checkpoint is shown; resets what belongs to the previous one. */
@@ -103,6 +110,17 @@ export function usePlaySession({
     if (requested) consumedRequest.current = requestedSession.token;
     const id = requested ? requestedSession.id : storedSession();
     if (!id) return;
+    if (
+      requested &&
+      requestedSession.keepTurnAtVersion !== undefined &&
+      !locked.current &&
+      session?.id === id &&
+      session.version === requestedSession.keepTurnAtVersion &&
+      !session.paused
+    ) {
+      setSetup(false);
+      return;
+    }
     load(id, requested ? requestedSession.resume : false, !requested);
   }, [visible, requestedSession, busy]);
   /** `restoring` marks the automatic restore of the last stored session. */

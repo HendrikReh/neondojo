@@ -114,7 +114,11 @@ export function useMatchImporter({
     startIntent: number,
   ) {
     if (!selected.length && !folder) return;
+    // Cancelling startup restoration advances navigation's intent. The import
+    // still owns the new intent unless the user navigated while reading a drop.
+    const stillCurrent = intent() === startIntent;
     onStart();
+    if (stillCurrent) startIntent = intent();
     onError(undefined);
     setNotice(undefined);
     importStop.current = false;

@@ -9,8 +9,24 @@ const match = {
   white: 'Home player',
   black: 'Opponent',
   match_length: 7,
-  position_count: 1,
+  position_count: 2,
   created_at: '2026-11-09T10:00:00Z',
+};
+const position = {
+  id: positionId,
+  match_uuid: id,
+  ordinal: 1,
+  game_no: 1,
+  ply: 2,
+  player: 0,
+  dice: [3, 1],
+  board: [
+    0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0,
+    2, 0,
+  ],
+  position_id: '4HPwATDgc/ABMA',
+  gnubg_match_id: 'cInlAAAAAAAE',
+  notation: '8/5 6/5',
 };
 async function fixture(page: Page, hold = false) {
   let release = () => {};
@@ -18,18 +34,24 @@ async function fixture(page: Page, hold = false) {
     release = resolve;
   });
   await page.addInitScript(
-    ({ id }) => {
+    ({ id, positionId }) => {
       localStorage.setItem('neondojo.locale', 'en');
       if (!sessionStorage.getItem('home-fixture-seeded')) {
         localStorage.setItem(
           'neondojo.workspace',
-          JSON.stringify({ matchId: id, gameNo: 1 }),
+          JSON.stringify({ matchId: id, gameNo: 1, positionId }),
         );
-        localStorage.setItem('neondojo.play-session', 'preserve-bot-session');
+        localStorage.setItem(
+          'neondojo.play-session',
+          '8106b2ea-7fe8-4d57-88c0-333333333333',
+        );
         sessionStorage.setItem('home-fixture-seeded', 'yes');
       }
     },
-    { id },
+    { id, positionId },
+  );
+  await page.route(`**/api/positions/${positionId}`, (route) =>
+    route.fulfill({ json: position }),
   );
   await page.route(`**/api/matches/${id}`, async (route) => {
     if (hold) await gate;
@@ -40,7 +62,7 @@ async function fixture(page: Page, hold = false) {
       json: [
         {
           game_no: 1,
-          position_count: 1,
+          position_count: 2,
           white_score: 0,
           black_score: 0,
           crawford: false,
@@ -54,24 +76,7 @@ async function fixture(page: Page, hold = false) {
   await page.route('**/api/positions?*', (route) =>
     route.fulfill({
       json: {
-        items: [
-          {
-            id: positionId,
-            match_uuid: id,
-            ordinal: 0,
-            game_no: 1,
-            ply: 1,
-            player: 0,
-            dice: [3, 1],
-            board: [
-              0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0,
-              0, 0, 0, 2, 0,
-            ],
-            position_id: '4HPwATDgc/ABMA',
-            gnubg_match_id: 'cInlAAAAAAAE',
-            notation: '8/5 6/5',
-          },
-        ],
+        items: [{ ...position, id, ply: 1, ordinal: 0 }, position],
         next_cursor: null,
       },
     }),
@@ -80,7 +85,7 @@ async function fixture(page: Page, hold = false) {
   return release;
 }
 for (const target of ['icon', 'title', 'keyboard'])
-  test(`${target} returns to welcome and reload stays there`, async ({
+  test(`${target} opens Home, retains the move and resumes after reload`, async ({
     page,
   }) => {
     await fixture(page);
@@ -100,40 +105,68 @@ for (const target of ['icon', 'title', 'keyboard'])
       await page
         .locator(target === 'icon' ? '.brand-mark' : '.brand > span:last-child')
         .click();
-    await expect(page.locator('.analysis-welcome')).toBeVisible();
+    const home = page.getByRole('region', { name: 'Home', exact: true });
+    await expect(home.locator('.board')).toBeVisible();
+    await expect(home).toContainText('Home player · Opponent');
+    if (target === 'icon') {
+      for (const [width, height] of [
+        [1800, 1169],
+        [2560, 1440],
+        [3840, 2160],
+      ]) {
+        await page.setViewportSize({ width, height });
+        await expect(
+          home.getByRole('button', { name: 'Resume at game 1, move 2' }),
+        ).toBeInViewport();
+        await home.screenshot({
+          path: test.info().outputPath('home-' + width + '.png'),
+        });
+      }
+    }
     await expect(page.locator('html')).toHaveAttribute(
       'data-home-test-document',
       'original',
     );
+    await expect(page.getByRole('tab', { selected: true })).toHaveCount(0);
+    expect(
+      await page.evaluate(() => localStorage.getItem('neondojo.play-session')),
+    ).toBe('8106b2ea-7fe8-4d57-88c0-333333333333');
+    await page.reload();
+    await home
+      .getByRole('button', { name: 'Resume at game 1, move 2' })
+      .click();
     await expect(
       page.getByRole('tab', { name: 'Analysis', exact: true }),
     ).toHaveAttribute('aria-selected', 'true');
+    await expect(page.locator('.analysis-workspace .board')).toBeVisible();
     expect(
-      await page.evaluate(() => localStorage.getItem('neondojo.workspace')),
-    ).toBeNull();
-    expect(
-      await page.evaluate(() => localStorage.getItem('neondojo.play-session')),
-    ).toBe('preserve-bot-session');
-    await page.reload();
-    await expect(page.locator('.analysis-welcome')).toBeVisible();
+      JSON.parse(
+        (await page.evaluate(() =>
+          localStorage.getItem('neondojo.workspace'),
+        ))!,
+      ),
+    ).toEqual({ matchId: id, gameNo: 1, positionId });
   });
-test('home cancels pending restoration', async ({ page }) => {
+test('Home lets a pending restoration finish in the background', async ({
+  page,
+}) => {
   const release = await fixture(page, true);
   try {
     await page
       .getByRole('link', { name: 'NeonDojo home', exact: true })
       .click();
-    await expect(page.locator('.analysis-welcome')).toBeVisible();
-    expect(
-      await page.evaluate(() => localStorage.getItem('neondojo.workspace')),
-    ).toBeNull();
+    await expect(
+      page.getByRole('heading', { name: 'Home', exact: true }),
+    ).toBeVisible();
     release();
-    await expect(page.locator('.analysis-workspace .board')).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Resume at game 1, move 2' }),
+    ).toBeVisible();
+    await expect(page.locator('.analysis-workspace .board')).toBeHidden();
   } finally {
     release();
   }
 });
-
 test('a finishing import cannot reopen a match after Home', async ({
   page,
 }) => {
@@ -160,15 +193,15 @@ test('a finishing import cannot reopen a match after Home', async ({
     await page
       .getByRole('link', { name: 'NeonDojo home', exact: true })
       .click();
-    await expect(page.locator('.analysis-welcome')).toBeVisible();
+    await expect(page.locator('.home-page')).toBeVisible();
     release();
     await expect(page.getByLabel('Match file', { exact: true })).toHaveValue(
       '',
     );
-    await expect(page.locator('.analysis-welcome')).toBeVisible();
+    await expect(page.locator('.home-page')).toBeVisible();
     expect(
       await page.evaluate(() => localStorage.getItem('neondojo.workspace')),
-    ).toBeNull();
+    ).toContain(positionId);
   } finally {
     release();
   }
@@ -201,3 +234,79 @@ for (const stored of [
     await expect(page.getByRole('alert')).toHaveCount(0);
   });
 }
+
+test('first visit opens Home and its quick starts reach the intended controls', async ({
+  page,
+}) => {
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  await page.goto('/');
+  const home = page.getByRole('region', { name: 'Home', exact: true });
+  await expect(
+    home.getByRole('heading', { name: 'Import your first match' }),
+  ).toBeVisible();
+  const chooser = page.waitForEvent('filechooser');
+  await home.getByRole('button', { name: 'Import match', exact: true }).click();
+  await (await chooser).setFiles([]);
+  await home.getByRole('button', { name: 'Find a position' }).click();
+  await expect(
+    page.getByRole('button', { name: 'All analyzed decisions' }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  const logo = page.getByRole('link', { name: 'NeonDojo home' });
+  await logo.click();
+  await logo.focus();
+  await page.keyboard.press('Tab');
+  await expect(
+    page.getByRole('tab', { name: 'Playing', exact: true }),
+  ).toBeFocused();
+  await home.getByRole('button', { name: 'Play against the computer' }).click();
+  await expect(page.locator('.play-setup-dialog')).toBeVisible();
+});
+
+test('the card shortcut uses today’s allowance and opens the recommended deck', async ({
+  page,
+}) => {
+  const deck = {
+    id: '8106b2ea-7fe8-4d57-88c0-444444444444',
+    name: 'Home cards',
+    card_count: 8,
+    due_count: 8,
+    version: 1,
+  };
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  await page.route('**/api/study/learning-summary', (route) =>
+    route.fulfill({ json: { today_count: 3, due_count: 8, next_deck: deck } }),
+  );
+  await page.route('**/api/decks', (route) => route.fulfill({ json: [deck] }));
+  await page.goto('/');
+  const next = page.waitForRequest((request) =>
+    request.url().includes('/decks/' + deck.id + '/next'),
+  );
+  await page.getByRole('button', { name: 'Flashcards for today · 3' }).click();
+  await next;
+  await expect(
+    page.getByRole('tab', { name: 'Flashcards & Anki' }),
+  ).toHaveAttribute('aria-selected', 'true');
+});
+
+test('an import from Home opens its match during a pending restore', async ({
+  page,
+}) => {
+  const release = await fixture(page, true);
+  try {
+    await page.getByRole('link', { name: 'NeonDojo home' }).click();
+    await page.route(/\/api\/imports(?:\?|$)/, (route) =>
+      route.fulfill({
+        status: 201,
+        json: { match, duplicate: false, warnings: [] },
+      }),
+    );
+    await page.getByLabel('Match file', { exact: true }).setInputFiles({
+      name: 'during-restore.sgf',
+      mimeType: 'application/octet-stream',
+      buffer: Buffer.from('(;GM[6])'),
+    });
+    await expect(page.locator('.analysis-workspace .board')).toBeVisible();
+  } finally {
+    release();
+  }
+});

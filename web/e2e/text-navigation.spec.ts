@@ -220,9 +220,10 @@ test('header tabs follow the workspace order with mouse and keyboard', async ({
     'Extras',
   ];
   await expect(tabs).toHaveText(labels);
-  await expect(header.getByRole('tab', { selected: true })).toHaveText(
-    'Analyse',
-  );
+  await expect(
+    page.getByRole('heading', { name: 'Startseite', exact: true }),
+  ).toBeVisible();
+  await expect(header.getByRole('tab', { selected: true })).toHaveCount(0);
   await tabs.first().click();
   for (const label of labels.slice(1)) {
     await page.keyboard.press('ArrowRight');

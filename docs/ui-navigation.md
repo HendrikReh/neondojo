@@ -19,6 +19,8 @@ An `aria-selected="true"`, `aria-pressed="true"` or `aria-current="page"`
 attribute, or the `active` class, drives the underline. Keep existing keyboard
 handlers and ARIA relationships. `text-navigation--compact` reduces vertical padding in dense
 analysis panels; `text-navigation--stacked` arranges sidebar choices vertically.
+The NeonDojo logo opens Home. Home offers the current analysis position, match import, computer play, position search and available study cards. Tab from the logo reaches Playing, the first workspace. Opening Home preserves the selected game and move.
+
 The main header retains its 20 px gap; other horizontal groups use 16 px.
 The header orders its workspaces as Playing, Analysis, Study, Positions,
 Match database, Player database, and Extras. Rendering and keyboard navigation

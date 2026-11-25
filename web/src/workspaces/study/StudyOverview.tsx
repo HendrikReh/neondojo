@@ -1,3 +1,4 @@
+import { useLearningSummary } from './useLearningSummary';
 import IndependentOnlyToggle from './mistakes/IndependentOnlyToggle';
 import UnanalyzedMatches from './mistakes/UnanalyzedMatches';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -8,11 +9,7 @@ import MistakePlayerSelect from './mistakes/MistakePlayerSelect';
 import RecurringMistakePractice from './mistakes/RecurringMistakePractice';
 import { useGamePlanText } from '../analysis/game-plans/game-plan-messages';
 import { useI18n } from '../../shared/i18n/i18n';
-import {
-  loadLearningSummary,
-  saveLearningPreferences,
-  type LearningSummary,
-} from './flashcards/learning-api';
+import { saveLearningPreferences } from './flashcards/learning-api';
 import { useLearningText } from './flashcards/learning-messages';
 import {
   loadMistakes,
@@ -80,8 +77,7 @@ function Overview({
   const learningText = useLearningText();
   const planText = useGamePlanText();
   const { locale, formatError, formatNumber } = useI18n();
-  const [summary, setSummary] = useState<Result<LearningSummary>>(loading);
-  const [cardRefresh, setCardRefresh] = useState(0);
+  const { summary, refresh } = useLearningSummary(visible, revision);
   const [limitDraft, setLimitDraft] = useState<string>();
   const [limitError, setLimitError] = useState<unknown>();
   const limitId = useId();
@@ -101,7 +97,7 @@ function Overview({
     void saveLearningPreferences({ new_cards_per_day: value })
       .then(() => {
         setLimitDraft(undefined);
-        setCardRefresh((count) => count + 1);
+        refresh();
       })
       .catch((error: unknown) => setLimitError(error));
   };
@@ -120,32 +116,6 @@ function Overview({
   const trigger = useRef<HTMLElement | null>(null);
   const playerSelect = useRef<HTMLSelectElement>(null);
   const nextHeading = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    setSummary(loading);
-    if (!visible) return;
-    const abort = new AbortController();
-    let timer: number | undefined;
-    void loadLearningSummary(abort.signal)
-      .then((data) => {
-        if (abort.signal.aborted) return;
-        setSummary({ status: 'ready', data });
-        if (data.next_due_at) {
-          const delay = Date.parse(data.next_due_at) - Date.now();
-          timer = window.setTimeout(
-            () => setCardRefresh((value) => value + 1),
-            delay < 0 ? 15_000 : Math.min(delay + 100, 2_147_483_647),
-          );
-        }
-      })
-      .catch((error: unknown) => {
-        if (!abort.signal.aborted) setSummary({ status: 'error', error });
-      });
-    return () => {
-      abort.abort();
-      window.clearTimeout(timer);
-    };
-  }, [visible, revision, cardRefresh]);
 
   useEffect(() => {
     setPlayers(loading);
@@ -338,7 +308,7 @@ function Overview({
             <ActionButton
               icon="refresh"
               label={mistakeText('retry')}
-              onClick={() => setCardRefresh((value) => value + 1)}
+              onClick={refresh}
             />
           </div>
         )}
