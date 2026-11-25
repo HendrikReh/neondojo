@@ -1,6 +1,6 @@
 use super::{
-    DERIVED_TABLES, TABLES, archive::Prepared, columns, relation, schema, schema_mismatch,
-    sequences, transfer_settings, validate_sequences,
+    ArchiveLayout, DERIVED_TABLES, TABLES, archive::Prepared, columns, relation, schema,
+    schema_mismatch, sequences, transfer_settings, validate_sequences,
 };
 use crate::api::{ApiError, ApiResult, AppState};
 use anyhow::{Context, Result};
@@ -85,10 +85,11 @@ async fn copy_tables(
     connection: &mut PgConnection,
     file: &mut File,
     lengths: Vec<u64>,
+    layout: ArchiveLayout,
 ) -> ApiResult<()> {
     let mut buffer = vec![0; 128 * 1024];
     for (table, mut remaining) in TABLES.iter().zip(lengths) {
-        let columns = columns(connection, table).await?;
+        let columns = columns(connection, table, layout).await?;
         let name = relation(table);
         set_copy_triggers(connection, table, false).await?;
         let mut writer = connection
@@ -259,9 +260,10 @@ pub(super) async fn replace(state: &AppState, mut input: Prepared) -> ApiResult<
         .await
         .context("Opening restore transaction")?;
     transfer_settings(&mut tx).await?;
-    if schema(&mut tx).await? != input.manifest.schema {
-        return Err(schema_mismatch());
-    }
+    let layout = schema(&mut tx)
+        .await?
+        .layout(&input.manifest.schema)
+        .ok_or_else(schema_mismatch)?;
     let sequences = sequences(&mut tx).await?;
     validate_sequences(&input.manifest, sequences.len())?;
 
@@ -311,7 +313,16 @@ pub(super) async fn replace(state: &AppState, mut input: Prepared) -> ApiResult<
         .execute(&mut *tx)
         .await
         .context("Preparing target backup tables")?;
-    copy_tables(&mut tx, &mut input.file, input.lengths).await?;
+    copy_tables(&mut tx, &mut input.file, input.lengths, layout).await?;
+    if layout == ArchiveLayout::BeforeGameCubeRules {
+        sqlx::query(include_str!(
+            "../schema_migrations/mark_legacy_cube_rules.sql"
+        ))
+        .execute(&mut *tx)
+        .await
+        .context("Marking restored games for cube-rule replay")?;
+    }
+    crate::schema_migrations::resolve_game_cube_rules(&mut tx).await?;
 
     let default: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM public.databases WHERE is_default")

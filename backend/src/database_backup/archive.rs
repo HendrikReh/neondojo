@@ -1,6 +1,6 @@
 use super::{
-    BackupContents, MAX_ARCHIVE_BYTES, MAX_DATA_BYTES, Manifest, TABLES, columns, relation, schema,
-    sequences, transfer_settings,
+    ArchiveLayout, ArchiveSchema, BackupContents, MAX_ARCHIVE_BYTES, MAX_DATA_BYTES, Manifest,
+    TABLES, columns, relation, schema, sequences, transfer_settings,
 };
 use crate::api::{ApiError, ApiResult};
 use anyhow::{Context, Result, ensure};
@@ -95,7 +95,7 @@ async fn stream_snapshot(
     transfer_settings(&mut tx).await?;
     let schema = schema(&mut tx).await?;
     for table in TABLES {
-        let columns = columns(&mut tx, table).await?;
+        let columns = columns(&mut tx, table, ArchiveLayout::Current).await?;
         outgoing.send(ExportEntry::Table(table)).await?;
         let mut stream = tx
             .copy_out_raw(&format!(
@@ -125,7 +125,7 @@ async fn stream_snapshot(
     outgoing
         .send(ExportEntry::Finish(Manifest {
             format: FORMAT,
-            schema,
+            schema: schema.current,
             sequences: next_values,
             created_at: Some(created_at),
         }))
@@ -271,7 +271,7 @@ struct Scanned<W> {
 // different schema, only the entries needed for the summary are inspected.
 async fn scan<W: Write + Send + 'static>(
     file: File,
-    fingerprint: String,
+    fingerprint: ArchiveSchema,
     destination: impl FnOnce() -> io::Result<W> + Send + 'static,
     permit: Arc<OwnedSemaphorePermit>,
     summarize: bool,
@@ -303,7 +303,7 @@ async fn scan<W: Write + Send + 'static>(
         if !matches!(manifest.format, LEGACY_FORMAT | FORMAT) {
             return Err(ApiError::invalid("Unsupported NeonDojo backup format"));
         }
-        let compatible = manifest.schema == fingerprint;
+        let compatible = fingerprint.layout(&manifest.schema).is_some();
         if compatible && archive.len() != TABLES.len() + 1 {
             return Err(ApiError::invalid(
                 "Backup has a missing or unexpected entry",
@@ -397,7 +397,7 @@ async fn scan<W: Write + Send + 'static>(
 
 pub(super) async fn check(
     file: File,
-    fingerprint: String,
+    fingerprint: ArchiveSchema,
     permit: Arc<OwnedSemaphorePermit>,
 ) -> ApiResult<Checked> {
     Ok(scan(file, fingerprint, || Ok(io::sink()), permit, true)
@@ -407,7 +407,7 @@ pub(super) async fn check(
 
 pub(super) async fn prepare(
     file: File,
-    fingerprint: String,
+    fingerprint: ArchiveSchema,
     permit: Arc<OwnedSemaphorePermit>,
 ) -> ApiResult<Prepared> {
     let Scanned {
