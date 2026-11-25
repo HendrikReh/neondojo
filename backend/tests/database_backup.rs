@@ -104,7 +104,7 @@ async fn restores_pre_cube_rule_archive_using_each_games_sgf(pool: PgPool) {
     let archive = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
 
     let mut target = sqlx::migrate!("./migrations");
-    target.migrations.to_mut().retain(|m| m.version <= 95);
+    target.migrations.to_mut().retain(|m| m.version <= 96);
     target.run(&pool).await.unwrap();
     sqlx::query("DELETE FROM match_games WHERE match_uuid=$1")
         .bind(id)
@@ -132,8 +132,9 @@ async fn restores_pre_cube_rule_archive_using_each_games_sgf(pool: PgPool) {
 
     sqlx::query(
         "INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time)
-        SELECT 96,'unrelated layout change',true,checksum,0 FROM _sqlx_migrations WHERE version=95",
+        SELECT $1,'unrelated layout change',true,checksum,0 FROM _sqlx_migrations WHERE version=95",
     )
+    .bind(i64::MAX)
     .execute(&pool)
     .await
     .unwrap();

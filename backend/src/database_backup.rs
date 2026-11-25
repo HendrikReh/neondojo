@@ -44,7 +44,7 @@ const DERIVED_TABLES: &[&str] = &[
 // These migrations leave the backed-up table layout and format compatible
 // with earlier archives. They only affect derived data, notifications,
 // indexes, views or how long job progress events are kept (0094).
-const ARCHIVE_COMPATIBLE_MIGRATIONS: &[i64] = &[89, 90, 91, 92, 93, 94];
+const ARCHIVE_COMPATIBLE_MIGRATIONS: &[i64] = &[89, 90, 91, 92, 93, 94, 96];
 
 // Parent tables precede their children so foreign keys remain enforced. Host
 // installations and the benchmark machine identity belong to the destination.
