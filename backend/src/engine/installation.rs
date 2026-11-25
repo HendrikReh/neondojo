@@ -1,10 +1,10 @@
 //! Bind one GNUbg process to the executable that was checked for it. Analysis
 //! runs (`Engine::run_observed`) and play rules processes share this check.
-use super::{Engine, resolve_binary_async};
+use super::{Engine, resolve_binary};
 use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
-use std::time::Duration;
-use tokio::io::AsyncReadExt;
+use std::{fs::File, io::Read, time::Duration};
+use tokio_util::sync::CancellationToken;
 
 const READ_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -28,15 +28,19 @@ struct Identity {
 
 impl Identity {
     async fn read(engine: &Engine) -> Result<Self> {
-        tokio::time::timeout(READ_TIMEOUT, async {
-            let executable = resolve_binary_async(engine.binary()).await?;
-            let mut file = tokio::fs::File::open(&executable).await?;
+        let binary = engine.binary().to_owned();
+        let cancel = CancellationToken::new();
+        let _cancel_on_drop = cancel.clone().drop_guard();
+        let read = tokio::task::spawn_blocking(move || {
+            let executable =
+                resolve_binary(&binary).context("Could not start GNUbg; check GNUBG_BIN")?;
+            let mut file = File::open(&executable)?;
             ensure!(
-                file.metadata().await?.is_file(),
+                file.metadata()?.is_file(),
                 "GNUbg executable is not a regular file"
             );
             let mut magic = [0; 4];
-            file.read_exact(&mut magic).await?;
+            file.read_exact(&mut magic)?;
             let direct_native = cfg!(target_os = "macos")
                 && matches!(
                     magic,
@@ -46,7 +50,12 @@ impl Identity {
             hash.update(magic);
             let mut chunk = vec![0; 64 * 1024];
             loop {
-                let len = file.read(&mut chunk).await?;
+                // A running blocking task can outlive its caller or the timeout.
+                ensure!(
+                    !cancel.is_cancelled(),
+                    "GNUbg executable verification cancelled"
+                );
+                let len = file.read(&mut chunk)?;
                 if len == 0 {
                     break;
                 }
@@ -57,9 +66,10 @@ impl Identity {
                 digest: hash.finalize().into(),
                 direct_native,
             })
-        })
-        .await
-        .context("GNUbg executable verification timed out")?
+        });
+        tokio::time::timeout(READ_TIMEOUT, read)
+            .await
+            .context("GNUbg executable verification timed out")??
     }
 }
 
@@ -144,6 +154,11 @@ mod tests {
         let (_directory, engine) = direct_binary();
         // The file is not executable: binding must not run `--version`.
         let installation = Installation::bind(&engine).await.unwrap();
+        let digest = sha2::digest::Output::<Sha256>::from(installation.identity.digest);
+        assert_eq!(
+            format!("{digest:x}"),
+            "e3d2802102794847801e55bcb42dac280bc0f04e1225ff5329a4497951b58648"
+        );
         assert!(installation.reports_version_at_startup());
         installation
             .check_startup_banner(&engine, b"GNU Backgammon 1.08.003\n")
@@ -165,6 +180,67 @@ mod tests {
             assert!(format!("{error:#}").contains(expected), "{error:#}");
         }
         installation.recheck(&engine).await.unwrap();
+    }
+
+    /// Run the three measurements in rotating order on the same native executable.
+    #[tokio::test]
+    #[ignore = "timing benchmark requires native GNUbg and its weights"]
+    async fn benchmark_native_installation_checks() {
+        use std::time::Instant;
+
+        let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or_else(|_| "gnubg".into()));
+        let version = engine.version().await.unwrap();
+        let pinned = engine.clone().with_expected_version(Some(version.clone()));
+        let mut timings = [Vec::new(), Vec::new(), Vec::new()];
+        for round in 0..33 {
+            for offset in 0..3 {
+                let case = (round + offset) % 3;
+                let start = Instant::now();
+                match case {
+                    0 => {
+                        let installation = Installation::bind(&pinned).await.unwrap();
+                        assert!(installation.reports_version_at_startup());
+                        installation.recheck(&pinned).await.unwrap();
+                    }
+                    1 => assert_eq!(pinned.check_installation().await.unwrap(), version),
+                    _ => assert_eq!(engine.check_installation().await.unwrap(), version),
+                }
+                if round >= 3 {
+                    timings[case].push(start.elapsed());
+                }
+            }
+        }
+        for (label, mut samples) in ["bind and recheck", "pinned probe", "unpinned probe"]
+            .into_iter()
+            .zip(timings)
+        {
+            samples.sort_unstable();
+            eprintln!(
+                "{label}, 30 samples: median {:?}, p90 {:?}",
+                (samples[14] + samples[15]) / 2,
+                samples[26]
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn recheck_resolves_the_configured_symlink_again() {
+        use std::os::unix::fs::symlink;
+
+        let (directory, target) = direct_binary();
+        let configured = directory.path().join("current");
+        let replacement = directory.path().join("same-bytes");
+        std::fs::copy(target.binary(), &replacement).unwrap();
+        symlink(target.binary(), &configured).unwrap();
+        let engine = Engine::new(configured.to_str().unwrap().to_owned());
+        let installation = Installation::bind(&engine).await.unwrap();
+        std::fs::remove_file(&configured).unwrap();
+        symlink(replacement, configured).unwrap();
+        let error = installation.recheck(&engine).await.unwrap_err();
+        assert!(
+            error.to_string().contains("installation changed"),
+            "{error:#}"
+        );
     }
 
     #[tokio::test]
