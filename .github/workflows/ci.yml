@@ -5,12 +5,16 @@ name: CI
 # Playwright suite are not available here; run them locally
 # (docs/development/testing.md#verification).
 #
-# Pull requests do not trigger a run; run the checks locally before merging, or
-# start a run by hand: gh workflow run ci.yml --ref <branch>
+# Pull requests and pushes to main do not trigger a run; main is checked once a
+# night. Run the checks locally before merging, or start a run by hand:
+# gh workflow run ci.yml --ref <branch>
 
 on:
+  schedule:
+    # Runs on the default branch (main). UTC, off the full hour to avoid delays.
+    - cron: '17 2 * * *'
   push:
-    branches: [main, 'release/**']
+    branches: ['release/**']
   workflow_dispatch:
 
 concurrency:
