@@ -126,6 +126,14 @@ const rows = {
     'Przeanalizowana',
     'Analizzato',
   ],
+  reanalyzeCubeless: [
+    'Reanalyze this game to apply its no-cube rule.',
+    'Dieses Spiel erneut analysieren, um die Regel ohne Doppler anzuwenden.',
+    'Vuelve a analizar esta partida para aplicar la regla sin cubo.',
+    'Relancez l’analyse de cette partie pour appliquer la règle sans videau.',
+    'Przeanalizuj grę ponownie, aby uwzględnić grę bez kostki dublującej.',
+    'Rianalizza questa partita per applicare la regola senza cubo.',
+  ],
   notAnalyzed: [
     'Not analyzed',
     'Nicht analysiert',

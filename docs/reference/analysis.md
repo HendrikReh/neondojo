@@ -81,6 +81,10 @@ In **Analysis → Statistics**, open **Compare saved analyses** and choose any t
 
 The selected decision shows the played and best actions, the loss, and the analysis source. Cube review includes missed doubles and double, take, and drop decisions. Game buttons in **Statistics** open that game. Native PR uses GNUbg job statistics. New jobs save complete per-game statistics atomically. Older jobs can show totals reconstructed from their decisions, with per-game PR shown as unavailable where it was never saved.
 
+Games imported with the SGF rule `RU[NoCube]` use cubeless checker analysis and have zero cube decisions. GNUbg uses the source game rules for checker evaluation and PR. NeonGammon supports cubeless checker evaluation for money games without Jacoby and reports other cube-disabled configurations as unsupported. Statistics marks older native checkpoints for these games so you can choose to analyze them again. Historical decisions and study schedules stay available. New cube practice questions require a game that permits doubling.
+
+NeonGammon replays the stored match once when a job starts or resumes. It indexes checker occurrences by game and ply, then verifies and checkpoints each remaining game independently.
+
 ### Candidate comparison and decision review
 
 Candidate tables share a compact layout for local, imported and opening-book results.

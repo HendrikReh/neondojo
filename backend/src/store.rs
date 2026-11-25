@@ -1,5 +1,5 @@
 use crate::{import::ImportedMatch, model::*, search::literal_pattern};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
@@ -385,6 +385,29 @@ pub async fn matches(pool: &PgPool, q: &str, after: Option<Uuid>, limit: i64) ->
         None
     };
     Ok(MatchPage { items, next_cursor })
+}
+
+/// Positions embedded in independent cards can have no local match. For a
+/// local match, use the game's source rule (including pre-catalog imports).
+pub(crate) async fn game_cube_enabled(pool: &PgPool, position: &Position) -> Result<bool> {
+    let rule: Option<Option<bool>> = sqlx::query_scalar(
+        "SELECT cube_enabled FROM match_games WHERE match_uuid=$1 AND game_no=$2",
+    )
+    .bind(position.match_uuid)
+    .bind(position.game_no)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(rule) = rule {
+        return rule.context("The source game's cube rule is unavailable");
+    }
+    let Some(games) = game_catalog(pool, position.match_uuid).await? else {
+        return Ok(position.cube_enabled.unwrap_or(true));
+    };
+    games
+        .iter()
+        .find(|game| game.game_no == position.game_no)
+        .and_then(|game| game.cube_enabled)
+        .context("The source game's cube rule is unavailable")
 }
 
 pub async fn get_position(pool: &PgPool, id: Uuid) -> Result<Option<Position>> {

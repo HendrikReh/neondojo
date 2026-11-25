@@ -15,7 +15,7 @@ use sqlx::{FromRow, PgConnection, PgPool};
 use uuid::Uuid;
 
 /// Bump when the stored columns or the hit format change.
-const INDEX_VERSION: &str = "1";
+const INDEX_VERSION: &str = "2";
 /// Matches re-indexed by one request; a larger backlog asks for a retry.
 const MAX_REBUILDS: usize = 400;
 /// Loads of one match per request while its saved decisions keep changing.

@@ -5,6 +5,7 @@ fn position(sgf: &str) -> Position {
     let imported = crate::import::parse_sgf(sgf).unwrap();
     let p = &imported.positions[0];
     Position {
+        cube_enabled: None,
         id: Uuid::nil(),
         match_uuid: Uuid::nil(),
         ordinal: 1,
@@ -385,6 +386,7 @@ async fn released_full_book_serves_real_scores_both_movers_and_cube() {
     let source = crate::import::parse_sgf("(;GM[6]MI[length:7];W[31hefe];B[42qusu])").unwrap();
     let p = &source.positions[1];
     let reply = Position {
+        cube_enabled: None,
         id: Uuid::nil(),
         match_uuid: Uuid::nil(),
         ordinal: 2,
@@ -519,6 +521,7 @@ async fn xg_provider_and_automatic_keep_references_separate_from_candidates() {
     let source = crate::import::parse_sgf("(;GM[6]MI[length:7];W[31hefe];B[42qusu])").unwrap();
     let p = &source.positions[1];
     let position = Position {
+        cube_enabled: None,
         id: Uuid::nil(),
         match_uuid: Uuid::nil(),
         ordinal: 1,
@@ -555,6 +558,7 @@ async fn xg_provider_and_automatic_keep_references_separate_from_candidates() {
     let money_source = crate::import::parse_sgf("(;GM[6]RU[Jacoby];W[31hefe];B[42qusu])").unwrap();
     let p = &money_source.positions[1];
     let money = Position {
+        cube_enabled: None,
         id: Uuid::nil(),
         match_uuid: Uuid::nil(),
         ordinal: 1,

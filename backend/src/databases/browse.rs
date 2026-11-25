@@ -28,7 +28,7 @@ LEFT JOIN LATERAL (
     AND rawpr.result #>> '{players,1,unavailable}'='0'
     AND rawpr.result #>> '{performance_rating,method}'='gnubg_emg_500_v1'
     AND rawpr.result #>> '{performance_rating,games}'=rawpr.total_games::text
-    AND rawpr.result #>> '{performance_rating,profile}'=(rawpr.result->>'engine')||'; '||(rawpr.result->>'plies')||'-ply cubeful deterministic'
+    AND rawpr.result #>> '{performance_rating,profile}' IN ((rawpr.result->>'engine')||'; '||(rawpr.result->>'plies')||'-ply cubeful deterministic', (rawpr.result->>'engine')||'; '||(rawpr.result->>'plies')||'-ply source cube rules deterministic')
     AND rawpr.result #>> '{performance_rating,players,0,player}'='0'
     AND rawpr.result #>> '{performance_rating,players,1,player}'='1'
 ) prj ON true

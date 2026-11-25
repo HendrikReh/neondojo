@@ -144,6 +144,7 @@ pub(super) async fn score_questions(
 ) -> ApiResult<Json<ScorePractice>> {
     let row = card(&state, id).await?;
     let content = cube_content(&row)?;
+    evaluation::require_cube_game(&state, &content.position).await?;
     crate::play::require_review_available(&state.pool, content.source.match_id).await?;
     let question = row.question();
     let questions = score_positions(content)?
@@ -192,6 +193,7 @@ pub(super) async fn score_answer(
         return Err(conflict("Card changed; reload its score variants"));
     }
     let content = cube_content(&row)?;
+    evaluation::require_cube_game(&state, &content.position).await?;
     crate::play::require_review_available(&state.pool, content.source.match_id).await?;
     let position = score_positions(content)?
         .into_iter()

@@ -97,6 +97,10 @@ pub(crate) struct CubeContext {
 /// Reconstruct the position before offering the cube. Older response cards
 /// encode the responder as the mover, without an outstanding-offer bit.
 pub(crate) fn cube_context(position: &Position, response: bool) -> Result<CubeContext> {
+    ensure!(
+        position.cube_enabled != Some(false),
+        "The game was played without the doubling cube"
+    );
     let id = context(position)?;
     let player = position.player;
     let doubler = if response { 1 - player } else { player };
@@ -161,6 +165,7 @@ pub(crate) mod tests {
     pub(crate) fn position(player: i32, dice: [i32; 2]) -> Position {
         let board = initial_board();
         Position {
+            cube_enabled: None,
             id: uuid::Uuid::nil(),
             match_uuid: uuid::Uuid::nil(),
             ordinal: 1,

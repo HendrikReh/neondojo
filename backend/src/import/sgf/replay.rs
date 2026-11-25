@@ -579,7 +579,7 @@ fn parse_sgf_context(
         );
         result_cubes.push(result_cube);
         result.games.push(crate::model::MatchGame {
-            cube_enabled: !no_cube,
+            cube_enabled: Some(!no_cube),
             result: outcome.clone(),
             game_no: game_index as i32 + 1,
             position_count: ply,

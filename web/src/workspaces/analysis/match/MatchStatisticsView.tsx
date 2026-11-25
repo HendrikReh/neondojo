@@ -382,6 +382,9 @@ export default function MatchStatisticsView({
                       </th>
                       <td>
                         {text(game.analyzed ? 'analyzed' : 'notAnalyzed')}
+                        {game.needs_cube_rule_reanalysis && (
+                          <small>{text('reanalyzeCubeless')}</small>
+                        )}
                       </td>
                       {names.map((name, player) => {
                         const stats = game.summary?.players.find(

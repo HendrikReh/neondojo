@@ -8,9 +8,11 @@ use crate::match_analysis::{
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
 
+pub(super) const GAME_TIMEOUT: Duration = Duration::from_secs(600);
+
 impl SageEngine {
     pub async fn analyze_game(&self, sgf: &str, game_no: i32, plies: i32) -> Result<AnalyzedGame> {
-        self.analyze_game_with_limit(sgf, game_no, plies, Some(Duration::from_secs(600)))
+        self.analyze_game_with_limit(sgf, game_no, plies, Some(GAME_TIMEOUT))
             .await
     }
 
@@ -44,13 +46,7 @@ impl SageEngine {
             );
             self
         } else {
-            ensure!(
-                game.supports_cubeless_money(),
-                "NeonGammon cubeless checker evaluation requires money play without Jacoby"
-            );
-            let mut snapshot = self.snapshot.clone();
-            snapshot.cubeless = true;
-            cubeless_engine = SageEngine::new(snapshot)?;
+            cubeless_engine = self.for_cubeless_checker(game.supports_cubeless_money())?;
             &cubeless_engine
         };
         crate::engine::with_shared_access(async {
@@ -198,6 +194,7 @@ impl SageEngine {
             decision.decision_no = i32::try_from(index + 1)?;
         }
         Ok(AnalyzedGame {
+            cube_enabled: game.cube_enabled,
             engine: self.version.clone(),
             game_no: game.game_no,
             decisions,
@@ -270,7 +267,10 @@ mod tests {
                 .game(replay.game(game_no).unwrap(), None)
                 .await
                 .unwrap();
-            let atomic = engine.analyze_game(source, game_no, 2).await.unwrap();
+            let atomic = engine
+                .analyze_prepared_game(&replay, game_no, 2, Some(GAME_TIMEOUT))
+                .await
+                .unwrap();
             assert_eq!(
                 serde_json::to_value(&individual).unwrap(),
                 serde_json::to_value(&atomic).unwrap(),

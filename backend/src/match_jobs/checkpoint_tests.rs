@@ -66,6 +66,7 @@ async fn checkpoints_batch_rows_and_roll_back_together(pool: PgPool) -> Result<(
     let (job, token) = running_job(&pool, match_id, 1).await?;
     // One real checker occurrence and enough synthetic cube rows to span batches.
     let game = AnalyzedGame {
+        cube_enabled: true,
         engine: "GNU Backgammon checkpoint fixture".into(),
         game_no: 1,
         statistics: None,

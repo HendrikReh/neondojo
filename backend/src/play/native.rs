@@ -274,6 +274,7 @@ pub(super) fn apply_snapshot(
         .split_once(':')
         .context("GNUbg ID missing")?;
     session.position = Position {
+        cube_enabled: None,
         id: session.id,
         match_uuid: session.id,
         ordinal: session.version.try_into()?,

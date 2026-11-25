@@ -513,6 +513,9 @@ pub(crate) async fn evaluate(
     solution: SavedEvaluation<'_>,
     answer: &PracticeAnswer,
 ) -> ApiResult<PracticeEvaluation> {
+    if kind != "checker" {
+        require_cube_game(state, position).await?;
+    }
     let checked = validate(kind, position, answer)?;
     if matches!(checked, CheckedAnswer::ForcedPass) {
         return Ok(PracticeEvaluation::forced_pass());
@@ -560,7 +563,14 @@ async fn evaluate_fresh(
     checked: CheckedAnswer,
     snapshot: Option<(i32, crate::settings::EngineSnapshot)>,
 ) -> ApiResult<PracticeEvaluation> {
+    let cube_enabled = crate::store::game_cube_enabled(&state.pool, position).await?;
+    if matches!(checked, CheckedAnswer::Cube { .. }) && !cube_enabled {
+        return Err(ApiError::invalid(
+            "The game was played without the doubling cube",
+        ));
+    }
     with_practice_engine(state, snapshot, |engine, plies| async move {
+        let engine = engine.for_checker_rules(cube_enabled, &position.gnubg_match_id)?;
         match checked {
             CheckedAnswer::Checker { board } => {
                 fresh_checker(engine, plies, position, &board).await
@@ -572,6 +582,16 @@ async fn evaluate_fresh(
         }
     })
     .await
+}
+
+pub(crate) async fn require_cube_game(state: &AppState, position: &Position) -> ApiResult<()> {
+    if crate::store::game_cube_enabled(&state.pool, position).await? {
+        Ok(())
+    } else {
+        Err(ApiError::invalid(
+            "The game was played without the doubling cube",
+        ))
+    }
 }
 
 /// Cubeless chances of a saved cube decision, for the player who decides.
@@ -591,6 +611,7 @@ pub(crate) async fn cube_chances(
     position: &Position,
     response: bool,
 ) -> ApiResult<CubeChances> {
+    require_cube_game(state, position).await?;
     let context = practice::cube_context(position, response)
         .map_err(|_| ApiError::invalid("The position does not permit this cube decision"))?;
     with_practice_engine(state, None, |engine, plies| async move {

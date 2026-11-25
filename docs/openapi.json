@@ -12819,6 +12819,9 @@
           "decisions"
         ],
         "properties": {
+          "cube_enabled": {
+            "type": "boolean"
+          },
           "decisions": {
             "type": "array",
             "items": {
@@ -14853,6 +14856,9 @@
           "game_no": {
             "type": "integer",
             "format": "int32"
+          },
+          "needs_cube_rule_reanalysis": {
+            "type": "boolean"
           },
           "summary": {
             "oneOf": [
@@ -17486,6 +17492,10 @@
             "type": "integer",
             "format": "int32"
           },
+          "needs_cube_rule_reanalysis": {
+            "type": "boolean",
+            "description": "Historical checkpoint evaluated before NoCube rules were recorded."
+          },
           "summary": {
             "oneOf": [
               {
@@ -18947,6 +18957,13 @@
           },
           "crawford": {
             "type": "boolean"
+          },
+          "cube_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the game rules allow a doubling cube, independently of ownership and score."
           },
           "game_no": {
             "type": "integer",
@@ -21524,6 +21541,13 @@
               "type": "integer",
               "format": "int32"
             }
+          },
+          "cube_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Source rule retained with portable practice positions when known."
           },
           "dice": {
             "type": "array",

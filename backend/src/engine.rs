@@ -119,6 +119,7 @@ const INSTALLATION_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Clone)]
 pub struct Engine {
     binary: String,
+    cubeless_checker: bool,
     expected_version: Option<String>,
     threads: Option<i32>,
     move_filter: Option<GnubgMoveFilter>,
@@ -203,11 +204,24 @@ impl Engine {
     pub fn new(binary: String) -> Self {
         Self {
             binary,
+            cubeless_checker: false,
             expected_version: None,
             threads: None,
             move_filter: None,
             installation_timeout: INSTALLATION_CHECK_TIMEOUT,
             roll_timeout: ROLL_TIMEOUT,
+        }
+    }
+
+    pub(crate) fn with_cubeless_checker(mut self) -> Self {
+        self.cubeless_checker = true;
+        self
+    }
+
+    fn configure_checker_rules(&self, commands: &mut String) {
+        if self.cubeless_checker {
+            commands
+                .push_str("set cube use off\nset evaluation chequerplay evaluation cubeful off\n");
         }
     }
 
@@ -593,6 +607,7 @@ impl Engine {
             ensure!((1..=6).contains(&a) && (1..=6).contains(&b), "Invalid dice");
             commands.push_str(&format!("set dice {a} {b}\n"));
         }
+        self.configure_checker_rules(&mut commands);
         let count = self
             .append_move_filter(&mut commands, "evaluation", plies)
             .unwrap_or(10);
@@ -610,9 +625,9 @@ impl Engine {
             // after passing, from the opponent's perspective; invert it back.
             let forced_commands = commands.replace(&hint, FORCED_PASS);
             let output = self.run(temp.path(), &forced_commands).await?;
-            vec![parse_pass(&output, plies)?]
+            vec![parse_pass(&output, plies, self.cubeless_checker)?]
         } else {
-            let mut candidates = parse_hints(&output)?;
+            let mut candidates = parse_hints(&output, !self.cubeless_checker)?;
             crate::match_analysis::retain_hint_paths(
                 &temp.path().join("hint.sgf"),
                 position_id,
@@ -661,6 +676,7 @@ impl Engine {
         let mut commands = format!(
             "set display off\nset evaluation chequerplay evaluation plies {native}\nset evaluation cubedecision evaluation plies {native}\nset output digits 6\n"
         );
+        self.configure_checker_rules(&mut commands);
         let count = self
             .append_move_filter(&mut commands, "evaluation", plies)
             .unwrap_or(10);
@@ -727,13 +743,13 @@ impl Engine {
         for (&index, part) in order.iter().zip(parts) {
             let [a, b] = rolls[index];
             let candidates = if blocked[index] {
-                vec![parse_pass(part, plies)?]
+                vec![parse_pass(part, plies, self.cubeless_checker)?]
             } else {
                 ensure!(
                     !part.contains("There are no legal moves."),
                     "GNUbg found no legal move for {a}-{b}, but the rules allow one"
                 );
-                let mut candidates = parse_hints(part)?;
+                let mut candidates = parse_hints(part, !self.cubeless_checker)?;
                 crate::match_analysis::retain_hint_paths(
                     &temp.path().join(format!("hint-{index}.sgf")),
                     position_id,
@@ -767,13 +783,15 @@ impl Engine {
         if forced_pass {
             return self.analyze(position_id, match_id, plies, None).await;
         }
-        let commands = decision_hint_commands(position_id, match_id, plies)?
-            + "hint 10000\nsave game hint.sgf\n";
+        let mut commands = decision_hint_commands(position_id, match_id, plies)?;
+        self.configure_checker_rules(&mut commands);
+        commands.push_str("hint 10000\nsave game hint.sgf\n");
         let directory = tempfile::tempdir()?;
         let output = self
             .run_with_timeout(directory.path(), &commands, Duration::from_secs(180))
             .await?;
-        let (mut candidates, evaluated_plies) = parse_full_checker_hints(&output, plies)?;
+        let (mut candidates, evaluated_plies) =
+            parse_full_checker_hints(&output, plies, !self.cubeless_checker)?;
         crate::match_analysis::retain_hint_paths(
             &directory.path().join("hint.sgf"),
             position_id,
@@ -964,11 +982,14 @@ pub fn valid_id(value: &str, length: usize) -> bool {
 /// GNUbg uses the same rows for hints and game exports, marking the played
 /// move with an asterisk in the game export. Reported depths are converted to
 /// NeonDojo's ply convention.
-pub(crate) fn parse_checker_candidates(output: &str) -> Result<Vec<(Candidate, bool)>> {
+pub(crate) fn parse_checker_candidates(
+    output: &str,
+    cube_enabled: bool,
+) -> Result<Vec<(Candidate, bool)>> {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     let pattern = PATTERN.get_or_init(|| {
         Regex::new(
-            r"^\s*(\*)?\s*(\d+)\.\s+Cubeful\s+(\d+)-ply\s+(.+?)\s+Eq\.:\s*([+-]?[0-9]+\.[0-9]+)",
+            r"^\s*(\*)?\s*(\d+)\.\s+(Cube(?:ful|less))\s+(\d+)-ply\s+(.+?)\s+Eq\.:\s*([+-]?[0-9]+\.[0-9]+)",
         )
         .unwrap()
     });
@@ -976,6 +997,10 @@ pub(crate) fn parse_checker_candidates(output: &str) -> Result<Vec<(Candidate, b
     let mut lines = output.lines();
     while let Some(line) = lines.next() {
         if let Some(captures) = pattern.captures(line) {
+            ensure!(
+                (&captures[3] == "Cubeful") == cube_enabled,
+                "GNUbg checker evaluation used the wrong cube rule"
+            );
             let probabilities = lines
                 .next()
                 .context("Missing GNUbg checker probabilities")?
@@ -983,7 +1008,7 @@ pub(crate) fn parse_checker_candidates(output: &str) -> Result<Vec<(Candidate, b
                 .filter(|token| *token != "-")
                 .map(str::parse::<f64>)
                 .collect::<Result<Vec<_>, _>>()?;
-            let equity: f64 = captures[5].parse()?;
+            let equity: f64 = captures[6].parse()?;
             ensure!(
                 equity.is_finite()
                     && probabilities.len() == 6
@@ -993,11 +1018,11 @@ pub(crate) fn parse_checker_candidates(output: &str) -> Result<Vec<(Candidate, b
             candidates.push((
                 Candidate {
                     rank: captures[2].parse()?,
-                    notation: captures[4].trim().into(),
+                    notation: captures[5].trim().into(),
                     path: None,
                     equity,
                     probabilities,
-                    plies: Some(plies_from_gnubg(captures[3].parse()?)),
+                    plies: Some(plies_from_gnubg(captures[4].parse()?)),
                 },
                 captures.get(1).is_some(),
             ));
@@ -1006,8 +1031,8 @@ pub(crate) fn parse_checker_candidates(output: &str) -> Result<Vec<(Candidate, b
     Ok(candidates)
 }
 
-pub(crate) fn parse_hints(output: &str) -> Result<Vec<Candidate>> {
-    let candidates = parse_checker_candidates(output)?;
+pub(crate) fn parse_hints(output: &str, cube_enabled: bool) -> Result<Vec<Candidate>> {
+    let candidates = parse_checker_candidates(output, cube_enabled)?;
     ensure!(
         !candidates.is_empty(),
         "GNUbg returned no evaluable move candidates"
@@ -1018,8 +1043,12 @@ pub(crate) fn parse_hints(output: &str) -> Result<Vec<Candidate>> {
         .collect())
 }
 
-pub(crate) fn parse_full_checker_hints(output: &str, plies: i32) -> Result<(Vec<Candidate>, i32)> {
-    let candidates = parse_hints(output)?;
+pub(crate) fn parse_full_checker_hints(
+    output: &str,
+    plies: i32,
+    cube_enabled: bool,
+) -> Result<(Vec<Candidate>, i32)> {
+    let candidates = parse_hints(output, cube_enabled)?;
     let evaluated_plies = candidates[0]
         .plies
         .context("Missing native checker evaluation depth")?;
@@ -1091,7 +1120,7 @@ fn split_rolls<'a>(output: &'a str, rolls: &[[i32; 2]]) -> Result<Vec<&'a str>> 
         .collect()
 }
 
-fn parse_pass(output: &str, plies: i32) -> Result<Candidate> {
+fn parse_pass(output: &str, plies: i32, cubeless: bool) -> Result<Candidate> {
     let prefix = match gnubg_plies(plies)? {
         0 => "static:".to_owned(),
         native => format!("{native} ply:"),
@@ -1116,7 +1145,7 @@ fn parse_pass(output: &str, plies: i32) -> Result<Candidate> {
         rank: 1,
         notation: "dance".into(),
         path: None,
-        equity: -values[6],
+        equity: -values[if cubeless { 5 } else { 6 }],
         probabilities: vec![
             1.0 - values[0],
             values[3],
@@ -1148,16 +1177,19 @@ mod tests {
     #[test]
     fn parses_ranked_engine_hints_and_rejects_missing_results() {
         let output = "    1. Cubeful 0-ply    8/5 6/5                      Eq.: +0.219\n       0.551 0.174 0.013 - 0.449 0.124 0.005\n        0-ply cubeful prune [expert]\n    2. Cubeful 0-ply    24/23 13/10                  Eq.: -0.012 (-0.231)\n       0.497 0.137 0.008 - 0.503 0.140 0.007\n";
-        let hints = super::parse_hints(output).unwrap();
+        let hints = super::parse_hints(output, true).unwrap();
         assert_eq!(hints.len(), 2);
         assert_eq!(hints[0].notation, "8/5 6/5");
         assert_eq!(hints[0].equity, 0.219);
         assert_eq!(hints[0].probabilities[0], 0.551);
-        assert!(super::parse_hints("No game in progress").is_err());
-        assert!(super::parse_full_checker_hints(output, 2).is_err());
+        assert!(super::parse_hints("No game in progress", true).is_err());
+        assert!(super::parse_full_checker_hints(output, 2, true).is_err());
         let single = output.split("    2.").next().unwrap();
         // GNUbg's native 0-ply is NeonDojo's 1-ply raw evaluation.
-        assert_eq!(super::parse_full_checker_hints(single, 1).unwrap().1, 1);
+        assert_eq!(
+            super::parse_full_checker_hints(single, 1, true).unwrap().1,
+            1
+        );
         assert_eq!(hints[0].plies, Some(1));
     }
 

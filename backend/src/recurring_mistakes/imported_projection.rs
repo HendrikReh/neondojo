@@ -20,6 +20,7 @@ pub(crate) fn source_move(
     let dice = event.dice.as_slice().try_into().ok()?;
     let after_board = if kind == "checker" {
         let position = Position {
+            cube_enabled: None,
             id: event.position_uuid.unwrap_or(Uuid::nil()),
             match_uuid: event.match_uuid,
             ordinal: checker_ply.unwrap_or(event.move_no),
@@ -75,6 +76,7 @@ pub(crate) fn review_position(
         (source.dice, source.match_id.clone())
     };
     Some(Position {
+        cube_enabled: None,
         id: position_uuid.unwrap_or(Uuid::nil()),
         match_uuid: match_id,
         ordinal: source.checker_ply.unwrap_or(source.move_no),

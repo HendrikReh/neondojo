@@ -2890,6 +2890,7 @@ export interface components {
             unavailable_reason?: null | components["schemas"]["EstimateUnavailableReason"];
         };
         AnalyzedGame: {
+            cube_enabled?: boolean;
             decisions: components["schemas"]["Decision"][];
             engine: string;
             /** Format: int32 */
@@ -3458,6 +3459,7 @@ export interface components {
             error_breakdown?: components["schemas"]["PlayerErrorBreakdown"][] | null;
             /** Format: int32 */
             game_no: number;
+            needs_cube_rule_reanalysis?: boolean;
             summary?: null | components["schemas"]["CatalogAnalysisSummary"];
             /** Format: int32 */
             white_score: number;
@@ -4272,6 +4274,8 @@ export interface components {
             error_breakdown?: components["schemas"]["PlayerErrorBreakdown"][] | null;
             /** Format: int32 */
             game_no: number;
+            /** @description Historical checkpoint evaluated before NoCube rules were recorded. */
+            needs_cube_rule_reanalysis?: boolean;
             summary?: null | components["schemas"]["MatchAnalysisSummary"];
             /** Format: int32 */
             white_score: number;
@@ -4714,6 +4718,8 @@ export interface components {
             /** Format: int32 */
             black_score: number;
             crawford: boolean;
+            /** @description Whether the game rules allow a doubling cube, independently of ownership and score. */
+            cube_enabled?: boolean | null;
             /** Format: int32 */
             game_no: number;
             /** Format: int32 */
@@ -5509,6 +5515,8 @@ export interface components {
         PlayerSortDirection: "asc" | "desc";
         Position: {
             board: number[];
+            /** @description Source rule retained with portable practice positions when known. */
+            cube_enabled?: boolean | null;
             dice: number[];
             /** Format: int32 */
             game_no: number;

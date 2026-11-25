@@ -602,6 +602,7 @@ mod tests {
         let imported = crate::import::parse_sgf(sgf).unwrap();
         let p = &imported.positions[index];
         crate::model::Position {
+            cube_enabled: None,
             id: uuid::Uuid::nil(),
             match_uuid: uuid::Uuid::nil(),
             ordinal: index as i32,

@@ -5,6 +5,39 @@ use crate::import::{
 };
 use anyhow::{Context, Result, ensure};
 
+pub(crate) enum MatchEvaluator<'a> {
+    Gnubg(&'a crate::engine::Engine, String),
+    NeonGammon(&'a super::SageEngine, PreparedMatch),
+}
+
+impl<'a> MatchEvaluator<'a> {
+    pub(crate) async fn prepare(engine: &'a super::AnalysisEngine, source: String) -> Result<Self> {
+        Ok(match engine {
+            super::AnalysisEngine::Gnubg(engine) => Self::Gnubg(engine, source),
+            super::AnalysisEngine::OpenSage(engine) => {
+                let replay =
+                    tokio::task::spawn_blocking(move || PreparedMatch::parse(&source)).await??;
+                Self::NeonGammon(engine, replay)
+            }
+        })
+    }
+
+    pub(crate) async fn analyze_game(
+        &self,
+        game_no: i32,
+        plies: i32,
+    ) -> Result<crate::match_analysis::AnalyzedGame> {
+        match self {
+            Self::Gnubg(engine, source) => engine.analyze_game(source, game_no, plies).await,
+            Self::NeonGammon(engine, replay) => {
+                engine
+                    .analyze_prepared_game(replay, game_no, plies, Some(super::game::GAME_TIMEOUT))
+                    .await
+            }
+        }
+    }
+}
+
 pub(crate) struct PreparedMatch(Vec<PreparedGame>);
 
 pub(super) struct PreparedGame {

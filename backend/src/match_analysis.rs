@@ -27,6 +27,10 @@ pub(crate) fn performance_rating_profile(engine: &str, plies: i32) -> String {
     format!("{engine}; {plies}-ply cubeful deterministic")
 }
 
+pub(crate) fn rule_aware_rating_profile(engine: &str, plies: i32) -> String {
+    format!("{engine}; {plies}-ply source cube rules deterministic")
+}
+
 /// Return a whole-result rating only with complete native statistical coverage.
 /// Callers selecting match overview values must also require a completed,
 /// whole-match job (game_no IS NULL); a scoped game's result has the same format.
@@ -42,7 +46,8 @@ pub fn match_performance_rating(
         || summary.players.iter().any(|p| p.unavailable != 0)
         || rating.games != summary.total_games
         || rating.method != PERFORMANCE_RATING_METHOD
-        || rating.profile != performance_rating_profile(&summary.engine, summary.plies)
+        || !(rating.profile == performance_rating_profile(&summary.engine, summary.plies)
+            || rating.profile == rule_aware_rating_profile(&summary.engine, summary.plies))
     {
         return None;
     }
@@ -72,6 +77,8 @@ pub fn match_performance_rating(
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AnalyzedGame {
+    #[serde(default = "crate::model::default_cube_enabled")]
+    pub cube_enabled: bool,
     pub engine: String,
     pub game_no: i32,
     pub decisions: Vec<Decision>,

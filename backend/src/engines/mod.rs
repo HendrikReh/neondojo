@@ -246,6 +246,18 @@ impl SageEngine {
         })
     }
 
+    fn for_cubeless_checker(&self, money_without_jacoby: bool) -> Result<Self> {
+        ensure!(
+            money_without_jacoby,
+            "NeonGammon cubeless checker evaluation requires money play without Jacoby"
+        );
+        let mut snapshot = self.snapshot.clone();
+        snapshot.cubeless = true;
+        let mut engine = Self::new(snapshot)?;
+        engine.slot = self.slot;
+        Ok(engine)
+    }
+
     pub(crate) fn for_play(snapshot: SageSnapshot) -> Result<Self> {
         let mut engine = Self::new(snapshot)?;
         engine.slot = process::Slot::Play;
@@ -753,6 +765,21 @@ pub enum AnalysisEngine {
     OpenSage(SageEngine),
 }
 impl AnalysisEngine {
+    pub(crate) fn for_checker_rules(self, cube_enabled: bool, match_id: &str) -> Result<Self> {
+        if cube_enabled {
+            return Ok(self);
+        }
+        match self {
+            Self::Gnubg(engine) => Ok(Self::Gnubg(engine.with_cubeless_checker())),
+            Self::OpenSage(engine) => {
+                let context = context::Context::decode(match_id)?;
+                Ok(Self::OpenSage(engine.for_cubeless_checker(
+                    context.away1 == 0 && !context.jacoby,
+                )?))
+            }
+        }
+    }
+
     pub(crate) fn id(&self) -> EngineId {
         match self {
             Self::Gnubg(_) => EngineId::Gnubg,

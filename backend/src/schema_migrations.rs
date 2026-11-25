@@ -54,7 +54,7 @@ pub(super) async fn resolve_game_cube_rules(connection: &mut sqlx::PgConnection)
                 .fetch_optional(&mut *connection)
                 .await?;
         let Some(source) = source else { continue };
-        let rules = tokio::task::spawn_blocking(move || {
+        let parsed = tokio::task::spawn_blocking(move || {
             crate::import::sgf::parse_sgf_with_context(&source).map(|(_, games)| {
                 games
                     .into_iter()
@@ -62,7 +62,14 @@ pub(super) async fn resolve_game_cube_rules(connection: &mut sqlx::PgConnection)
                     .collect::<Vec<_>>()
             })
         })
-        .await??;
+        .await?;
+        let rules = match parsed {
+            Ok(rules) => rules,
+            Err(error) => {
+                tracing::warn!(match_id = %id, %error, "Could not recover game cube rules from stored source");
+                continue;
+            }
+        };
         sqlx::query("UPDATE match_games g SET cube_enabled=r.enabled FROM unnest($2::boolean[]) WITH ORDINALITY r(enabled,n) WHERE g.match_uuid=$1 AND g.game_no=r.n AND g.cube_enabled IS NULL")
             .bind(id).bind(rules).execute(&mut *connection).await?;
     }

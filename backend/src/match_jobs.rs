@@ -77,42 +77,22 @@ pub(crate) async fn execute(
         summary.analyzed_moves,
     )
     .await?;
-    let prepared = match engine {
-        crate::engines::AnalysisEngine::OpenSage(_) => {
-            let source = source.clone();
-            Some(
-                tokio::task::spawn_blocking(move || {
-                    crate::engines::replay::PreparedMatch::parse(&source)
-                })
-                .await??,
-            )
-        }
-        _ => None,
-    };
+    let prepared = crate::engines::replay::MatchEvaluator::prepare(engine, source).await?;
     for &game_no in &game_numbers[job.completed_games as usize..] {
         crate::engine::with_shared_access(async {
             crate::analysis_timing::start_game(&state.pool, job, token).await?;
             let started = Instant::now();
             let work = async {
-                let analyzed = match (engine, &prepared) {
-                    (crate::engines::AnalysisEngine::OpenSage(sage), Some(replay)) => {
-                        sage.analyze_prepared_game(
-                            replay,
-                            game_no,
-                            job.plies,
-                            Some(std::time::Duration::from_secs(600)),
+                let analyzed = prepared
+                    .analyze_game(game_no, job.plies)
+                    .await
+                    .with_context(|| {
+                        format!(
+                            "{} analysis failed in game {game_no}/{}",
+                            engine.id().display_name(),
+                            job.total_games
                         )
-                        .await
-                    }
-                    _ => engine.analyze_game(&source, game_no, job.plies).await,
-                }
-                .with_context(|| {
-                    format!(
-                        "{} analysis failed in game {game_no}/{}",
-                        engine.id().display_name(),
-                        job.total_games
-                    )
-                })?;
+                    })?;
                 checkpoint(
                     &state.pool,
                     job,
@@ -264,7 +244,10 @@ async fn checkpoint(
         });
         inserts.push(insert);
     }
-    let game_summary = serde_json::to_value(game_summary)?;
+    let mut game_summary = serde_json::to_value(game_summary)?;
+    if !game.cube_enabled {
+        game_summary["cube_enabled"] = Value::Bool(false);
+    }
     let result = serde_json::to_value(&next)?;
     let progress = next.completed_games * 100 / job.total_games;
     let progress_event = json!({
@@ -313,10 +296,13 @@ fn accumulate_performance_rating(summary: &mut MatchAnalysisSummary, game: &Anal
         summary.performance_rating = None;
         return;
     };
+    let cubeful = crate::match_analysis::performance_rating_profile(&game.engine, summary.plies);
+    let source_rules =
+        crate::match_analysis::rule_aware_rating_profile(&game.engine, summary.plies);
     if summary.completed_games == 0 {
         summary.performance_rating = Some(PerformanceRatingSummary {
             method: crate::match_analysis::PERFORMANCE_RATING_METHOD.into(),
-            profile: crate::match_analysis::performance_rating_profile(&game.engine, summary.plies),
+            profile: cubeful.clone(),
             games: 0,
             players: [
                 PlayerPerformanceRating::default(),
@@ -332,11 +318,13 @@ fn accumulate_performance_rating(summary: &mut MatchAnalysisSummary, game: &Anal
     };
     if rating.games != summary.completed_games
         || rating.method != crate::match_analysis::PERFORMANCE_RATING_METHOD
-        || rating.profile
-            != crate::match_analysis::performance_rating_profile(&game.engine, summary.plies)
+        || (rating.profile != cubeful && rating.profile != source_rules)
     {
         summary.performance_rating = None;
         return;
+    }
+    if !game.cube_enabled {
+        rating.profile = source_rules;
     }
     for (player, native) in rating.players.iter_mut().zip(statistics) {
         player.normalized_equity_loss += native.normalized_equity_loss;
@@ -448,6 +436,7 @@ mod tests {
 
     fn rated_game(loss: [f64; 2], checker: [i32; 2], cube: [i32; 2]) -> AnalyzedGame {
         AnalyzedGame {
+            cube_enabled: true,
             engine: "GNU Backgammon test".into(),
             game_no: 1,
             decisions: Vec::new(),

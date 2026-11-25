@@ -193,6 +193,7 @@ pub(crate) fn build_history_snapshots(
             ply = checker_ply;
         }
         let before = Position {
+            cube_enabled: None,
             id: session.id,
             match_uuid: session.id,
             ordinal: index.try_into()?,
@@ -246,6 +247,7 @@ pub(super) fn stage_opening(session: &mut PlaySession, next: bool) -> anyhow::Re
     }
     let board = crate::backgammon::initial_board();
     session.position = Position {
+        cube_enabled: None,
         id: session.id,
         match_uuid: session.id,
         ordinal: session.version.try_into()?,
