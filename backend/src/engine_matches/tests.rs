@@ -1,4 +1,6 @@
 #[cfg(unix)]
+mod lease;
+#[cfg(unix)]
 mod worker_lifetime;
 
 use super::dice;
@@ -46,6 +48,12 @@ async fn mixed_duels_retain_checker_evaluations_for_both_sides(pool: sqlx::PgPoo
         .unwrap();
         let records = crate::imported_analysis::extract(&finished.sgf).unwrap();
         let (_, moves) = crate::import::sgf::parse_sgf_source_moves(&finished.sgf).unwrap();
+        assert!(
+            records.iter().all(|record| record.kind != "checker"
+                || record.player != sage_side
+                || record.engine == "NeonGammon"),
+            "GNUbg legal-move hints must not be archived as the external side's evaluations"
+        );
         let sage_moves: Vec<_> = moves
             .iter()
             // GNUbg can automatically record a blocked roll without asking
