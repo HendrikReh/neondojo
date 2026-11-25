@@ -19,14 +19,16 @@ const SINGLE_THREADED_MATH: [(&str, &str); 3] = [
     ("OPENBLAS_NUM_THREADS", "1"),
     ("VECLIB_MAXIMUM_THREADS", "1"),
 ];
-// One worker for playing and one for everything else, each behind its own
-// lock. A game retains its general worker, but each exchange reserves threads
-// separately so a waiting play request can run between evaluations. Benchmarks
-// still exclude all other engine work through the shared engine gate.
+// One worker for playing, one for evaluations a person waits for, and one for
+// everything else, each behind its own lock. A game retains its general worker,
+// but each exchange reserves threads separately so a waiting play or
+// interactive request can run between evaluations. Benchmarks still exclude
+// all other engine work through the shared engine gate.
 static GENERAL: Mutex<Option<Worker>> = Mutex::const_new(None);
 static PLAY: Mutex<Option<Worker>> = Mutex::const_new(None);
+static INTERACTIVE: Mutex<Option<Worker>> = Mutex::const_new(None);
 /// Installation checks run one at a time, each in its own process. They wait
-/// for neither worker, so a game analysis does not delay a new match, the
+/// for none of these workers, so a game analysis does not delay a new match, the
 /// engine list or the submission of another analysis.
 static PROBE: Mutex<()> = Mutex::const_new(());
 static CPU_BUDGET: LazyLock<(u32, Semaphore)> = LazyLock::new(|| {
@@ -50,6 +52,8 @@ async fn acquire_threads(profile: &SageSnapshot) -> Result<SemaphorePermit<'stat
 pub(super) enum Slot {
     General,
     Play,
+    /// Hints, Coach and Tutor evaluations, and Study answers.
+    Interactive,
 }
 
 impl Slot {
@@ -57,6 +61,7 @@ impl Slot {
         match self {
             Self::General => &GENERAL,
             Self::Play => &PLAY,
+            Self::Interactive => &INTERACTIVE,
         }
     }
 }
@@ -495,7 +500,8 @@ pub(super) fn validate_identity(profile: &SageSnapshot, identity: &Value) -> Res
 }
 
 #[cfg(all(test, unix))]
-mod tests {
+pub(super) mod tests {
+    use super::super::{AnalysisEngine, SageEngine};
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 
@@ -504,6 +510,41 @@ mod tests {
     }
 
     static TEST_LOCK: Mutex<()> = Mutex::const_new(());
+
+    /// A NeonGammon engine that passes validation but whose process cannot start.
+    pub(crate) fn unstartable_engine(plies: i32) -> crate::settings::EngineSnapshot {
+        crate::settings::EngineSnapshot {
+            engine_id: "bgsage".into(),
+            gnubg_path: "/missing/gnubg".into(),
+            engine_version: None,
+            gnubg_threads: None,
+            gnubg_move_filter: None,
+            open_sage: Some(SageSnapshot {
+                python: "/missing/python".into(),
+                package_version: "3.1.1".into(),
+                artifact_fingerprint: "a".repeat(64),
+                threads: 2,
+                plies,
+                adapter_version: 1,
+                one_ply_verified: false,
+                cubeless: false,
+            }),
+        }
+    }
+
+    /// Occupies the general worker, as a game analysis does, until dropped.
+    pub(crate) struct GeneralWorkerHeld {
+        _general: MutexGuard<'static, Option<Worker>>,
+        _serial: MutexGuard<'static, ()>,
+    }
+
+    pub(crate) async fn hold_general_worker() -> GeneralWorkerHeld {
+        let serial = TEST_LOCK.lock().await;
+        GeneralWorkerHeld {
+            _general: GENERAL.lock().await,
+            _serial: serial,
+        }
+    }
 
     struct FakeWorker {
         directory: tempfile::TempDir,
@@ -1160,6 +1201,67 @@ for line in sys.stdin:
     }
 
     #[tokio::test]
+    async fn interactive_requests_keep_their_worker_beside_an_analysis_and_a_game() {
+        let _serial = TEST_LOCK.lock().await;
+        let analysis = FakeWorker::new("batch_healthy");
+        let game = FakeWorker::new("healthy");
+        let hint = FakeWorker::new("healthy");
+        let engine =
+            AnalysisEngine::OpenSage(SageEngine::new(hint.profile.clone()).unwrap()).interactive();
+        let AnalysisEngine::OpenSage(engine) = engine else {
+            unreachable!("The engine changed with its worker")
+        };
+        let batch = VerifiedBatch::begin(&analysis.profile).await.unwrap();
+        warm_play(&game.profile).await.unwrap();
+        let mut pids = Vec::new();
+        for _ in 0..2 {
+            tokio::time::timeout(Duration::from_secs(5), engine.version())
+                .await
+                .expect("An interactive request waited for the analysis block")
+                .unwrap();
+            pids.push(hint.pid());
+        }
+        assert_eq!(pids[0], pids[1], "An interactive request started cold");
+        batch.finish().await.unwrap();
+        restart(&analysis.profile).await.unwrap();
+        for slot in [&GENERAL, &PLAY, &INTERACTIVE] {
+            assert!(slot.lock().await.is_some(), "A worker was displaced");
+        }
+        engine.version().await.unwrap();
+        assert_eq!(hint.pid(), pids[0], "A cold benchmark displaced the worker");
+        for slot in [&GENERAL, &PLAY, &INTERACTIVE] {
+            drop(slot.lock().await.take());
+        }
+        for fake in [&analysis, &game, &hint] {
+            assert_reaped(&fake.pid()).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn interactive_requests_wait_for_an_exclusive_benchmark() {
+        let _serial = TEST_LOCK.lock().await;
+        let hint = FakeWorker::new("healthy");
+        let identity = json!({"operation":"identity"});
+        let limit = Duration::from_millis(300);
+        crate::engine::benchmark_exclusive(async {
+            // A task of its own does not inherit the access of the benchmark.
+            let (profile, identity) = (hint.profile.clone(), identity.clone());
+            let blocked = tokio::spawn(async move {
+                super::request(&profile, identity, limit, Slot::Interactive).await
+            });
+            assert!(blocked.await.unwrap().is_err(), "Overlapped a benchmark");
+            assert!(!hint.directory.path().join("pid").exists());
+        })
+        .await;
+        let limit = Duration::from_secs(5);
+        super::request(&hint.profile, identity, limit, Slot::Interactive)
+            .await
+            .unwrap();
+        drop(INTERACTIVE.lock().await.take());
+        assert_reaped(&hint.pid()).await;
+    }
+
+    #[tokio::test]
     async fn moves_finish_while_an_analysis_block_holds_the_general_worker() {
         let _serial = TEST_LOCK.lock().await;
         let analysis = FakeWorker::new("batch_healthy");
@@ -1326,20 +1428,25 @@ for line in sys.stdin:
     }
 
     #[tokio::test]
-    async fn play_shares_budget_between_verified_evaluations() {
+    async fn waiting_requests_share_budget_between_verified_evaluations() {
         let _serial = TEST_LOCK.lock().await;
         let capacity =
             u32::try_from(crate::configuration::available_cpu_threads().unwrap_or(1)).unwrap();
         crate::engine::with_shared_access(async {
-            for (threads, waits) in [
-                (2, capacity < 4),
-                (capacity.max(2), true),
-                (capacity.saturating_add(1).max(2), true),
-            ] {
+            for (slot, threads, waits) in [Slot::Play, Slot::Interactive]
+                .into_iter()
+                .flat_map(|slot| {
+                    [
+                        (slot, 2, capacity < 4),
+                        (slot, capacity.max(2), true),
+                        (slot, capacity.saturating_add(1).max(2), true),
+                    ]
+                })
+            {
                 let mut analysis = FakeWorker::new("batch_gated");
                 analysis.profile.threads = threads;
                 let play = FakeWorker::new("healthy");
-                warm_play(&play.profile).await.unwrap();
+                *slot.worker().lock().await = Some(Worker::initialize(&play.profile).await.unwrap());
                 let pid = play.pid();
                 let mut batch = VerifiedBatch::begin(&analysis.profile).await.unwrap();
                 let checker = json!({"operation":"checker", "force_board":vec![0; 26]});
@@ -1365,13 +1472,13 @@ for line in sys.stdin:
                     Duration::from_secs(3)
                 };
                 let play_result =
-                    super::request(&play.profile, identity.clone(), timeout, Slot::Play).await;
+                    super::request(&play.profile, identity.clone(), timeout, slot).await;
                 let started = play.directory.path().join("started").exists();
                 let queued = super::request(
                     &play.profile,
                     identity,
                     Duration::from_secs(3),
-                    Slot::Play,
+                    slot,
                 );
                 tokio::pin!(queued);
                 if waits {
@@ -1391,7 +1498,7 @@ for line in sys.stdin:
                     async {
                         batch.request_costed(checker, Duration::from_secs(5)).await.unwrap();
                         if waits {
-                            assert!(play_finished.get(), "A new analysis bypassed the waiting move");
+                            assert!(play_finished.get(), "A new analysis bypassed the waiting request");
                         }
                     },
                     async {
@@ -1400,8 +1507,8 @@ for line in sys.stdin:
                     },
                 );
                 batch.finish().await.unwrap();
-                assert_eq!(play.pid(), pid, "Waiting displaced the warm play worker");
-                drop(PLAY.lock().await.take());
+                assert_eq!(play.pid(), pid, "Waiting displaced the warm worker");
+                drop(slot.worker().lock().await.take());
                 drop(GENERAL.lock().await.take());
                 assert_reaped(&pid).await;
                 assert_reaped(&analysis.pid()).await;

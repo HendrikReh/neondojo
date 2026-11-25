@@ -347,7 +347,7 @@ pub(super) async fn analyze_decision(
     session: &PlaySession,
     path: &str,
 ) -> anyhow::Result<Vec<PlayAlternative>> {
-    let engine = match session.analysis_engine(path)? {
+    let engine = match session.analysis_engine(path)?.interactive() {
         crate::engines::AnalysisEngine::OpenSage(engine) => {
             return super::open_sage::alternatives(session, &engine).await;
         }
@@ -503,6 +503,30 @@ mod tests {
                 probabilities: Some(vec![0.4; 6]),
             },
         ]
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn neongammon_hints_do_not_wait_for_a_game_analysis() {
+        let mut state = session(PlayMode::Training);
+        state.position.position_id = "4HPwATDgc/ABMA".into();
+        state.position.gnubg_match_id = "cInlAAAAAAAE".into();
+        let engine = crate::engines::unstartable_engine(state.analysis_plies);
+        state.engine_snapshots = Some(PlayEngineSnapshots {
+            rules: engine.clone(),
+            bot: engine.clone(),
+            analysis: engine,
+        });
+        let analysis = crate::engines::hold_general_worker().await;
+        let hint = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            analyze_decision(&state, "/missing/gnubg"),
+        )
+        .await
+        .expect("The hint waited for the general worker");
+        drop(analysis);
+        // It reached its own worker, which this profile cannot start.
+        let error = format!("{:#}", hint.unwrap_err());
+        assert!(error.contains("Cannot start NeonGammon"), "{error}");
     }
     #[tokio::test]
     #[ignore = "requires native GNUbg"]
