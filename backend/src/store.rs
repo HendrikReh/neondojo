@@ -899,16 +899,21 @@ pub(crate) async fn move_analyses_with_thresholds(
 
 /// A legacy row has no snapshot and intentionally retains the injected engine.
 /// New and recovered jobs use exactly the installation saved at submission time.
-pub(crate) async fn job_engine(
+/// Read after the worker registers for cancellation so a revoked claim cannot
+/// start an engine even if its cancellation signal preceded registration.
+pub(crate) async fn claimed_job_engine(
     pool: &PgPool,
     job_id: Uuid,
+    lease: Uuid,
     fallback: &crate::engine::Engine,
 ) -> Result<crate::engines::AnalysisEngine> {
     let snapshot: Option<serde_json::Value> =
-        sqlx::query_scalar("SELECT engine_snapshot FROM jobs WHERE id=$1")
+        sqlx::query_scalar("SELECT engine_snapshot FROM jobs WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now()")
             .bind(job_id)
-            .fetch_one(pool)
-            .await?;
+            .bind(lease)
+            .fetch_optional(pool)
+            .await?
+            .context("Job lease was lost")?;
     match snapshot {
         Some(snapshot) => {
             serde_json::from_value::<crate::settings::EngineSnapshot>(snapshot)?.engine()
