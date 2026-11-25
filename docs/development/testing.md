@@ -215,6 +215,25 @@ GNUBG_BIN=/absolute/path/to/gnubg \
 npx playwright test e2e/play-full-match.spec.ts --output=/tmp/neondojo-full-match-results --reporter=line
 ```
 
+### Engine Duel process reuse
+
+The native regression plays a three-point match using dice seed 13, NeonGammon at 2-ply versus 3-ply, and four threads per side. It counts Python worker starts separately for each depth and GNUbg rules processes per game. It checks the saved checker evaluations and per-side move counts, then prints hashes of the played decisions and imported evaluations for comparison across builds.
+
+```sh
+NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python \
+cargo test -p neondojo --lib two_neongammon_depths_reuse_workers -- --ignored --nocapture
+```
+
+On November 25, 2026, four local runs per version on an Apple M4 Pro used NeonGammon 3.1.2 and GNUbg 1.08.003 (20261117). Wall time covers one completed duel, including worker startup and SGF retention. The initial installation probes run before timing begins.
+
+| Measurement | Before reuse | With reuse |
+|---|---:|---:|
+| Python workers for the 2-ply / 3-ply sides | 56 / 55 | 1 / 1 |
+| GNUbg processes in games 1 / 2 / 3 | 20 / 158 / 76 | 1 / 1 / 1 |
+| Median duel wall time (range) | 57.7 s (53.1–65.6 s) | 7.9 s (7.8–8.3 s) |
+
+Both versions produced the same 3–1 result. All 134 played events, 117 retained NeonGammon checker evaluations and three sets of GNUbg game statistics matched. Process counts exclude GNUbg version checks. The timings describe this seeded match under local host load.
+
 ### Native feedback tests
 
 To verify mode switching and feedback with the configured GNUbg and an isolated test backend and database, run the native browser suite.
