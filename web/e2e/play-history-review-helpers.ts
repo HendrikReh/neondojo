@@ -1,3 +1,4 @@
+import { fulfillJson } from './api-fixtures';
 import { eitherOrder } from './play-turn-fixtures';
 import { type Page, type Route } from '@playwright/test';
 import { applySteps } from '../src/shared/board/play-state';
@@ -88,16 +89,18 @@ export async function historyFixture(
     { id, human },
   );
   await page.route(`**/api/play/sessions/${id}`, (r) =>
-    r.fulfill({ json: saved }),
+    fulfillJson<'PlaySession'>(r, saved),
   );
   await page.route(`**/api/play/sessions/${id}/history?*`, (r) => {
     reads++;
     const data = { session_id: id, version: 7, items };
-    return reply ? reply(r, data) : r.fulfill({ json: data });
+    return reply
+      ? reply(r, data)
+      : fulfillJson<'PlayHistorySnapshots'>(r, data);
   });
   await page.route(`**/api/play/sessions/${id}/actions`, (r) => {
     writes.push(r.request().postDataJSON());
-    return r.fulfill({ json: saved });
+    return fulfillJson<'PlaySession'>(r, saved);
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();

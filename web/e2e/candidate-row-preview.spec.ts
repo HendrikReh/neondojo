@@ -32,20 +32,22 @@ for (const source of ['engine', 'file', 'book'] as const)
       },
       { matchId },
     );
-    await page.route('**/api/**', async (route) => {
-      if (
-        /\/api\/(?:configuration|profiles)(?:\/|$)/.test(
-          new URL(route.request().url()).pathname,
+    await page.route(
+      (url) => url.pathname.startsWith('/api/'),
+      (route) => {
+        if (
+          route.request().method() === 'GET' ||
+          /^\/api\/(?:configuration|profiles)(?:\/|$)/.test(
+            new URL(route.request().url()).pathname,
+          )
         )
-      )
-        return route.fallback();
-      if (route.request().method() !== 'GET')
+          return route.fallback();
         return route.fulfill({
           status: 422,
           json: { error: 'Fixture blocks writes' },
         });
-      return route.continue();
-    });
+      },
+    );
     const match = {
       id: matchId,
       source_available: true,

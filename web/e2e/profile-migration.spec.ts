@@ -1,10 +1,21 @@
 import { backendTest as test, expect } from './test';
 import { profileBackend } from './profile-backend';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
 test('imports legacy preferences once and preserves unrelated workspace state', async ({
   page,
 }) => {
-  const backend = await profileBackend(page, { initialized: false });
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.play = {
+    ...configuration.play,
+    engine: 'bgsage',
+    plies: 2,
+    top_two: true,
+  };
+  const backend = await profileBackend(page, {
+    configuration,
+    initialized: false,
+  });
   await page.addInitScript(() => {
     if (sessionStorage.getItem('legacy-installed')) return;
     sessionStorage.setItem('legacy-installed', 'yes');
@@ -21,7 +32,20 @@ test('imports legacy preferences once and preserves unrelated workspace state', 
     );
     localStorage.setItem('neondojo.jobs.unrelated', 'kept');
   });
+  const settings = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === '/api/settings' &&
+      response.request().method() === 'GET',
+  );
   await page.goto('/');
+  expect(await (await settings).json()).toMatchObject({
+    play_top_two: true,
+    gnubg_threads: null,
+    gnubg_play_threads: null,
+    open_sage_threads: null,
+    open_sage_play_threads: null,
+    parallel_analysis_jobs: null,
+  });
   await expect(
     page.getByRole('button', { name: /Profil: Standard/ }),
   ).toBeVisible();
@@ -30,6 +54,7 @@ test('imports legacy preferences once and preserves unrelated workspace state', 
     'walnut',
   );
   expect(backend.state.current_configuration.general.play_sounds).toBe(false);
+  expect(backend.state.current_configuration.play.top_two).toBe(true);
   expect(backend.state.current_configuration.library.visible_columns).toEqual([
     'id',
   ]);

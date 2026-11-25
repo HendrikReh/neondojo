@@ -1,3 +1,8 @@
+import {
+  fulfillJson,
+  mockEngineCatalog,
+  settingsFixture,
+} from './api-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import {
   calculateDiceEquity,
@@ -23,11 +28,10 @@ const themes: { id: string; name: string }[] = [
 ];
 
 const initialSettings = {
+  ...settingsFixture(),
   version: 3,
   player_name: 'Settings Player',
-  analysis_engine: 'gnubg',
   analysis_plies: 1,
-  play_engine: 'gnubg',
   play_plies: 2,
   gnubg_path: '/opt/bin/gnubg',
 };
@@ -41,13 +45,13 @@ async function settingsBackend(
   const writes: (typeof initialSettings)[] = [];
   await page.route('**/api/settings', async (route) => {
     if (route.request().method() === 'GET')
-      return route.fulfill({ json: saved });
+      return fulfillJson<'AppSettings'>(route, saved);
     const body = route.request().postDataJSON();
     writes.push(body);
     if (conflict)
       return route.fulfill({ status: 409, json: { error: 'Version changed' } });
-    saved = { ...body, version: saved.version + 1 };
-    await route.fulfill({ json: saved });
+    saved = { ...saved, ...body, version: saved.version + 1 };
+    await fulfillJson<'AppSettings'>(route, saved);
   });
   await page.route('**/api/configuration', async (route) => {
     if (route.request().method() !== 'PUT') return route.fallback();
@@ -73,28 +77,7 @@ async function settingsBackend(
     saved = { ...proposed, version: saved.version + 1 };
     return route.fallback();
   });
-  await page.route('**/api/engines', (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: 'gnubg',
-          name: 'GNU Backgammon',
-          available: true,
-          version: 'GNUbg 1.08',
-          max_parallel_threads: 7,
-          plies: [1, 2, 3, 4, 5],
-        },
-        {
-          id: 'bgsage',
-          name: 'BGSage',
-          available: false,
-          version: null,
-          max_parallel_threads: 9,
-          plies: [],
-        },
-      ],
-    }),
-  );
+  await mockEngineCatalog(page);
   await page.route('**/api/engines/gnubg/check', (route) =>
     route.fulfill({ status: 422, json: { error: 'Executable not found' } }),
   );
@@ -353,30 +336,28 @@ for (const { version, supported, onePly, verified } of [
         },
       });
     });
-    await page.route('**/api/engines', async (route) => {
+    await mockEngineCatalog(page, async () => {
       if (savedPath !== python) await catalogPending.promise;
-      await route.fulfill({
-        json: [
-          {
-            id: 'gnubg',
-            name: 'GNUbg',
-            available: true,
-            version: 'GNU Backgammon 1.08.003',
-            max_parallel_threads: 14,
-            plies: [1, 2, 3, 4, 5],
-          },
-          {
-            id: 'bgsage',
-            name: 'NeonGammon',
-            available,
-            version: available
-              ? `NeonGammon ${version}; model ${'a'.repeat(64)}; 2ply cubeful; threads 4; adapter 1`
-              : null,
-            max_parallel_threads: 14,
-            plies: savedPath === python ? supported : [2, 3, 4],
-          },
-        ],
-      });
+      return [
+        {
+          id: 'gnubg',
+          name: 'GNUbg',
+          available: true,
+          version: 'GNU Backgammon 1.08.003',
+          max_parallel_threads: 14,
+          plies: [1, 2, 3, 4, 5],
+        },
+        {
+          id: 'bgsage',
+          name: 'NeonGammon',
+          available,
+          version: available
+            ? `NeonGammon ${version}; model ${'a'.repeat(64)}; 2ply cubeful; threads 4; adapter 1`
+            : null,
+          max_parallel_threads: 14,
+          plies: savedPath === python ? supported : [2, 3, 4],
+        },
+      ];
     });
     await page.goto('/');
     const { dialog } = await openSettings(page);

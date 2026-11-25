@@ -1,3 +1,8 @@
+import {
+  fulfillJson,
+  mockEngineCatalog,
+  settingsFixture,
+} from './api-fixtures';
 import { expect, test, type Page } from './test';
 const reference = {
   id: 'wc2014-v1',
@@ -10,13 +15,9 @@ const reference = {
   protocol: { id: 'gnubg-match-v4-unlimited', game_timeout_seconds: null },
 };
 const settings = {
-  version: 1,
+  ...settingsFixture(),
   player_name: 'Player',
-  analysis_engine: 'gnubg',
-  analysis_plies: 3,
-  play_engine: 'gnubg',
   play_plies: 2,
-  gnubg_path: '/usr/bin/gnubg',
 };
 const run = (id: string, status = 'completed', plies = 1) => ({
   id,
@@ -60,15 +61,13 @@ async function backend(page: Page, savedSettings = settings) {
     localStorage.clear();
     localStorage.setItem('neondojo.locale', 'en');
   });
-  await page.route('**/api/**', (route) =>
-    /\/api\/(?:configuration|profiles|opening-book)(?:\/|$)/.test(
-      new URL(route.request().url()).pathname,
-    )
-      ? route.fallback()
-      : route.fulfill({ json: [] }),
-  );
+
   await page.route('**/api/library/matches?*', (route) =>
-    route.fulfill({ json: { items: [], next_cursor: null, total: 0 } }),
+    fulfillJson<'LibraryPage'>(route, {
+      items: [],
+      next_cursor: null,
+      total: 0,
+    }),
   );
   await page.route('**/api/positions?*', (route) =>
     route.fulfill({ json: { items: [], next_cursor: null, total: 0 } }),
@@ -82,28 +81,9 @@ async function backend(page: Page, savedSettings = settings) {
   await page.route('**/api/settings', (route) => {
     if (route.request().method() !== 'GET')
       writes.push(route.request().postDataJSON());
-    return route.fulfill({ json: savedSettings });
+    return fulfillJson<'AppSettings'>(route, savedSettings);
   });
-  await page.route('**/api/engines', (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: 'gnubg',
-          name: 'GNU Backgammon',
-          available: true,
-          version: 'GNUbg 1.08',
-          plies: [1, 2, 3, 4, 5],
-        },
-        {
-          id: 'bgsage',
-          name: 'BGSage',
-          available: false,
-          version: null,
-          plies: [],
-        },
-      ],
-    }),
-  );
+  await mockEngineCatalog(page);
   await page.route('**/api/benchmarks/status', (route) =>
     route.fulfill({
       json: {
@@ -348,26 +328,22 @@ test('play-turn latency starts independently and has its own history metric', as
     play_plies: 3,
   });
   await page.setViewportSize({ width: 1800, height: 1169 });
-  await page.route('**/api/engines', (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: 'gnubg',
-          name: 'GNU Backgammon',
-          available: true,
-          version: 'GNUbg 1.08',
-          plies: [1, 2, 3, 4, 5],
-        },
-        {
-          id: 'bgsage',
-          name: 'NeonGammon',
-          available: true,
-          version: 'NeonGammon 2.0',
-          plies: [1, 2, 3, 4],
-        },
-      ],
-    }),
-  );
+  await mockEngineCatalog(page, () => [
+    {
+      id: 'gnubg',
+      name: 'GNU Backgammon',
+      available: true,
+      version: 'GNUbg 1.08',
+      plies: [1, 2, 3, 4, 5],
+    },
+    {
+      id: 'bgsage',
+      name: 'NeonGammon',
+      available: true,
+      version: 'NeonGammon 2.0',
+      plies: [1, 2, 3, 4],
+    },
+  ]);
   let playStarts = 0;
   const playRun = {
     ...run('play-completed', 'completed', 1),
@@ -633,19 +609,17 @@ test('active history stays usable while engine catalog is blocked, then refreshe
   await backend(page);
   let active = true,
     catalogReads = 0;
-  await page.route('**/api/engines', (route) => {
+  await mockEngineCatalog(page, () => {
     catalogReads++;
-    return route.fulfill({
-      json: [
-        {
-          id: 'gnubg',
-          name: 'GNU Backgammon',
-          available: !active,
-          version: active ? null : 'GNUbg 1.08',
-          plies: [1, 2, 3, 4, 5],
-        },
-      ],
-    });
+    return [
+      {
+        id: 'gnubg',
+        name: 'GNU Backgammon',
+        available: !active,
+        version: active ? null : 'GNUbg 1.08',
+        plies: [1, 2, 3, 4, 5],
+      },
+    ];
   });
   await page.route('**/api/benchmarks', (route) =>
     route.fulfill({

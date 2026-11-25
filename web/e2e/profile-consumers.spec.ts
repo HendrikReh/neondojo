@@ -1,3 +1,4 @@
+import { fulfillJson } from './api-fixtures';
 import { backendTest as test, expect, type Page } from './test';
 import { profileBackend, secondProfileId } from './profile-backend';
 import {
@@ -19,6 +20,10 @@ const match = (name: string) => ({
   white: `${name} white`,
   black: `${name} black`,
   match_length: 7,
+  source_available: true,
+  import_warning_count: 0,
+  play_paused: false,
+  play_assisted: false,
   position_count: 1,
   game_count: 1,
   created_at: '2026-11-10T12:00:00Z',
@@ -145,11 +150,9 @@ test('filters and local column layouts survive profile switches and reload', asy
   await page.route('**/api/library/matches?*', (route) => {
     const url = new URL(route.request().url());
     queries.push(url);
-    return route.fulfill({
-      json: {
-        items: [match(url.searchParams.get('q') ?? '')],
-        next_cursor: null,
-      },
+    return fulfillJson<'LibraryPage'>(route, {
+      items: [match(url.searchParams.get('q') ?? '')],
+      next_cursor: null,
     });
   });
   await page.goto('/');
@@ -238,14 +241,10 @@ test('a late search response cannot replace a newer session query', async ({
       started();
       await held;
     }
-    await route
-      .fulfill({
-        json: {
-          items: [match(q === 'slow' ? 'STALE RESULT' : 'Beta')],
-          next_cursor: null,
-        },
-      })
-      .catch(() => {});
+    await fulfillJson<'LibraryPage'>(route, {
+      items: [match(q === 'slow' ? 'STALE RESULT' : 'Beta')],
+      next_cursor: null,
+    }).catch(() => {});
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
@@ -269,7 +268,7 @@ test('a profile switch retains the active learning card and the selected deck', 
   });
   const nextCalls: string[] = [];
   await page.route('**/api/library/matches?*', (route) =>
-    route.fulfill({ json: { items: [], next_cursor: null } }),
+    fulfillJson<'LibraryPage'>(route, { items: [], next_cursor: null }),
   );
   await page.route('**/api/decks/*/next', (route) => {
     nextCalls.push(route.request().url());
@@ -352,7 +351,7 @@ test('switching profiles preserves an unsaved note without submitting it', async
 }) => {
   await fixture(page);
   await page.route('**/api/library/matches?*', (route) =>
-    route.fulfill({ json: { items: [], next_cursor: null } }),
+    fulfillJson<'LibraryPage'>(route, { items: [], next_cursor: null }),
   );
   await page.goto('/');
   const marker = crypto.randomUUID();
@@ -388,7 +387,7 @@ test('raw library search text retains typed spaces while the applied query is ca
   const queries: URL[] = [];
   await page.route('**/api/library/matches?*', (route) => {
     queries.push(new URL(route.request().url()));
-    return route.fulfill({ json: { items: [], next_cursor: null } });
+    return fulfillJson<'LibraryPage'>(route, { items: [], next_cursor: null });
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Match database', exact: true }).click();
