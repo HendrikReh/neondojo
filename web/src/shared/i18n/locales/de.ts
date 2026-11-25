@@ -2212,7 +2212,8 @@ export default {
     score: 'Quellspielstand',
     state: 'Analyse',
     analyzed: 'Analysiert',
-    reanalyzeCubeless: 'Dieses Spiel erneut analysieren, um die Regel ohne Doppler anzuwenden.',
+    reanalyzeCubeless:
+      'Dieses Spiel erneut analysieren, um die Regel ohne Doppler anzuwenden.',
     notAnalyzed: 'Nicht analysiert',
     crawford: 'Crawford',
     decisions: 'Entscheidungen',
@@ -2275,12 +2276,21 @@ export default {
     applyConfiguration: 'Speichert Änderungen in der aktuellen Konfiguration.',
     applyInstallation:
       'Engine-Pfade und Thread-Limits werden auf diesem Rechner gespeichert.',
+    sagePythonPath: 'Python-Pfad',
+    sageVerify: 'Prüfen und speichern',
+    sageVerifying: 'Prüfung läuft…',
+    sageUnverified: 'Installation nicht geprüft',
+    sageLastVersion: 'Zuletzt erkannte Version: {version}',
+    sageVerifiedDepths: 'Zuletzt geprüft: {depths}',
+    sageSupportedDepths: 'Unterstützte Analysetiefen: {depths}',
+    sageModelIdentity: 'Modell-Fingerabdruck: {fingerprint}',
     verifySageTarget: 'Prüft und speichert den Python-Pfad auf diesem Rechner.',
     localEngines: 'Engines auf diesem Rechner',
     available: 'Verfügbar',
     engineStatusError: 'Der Engine-Status konnte nicht aktualisiert werden.',
     manageBooks: 'Eröffnungsbücher verwalten',
-    localEnginesHelp: 'Pfade und Thread-Limits gelten für diesen Rechner.',
+    localEnginesHelp:
+      'Pfade und Thread-Limits gelten auf dem Rechner, auf dem NeonDojo läuft.',
     language: 'Sprache',
     languageHelp:
       'Wähle die Sprache der App. Die Änderung wird mit „{action}“ wirksam.',
@@ -2300,13 +2310,11 @@ export default {
     analysisHelp:
       'Gilt für neue Analyseaufträge. Vorhandene Ergebnisse und laufende Aufträge behalten ihre Engine und ihr Profil.',
     path: 'GNUbg-Programmpfad',
-    pathHelp:
-      'Dieser Pfad bezeichnet den Rechner des Backends. Das kann ein anderer Rechner als der deines Browsers sein.',
     installation: 'GNUbg',
     check: 'Installation prüfen',
     checking: 'Version und Positionsbewertung werden geprüft…',
     checkHelp:
-      'Prüft Version und eine echte Positionsbewertung einschließlich benötigter Netzgewichte.',
+      'Prüft die Version und bewertet eine Stellung. „Anwenden“ speichert den Pfad.',
     checkSuccess: 'Installation geprüft: {version}',
     engineThreadsHeading: 'Threads und parallele Jobs',
     gnubgAnalysisThreads: 'GNUbg-Threads für Analysen',
@@ -2318,11 +2326,11 @@ export default {
     retainedThreadCount: 'Gespeicherter Wert {count}.',
     configurableThreadRange: 'Einstellbarer Bereich {min}–{max}.',
     threadsHelp:
-      'Analyse-Threads gelten für neue Analysen und Engine-Duelle, Spiel-Threads für neue Partien. Standardmäßig nutzt GNUbg jeweils 1 Thread. NeonGammon nutzt 4 für Analysen und Duelle und 2 beim Spielen.',
+      'Analyse-Threads gelten für neue Analysen und Duelle, Spiel-Threads für neue Partien.',
     parallelAnalysisJobs: 'Gleichzeitige Analyse-Jobs',
     defaultParallelJobs: 'Standard ({count})',
     parallelAnalysisJobsHelp:
-      'Positions-, Würfel-Equity- und Matchanalysen, die auf diesem Rechner gleichzeitig laufen dürfen. NeonGammon rechnet jeweils nur eine Analyse. Jeder Job nutzt eigene Analyse-Threads; Jobs × Threads sollte die logischen CPUs nicht übersteigen. Engine-Duelle und Partien zählen nicht mit.',
+      'Begrenzt gleichzeitige Stellungs-, Würfel-Equity- und Matchanalysen. Die Aufträge teilen sich die CPU-Threads. NeonGammon führt jeweils eine Analyse aus.',
     checkNeeded:
       'Die geänderten GNUbg-Einstellungen wurden noch nicht geprüft.',
     engineVersion: 'Erkannte Version: {version}',

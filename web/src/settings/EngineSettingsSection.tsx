@@ -34,7 +34,10 @@ function ParallelJobsField({
       <label className="settings-field settings-parallel-jobs">
         <span className="settings-thread-label">
           <span id={labelId}>{t('parallelAnalysisJobs')}</span>
-          <span className="settings-help">
+          <span
+            className={retained ? 'settings-help' : 'sr-only'}
+            id={`${id}-parallel-range`}
+          >
             {t('configurableThreadRange', { min, max })}
             {retained && <> {t('retainedThreadCount', { count: value })}</>}
           </span>
@@ -42,7 +45,7 @@ function ParallelJobsField({
         <select
           value={value ?? ''}
           aria-labelledby={labelId}
-          aria-describedby={helpId}
+          aria-describedby={`${id}-parallel-range ${helpId}`}
           onChange={(event) =>
             onChange(
               event.target.value === '' ? null : Number(event.target.value),
@@ -81,7 +84,7 @@ export default function EngineSettingsSection({
   disabled,
   hidden,
   engines,
-  engineCatalogError,
+  engineCatalogRefresh,
   onRefreshEngines,
   check,
   checking,
@@ -90,7 +93,6 @@ export default function EngineSettingsSection({
   onInstallationEdited,
   diagnostic,
   sage,
-  onVerified,
 }: {
   id: string;
   draft: AppSettings;
@@ -98,7 +100,7 @@ export default function EngineSettingsSection({
   disabled: boolean;
   hidden: boolean;
   engines: EngineInfo[];
-  engineCatalogError: unknown;
+  engineCatalogRefresh: { error?: unknown } | null;
   onRefreshEngines: () => void;
   check: CheckState;
   checking: boolean;
@@ -107,9 +109,9 @@ export default function EngineSettingsSection({
   onInstallationEdited: () => void;
   diagnostic: (error: unknown) => string;
   sage: ReturnType<typeof useOpenSageInstallation>;
-  onVerified: () => void;
 }) {
   const t = useSettingsText();
+  const engineCatalogError = engineCatalogRefresh?.error;
   const engine = engines.find(({ id }) => id === 'gnubg');
   return (
     <fieldset
@@ -119,7 +121,9 @@ export default function EngineSettingsSection({
     >
       <legend>{t('localEngines')}</legend>
       <div className="settings-engines-intro">
-        <p className="settings-help">{t('localEnginesHelp')}</p>
+        <p id={`${id}-local-help`} className="settings-help">
+          {t('localEnginesHelp')}
+        </p>
         <div className="settings-engine-summary">
           {(
             [
@@ -127,6 +131,7 @@ export default function EngineSettingsSection({
               ['bgsage', t('planned')],
             ] as const
           ).map(([provider, label]) => {
+            if (engineCatalogRefresh && provider === 'bgsage') return null;
             const available = engines.find(
               ({ id }) => id === provider,
             )?.available;
@@ -146,9 +151,12 @@ export default function EngineSettingsSection({
           <p>
             {t('engineStatusError')} {diagnostic(engineCatalogError)}
           </p>
-          <button type="button" onClick={onRefreshEngines}>
-            {t('retry')}
-          </button>
+          <ActionButton
+            icon="refresh"
+            label={t('retry')}
+            type="button"
+            onClick={onRefreshEngines}
+          />
         </div>
       )}
       <div className="settings-engine-cards">
@@ -164,7 +172,7 @@ export default function EngineSettingsSection({
                   value={draft.gnubg_path}
                   spellCheck={false}
                   autoComplete="off"
-                  aria-describedby={`${id}-path-help ${id}-check-status`}
+                  aria-describedby={`${id}-local-help ${id}-check-status`}
                   aria-invalid={Boolean(check && 'error' in check)}
                   onChange={(event) => {
                     onInstallationEdited();
@@ -180,9 +188,6 @@ export default function EngineSettingsSection({
                 onClick={onCheck}
               />
             </div>
-            <p id={`${id}-path-help`} className="settings-help">
-              {t('pathHelp')}
-            </p>
             <div className="settings-engine-status" id={`${id}-check-status`}>
               {engine?.version && !check && !gnubgEdited && (
                 <p>
@@ -213,7 +218,14 @@ export default function EngineSettingsSection({
           </fieldset>
         </div>
         <div className="settings-engine-card">
-          <OpenSageInstallation setup={sage} onVerified={onVerified} />
+          <OpenSageInstallation
+            setup={sage}
+            engine={
+              engineCatalogRefresh
+                ? undefined
+                : engines.find(({ id }) => id === 'bgsage')
+            }
+          />
         </div>
       </div>
       <section
@@ -247,7 +259,12 @@ export default function EngineSettingsSection({
               <label className="settings-field" key={field}>
                 <span className="settings-thread-label">
                   <span id={labelId}>{t(label)}</span>
-                  <span className="settings-help" id={limitsId}>
+                  <span
+                    className={
+                      validRange && !retained ? 'sr-only' : 'settings-help'
+                    }
+                    id={limitsId}
+                  >
                     {validRange
                       ? t('configurableThreadRange', { min, max })
                       : t('threadRangeUnavailable')}

@@ -3,62 +3,20 @@ import {
   loadSageInstallation,
   saveSageInstallation,
   type SageInstallation,
+  type EngineInfo,
 } from './settings-api';
+import ActionButton from '../shared/ui/ActionButton';
+import EngineLabel from '../shared/engine/EngineLabel';
+import { depthLabel } from '../shared/engine/analysis-depth';
 import { isConflict } from '../shared/http/api';
 import { useI18n } from '../shared/i18n/i18n';
 import { useSettingsText } from './settings-messages';
 
-const text = {
-  de: [
-    'Lokale NeonGammon-Installation',
-    'Python-Pfad',
-    'Prüfen und speichern',
-    'Prüfung läuft…',
-    'Geprüft: 2-ply. GNUbg verwaltet weiterhin Regeln und Spielstände.',
-    'Installation nicht geprüft',
-  ],
-  en: [
-    'Local NeonGammon installation',
-    'Python path',
-    'Verify and save',
-    'Verifying…',
-    'Verified: 2-ply. GNUbg continues to manage rules and saved games.',
-    'Installation not verified',
-  ],
-  es: [
-    'Instalación local de NeonGammon',
-    'Ruta de Python',
-    'Verificar y guardar',
-    'Verificando…',
-    'Verificado: 2-ply. GNUbg mantiene las reglas y las partidas guardadas.',
-    'Instalación no verificada',
-  ],
-  fr: [
-    'Installation locale NeonGammon',
-    'Chemin Python',
-    'Vérifier et enregistrer',
-    'Vérification…',
-    'Vérifié : 2-ply. GNUbg conserve les règles et les parties sauvegardées.',
-    'Installation non vérifiée',
-  ],
-  it: [
-    'Installazione locale NeonGammon',
-    'Percorso Python',
-    'Verifica e salva',
-    'Verifica…',
-    'Verificato: 2-ply. GNUbg gestisce ancora regole e partite salvate.',
-    'Installazione non verificata',
-  ],
-  pl: [
-    'Lokalna instalacja NeonGammon',
-    'Ścieżka Pythona',
-    'Sprawdź i zapisz',
-    'Sprawdzanie…',
-    'Zweryfikowano: 2-ply. GNUbg nadal zarządza regułami i zapisanymi grami.',
-    'Instalacja niezweryfikowana',
-  ],
-};
-export function useOpenSageInstallation(open: boolean, settingsReload: number) {
+export function useOpenSageInstallation(
+  open: boolean,
+  settingsReload: number,
+  refreshEngines: () => void,
+) {
   const [reload, setReload] = useState(0);
   const [installation, setInstallation] = useState<SageInstallation>();
   const [path, setPath] = useState('');
@@ -103,10 +61,12 @@ export function useOpenSageInstallation(open: boolean, settingsReload: number) {
       if (!abort.signal.aborted) {
         setInstallation(value);
         setPath(value.python_path);
+        refreshEngines();
       }
     } catch (e) {
       if (!abort.signal.aborted) {
         setError(e);
+        if (path === installation.python_path) refreshEngines();
         throw e;
       }
     } finally {
@@ -124,7 +84,10 @@ export function useOpenSageInstallation(open: boolean, settingsReload: number) {
     error,
     dirty: !!installation && path !== installation.python_path,
     verify,
-    reload: () => setReload((value) => value + 1),
+    reload: () => {
+      setReload((value) => value + 1);
+      refreshEngines();
+    },
     discard: () => {
       setPath(installation?.python_path ?? '');
       setError(undefined);
@@ -134,22 +97,27 @@ export function useOpenSageInstallation(open: boolean, settingsReload: number) {
 
 export default function OpenSageInstallation({
   setup,
-  onVerified,
+  engine,
 }: {
   setup: ReturnType<typeof useOpenSageInstallation>;
-  onVerified: () => void;
+  engine?: EngineInfo;
 }) {
   const { locale, formatError } = useI18n();
-  const t = text[locale];
-  const settingsT = useSettingsText();
+  const t = useSettingsText();
   const saveTargetId = useId();
   const { installation, path, setPath, busy, error, verify, reload } = setup;
+  const snapshot =
+    path === installation?.python_path ? installation.snapshot : null;
+  const formatDepths = (plies: number[]) =>
+    new Intl.ListFormat(locale, { type: 'unit' }).format(
+      plies.map((ply) => depthLabel(ply)),
+    );
   return (
     <fieldset className="settings-section settings-engine" disabled={busy}>
-      <legend>{t[0]}</legend>
+      <legend>{t('planned')}</legend>
       <div className="settings-engine-path">
         <label className="settings-field">
-          <span>{t[1]}</span>
+          <span>{t('sagePythonPath')}</span>
           <input
             value={path}
             disabled={!installation}
@@ -158,28 +126,66 @@ export default function OpenSageInstallation({
             autoComplete="off"
           />
         </label>
-        <button
+        <ActionButton
+          icon="confirm"
+          label={t(busy ? 'sageVerifying' : 'sageVerify')}
           type="button"
           aria-describedby={saveTargetId}
           disabled={!installation || !path.trim()}
-          onClick={() => void verify().then(onVerified, () => {})}
-        >
-          {t[busy ? 3 : 2]}
-        </button>
+          onClick={() => void verify().catch(() => {})}
+        />
       </div>
       <p className="settings-help" id={saveTargetId}>
-        {settingsT('verifySageTarget')}
+        {t('verifySageTarget')}
       </p>
-      <p className="settings-help" role="status">
-        {t[installation?.snapshot && path === installation.python_path ? 4 : 5]}
-      </p>
+      <div className="settings-engine-status" role="status">
+        {snapshot ? (
+          <>
+            <p>
+              <EngineLabel
+                details={`NeonGammon ${snapshot.package_version}`}
+                tooltip={t('sageModelIdentity', {
+                  fingerprint: snapshot.artifact_fingerprint,
+                })}
+                format={(version) =>
+                  t(engine?.available ? 'engineVersion' : 'sageLastVersion', {
+                    version,
+                  })
+                }
+              />
+            </p>
+            {engine?.available === false && <p>{t('unavailable')}</p>}
+            {engine?.available && engine.plies.length > 0 && (
+              <p>
+                {t('sageSupportedDepths', {
+                  depths: formatDepths(engine.plies),
+                })}
+              </p>
+            )}
+            <p>
+              {t('sageVerifiedDepths', {
+                depths: formatDepths(
+                  snapshot.one_ply_verified && snapshot.plies !== 1
+                    ? [1, snapshot.plies]
+                    : [snapshot.plies],
+                ),
+              })}
+            </p>
+          </>
+        ) : (
+          installation && <p>{t('sageUnverified')}</p>
+        )}
+      </div>
       {error !== undefined && (
-        <>
-          <p role="alert">{formatError(error)}</p>
-          <button type="button" onClick={reload}>
-            {settingsT(isConflict(error) ? 'loadLatest' : 'retry')}
-          </button>
-        </>
+        <div className="settings-error" role="alert">
+          <p>{formatError(error)}</p>
+          <ActionButton
+            icon="refresh"
+            label={t(isConflict(error) ? 'loadLatest' : 'retry')}
+            type="button"
+            onClick={reload}
+          />
+        </div>
       )}
     </fieldset>
   );

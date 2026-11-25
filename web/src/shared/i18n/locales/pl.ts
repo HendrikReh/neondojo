@@ -2191,7 +2191,8 @@ export default {
     score: 'Wynik źródłowy',
     state: 'Analiza',
     analyzed: 'Przeanalizowana',
-    reanalyzeCubeless: 'Przeanalizuj grę ponownie, aby uwzględnić grę bez kostki dublującej.',
+    reanalyzeCubeless:
+      'Przeanalizuj grę ponownie, aby uwzględnić grę bez kostki dublującej.',
     notAnalyzed: 'Nieprzeanalizowana',
     crawford: 'Crawford',
     decisions: 'Decyzje',
@@ -2253,12 +2254,21 @@ export default {
     applyConfiguration: 'Zapisuje zmiany w bieżącej konfiguracji.',
     applyInstallation:
       'Ścieżki silników i limity wątków są zapisywane na tym komputerze.',
+    sagePythonPath: 'Ścieżka Pythona',
+    sageVerify: 'Sprawdź i zapisz',
+    sageVerifying: 'Sprawdzanie…',
+    sageUnverified: 'Instalacja niezweryfikowana',
+    sageLastVersion: 'Ostatnio wykryta wersja: {version}',
+    sageVerifiedDepths: 'Ostatnio zweryfikowano: {depths}',
+    sageSupportedDepths: 'Obsługiwane głębokości analizy: {depths}',
+    sageModelIdentity: 'Odcisk cyfrowy modelu: {fingerprint}',
     verifySageTarget: 'Sprawdza i zapisuje ścieżkę Pythona na tym komputerze.',
     localEngines: 'Silniki na tym komputerze',
     available: 'Dostępny',
     engineStatusError: 'Nie udało się odświeżyć stanu silników.',
     manageBooks: 'Zarządzaj książkami otwarć',
-    localEnginesHelp: 'Ścieżki i limity wątków dotyczą tego komputera.',
+    localEnginesHelp:
+      'Ścieżki i limity wątków dotyczą komputera, na którym działa NeonDojo.',
     language: 'Język',
     languageHelp:
       'Wybierz język aplikacji. Zmiana zacznie obowiązywać po wybraniu „{action}”.',
@@ -2278,13 +2288,11 @@ export default {
     analysisHelp:
       'Dotyczy nowych analiz. Istniejące wyniki i trwające zadania zachowują swój silnik i profil.',
     path: 'Ścieżka do programu GNUbg',
-    pathHelp:
-      'Ta ścieżka dotyczy komputera backendu, który może być inny niż komputer przeglądarki.',
     installation: 'GNUbg',
     check: 'Sprawdź instalację',
     checking: 'Sprawdzanie wersji i oceny pozycji…',
     checkHelp:
-      'Sprawdza wersję i rzeczywistą ocenę pozycji, w tym wymagane wagi sieci neuronowej.',
+      'Sprawdza wersję i ocenia pozycję. Przycisk „Zastosuj” zapisuje ścieżkę.',
     checkSuccess: 'Instalacja sprawdzona: {version}',
     engineThreadsHeading: 'Wątki i równoczesne analizy',
     gnubgAnalysisThreads: 'Wątki GNUbg do analizy',
@@ -2296,11 +2304,11 @@ export default {
     retainedThreadCount: 'Zapisana wartość {count}.',
     configurableThreadRange: 'Zakres ustawień {min}–{max}.',
     threadsHelp:
-      'Wątki analizy dotyczą nowych analiz i pojedynków silników, a wątki gry — nowych partii. Domyślnie GNUbg używa 1 wątku w obu przypadkach. NeonGammon używa 4 do analiz i pojedynków oraz 2 do gry.',
+      'Wątki analizy dotyczą nowych analiz i pojedynków, a wątki gry nowych partii.',
     parallelAnalysisJobs: 'Równoczesne analizy',
     defaultParallelJobs: 'Domyślnie ({count})',
     parallelAnalysisJobsHelp:
-      'Analizy pozycji, equity kości i meczu, które mogą działać jednocześnie na tym komputerze. NeonGammon wykonuje jedną analizę naraz. Każda analiza używa własnych wątków analizy, więc analizy × wątki nie powinny przekraczać logicznych procesorów. Pojedynki silników i partie nie są liczone.',
+      'Ogranicza liczbę równoczesnych analiz pozycji, equity rzutów i meczów. Zadania współdzielą wątki procesora. NeonGammon wykonuje jedną analizę naraz.',
     checkNeeded: 'Zmienione ustawienia GNUbg nie zostały jeszcze sprawdzone.',
     engineVersion: 'Wykryta wersja: {version}',
     unavailable: 'Niedostępny',

@@ -189,7 +189,12 @@ function parseSageInstallation(value: unknown): SageInstallation {
       typeof snapshot.python !== 'string' ||
       typeof snapshot.package_version !== 'string' ||
       typeof snapshot.artifact_fingerprint !== 'string' ||
-      snapshot.plies !== 2 ||
+      typeof snapshot.plies !== 'number' ||
+      !configurationOptions.engine_profiles.bgsage.analysis.includes(
+        snapshot.plies,
+      ) ||
+      (snapshot.one_ply_verified !== undefined &&
+        typeof snapshot.one_ply_verified !== 'boolean') ||
       typeof snapshot.threads !== 'number' ||
       !isThreadLimit(snapshot.threads, 'bgsage') ||
       snapshot.adapter_version !== 1)
