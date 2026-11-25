@@ -1,4 +1,5 @@
 """Dependency-free tests for the bundled NeonGammon sidecar protocol."""
+import ast
 import importlib.util
 import os
 from pathlib import Path
@@ -18,6 +19,14 @@ _PROBE_SPEC.loader.exec_module(PROBE)
 class WorkerTests(unittest.TestCase):
     def test_worker_exists(self):
         self.assertTrue(PATH.exists(), 'bundled sidecar is missing')
+
+    def test_worker_uses_public_engine_interfaces(self):
+        tree = ast.parse(PATH.read_text())
+        self.assertEqual([n.attr for n in ast.walk(tree)
+                          if isinstance(n, ast.Attribute) and n.attr.startswith('_')], [])
+        self.assertEqual([n.args[1].value for n in ast.walk(tree) if isinstance(n, ast.Call)
+                          and isinstance(n.func, ast.Name) and n.func.id == 'getattr'
+                          and isinstance(n.args[1], ast.Constant) and n.args[1].value.startswith('_')], [])
 
     def test_validates_depth_and_minimum_threads(self):
         if not PATH.exists():
@@ -189,6 +198,58 @@ class BatchTests(unittest.TestCase):
         cube, _ = self.runtime.dispatch(self.cube)
         self.assertEqual(cube['take'], .3)
         self.runtime.analyzer.cube_action.assert_called_once()
+
+    def test_checker_batch_matches_scalar_with_per_row_force_and_jacoby(self):
+        self.runtime.models = object()
+        self.runtime.release = PROBE.RELEASES['3.1.2']
+        self.runtime.profile['threads'] = 4
+        before = self.cube['board']
+        played = [0, 1] + [0] * 24
+        moves = [SimpleNamespace(board=played, eval_level='2-ply', equity=.2,
+                                 probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01]))]
+        self.runtime.analyzer.checker_play = Mock(return_value=SimpleNamespace(moves=moves))
+        batch = Mock(side_effect=lambda rows, **kwargs: [SimpleNamespace(moves=moves) for _ in rows])
+        self.runtime.sage = SimpleNamespace(batch_checker_play=batch, possible_moves=lambda *args: [played])
+        rows = [dict(self.cube, operation='checker', dice=[6, 2], force_board=played),
+                dict(self.cube, operation='checker', dice=[1, 3], context=dict(self.cube['context'], jacoby=False))]
+        self.runtime.dispatch({'operation': 'begin_batch'})
+        notation = SimpleNamespace(compute_move_notation=lambda *args: '8/2')
+        with patch.dict(sys.modules, {'neongammon.text_export': notation}):
+            expected = [self.runtime.dispatch(row)[0] for row in rows]
+            result, _ = self.runtime.dispatch(dict(operation='checker_batch', rows=rows))
+            self.assertEqual(result, expected)
+            self.assertEqual(batch.call_count, 2)
+            for call, row in zip(batch.call_args_list, rows):
+                self.assertEqual(call.args[0], [dict(board=before, die1=row['dice'][0], die2=row['dice'][1],
+                                                     force_boards=[played] if 'force_board' in row else None,
+                                                     beaver=False, **row['context'])])
+                self.assertEqual(call.kwargs, dict(jacoby=row['context']['jacoby'], beaver=False,
+                                                   models=self.runtime.models, n_threads=4, eval_level='2ply'))
+            # Cubeless profiles and pre-parity wheels use ordered scalar evaluations.
+            for cubeless, version in [(True, '3.2.0'), (False, '3.1.1')]:
+                self.runtime.cubeless = cubeless
+                self.runtime.release = PROBE.RELEASES[version]
+                self.assertEqual(self.runtime.dispatch(dict(operation='checker_batch', rows=rows))[0], expected)
+                self.assertEqual(batch.call_count, 2)
+
+    def test_cube_batch_requires_verified_full_evaluations_and_exact_row_count(self):
+        self.runtime.models = object()
+        self.runtime.release = PROBE.RELEASES['3.2.0']
+        self.runtime.profile['threads'] = 2
+        cube = self.runtime.analyzer.cube_action(None)
+        batch = Mock(return_value=[cube, cube])
+        self.runtime.sage = SimpleNamespace(batch_cube_action_nply=batch)
+        request = dict(operation='cube_batch_nply', rows=[self.cube, self.cube])
+        with self.assertRaisesRegex(ValueError, 'verified batch'):
+            self.runtime.dispatch(request)
+        self.runtime.dispatch({'operation': 'begin_batch'})
+        result, _ = self.runtime.dispatch(request)
+        self.assertEqual(result, [self.runtime.dispatch(self.cube)[0]] * 2)
+        self.assertIs(batch.call_args.kwargs['models'], self.runtime.models)
+        self.assertEqual(batch.call_args.kwargs['eval_level'], '2ply')
+        batch.return_value = [cube]
+        with self.assertRaises(ValueError):
+            self.runtime.dispatch(request)
 
     def test_rejects_cube_depth_below_profile(self):
         self.runtime.profile = {'plies': 3}
@@ -480,15 +541,21 @@ class OpponentPolicyTests(unittest.TestCase):
         spec.loader.exec_module(worker)
         runtime = worker.Runtime.__new__(worker.Runtime)
         runtime.profile = {'plies': 1, 'threads': 2}
+        runtime.release = PROBE.RELEASES['3.2.0']
         runtime.opponent_policies = {}
-        constructor = Mock(side_effect=lambda difficulty, seed, parallel_threads:
-                           SimpleNamespace(_rng=Random(seed)))
+        runtime.policy_analyzers = {1: object()}
+        def policy(difficulty, seed, parallel_threads, analyzer, cube_analyzer):
+            rng = Random(seed)
+            self.assertIs(analyzer, runtime.policy_analyzers[1])
+            self.assertIs(cube_analyzer, analyzer)
+            return SimpleNamespace(roll=rng.random, reseed=rng.seed)
+        constructor = Mock(side_effect=policy)
         runtime.sage = SimpleNamespace(DifficultyPolicy=constructor)
         first = runtime.opponent_policy('beginner', 61)
-        value = first._rng.random()
+        value = first.roll()
         self.assertIs(runtime.opponent_policy('beginner', 61), first)
-        self.assertEqual(first._rng.random(), value)
-        constructor.assert_called_once_with('beginner', seed=61, parallel_threads=2)
+        self.assertEqual(first.roll(), value)
+        constructor.assert_called_once()
 
     def test_opponent_requests_use_the_choice_from_the_preset(self):
         spec = importlib.util.spec_from_file_location('sage_worker', PATH)

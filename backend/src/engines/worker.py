@@ -10,8 +10,7 @@ import os
 import resource
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from itertools import groupby
 
 MAX_REQUEST = 262144
 MAX_RESPONSE = 2097152
@@ -53,6 +52,18 @@ def board(value):
     return value
 
 
+def cube_context(request):
+    context = request['context']
+    return {key: context[key] for key in ('cube_value', 'cube_owner', 'away1', 'away2', 'is_crawford', 'jacoby')} | {'beaver': False}
+
+
+def checker_dice(request):
+    dice = request['dice']
+    if len(dice) != 2 or any(type(x) is not int or not 1 <= x <= 6 for x in dice):
+        raise ValueError('Invalid dice')
+    return dice
+
+
 class Runtime:
     def __init__(self, profile, integrity):
         validate_profile(profile['plies'], profile['threads'])
@@ -67,10 +78,12 @@ class Runtime:
         if type(self.cubeless) is not bool:
             raise ValueError('Invalid NeonGammon cubeless flag')
         self.batch_active = False
-        self.top_two_pool = None
+        self.legacy_deep = None
+        self.policy_analyzers = {}
         self.opponent_policies = {}
         self.identity = self.check_identity()
-        if self.identity['package_version'] != '3.0.0' and not callable(getattr(self.sage, 'DifficultyPolicy', None)):
+        self.release = integrity['RELEASES'][self.identity['package_version']]
+        if self.release['presets'] and not callable(getattr(self.sage, 'DifficultyPolicy', None)):
             raise ValueError(f"NeonGammon {self.identity['package_version']} did not export DifficultyPolicy")
         if not callable(getattr(self.sage.BgBotAnalyzer, 'cube_decision', None)):
             raise ValueError('NeonGammon did not export BgBotAnalyzer.cube_decision; install the locked wheels')
@@ -81,6 +94,10 @@ class Runtime:
         # serially and searches only its filtered top candidates at full depth.
         self.analyzer = neongammon.BgBotAnalyzer(eval_level=f"{profile['plies']}ply", cubeful=not self.cubeless,
                                              parallel_threads=profile['threads'])
+        self.models = None
+        if self.release['shared_models']:
+            self.models = neongammon.BatchModels.from_analyzer(self.analyzer)
+        self.policy_analyzers[profile['plies']] = self.analyzer
         # Exercise the real candidate path and observe its configured budgets.
         opening, observed = integrity['observe_thread_budgets'](
             neongammon, lambda: self.analyzer.checker_play(list(neongammon.STARTING_BOARD), 3, 1, beaver=False))
@@ -129,57 +146,124 @@ class Runtime:
         if guard is None or self.integrity['stat_snapshot'](guard[0]) != guard[1]:
             self.verify()
 
-    def top_two_candidates(self, before, moves, context):
+    def top_two_candidates(self, before, dice, moves, context):
+        if self.release['shared_models']:
+            return self.analyzer.top_two_promote(before, moves, max_gap=TOP_TWO_GAP, **context)
         if len(moves) < 2 or self.sage.board.is_race(before):
             return moves, '2-ply'
-        first, second = moves[:2]
-        if any(move.eval_level != '2-ply' for move in (first, second)):
+        if any(move.eval_level != '2-ply' for move in moves[:2]):
             raise ValueError('NeonGammon did not evaluate both leading candidates at 2-ply')
-        if first.equity - second.equity > TOP_TWO_GAP:
+        if moves[0].equity - moves[1].equity > TOP_TWO_GAP:
             return moves, '2-ply'
-
-        analyzer = self.sage.analyzer
-        inner = self.analyzer._analyzer._inner
-        owner = analyzer._FLIP_OWNER[analyzer.resolve_owner(context['cube_owner'])]
-        away1, away2 = context['away1'], context['away2']
-        money = not away1 and not away2
-
-        def evaluate(move):
-            # The native checker search roots routing at the board before the move.
-            result = self.native.cubeful_probs_and_equity_nply(
-                self.native.flip_board(move.board), owner, inner._strategy_1ply, 3,
-                filter_max_moves=inner.FILTER_MAX_MOVES,
-                filter_threshold=inner.FILTER_THRESHOLD, n_threads=1,
-                cube_value=context['cube_value'], away1=away2, away2=away1,
-                is_crawford=context['is_crawford'], jacoby=context['jacoby'],
-                beaver=context['beaver'], root_board=before,
-                contact_x=analyzer._contact_cube_life(3, away1, away2) if money else -1.0,
-                contact_x_pip_slope=analyzer._contact_cube_slope(3, away1, away2) if money else 0.0,
-            )
-            win, gammon_win, bg_win, gammon_loss, bg_loss = result['probs']
-            probs = [1.0 - win, gammon_loss, bg_loss, gammon_win, bg_win]
-            cubeless = 2.0 * probs[0] - 1.0 + gammon_loss - gammon_win + bg_loss - bg_win
-            return replace(move, equity=-result['equity'], cubeless_equity=cubeless,
-                           probs=type(move.probs).from_list(probs), eval_level='3-ply')
-
-        if self.top_two_pool is None:
-            self.top_two_pool = ThreadPoolExecutor(max_workers=2)
-        scored = sorted(self.top_two_pool.map(evaluate, (first, second)),
-                        key=lambda move: (-move.equity, -move.cubeless_equity, move.board))
-        return scored, '3-ply'
+        # These releases expose a full 3-ply checker search. Keep precisely
+        # the original pair and its tie ordering after the deeper search.
+        if self.legacy_deep is None:
+            self.legacy_deep = self.sage.BgBotAnalyzer(eval_level='3ply', parallel_threads=self.profile['threads'])
+        pair = [move.board for move in moves[:2]]
+        deep = self.legacy_deep.checker_play(before, *dice, force_boards=pair, **context)
+        scored = [move for move in deep.moves if move.board in pair]
+        if len(scored) != 2 or any(move.eval_level != '3-ply' for move in scored):
+            raise ValueError('NeonGammon omitted a promoted candidate')
+        return sorted(scored, key=lambda move: (-move.equity, -move.cubeless_equity, move.board)), '3-ply'
 
     def opponent_policy(self, difficulty, seed):
-        policy = self.opponent_policies.get(difficulty)
-        if policy is None:
-            factory = getattr(self.sage, 'DifficultyPolicy', None)
-            if factory is None:
-                raise ValueError('NeonGammon difficulty presets require NeonGammon 3.1.0 or newer')
-            policy = factory(difficulty, seed=seed, parallel_threads=self.profile['threads'])
-            self.opponent_policies[difficulty] = policy
-        else:
-            # Reuse the installed policy's analyzer and seed this decision independently.
-            policy._rng.seed(seed)
+        if not self.release['presets']:
+            raise ValueError('NeonGammon difficulty presets require NeonGammon 3.1.0 or newer')
+        if not self.release['shared_models']:
+            # Earlier releases expose the deterministic RNG seed only at construction.
+            return self.sage.DifficultyPolicy(difficulty, seed=seed, parallel_threads=self.profile['threads'])
+        if difficulty not in self.opponent_policies:
+            depth = 2 if difficulty == 'full_strength' else 1
+            if depth not in self.policy_analyzers:
+                self.policy_analyzers[depth] = self.sage.BgBotAnalyzer(
+                    eval_level=f'{depth}ply', models=self.models, parallel_threads=self.profile['threads'])
+            analyzer = self.policy_analyzers[depth]
+            self.opponent_policies[difficulty] = self.sage.DifficultyPolicy(
+                difficulty, analyzer=analyzer, cube_analyzer=analyzer, seed=seed, parallel_threads=self.profile['threads'])
+        policy = self.opponent_policies[difficulty]
+        policy.reseed(seed)
         return policy
+
+    def checker_input(self, request):
+        before = board(request['board'])
+        dice = checker_dice(request)
+        forced = request.get('force_board')
+        all_legal = request.get('all_legal', False)
+        top_two = request.get('top_two', False)
+        if (type(all_legal) is not bool or type(top_two) is not bool
+                or sum((all_legal, top_two, forced is not None)) > 1
+                or top_two and (self.cubeless or self.profile['plies'] != 2)):
+            raise ValueError('Invalid checker candidate scope')
+        force_boards = None
+        if forced is not None:
+            forced = board(forced)
+            if forced not in self.sage.possible_moves(before, *dice):
+                raise ValueError('Forced played board is not legal')
+            force_boards = [forced]
+        elif all_legal:
+            force_boards = [board(list(move)) for move in self.sage.possible_moves(before, *dice)]
+        return dict(board=before, die1=dice[0], die2=dice[1], force_boards=force_boards, **cube_context(request))
+
+    def checker_output(self, request, native):
+        before, dice = request['board'], request['dice']
+        forced = request.get('force_board')
+        depth = f"{self.profile['plies']}-ply"
+        candidates = native.moves
+        if request.get('top_two'):
+            candidates, depth = self.top_two_candidates(before, dice, candidates, cube_context(request))
+        from neongammon.text_export import compute_move_notation
+        moves = []
+        for move in candidates:
+            try:
+                self.integrity['validate_result'](move, probabilities)
+            except Exception as error:
+                raise ValueError(f'Invalid checker evaluation: board={before}, dice={dice}; {error}') from error
+            if move.eval_level != depth:
+                if not request.get('all_legal') and move.board != forced:
+                    continue
+                raise ValueError('NeonGammon returned a forced candidate below the requested depth')
+            moves.append({'board': board(move.board), 'notation': compute_move_notation(before, move.board, *dice),
+                          'equity': move.equity, 'probabilities': probabilities(move.probs.to_list())})
+        if not moves or forced is not None and not any(move['board'] == forced for move in moves):
+            raise ValueError('NeonGammon omitted the played candidate')
+        return moves
+
+    def cube_output(self, result):
+        self.integrity['validate_result'](result, probabilities)
+        if result.eval_level != f"{self.profile['plies']}-ply":
+            raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
+        return {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp,
+                'probabilities': probabilities(result.probs.to_list())}
+
+    def evaluate_batch(self, request):
+        checker = request['operation'] == 'checker_batch'
+        rows = request['rows']
+        if (not self.batch_active or not isinstance(rows, list) or not 1 <= len(rows) <= 64
+                or any(row['operation'] != ('checker' if checker else 'cube') for row in rows)):
+            raise ValueError('Invalid verified batch rows')
+        if not checker and (self.cubeless or any(row.get('decision_only') for row in rows)):
+            raise ValueError('Invalid cube evaluation batch')
+        inputs = [self.checker_input(row) if checker else dict(board=board(row['board']), **cube_context(row))
+                  for row in rows]
+        native_checker = checker and self.release['checker_batch'] and not self.cubeless
+        native_cube = not checker and self.release['shared_models']
+        if native_checker or native_cube:
+            if self.models is None:  # 3.1.2 has no from_analyzer constructor.
+                self.models = self.sage.BatchModels()
+            evaluate = self.sage.batch_checker_play if checker else self.sage.batch_cube_action_nply
+            native = []
+            # 3.1.2's checker API accepts one Jacoby flag per call. Preserve
+            # row order and group adjacent identical flags for all versions.
+            for jacoby, group in groupby(inputs, key=lambda row: row['jacoby']):
+                native.extend(evaluate(list(group), eval_level=f"{self.profile['plies']}ply",
+                                       jacoby=jacoby, beaver=False, models=self.models,
+                                       n_threads=self.profile['threads']))
+        elif checker:
+            native = [self.analyzer.checker_play(**row) for row in inputs]
+        else:
+            native = [self.analyzer.cube_action(**row) for row in inputs]
+        return [self.checker_output(row, result) if checker else self.cube_output(result)
+                for row, result in zip(rows, native, strict=True)]
 
     def dispatch(self, request):
         operation = request['operation']
@@ -195,24 +279,19 @@ class Runtime:
             self.verify()
             self.batch_active = False
             return self.identity, None
-        if self.batch_active and operation not in ('checker', 'cube'):
+        if self.batch_active and operation not in ('checker', 'cube', 'checker_batch', 'cube_batch_nply'):
             raise ValueError('Unsupported integrity batch operation')
         if not self.batch_active:
             self.verify_unchanged()
         # Engine work only: integrity checks before and after stay outside.
         cpu_before, wall_before = process_cpu_us(), time.perf_counter_ns()
-        if request['operation'] == 'identity':
+        if operation in ('checker_batch', 'cube_batch_nply'):
+            result = self.evaluate_batch(request)
+        elif operation == 'identity':
             result = self.identity
         else:
             before = board(request['board'])
-            context = request['context']
-            # Only explicit, validated context is passed; never arbitrary kwargs.
-            kwargs = {key: context[key] for key in ('cube_value', 'cube_owner', 'away1', 'away2', 'is_crawford', 'jacoby')}
-            kwargs['beaver'] = False
-            if operation in ('checker', 'opponent_checker'):
-                dice = request['dice']
-                if len(dice) != 2 or any(type(x) is not int or x < 1 or x > 6 for x in dice):
-                    raise ValueError('Invalid dice')
+            kwargs = cube_context(request)
             if operation in ('opponent_checker', 'opponent_cube'):
                 difficulty, seed = request['difficulty'], request['seed']
                 # Older Full Strength sessions pin 2-ply for both decisions.
@@ -222,6 +301,7 @@ class Runtime:
                     raise ValueError('Invalid opponent policy request')
                 policy = self.opponent_policy(difficulty, seed)
                 if operation == 'opponent_checker':
+                    dice = checker_dice(request)
                     if self.profile['plies'] == 3:
                         # NeonDojo pins a deeper checker search for new Full Strength matches.
                         selected = self.analyzer.checker_play(before, *dice, **kwargs).moves[0].board
@@ -232,46 +312,7 @@ class Runtime:
                     decision = policy.cube_decision(before, **kwargs)
                     result = {'should_double': decision.should_double, 'should_take': decision.should_take}
             elif operation == 'checker':
-                forced = request.get('force_board')
-                all_legal = request.get('all_legal', False)
-                top_two = request.get('top_two', False)
-                if (type(all_legal) is not bool or type(top_two) is not bool
-                        or sum((all_legal, top_two, forced is not None)) > 1
-                        or top_two and (self.cubeless or self.profile['plies'] != 2)):
-                    raise ValueError('Invalid checker candidate scope')
-                force_boards = None
-                if forced is not None:
-                    forced = board(forced)
-                    if forced not in self.sage.possible_moves(before, *dice):
-                        raise ValueError('Forced played board is not legal')
-                    force_boards = [forced]
-                elif all_legal:
-                    # Hints rate every legal move, so search all of them at full depth.
-                    force_boards = [board(list(move)) for move in self.sage.possible_moves(before, *dice)]
-                result = self.analyzer.checker_play(before, *dice, force_boards=force_boards, **kwargs)
-                candidates, depth = result.moves, f"{self.profile['plies']}-ply"
-                if top_two:
-                    candidates, depth = self.top_two_candidates(before, candidates, kwargs)
-                from neongammon.text_export import compute_move_notation
-                moves = []
-                for move in candidates:
-                    try:
-                        self.integrity['validate_result'](move, probabilities)
-                    except Exception as error:
-                        raise ValueError(f'Invalid checker evaluation: probabilities={move.probs.to_list()}, board={before}, dice={dice}, context={context}; {error}') from error
-                    if move.eval_level != depth:
-                        # The cubeless path and, from fork release 2.0.20261119,
-                        # cubeful 2-ply prune weaker candidates to 1-ply. Keep
-                        # only fully searched ones, which include the engine's
-                        # choice; forced candidates must still reach full depth.
-                        if not all_legal and move.board != forced:
-                            continue
-                        raise ValueError('NeonGammon returned a forced candidate below the requested depth')
-                    moves.append({'board': board(move.board), 'notation': compute_move_notation(before, move.board, *dice),
-                                  'equity': move.equity, 'probabilities': probabilities(move.probs.to_list())})
-                if not moves or forced is not None and not any(move['board'] == forced for move in moves):
-                    raise ValueError('NeonGammon omitted the played candidate')
-                result = moves
+                result = self.checker_output(request, self.analyzer.checker_play(**self.checker_input(request)))
             elif request['operation'] == 'resignation':
                 level = request['level']
                 if type(level) is not int or level not in (1, 2, 3):
@@ -305,20 +346,12 @@ class Runtime:
                     result = self.analyzer.cube_decision(before, **kwargs)
                     equities = (result.equity_nd, result.equity_dt, result.equity_dp, result.optimal_equity)
                     if not all(math.isfinite(value) for value in equities):
-                        raise ValueError(f'Invalid cube decision: board={before}, context={context}')
+                        raise ValueError(f'Invalid cube decision: board={before}, context={kwargs}')
                     if result.eval_level != depth:
                         raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
                     result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp}
                 else:
-                    result = self.analyzer.cube_action(before, **kwargs)
-                    try:
-                        self.integrity['validate_result'](result, probabilities)
-                        if result.eval_level != depth:
-                            raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
-                    except Exception as error:
-                        raise ValueError(f'Invalid cube evaluation: probabilities={result.probs.to_list()}, board={before}, context={context}; {error}') from error
-                    result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp,
-                              'probabilities': probabilities(result.probs.to_list())}
+                    result = self.cube_output(self.analyzer.cube_action(before, **kwargs))
             else:
                 raise ValueError('Unsupported sidecar operation')
         cost = {'cpu_us': process_cpu_us() - cpu_before,
@@ -357,7 +390,10 @@ def main(integrity):
                 envelope['cost'] = cost
             response = json.dumps(envelope, allow_nan=False, separators=(',', ':'))
             if len(response.encode()) + 1 > MAX_RESPONSE:
-                raise ValueError('Sidecar output exceeded its bound')
+                if request['operation'] in ('checker_batch', 'cube_batch_nply') and len(request['rows']) > 1:
+                    response = json.dumps({'id': request_id, 'result': {'split': True}})
+                else:
+                    raise ValueError('Sidecar output exceeded its bound')
             protocol.write(response + '\n')
         except Exception as error:
             # Fail closed: Rust discards the process after every error.

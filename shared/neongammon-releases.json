@@ -1,0 +1,35 @@
+{
+  "3.0.0": {
+    "presets": false,
+    "checker_batch": false,
+    "shared_models": false,
+    "fingerprint": "621c35546142fe9d4762ad763e3c2dac3372a03c8a67c6d264fa634dfc69f7f7",
+    "revision": "cbfcb014c7f8cf33d75e7f06cbdfc77260cb53ed"
+  },
+  "3.1.0": {
+    "presets": true,
+    "checker_batch": false,
+    "shared_models": false,
+    "fingerprint": "26e7701c27c6c5e0cd3cc864768e27675f0d72149c2ad545ffb0c5293ff705d5",
+    "revision": "04e0bb702c3f7549a05f91af4e862fdef2af954f"
+  },
+  "3.1.1": {
+    "presets": true,
+    "checker_batch": false,
+    "shared_models": false,
+    "fingerprint": "eaa6f2a81b42320a80dc8ed2114dd84fc18239ce1f9cfcc1ca31b503e66bfebe",
+    "revision": "abaedf9799d442fb4d53b83f2e3079cf17d8b6ce"
+  },
+  "3.1.2": {
+    "presets": true,
+    "checker_batch": true,
+    "shared_models": false,
+    "fingerprint": "02d3ad593cf480a0813858fdcb8373645b0b0048e2ce31080180730a90192199",
+    "revision": "758d701441cdaaa30c042c96b53953039ba2ba29"
+  },
+  "3.2.0": {
+    "presets": true,
+    "checker_batch": true,
+    "shared_models": true
+  }
+}

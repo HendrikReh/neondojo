@@ -119,7 +119,8 @@ impl Worker {
     async fn start(profile: &SageSnapshot) -> Result<Self> {
         let probe = include_str!("../../../tools/probe_open_sage.py");
         let script = format!(
-            "integrity = {{'__name__': 'neondojo_integrity'}}\nexec({}, integrity)\n{}\nmain(integrity)\n",
+            "import json\nintegrity = {{'__name__': 'neondojo_integrity', 'RELEASES': json.loads({})}}\nexec({}, integrity)\n{}\nmain(integrity)\n",
+            serde_json::to_string(super::RELEASES_JSON)?,
             serde_json::to_string(probe)?,
             include_str!("worker.py")
         );
@@ -272,7 +273,10 @@ impl VerifiedBatch {
     ) -> Result<(Value, Option<EngineCost>)> {
         let worker = self.worker.take().context("NeonGammon batch was aborted")?;
         ensure!(
-            matches!(payload["operation"].as_str(), Some("checker" | "cube")),
+            matches!(
+                payload["operation"].as_str(),
+                Some("checker" | "cube" | "checker_batch" | "cube_batch_nply")
+            ),
             "Unsupported NeonGammon game operation"
         );
         // Removing ownership also poisons the block if this individual future
@@ -405,6 +409,38 @@ pub(super) async fn warm_play(profile: &SageSnapshot) -> Result<()> {
 fn validate_payload(profile: &SageSnapshot, request: &Value, result: &Value) -> Result<()> {
     match request.get("operation").and_then(Value::as_str) {
         Some("identity" | "begin_batch" | "end_batch") => validate_identity(profile, result),
+        Some(operation @ ("checker_batch" | "cube_batch_nply")) => {
+            let rows = request["rows"]
+                .as_array()
+                .context("Missing NeonGammon batch rows")?;
+            ensure!(
+                !rows.is_empty() && rows.len() <= 64,
+                "Invalid NeonGammon batch size"
+            );
+            if rows.len() > 1 && result == &json!({"split":true}) {
+                return Ok(());
+            }
+            let values = result
+                .as_array()
+                .context("Invalid NeonGammon batch response")?;
+            ensure!(
+                rows.len() == values.len(),
+                "Incomplete NeonGammon batch response"
+            );
+            let action = if operation == "checker_batch" {
+                "checker"
+            } else {
+                "cube"
+            };
+            for (row, value) in rows.iter().zip(values) {
+                ensure!(
+                    row["operation"] == action,
+                    "Invalid NeonGammon batch action"
+                );
+                validate_payload(profile, row, value)?;
+            }
+            Ok(())
+        }
         Some("checker") => {
             let candidates: Vec<super::SageCheckerCandidate> =
                 serde_json::from_value(result.clone())
@@ -576,17 +612,25 @@ for line in sys.stdin:
         operation = request['operation']
         if mode == 'batch_end_block' and operation == 'end_batch':
             time.sleep(60)
-        if operation == 'checker':
+        if operation in ('checker', 'checker_batch'):
             (root / 'checker_started').write_text('ready')
             if mode == 'batch_block':
                 time.sleep(60)
             if mode == 'batch_gated':
                 while not (root / 'checker_release').exists():
                     time.sleep(.005)
-            result = [{'board': request['force_board'], 'notation': '8/5 6/5', 'equity': .2,
-                       'probabilities': [.6, .1, .01, .4, .1, .01]}]
-            if mode == 'batch_bad_checker':
-                del result[0]['probabilities']
+            def checker(row):
+                moves = [{'board': row.get('force_board', [0] * 26), 'notation': '8/5 6/5',
+                          'equity': sum(row.get('dice', [0, 0])) / 10,
+                          'probabilities': [.6, .1, .01, .4, .1, .01]}]
+                if mode == 'batch_bad_checker':
+                    del moves[0]['probabilities']
+                return moves
+            result = [checker(row) for row in request['rows']] if operation == 'checker_batch' else checker(request)
+            if operation == 'checker_batch' and mode == 'batch_split' and len(request['rows']) > 12:
+                result = {'split': True}
+            if operation == 'checker_batch' and mode == 'batch_short':
+                result = result[:-1]
             if mode == 'batch_bad_json':
                 print('{invalid}', flush=True)
                 continue
@@ -740,14 +784,51 @@ for line in sys.stdin:
         assert_eq!(second.unwrap().decisions.len(), 1);
         assert_eq!(
             operations,
-            "initialize\nbegin_batch\nchecker\nend_batch\nbegin_batch\nchecker\nend_batch\nidentity\n"
+            "initialize\nbegin_batch\nchecker_batch\nend_batch\nbegin_batch\nchecker_batch\nend_batch\nidentity\n"
         );
+    }
+
+    #[tokio::test]
+    async fn rolls_preserve_order_and_progress_with_bounded_batch_frames() {
+        let _serial = TEST_LOCK.lock().await;
+        let rolls: Vec<_> = (1..=6).flat_map(|a| (a..=6).map(move |b| [a, b])).collect();
+        for (mode, frames) in [("batch_healthy", 1), ("batch_split", 3)] {
+            let fake = FakeWorker::new(mode);
+            let engine = SageEngine::new(fake.profile.clone()).unwrap();
+            let mut progress = Vec::new();
+            let analyses = engine
+                .analyze_rolls("4HPwATDgc/ABMA", "cAkHAAAAAAAE", 2, &rolls, |n| {
+                    progress.push(n);
+                    std::future::ready(Ok(()))
+                })
+                .await
+                .unwrap();
+            assert_eq!(progress, (1..=21).collect::<Vec<_>>());
+            for (roll, analysis) in rolls.iter().zip(analyses) {
+                assert_eq!(
+                    analysis.candidates[0].equity,
+                    f64::from(roll[0] + roll[1]) / 10.0
+                );
+            }
+            let operations =
+                std::fs::read_to_string(fake.directory.path().join("operations")).unwrap();
+            assert_eq!(
+                operations
+                    .lines()
+                    .filter(|op| *op == "checker_batch")
+                    .count(),
+                frames
+            );
+            assert_eq!(operations.lines().last(), Some("end_batch"));
+            drop(GENERAL.lock().await.take());
+            assert_reaped(&fake.pid()).await;
+        }
     }
 
     #[tokio::test]
     async fn invalid_batch_frames_and_typed_results_discard_worker() {
         let _serial = TEST_LOCK.lock().await;
-        for mode in ["batch_bad_checker", "batch_bad_json"] {
+        for mode in ["batch_bad_checker", "batch_bad_json", "batch_short"] {
             let fake = FakeWorker::new(mode);
             let engine = super::super::SageEngine::new(fake.profile.clone()).unwrap();
             assert!(engine.analyze_game(SINGLE_GAME, 1, 2).await.is_err());

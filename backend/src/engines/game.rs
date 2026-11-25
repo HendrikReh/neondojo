@@ -77,48 +77,69 @@ impl SageEngine {
         game: &PreparedGame,
         mut batch: Option<&mut super::process::VerifiedBatch>,
     ) -> Result<AnalyzedGame> {
-        let game_no = game.game_no;
-        let mut decisions = Vec::new();
-        let expected_checkers = game.positions.len();
-        let mut analyzed_checkers = 0;
+        use super::{CheckerScope, CubeScope, SageCubeEvaluation, context, cube_request};
+        // Record the SGF decision order while collecting independent engine rows.
+        let mut order = Vec::new();
+        let mut checkers = Vec::new();
+        let mut checker_players = Vec::new();
+        let mut cubes = Vec::new();
         for event in &game.events {
             if event.kind == "resign" {
                 continue;
             }
-            if event.kind == "checker" {
-                let position = game.position(event)?;
-                if requires_cube_analysis(position)? {
-                    let cube = self
-                        .cube_with_batch(&event.position_id, &event.match_id, batch.as_deref_mut())
-                        .await?;
-                    let mut result = evaluated_cube_decision(
-                        event.player,
-                        "no double",
-                        cube.no_double,
-                        cube.take,
-                        cube.pass,
-                    )?;
-                    if let Some(evaluation) = &mut result.cube_evaluation {
-                        evaluation.probabilities = cube.probabilities.as_slice().try_into().ok();
-                    }
-                    result.checker_no = event.checker_ply;
-                    decisions.push(result);
-                }
-                let after: [i32; 26] = event
+            let checker = event.kind == "checker";
+            let needs_cube = if checker {
+                requires_cube_analysis(game.position(event)?)?
+            } else {
+                ensure!(game.cube_enabled, "Unexpected cube action in cubeless game");
+                true
+            };
+            if needs_cube {
+                let ctx = context::Context::decode(&event.match_id)?;
+                cubes.push(cube_request(
+                    &ctx.board(&event.position_id, &event.match_id)?,
+                    &ctx,
+                    CubeScope::Evaluation,
+                ));
+                order.push((event, None));
+            }
+            if checker {
+                let after = event
                     .after_board
-                    .clone()
+                    .as_slice()
                     .try_into()
-                    .ok()
                     .context("Invalid played board")?;
-                let candidates = self
-                    .checker_boards_with_batch(
-                        &event.position_id,
-                        &event.match_id,
-                        None,
-                        Some(after),
-                        batch.as_deref_mut(),
-                    )
-                    .await?;
+                let (row, player) = Self::checker_request(
+                    &event.position_id,
+                    &event.match_id,
+                    None,
+                    CheckerScope::Played(after),
+                )?;
+                checkers.push(row);
+                checker_players.push(player);
+                order.push((event, Some(after)));
+            }
+        }
+        ensure!(
+            checkers.len() == game.positions.len(),
+            "Incomplete NeonGammon game coverage"
+        );
+        let mut checker_results = self
+            .evaluate_rows("checker_batch", &checkers, batch.as_deref_mut())
+            .await?
+            .into_iter()
+            .zip(checker_players);
+        let mut cube_results = self
+            .evaluate_rows("cube_batch_nply", &cubes, batch)
+            .await?
+            .into_iter();
+        let mut decisions = Vec::with_capacity(order.len());
+        for (event, checker) in order {
+            if let Some(after) = checker {
+                let (row, player) = checker_results
+                    .next()
+                    .context("Missing NeonGammon checker row")?;
+                let candidates = Self::absolute_candidates(row, player)?;
                 let best = candidates
                     .first()
                     .context("NeonGammon omitted best checker move")?;
@@ -140,12 +161,15 @@ impl SageEngine {
                     result.checker_candidates = self.ranked_candidates(candidates);
                 }
                 decisions.push(result);
-                analyzed_checkers += 1;
             } else {
-                let played = event.notation.to_ascii_lowercase();
-                let cube = self
-                    .cube_with_batch(&event.position_id, &event.match_id, batch.as_deref_mut())
-                    .await?;
+                let cube: SageCubeEvaluation = serde_json::from_value(
+                    cube_results.next().context("Missing NeonGammon cube row")?,
+                )?;
+                let played = if event.kind == "checker" {
+                    "no double".into()
+                } else {
+                    event.notation.to_ascii_lowercase()
+                };
                 let response = matches!(played.as_str(), "take" | "drop");
                 let sign = if response { -1.0 } else { 1.0 };
                 let mut result = evaluated_cube_decision(
@@ -164,19 +188,18 @@ impl SageEngine {
                         probabilities
                     };
                 }
+                if event.kind == "checker" {
+                    result.checker_no = event.checker_ply;
+                }
                 decisions.push(result);
             }
         }
-        ensure!(
-            analyzed_checkers == expected_checkers,
-            "Incomplete NeonGammon game coverage"
-        );
         for (index, decision) in decisions.iter_mut().enumerate() {
             decision.decision_no = i32::try_from(index + 1)?;
         }
         Ok(AnalyzedGame {
             engine: self.version.clone(),
-            game_no,
+            game_no: game.game_no,
             decisions,
             statistics: None,
         })
@@ -237,12 +260,12 @@ mod tests {
         let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
         let engine = SageEngine::new(SageEngine::probe(python, 4).await.unwrap()).unwrap();
         let source = crate::benchmarks::REFERENCE_SGF;
+        let replay = PreparedMatch::parse(source).unwrap();
         let mut checkers = 0;
         let mut cubes = 0;
         for game_no in 1..=10 {
             // Same authoritative game mapping, but the established ordinary
             // transport verifies each request before and after evaluation.
-            let replay = PreparedMatch::parse(source).unwrap();
             let individual = engine
                 .game(replay.game(game_no).unwrap(), None)
                 .await
