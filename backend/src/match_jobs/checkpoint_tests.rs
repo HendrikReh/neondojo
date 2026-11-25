@@ -302,3 +302,84 @@ async fn benchmark_game_checkpoint(pool: PgPool) -> Result<()> {
     );
     Ok(())
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires locked native NeonGammon and PostgreSQL"]
+async fn native_neongammon_resumes_only_the_unfinished_game(pool: PgPool) -> Result<()> {
+    use crate::{engines::SageEngine, settings::EngineSnapshot};
+
+    let source = "(;GM[6]MI[length:7][ws:0][bs:0];W[31hefe])\n(;GM[6]MI[length:7][ws:1][bs:0];W[31hefe];B[42qusu])";
+    let id = import_source(&pool, source).await?;
+    let sage = SageEngine::new(
+        SageEngine::probe_profile(std::env::var("NEONDOJO_SAGE_PYTHON")?, 1, 2).await?,
+    )?;
+    let saved = EngineSnapshot {
+        engine_id: "bgsage".into(),
+        gnubg_path: "/unused/gnubg".into(),
+        engine_version: sage.saved_version().map(str::to_owned),
+        gnubg_threads: None,
+        gnubg_move_filter: None,
+        open_sage: Some(sage.snapshot().clone()),
+    };
+    let job =
+        store::create_match_job_scoped_with_snapshot(&pool, id, 1, 2, None, Some(&saved)).await?;
+    let token = Uuid::new_v4();
+    sqlx::query("UPDATE jobs SET status='running', attempts=1, lease_token=$2, lease_until=now()+interval '120 seconds' WHERE id=$1")
+        .bind(job.id).bind(token).execute(&pool).await?;
+    let first = sage.analyze_game(source, 1, 1).await?;
+    let mut progress = summary(&first);
+    progress.total_games = 2;
+    progress.total_moves = 3;
+    checkpoint(&pool, &job, token, &first, &mut progress, None).await?;
+    let first_rows = async || -> Result<Vec<(i64, Value)>> {
+        Ok(sqlx::query_as(
+            "SELECT id, data FROM move_analyses WHERE job_id=$1 AND game_no=1 ORDER BY id",
+        )
+        .bind(job.id)
+        .fetch_all(&pool)
+        .await?)
+    };
+    let retained = first_rows().await?;
+    assert_eq!(retained.len(), 1);
+    sqlx::query("UPDATE jobs SET lease_until=now()-interval '1 second' WHERE id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await?;
+
+    // A new application instance recovers the expired lease using only the saved profile.
+    let state = AppState::new(pool.clone(), Engine::new("/unused/gnubg".into()));
+    assert!(crate::jobs::run_one(&state).await?);
+    let done = store::get_job(&pool, job.id)
+        .await?
+        .context("missing resumed job")?;
+    assert_eq!(done.status, "completed", "{:?}", done.error);
+    assert_eq!((done.attempts, done.completed_games, done.plies), (2, 2, 1));
+    assert_eq!(
+        serde_json::to_value(done.engine_snapshot)?,
+        serde_json::to_value(saved)?
+    );
+    assert_eq!(first_rows().await?, retained);
+    let checkpoints: Vec<(i32, Value)> = sqlx::query_as(
+        "SELECT game_no, summary FROM match_analysis_games WHERE job_id=$1 ORDER BY game_no",
+    )
+    .bind(job.id)
+    .fetch_all(&pool)
+    .await?;
+    assert_eq!(checkpoints.len(), 2);
+    assert_eq!(checkpoints[0].0, 1);
+    assert_eq!(checkpoints[0].1["analyzed_moves"], 1);
+    assert_eq!(checkpoints[1].0, 2);
+    assert_eq!(checkpoints[1].1["analyzed_moves"], 2);
+    assert_eq!(
+        done.result.context("missing final summary")?["analyzed_moves"],
+        3
+    );
+    let timing: (i64, i64) = sqlx::query_as(
+        "SELECT completed_moves,timed_moves FROM match_analysis_timing WHERE job_id=$1",
+    )
+    .bind(job.id)
+    .fetch_one(&pool)
+    .await?;
+    assert_eq!(timing, (3, 2), "only game 2 is evaluated on recovery");
+    Ok(())
+}
