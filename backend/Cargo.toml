@@ -32,6 +32,10 @@ utoipa = { version = "5", features = ["axum_extras", "uuid", "chrono"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 serde-smile = "=0.3.1"
 
+# Use the ARM SHA instructions when fingerprinting GNUbg before and after a run.
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+sha2 = { version = "0.10", features = ["asm"] }
+
 [dev-dependencies]
 http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }

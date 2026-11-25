@@ -104,6 +104,24 @@ The Ready query looked up the explicit selection once for each of 10,000 matches
 
 In the default PostgreSQL suite, `review_decisions::review_query_plans_use_the_current_page_parameters` also checks that paginated match review queries keep parameter-specific query plans rather than caching a generic prepared statement across filters and page modes.
 
+### GNUbg executable verification
+
+On macOS, point `GNUBG_BIN` at a native GNUbg binary with its evaluation weights available. This opt-in benchmark measures the executable identity check on its own and the complete version and 1-ply position probe with and without a saved engine version.
+
+```sh
+cargo test --release -p neondojo --lib benchmark_native_installation_checks -- --ignored --nocapture
+```
+
+On November 25, 2026, a Mac mini M4 Pro ran GNUbg 1.08.003 (1,927,608-byte ARM64 executable) in four paired release-build runs against NeonDojo 1.4.1. Each build went first in two pairs. Each run rotated through the three operations, discarded three warmups per operation and timed 30 samples per operation against a warm filesystem cache. Each value is the median of four run medians, in milliseconds.
+
+| Operation | 1.4.1 | Single blocking task and ARM SHA-256 |
+|---|---:|---:|
+| Resolve and hash the executable before and after a run | 8.05 | 1.88 |
+| Full probe with a saved engine version | 164.95 | 158.33 |
+| Full probe without a saved engine version | 159.55 | 156.21 |
+
+The pinned path launches the executable it verified and resolves the configured path again when the process exits. Wrappers also report their version before and after execution. The unpinned probe skips the executable hashes and shows the variation in GNUbg startup and position evaluation. Timings cover backend work, excluding HTTP and database access.
+
 ### Optional local import corpus
 
 The corpus test reads `games/xg`, `games/mat`, and `games/bgf` by default. Set `NEONDOJO_GAMES_DIR` to use a different parent directory. It sends the files through the multipart API in its own SQLx test database and skips when the local files are absent.

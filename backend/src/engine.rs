@@ -455,9 +455,6 @@ impl Engine {
         mut observe: impl FnMut(&[u8]) + Send,
     ) -> Result<String> {
         let _permit = engine_permit().await;
-        let binary = resolve_binary_async(&self.binary)
-            .await
-            .context("Could not start GNUbg; check GNUBG_BIN")?;
         // A job may outlive an upgrade at the same path. Fence every native
         // invocation, including later games, dice batches and forced-pass calls.
         let installation = match self.expected_version {
@@ -469,9 +466,12 @@ impl Engine {
             None => None,
         };
         // Start exactly the executable that was checked.
-        let binary = installation
-            .as_ref()
-            .map_or(binary, |installation| installation.executable().to_owned());
+        let binary = match &installation {
+            Some(checked) => checked.executable().to_owned(),
+            None => resolve_binary_async(&self.binary)
+                .await
+                .context("Could not start GNUbg; check GNUBG_BIN")?,
+        };
         // A direct binary proves its version with its own startup banner.
         let mut startup = installation
             .as_ref()
