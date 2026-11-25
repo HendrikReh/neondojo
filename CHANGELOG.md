@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+### Changed
+
+- The recommended NeonGammon engine is now 3.2.0. The verified wheel supports recursive cube batches and shares model weights across checker and cube evaluations. Existing 3.0.0 and 3.1.x installations remain supported. [Installation and verification](docs/open-sage-local.md#neongammon-320--november-25-2026)
+
 ## [1.3.0] - 2026-11-25
 
 NeonDojo 1.3.0 makes large libraries, NeonGammon and the first load faster, keeps Playing, hints and Study responsive while NeonGammon analyzes, adds decks built from decision searches, and restricts the local API to local callers. NeonGammon 3.1.2 is the recommended engine release; 3.1.1, 3.1.0 and 3.0.0 installations keep working. No change requires action from users; analysis time estimates return after a new benchmark for each engine. Migrations `0090_job_event_notifications`, `0091_similar_position_pips`, `0092_matches_effective_database`, `0093_decision_search_indexes` and `0094_duplicate_finder_and_job_history` run at startup; backups made with 1.2.0 stay restorable.

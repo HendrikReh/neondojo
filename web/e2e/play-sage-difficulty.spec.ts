@@ -1,3 +1,4 @@
+import releases from '../../shared/neongammon-releases.json' with { type: 'json' };
 import type { PlaySession } from '../src/workspaces/play/play-api';
 import { watchOpening } from './play-opening-helpers';
 import { backendTest as test, expect } from './test';
@@ -21,9 +22,11 @@ test('five-point difficulty labels and the selected opponent survive pause and r
     },
   });
   expect(verified.status(), await verified.text()).toBe(200);
-  expect(['3.1.0', '3.1.1', '3.1.2']).toContain(
-    (await verified.json()).snapshot.package_version,
-  );
+  const { snapshot } = await verified.json();
+  const presetVersions = Object.entries(releases)
+    .filter(([, release]) => release.presets)
+    .map(([version]) => version);
+  expect(presetVersions).toContain(snapshot.package_version);
 
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
