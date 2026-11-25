@@ -231,3 +231,25 @@ it('keeps local installation revision and path separate from portable preference
     path: '/local/python',
   });
 });
+
+it('rejects a non-boolean one-ply verification flag', async () => {
+  const python = '/local/python';
+  vi.stubGlobal('fetch', async () =>
+    Response.json({
+      version: 1,
+      python_path: python,
+      snapshot: {
+        python,
+        package_version: '3.1.2',
+        artifact_fingerprint: 'a'.repeat(64),
+        threads: 4,
+        plies: 2,
+        adapter_version: 1,
+        one_ply_verified: 'false',
+      },
+    }),
+  );
+  await expect(loadSageInstallation()).rejects.toMatchObject({
+    key: 'error.invalidResponse',
+  });
+});

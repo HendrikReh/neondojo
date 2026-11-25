@@ -250,6 +250,9 @@ test('analysis keeps profile settings and Engines provides a dedicated local con
   ]) {
     await page.setViewportSize({ width, height });
     await expect(path).toBeInViewport();
+    await expect(
+      dialog.getByRole('combobox', { name: 'Simultaneous analysis jobs' }),
+    ).toBeInViewport({ ratio: 1 });
     await dialog.screenshot({ path: info.outputPath(`engines-${width}.png`) });
   }
 });
@@ -307,6 +310,148 @@ test('playing groups engine, feedback and game preferences without desktop scrol
     await dialog.screenshot({ path: info.outputPath(`playing-${width}.png`) });
   }
 });
+
+for (const { version, supported, onePly, verified } of [
+  {
+    version: '3.1.2',
+    supported: [1, 2, 3, 4],
+    onePly: true,
+    verified: '1-ply, 2-ply',
+  },
+  { version: '3.0.0', supported: [2, 3], onePly: undefined, verified: '2-ply' },
+]) {
+  test(`NeonGammon ${version} shows supported and verified depths independently`, async ({
+    page,
+  }, info) => {
+    await settingsBackend(page);
+    const python = '/opt/neongammon/bin/python';
+    let savedPath = python;
+    let available = true;
+    const catalogPending = Promise.withResolvers<void>();
+    await page.route('**/api/engines/bgsage', (route) => {
+      if (route.request().method() === 'PUT') {
+        if (!available)
+          return route.fulfill({
+            status: 422,
+            json: { error: 'Python not found' },
+          });
+        savedPath = route.request().postDataJSON().path;
+      }
+      return route.fulfill({
+        json: {
+          version: 7,
+          python_path: savedPath,
+          snapshot: {
+            python: savedPath,
+            package_version: version,
+            plies: 2,
+            threads: 4,
+            adapter_version: 1,
+            artifact_fingerprint: 'a'.repeat(64),
+            one_ply_verified: savedPath === python ? onePly : false,
+          },
+        },
+      });
+    });
+    await page.route('**/api/engines', async (route) => {
+      if (savedPath !== python) await catalogPending.promise;
+      await route.fulfill({
+        json: [
+          {
+            id: 'gnubg',
+            name: 'GNUbg',
+            available: true,
+            version: 'GNU Backgammon 1.08.003',
+            max_parallel_threads: 14,
+            plies: [1, 2, 3, 4, 5],
+          },
+          {
+            id: 'bgsage',
+            name: 'NeonGammon',
+            available,
+            version: available
+              ? `NeonGammon ${version}; model ${'a'.repeat(64)}; 2ply cubeful; threads 4; adapter 1`
+              : null,
+            max_parallel_threads: 14,
+            plies: savedPath === python ? supported : [2, 3, 4],
+          },
+        ],
+      });
+    });
+    await page.goto('/');
+    const { dialog } = await openSettings(page);
+    await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
+    const card = dialog.getByRole('group', { name: 'NeonGammon', exact: true });
+    await expect(
+      card.getByText(`Detected version: NeonGammon ${version}`, {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(
+      card.getByText(`Last verified: ${verified}`, { exact: true }),
+    ).toBeVisible();
+    await expect(
+      card.getByText(
+        `Supported analysis depths: ${supported.map((ply) => `${ply}-ply`).join(', ')}`,
+        { exact: true },
+      ),
+    ).toBeVisible();
+    for (const [width, height] of [
+      [1800, 1169],
+      [2560, 1440],
+    ]) {
+      await page.setViewportSize({ width, height });
+      await expect(
+        dialog.getByRole('combobox', { name: 'Simultaneous analysis jobs' }),
+      ).toBeInViewport({ ratio: 1 });
+      await dialog.screenshot({
+        path: info.outputPath(`verified-engines-${width}.png`),
+      });
+    }
+    await card
+      .getByRole('textbox', { name: 'Python path' })
+      .fill('/another/python');
+    await expect(card.getByText('Installation not verified')).toBeVisible();
+    await expect(
+      card.getByText(
+        /Detected version|Supported analysis depths|Last verified:/,
+      ),
+    ).toHaveCount(0);
+    const refreshing = page.waitForRequest(
+      (request) => new URL(request.url()).pathname === '/api/engines',
+    );
+    await card.getByRole('button', { name: 'Verify and save' }).click();
+    await refreshing;
+    try {
+      await expect(
+        card.getByText('Last verified: 2-ply', { exact: true }),
+      ).toBeVisible();
+      await expect(card.getByText(/Supported analysis depths/)).toHaveCount(0);
+    } finally {
+      catalogPending.resolve();
+    }
+    await expect(
+      card.getByText('Supported analysis depths: 2-ply, 3-ply, 4-ply'),
+    ).toBeVisible();
+    available = false;
+    await card.getByRole('button', { name: 'Verify and save' }).click();
+    await expect(card.getByRole('alert')).toContainText('Python not found');
+    await expect(
+      card.getByText('Not available', { exact: true }),
+    ).toBeVisible();
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await openSettings(page);
+    await dialog.getByRole('button', { name: 'Engines', exact: true }).click();
+    await expect(
+      card.getByText('Not available', { exact: true }),
+    ).toBeVisible();
+    await expect(
+      card.getByText(`Last detected version: NeonGammon ${version}`),
+    ).toBeVisible();
+    await expect(card.getByText('Last verified: 2-ply')).toBeVisible();
+    await expect(card.getByText(/Supported analysis depths/)).toHaveCount(0);
+  });
+}
 
 test('an edited NeonGammon path stays in the draft until verified or discarded', async ({
   page,

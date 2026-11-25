@@ -2225,12 +2225,21 @@ export default {
     applyConfiguration: 'Saves changes to the current configuration.',
     applyInstallation:
       'Engine paths and thread limits are saved on this computer.',
+    sagePythonPath: 'Python path',
+    sageVerify: 'Verify and save',
+    sageVerifying: 'Verifying…',
+    sageUnverified: 'Installation not verified',
+    sageLastVersion: 'Last detected version: {version}',
+    sageVerifiedDepths: 'Last verified: {depths}',
+    sageSupportedDepths: 'Supported analysis depths: {depths}',
+    sageModelIdentity: 'Model fingerprint: {fingerprint}',
     verifySageTarget: 'Verifies and saves the Python path on this computer.',
     localEngines: 'Engines on this computer',
     available: 'Available',
     engineStatusError: 'Engine status could not be refreshed.',
     manageBooks: 'Manage opening books',
-    localEnginesHelp: 'Paths and thread limits apply to this computer.',
+    localEnginesHelp:
+      'Paths and thread limits apply to the computer running NeonDojo.',
     language: 'Language',
     languageHelp:
       'Choose the app language. It changes when you select “{action}”.',
@@ -2249,13 +2258,11 @@ export default {
     analysisHelp:
       'Applies to new analysis jobs. Existing results and running jobs retain their engine and profile.',
     path: 'GNUbg executable path',
-    pathHelp:
-      'This path is on the backend computer, which may differ from the computer running your browser.',
     installation: 'GNUbg',
     check: 'Check installation',
     checking: 'Checking version and position evaluation…',
     checkHelp:
-      'Checks the version and a real position evaluation, including the required neural weights.',
+      'Checks the version and evaluates a position. Apply saves the path.',
     checkSuccess: 'Installation checked: {version}',
     engineThreadsHeading: 'Threads and parallel jobs',
     gnubgAnalysisThreads: 'GNUbg threads for analysis',
@@ -2267,11 +2274,11 @@ export default {
     retainedThreadCount: 'Saved value {count}.',
     configurableThreadRange: 'Configurable range {min}–{max}.',
     threadsHelp:
-      'Analysis threads apply to new analyses and engine duels, playing threads to new games. By default GNUbg uses 1 thread for both. NeonGammon uses 4 for analysis and duels and 2 for playing.',
+      'Analysis threads apply to new analyses and duels. Playing threads apply to new games.',
     parallelAnalysisJobs: 'Simultaneous analysis jobs',
     defaultParallelJobs: 'Default ({count})',
     parallelAnalysisJobsHelp:
-      'Position, dice equity and match analyses that may run at the same time on this computer. NeonGammon runs one analysis at a time. Each job uses its own analysis threads, so jobs × threads should stay within the logical CPUs. Engine duels and games do not count.',
+      'Sets the limit for position, dice equity and match analyses. Jobs share the available CPU threads. NeonGammon runs one analysis at a time.',
     checkNeeded: 'The edited GNUbg settings have not been checked yet.',
     engineVersion: 'Detected version: {version}',
     unavailable: 'Not available',

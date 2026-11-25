@@ -203,9 +203,12 @@ export default function SettingsDialog({
   const [draft, setDraft] = useState<AppSettings | null>(null);
   const [initial, setInitial] = useState<AppSettings | null>(null);
   const [engines, setEngines] = useState<EngineInfo[]>([]);
-  const [engineCatalogError, setEngineCatalogError] = useState<unknown>(null);
+  const [engineCatalogRefresh, setEngineCatalogRefresh] = useState<{
+    error?: unknown;
+  } | null>(null);
+  const catalogAbort = useRef<AbortController | null>(null);
   const [reload, setReload] = useState(0);
-  const sage = useOpenSageInstallation(open, reload);
+  const sage = useOpenSageInstallation(open, reload, refreshEngines);
   const myProfile = useMyPlayerProfileDraft(open, reload);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<unknown>(null);
@@ -247,7 +250,7 @@ export default function SettingsDialog({
     setDraft(null);
     setInitial(null);
     setEngines([]);
-    setEngineCatalogError(null);
+    setEngineCatalogRefresh(null);
     setLoadError(null);
     setRecoveryError(null);
     setSaveError(null);
@@ -280,6 +283,7 @@ export default function SettingsDialog({
       abort.abort();
       checkAbort.current?.abort();
       saveAbort.current?.abort();
+      catalogAbort.current?.abort();
     };
   }, [open, reload]);
 
@@ -429,14 +433,17 @@ export default function SettingsDialog({
   }
 
   async function refreshEngines() {
-    const currentSession = session.current;
+    catalogAbort.current?.abort();
+    const abort = new AbortController();
+    catalogAbort.current = abort;
+    setEngineCatalogRefresh({});
     try {
-      const value = await loadEngines();
-      if (currentSession !== session.current) return;
+      const value = await loadEngines(abort.signal);
+      if (abort.signal.aborted) return;
       setEngines(value);
-      setEngineCatalogError(null);
+      setEngineCatalogRefresh(null);
     } catch (error) {
-      if (currentSession === session.current) setEngineCatalogError(error);
+      if (!abort.signal.aborted) setEngineCatalogRefresh({ error });
     }
   }
 
@@ -492,10 +499,7 @@ export default function SettingsDialog({
     const myProfileChanged = myProfile.changed;
     try {
       if (myProfileChanged) await myProfile.save(abort.signal);
-      if (sage.dirty) {
-        await sage.verify();
-        void refreshEngines();
-      }
+      if (sage.dirty) await sage.verify();
       if (configuration) {
         // Machine installation is separate from the profile snapshot.
         const installation = await saveInstallationSettings(
@@ -1086,7 +1090,7 @@ export default function SettingsDialog({
                   disabled={saving}
                   hidden={category !== 'engines'}
                   engines={engines}
-                  engineCatalogError={engineCatalogError}
+                  engineCatalogRefresh={engineCatalogRefresh}
                   onRefreshEngines={() => void refreshEngines()}
                   check={check}
                   checking={checking}
@@ -1095,7 +1099,6 @@ export default function SettingsDialog({
                   onInstallationEdited={resetInstallationCheck}
                   diagnostic={diagnostic}
                   sage={sage}
-                  onVerified={refreshEngines}
                 />
               </>
             )}
