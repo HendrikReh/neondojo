@@ -1,7 +1,11 @@
-import type { RefObject } from 'react';
+import { useRef, useLayoutEffect } from 'react';
 import type { Position } from '../shared/http/api';
 import Board from '../shared/board/Board';
-import { archiveThemes, themes, type Theme } from '../shared/board/themes';
+import {
+  useArchiveThemes,
+  builtInThemes,
+  type Theme,
+} from '../shared/board/themes';
 import { useSettingsText } from './settings-messages';
 
 // A fixed, legal GNUbg position with checkers on the bar and borne off on both
@@ -25,31 +29,44 @@ const previewPosition: Position = {
 
 /** The Board category: the theme gallery and a preview of the chosen theme. */
 export default function BoardSettingsSection({
-  galleryRef,
   disabled,
-  hidden,
   theme,
   onTheme,
 }: {
-  galleryRef: RefObject<HTMLDivElement | null>;
   disabled: boolean;
-  hidden: boolean;
   theme: Theme;
   onTheme: (theme: Theme) => void;
 }) {
   const t = useSettingsText();
+  const archiveThemes = useArchiveThemes(true);
+  const themes = [...builtInThemes, ...archiveThemes];
+  const boardGallery = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const gallery = boardGallery.current;
+    if (!gallery) return;
+    const selected = gallery.querySelector('button[aria-pressed="true"]');
+    if (!selected) return;
+
+    const item = selected.getBoundingClientRect();
+    const galleryBox = gallery.getBoundingClientRect();
+    const padding = getComputedStyle(gallery);
+    const top = galleryBox.top + parseFloat(padding.paddingTop);
+    const bottom = galleryBox.bottom - parseFloat(padding.paddingBottom);
+    if (item.top < top) gallery.scrollTop += Math.floor(item.top - top);
+    else if (item.bottom > bottom)
+      gallery.scrollTop += Math.ceil(item.bottom - bottom);
+  }, []);
   const selectedTheme = themes.find(({ id }) => id === theme) ?? themes[0];
   return (
     <fieldset
       className="settings-section settings-board-section"
       disabled={disabled}
-      hidden={hidden}
     >
       <legend>{t('board')}</legend>
       <p className="settings-help settings-intro">{t('boardHelp')}</p>
       <div className="settings-preview-layout">
         <div
-          ref={galleryRef}
+          ref={boardGallery}
           className="settings-theme-gallery"
           role="group"
           tabIndex={0}

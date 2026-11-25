@@ -1,5 +1,6 @@
+import archiveThemes from './archive-themes';
 import { expect, it } from 'vitest';
-import { archiveThemes, pointColumns, stackGeometry } from './themes';
+import { pointColumns, stackGeometry } from './themes';
 
 it('uses XML column positions for both player directions, the bar and bear-off trays', () => {
   expect(pointColumns.map((p) => p.point)).toEqual([

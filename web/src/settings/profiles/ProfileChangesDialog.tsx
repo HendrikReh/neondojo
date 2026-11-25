@@ -1,3 +1,4 @@
+import LazyPanel from '../../app/LazyPanel';
 import { useRef, useState } from 'react';
 import { useConfiguration } from '../configuration/ConfigurationProvider';
 import type { ConfigurationProfile } from '../configuration/configuration-api';
@@ -142,15 +143,19 @@ export default function ProfileChangesDialog({
             </div>
           )
         )}
-        <ProfileSummary
-          configuration={config.activeProfile.configuration}
-          compareTo={config.current}
-          differencesOnly
-          onResetField={(path) => void restore(path)}
-          resetDisabled={
-            config.busy || Boolean(confirmation) || config.status === 'conflict'
-          }
-        />
+        <LazyPanel>
+          <ProfileSummary
+            configuration={config.activeProfile.configuration}
+            compareTo={config.current}
+            differencesOnly
+            onResetField={(path) => void restore(path)}
+            resetDisabled={
+              config.busy ||
+              Boolean(confirmation) ||
+              config.status === 'conflict'
+            }
+          />
+        </LazyPanel>
       </div>
     </LibraryDialog>
   );

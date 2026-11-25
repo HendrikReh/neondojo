@@ -1,3 +1,4 @@
+import '../src/shared/i18n/test-locales';
 import { test as playwright } from '@playwright/test';
 import { profileBackend } from './profile-backend';
 import { startStack, type SpecStack, type Stack } from './stack';

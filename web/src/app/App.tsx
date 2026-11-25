@@ -14,9 +14,7 @@ import {
   readExtrasTool,
   saveExtrasTool,
 } from '../workspaces/extras/extras-tool';
-import { useBenchmarkText } from '../workspaces/extras/benchmark-messages';
 import ActionButton from '../shared/ui/ActionButton';
-import { usePlayText } from '../workspaces/play/play-messages';
 import {
   lazy,
   useCallback,
@@ -32,15 +30,11 @@ import {
   type Match,
   type Position,
 } from '../shared/http/api';
-import AnalysisWorkspace, {
-  type AnalysisDetail,
-} from '../workspaces/analysis/AnalysisWorkspace';
-import { usePlayerText } from '../workspaces/players/player-directory-messages';
+import type { AnalysisDetail } from '../workspaces/analysis/AnalysisWorkspace';
 import MatchDatabase, {
   type PositionSearchRequest,
 } from '../workspaces/library/MatchDatabase';
 import type { AssessmentEntry } from '../workspaces/study/reports/match-assessment-api';
-import { usePositionText } from '../workspaces/positions/position-browser-messages';
 import { readTheme, saveTheme } from '../settings/ui-preferences';
 import type { Theme } from '../shared/board/themes';
 import { useGameNavigation } from './useGameNavigation';
@@ -48,7 +42,6 @@ import { useJobs } from '../shared/jobs/useJobs';
 import { useBackgroundJobs } from './useBackgroundJobs';
 import { useI18n } from '../shared/i18n/i18n';
 import { useWorkspaceText } from '../shared/i18n/workspace-messages';
-import { useLearningText } from '../workspaces/study/flashcards/learning-messages';
 import { decodeBulkAnalysisSession, clearSelection } from './workspace-state';
 import { AppError } from '../shared/i18n/i18n-core';
 import type { AnnotationHit } from '../workspaces/analysis/notes/AnnotationSearch';
@@ -62,14 +55,11 @@ import {
 } from '../workspaces/library/library-api';
 import type { PlaySession } from '../workspaces/play/play-api';
 import { DEFAULT_ANALYSIS_PLIES } from '../shared/engine/analysis-depth';
-import MoveNotesDialog, {
-  type MoveNotesTarget,
-} from '../workspaces/analysis/notes/MoveNotesDialog';
+import type { MoveNotesTarget } from '../workspaces/analysis/notes/MoveNotesDialog';
 import { useUiAppearance } from '../settings/appearance/useUiAppearance';
 import { useButtonShortcuts } from './useButtonShortcuts';
-import { useDecisionSearchText } from '../workspaces/positions/decision-search-messages';
 import LazyPanel, { MountHidden } from './LazyPanel';
-import AnalysisDialogs, { type AnalysisSelection } from './AnalysisDialogs';
+import type { AnalysisSelection } from './AnalysisDialogs';
 import AppNotices from './AppNotices';
 import AppWelcome from './AppWelcome';
 import MatchImportInputs from './MatchImportInputs';
@@ -79,8 +69,14 @@ import { useMatchImporter } from './useMatchImporter';
 import { usePositionKeys } from './usePositionKeys';
 import { useSelectionRestore } from './useSelectionRestore';
 
-// Workspaces other than Analysis and the match database, and the settings
-// dialog, load on their first visit and stay mounted afterwards.
+// A fresh library shows the welcome screen until the first match opens.
+const AnalysisWorkspace = lazy(
+  () => import('../workspaces/analysis/AnalysisWorkspace'),
+);
+const AnalysisDialogs = lazy(() => import('./AnalysisDialogs'));
+const MoveNotesDialog = lazy(
+  () => import('../workspaces/analysis/notes/MoveNotesDialog'),
+);
 const PlayWorkspace = lazy(() => import('../workspaces/play/PlayWorkspace'));
 const PlayerDirectory = lazy(
   () => import('../workspaces/players/PlayerDirectory'),
@@ -119,7 +115,6 @@ const views: View[] = [
 ];
 export default function App() {
   useButtonShortcuts();
-  const decisionText = useDecisionSearchText();
   const [positionScope, setPositionScope] = useState<'saved' | 'all'>('saved');
   // The decision search stays mounted after its first visit, so its filters
   // and results survive a switch to the saved positions and back.
@@ -131,8 +126,6 @@ export default function App() {
   const [settingsCategory, setSettingsCategory] = useState<
     'general' | 'play' | 'profiles'
   >('general');
-  const playText = usePlayText();
-  const benchmarkT = useBenchmarkText();
   const benchmarkActivity = useBenchmarkActivity();
   const [extrasTool, setExtrasTool] = useState(readExtrasTool);
   useEffect(() => saveExtrasTool(extrasTool), [extrasTool]);
@@ -142,10 +135,7 @@ export default function App() {
     resume?: boolean;
   }>();
   const { t, setLocale } = useI18n();
-  const w = useWorkspaceText(),
-    learnT = useLearningText();
-  const playerText = usePlayerText();
-  const positionText = usePositionText();
+  const w = useWorkspaceText();
   const { appearance, applyAppearance } = useUiAppearance();
   const [requestedAssessment, setRequestedAssessment] =
     useState<AssessmentEntry>();
@@ -242,6 +232,8 @@ export default function App() {
     token: number;
   }>();
   const navigation = useGameNavigation();
+  const [analysisOpened, setAnalysisOpened] = useState(false);
+  if (navigation.match && !analysisOpened) setAnalysisOpened(true);
   const { restoring, cancelRestoration } = useSelectionRestore(
     navigation,
     (id) => {
@@ -445,37 +437,39 @@ export default function App() {
     );
   // Shown by the workspace that asked for the analysis.
   const analysisDialogs = analysisSelection && (
-    <AnalysisDialogs
-      selection={analysisSelection}
-      engine={analysisEngine}
-      plies={analysisPlies}
-      installationKey={analysisInstallationKey}
-      trackedJobs={trackedAnalysisJobs}
-      onAccepted={(jobs) => {
-        for (const job of jobs) track(job);
-        setRevision((value) => value + 1);
-      }}
-      onBulkAccepted={(databases, continuesBatch) =>
-        setBulkAnalysis((previous) => {
-          const overlaps = Object.keys(previous.jobs).some((id) =>
-            bulkJobPending(id, trackedAnalysisJobs, missingAnalysisJobs),
-          );
-          return {
-            jobs: {
-              ...(continuesBatch || overlaps ? previous.jobs : {}),
-              ...databases,
-            },
-            showMatchList: true,
-          };
-        })
-      }
-      onShowResults={(match, job) => {
-        setAnalysisSelection(undefined);
-        openMatch(match, undefined, job);
-        requestAnimationFrame(() => tabs.current.analysis?.focus());
-      }}
-      onClose={() => setAnalysisSelection(undefined)}
-    />
+    <LazyPanel>
+      <AnalysisDialogs
+        selection={analysisSelection}
+        engine={analysisEngine}
+        plies={analysisPlies}
+        installationKey={analysisInstallationKey}
+        trackedJobs={trackedAnalysisJobs}
+        onAccepted={(jobs) => {
+          for (const job of jobs) track(job);
+          setRevision((value) => value + 1);
+        }}
+        onBulkAccepted={(databases, continuesBatch) =>
+          setBulkAnalysis((previous) => {
+            const overlaps = Object.keys(previous.jobs).some((id) =>
+              bulkJobPending(id, trackedAnalysisJobs, missingAnalysisJobs),
+            );
+            return {
+              jobs: {
+                ...(continuesBatch || overlaps ? previous.jobs : {}),
+                ...databases,
+              },
+              showMatchList: true,
+            };
+          })
+        }
+        onShowResults={(match, job) => {
+          setAnalysisSelection(undefined);
+          openMatch(match, undefined, job);
+          requestAnimationFrame(() => tabs.current.analysis?.focus());
+        }}
+        onClose={() => setAnalysisSelection(undefined)}
+      />
+    </LazyPanel>
   );
 
   return (
@@ -519,17 +513,7 @@ export default function App() {
                 setView(tab);
               }}
             >
-              {tab === 'extras'
-                ? benchmarkT('extras')
-                : tab === 'play'
-                  ? playText('title')
-                  : tab === 'learning'
-                    ? learnT('study')
-                    : tab === 'positions'
-                      ? positionText('title')
-                      : tab === 'players'
-                        ? playerText('title')
-                        : w(tab)}
+              {w(tab)}
             </button>
           ))}
         </nav>
@@ -555,7 +539,7 @@ export default function App() {
       </header>
       {benchmarkActivity.active && (
         <p className="benchmark-global-status" role="status">
-          {benchmarkT('globalBusy')}
+          {w('globalBusy')}
         </p>
       )}
       <main className={`app-body app-body-${view}`}>
@@ -618,64 +602,72 @@ export default function App() {
           aria-labelledby="workspace-tab-analysis"
           hidden={view !== 'analysis'}
         >
-          <AnalysisWorkspace
-            active={view === 'analysis'}
-            requestedAnalysis={requestedAnalysis}
-            requestedCubeDecision={requestedCubeDecision}
-            onAnalysisRequestConsumed={(consumed) =>
-              setRequestedAnalysis((pending) =>
-                pending === consumed ? undefined : pending,
-              )
-            }
-            analysisRevision={JSON.stringify([
-              assessmentRevision,
-              runningAnalysisJobs
-                .filter((job) => job.kind === 'match' && job.game_no == null)
-                .map((job) => job.id)
-                .sort(),
-              confirmed?.analysis.error_thresholds,
-            ])}
-            metadataRevision={revision}
-            bookmarkRevision={bookmarkRevision}
-            onBookmarkChanged={bookmarkChanged}
-            navigation={navigation}
-            jobs={jobs}
-            runningJobs={runningAnalysisJobs}
-            theme={theme}
-            defaultEngine={analysisEngine}
-            defaultPlies={analysisPlies}
-            analysisInstallationKey={analysisInstallationKey}
-            openingBookRevision={bookRevision}
-            configured
-            detail={detail}
-            onDetail={setDetail}
-            onOpenDatabase={searchCurrentPosition}
-            onAnalyzeMatch={(match) =>
-              // The Analysis header names the players, like the dialog's fallback.
-              setAnalysisSelection({
-                kind: 'single',
-                match: { ...match, display_name: '' },
-              })
-            }
-            onTrackJob={track}
-            onNotesSaved={notesSaved}
-            notesSuspended={!!moveNotes || view !== 'analysis'}
-            onMoveNotes={(target) => {
-              if (navigation.match && navigation.game)
-                setMoveNotes({
-                  match: navigation.match,
-                  gameNo: target?.gameNo ?? navigation.game.game_no,
-                  moveId: target?.moveId,
-                  decisionKind: target?.decisionKind,
-                  reviewDecision: target?.reviewDecision,
-                });
-            }}
-            deckRevision={deckRevision}
-            onDeckChanged={deckChanged}
-            onPosition={openPosition}
-            scopeRequest={scopeRequest}
-            welcome={welcome}
-          />
+          {analysisOpened ? (
+            <LazyPanel>
+              <AnalysisWorkspace
+                active={view === 'analysis'}
+                requestedAnalysis={requestedAnalysis}
+                requestedCubeDecision={requestedCubeDecision}
+                onAnalysisRequestConsumed={(consumed) =>
+                  setRequestedAnalysis((pending) =>
+                    pending === consumed ? undefined : pending,
+                  )
+                }
+                analysisRevision={JSON.stringify([
+                  assessmentRevision,
+                  runningAnalysisJobs
+                    .filter(
+                      (job) => job.kind === 'match' && job.game_no == null,
+                    )
+                    .map((job) => job.id)
+                    .sort(),
+                  confirmed?.analysis.error_thresholds,
+                ])}
+                metadataRevision={revision}
+                bookmarkRevision={bookmarkRevision}
+                onBookmarkChanged={bookmarkChanged}
+                navigation={navigation}
+                jobs={jobs}
+                runningJobs={runningAnalysisJobs}
+                theme={theme}
+                defaultEngine={analysisEngine}
+                defaultPlies={analysisPlies}
+                analysisInstallationKey={analysisInstallationKey}
+                openingBookRevision={bookRevision}
+                configured
+                detail={detail}
+                onDetail={setDetail}
+                onOpenDatabase={searchCurrentPosition}
+                onAnalyzeMatch={(match) =>
+                  // The Analysis header names the players, like the dialog's fallback.
+                  setAnalysisSelection({
+                    kind: 'single',
+                    match: { ...match, display_name: '' },
+                  })
+                }
+                onTrackJob={track}
+                onNotesSaved={notesSaved}
+                notesSuspended={!!moveNotes || view !== 'analysis'}
+                onMoveNotes={(target) => {
+                  if (navigation.match && navigation.game)
+                    setMoveNotes({
+                      match: navigation.match,
+                      gameNo: target?.gameNo ?? navigation.game.game_no,
+                      moveId: target?.moveId,
+                      decisionKind: target?.decisionKind,
+                      reviewDecision: target?.reviewDecision,
+                    });
+                }}
+                deckRevision={deckRevision}
+                onDeckChanged={deckChanged}
+                onPosition={openPosition}
+                scopeRequest={scopeRequest}
+                welcome={welcome}
+              />
+            </LazyPanel>
+          ) : (
+            <section className="analysis-workspace">{welcome}</section>
+          )}
           {view === 'analysis' && analysisDialogs}
         </div>
         <div
@@ -764,7 +756,7 @@ export default function App() {
           <div
             className="text-navigation position-scope"
             role="group"
-            aria-label={decisionText('scope')}
+            aria-label={w('scope')}
           >
             {/* The scopes stay available beside a similar-position search;
                 choosing one closes that search. */}
@@ -778,7 +770,7 @@ export default function App() {
                   setPositionScope(scope);
                 }}
               >
-                {decisionText(scope)}
+                {w(scope)}
               </button>
             ))}
           </div>
@@ -933,12 +925,14 @@ export default function App() {
         </footer>
       </main>
       {moveNotes && (
-        <MoveNotesDialog
-          target={moveNotes}
-          theme={theme}
-          onClose={() => setMoveNotes(undefined)}
-          onSaved={notesSaved}
-        />
+        <LazyPanel>
+          <MoveNotesDialog
+            target={moveNotes}
+            theme={theme}
+            onClose={() => setMoveNotes(undefined)}
+            onSaved={notesSaved}
+          />
+        </LazyPanel>
       )}
       <LazyPanel quiet>
         {(settingsOpen || settingsOpened) && (

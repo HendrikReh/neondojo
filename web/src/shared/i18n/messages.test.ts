@@ -6,20 +6,8 @@ import {
   validatePluralForms,
   type Locale,
 } from './i18n-core';
-import {
-  defineMessages,
-  definedMessages,
-  fromRows,
-  rowLocales,
-} from './messages';
-
-// Load every feature catalog, so each one registers itself.
-const sources = import.meta.glob<string>('../../**/*-messages.ts', {
-  eager: true,
-  query: '?raw',
-  import: 'default',
-});
-import.meta.glob('../../**/*-messages.ts', { eager: true });
+import { defineMessages } from './messages';
+import { localeMessages, type LocaleMessages } from './i18n-catalogs';
 
 const locales = Object.keys(requiredPluralCategories) as Locale[];
 const pluralName = /\{([A-Za-z][A-Za-z0-9]*), plural,/g;
@@ -37,53 +25,51 @@ function sample(template: string, count: number) {
   );
 }
 
-it('defines every feature catalog through defineMessages', () => {
-  const files = Object.entries(sources);
-  expect(files.length).toBeGreaterThan(30);
+const groups = Object.keys(localeMessages('en')) as (keyof LocaleMessages)[];
+
+it('exposes every feature catalog through defineMessages', () => {
+  const files = import.meta.glob<string>(
+    ['/src/**/*-messages.ts', '!/src/shared/i18n/locales/**'],
+    { eager: true, query: '?raw', import: 'default' },
+  );
+  expect(Object.keys(files).length).toBeGreaterThan(30);
   expect(
-    files
+    Object.entries(files)
       .filter(([, source]) => !source.includes('defineMessages('))
       .map(([path]) => path),
   ).toEqual([]);
 });
 
-it('builds catalogs from rows in the row order', () => {
-  const catalogs = fromRows({ greeting: ['en', 'de', 'es', 'fr', 'pl', 'it'] });
-  for (const locale of rowLocales)
-    expect(catalogs[locale].greeting).toBe(locale);
+it.each(locales)('%s includes every catalog', (locale) => {
+  expect(Object.keys(localeMessages(locale)).sort()).toEqual(
+    [...groups].sort(),
+  );
 });
 
 it('shows an unknown key instead of failing', () => {
-  const messages = defineMessages('test-unknown-key', {
-    en: { known: 'Known' },
-    de: { known: 'Bekannt' },
-    es: { known: 'Conocido' },
-    fr: { known: 'Connu' },
-    pl: { known: 'Znany' },
-    it: { known: 'Noto' },
-  });
-  expect(messages.text('de', 'known')).toBe('Bekannt');
-  expect(messages.text('de', 'unexpected' as 'known')).toBe('unexpected');
+  const messages = defineMessages('workspace');
+  expect(messages.text('de', 'settings')).toBe('Einstellungen');
+  expect(messages.text('de', 'unexpected' as 'settings')).toBe('unexpected');
 });
 
-describe.each([...definedMessages])('%s', (_name, catalogs) => {
-  const english = catalogs.en;
+describe.each(groups)('%s', (group) => {
+  const english: Readonly<Record<string, string>> = localeMessages('en')[group];
   const keys = Object.keys(english).sort();
 
   it.each(locales)('%s has every key and no other', (locale) => {
-    expect(Object.keys(catalogs[locale]).sort()).toEqual(keys);
+    expect(Object.keys(localeMessages(locale)[group]).sort()).toEqual(keys);
   });
 
   it.each(locales)(
     '%s keeps placeholders and plural forms, and every message formats',
     (locale) => {
+      const catalog: Readonly<Record<string, string>> =
+        localeMessages(locale)[group];
       for (const key of keys) {
-        const text = catalogs[locale][key as keyof typeof english];
+        const text = catalog[key];
         expect(text, key).toBeTypeOf('string');
         expect(text.trim(), key).not.toBe('');
-        expect(placeholders(text), key).toEqual(
-          placeholders(english[key as keyof typeof english]),
-        );
+        expect(placeholders(text), key).toEqual(placeholders(english[key]));
         expect(() => validatePluralForms(locale, text), key).not.toThrow();
         for (const count of [0, 1, 2, 5, 22])
           expect(

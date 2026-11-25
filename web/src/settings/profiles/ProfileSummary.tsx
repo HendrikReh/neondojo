@@ -9,7 +9,7 @@ import {
   useProfileText,
   type ProfileMessageKey,
 } from './profile-messages';
-import { themes } from '../../shared/board/themes';
+import { builtInThemes, useArchiveThemes } from '../../shared/board/themes';
 import { languages, numberFormat } from '../../shared/i18n/i18n-core';
 import {
   ALL_CARDS,
@@ -50,6 +50,11 @@ export default function ProfileSummary({
 }) {
   const t = useProfileText(),
     { locale, t: appT } = useI18n();
+  const archiveThemes = useArchiveThemes(
+    [configuration, compareTo].some((profile) =>
+      profile?.appearance.board_theme.startsWith('bgblitz:'),
+    ),
+  );
   const differencesHeading = useId();
   const searchText = useCardSearchText();
   const settingsText = useSettingsText();
@@ -88,7 +93,7 @@ export default function ProfileSummary({
       );
       if (threshold) return appT(threshold[1]);
     }
-    const key = profileFieldKey(path);
+    const key = profileFieldKey(locale, path);
     if (key) return t(key);
     const leaf = path.split('.').at(-1)!;
     const column = LIBRARY_COLUMNS.find((c) => c.id === leaf);
@@ -159,7 +164,10 @@ export default function ProfileSummary({
     if (path.endsWith('.locale'))
       return languages.find((l) => l.id === s)?.name ?? s;
     if (path.endsWith('board_theme'))
-      return themes.find((theme) => theme.id === s)?.name ?? s;
+      return (
+        [...builtInThemes, ...archiveThemes].find((theme) => theme.id === s)
+          ?.name ?? s
+      );
     if (path.endsWith('.database_id') || path.endsWith('.deck_id'))
       return resourceNames[s] ?? t('unavailableReference');
     const enumFields = [
@@ -177,7 +185,7 @@ export default function ProfileSummary({
       'status',
       'severity',
     ];
-    const key = profileFieldKey(s);
+    const key = profileFieldKey(locale, s);
     return enumFields.includes(path.split('.').at(-1)!) && key ? t(key) : s;
   };
   const rows = differencesOnly ? [] : configurationSummaryRows(configuration);

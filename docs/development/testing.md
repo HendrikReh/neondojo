@@ -26,6 +26,21 @@ The filter matches substrings, so `play::` also selects `open_sage_play::` and `
 
 [cargo-nextest](https://nexte.st/) runs each test in its own process and in parallel across test binaries. With nextest installed, `cargo nextest run --workspace` replaces `cargo test --workspace` and does not run doctests; `-E 'binary(integration) & test(/^play::/)'` selects exactly the `play` module of the integration tests. On November 21, 2026, on the Mac mini M4 Pro, the default suite of 604 tests took 56 s with `cargo test` and 54 s with nextest, after the build. With one binary per test file, `cargo test` had needed 100 s. After a change in the library, rebuilding the tests took 4.0 s instead of 6.3 s.
 
+### Production web startup
+
+On 2026-11-25, the production entry built with all 13 BGBlitz archives measured 432,028 bytes raw and 137,441 bytes gzip-9. The entry on `237d2ec` measured 1,091,818 and 350,574 bytes respectively.
+
+The table shows median results from three cold Chrome 158 runs per build on macOS. Each run used an empty disposable library, German, BG Quantum, a local HTTP server with precompressed gzip-9 assets and a fresh browser context with caching disabled. Boot covers JavaScript requested before clicking **Spielen**. The first switch ends when the idle board appears. Transfer counts compressed JavaScript response bodies. Parse CPU sums the thread durations of Chrome’s `v8.parseOnBackground` events for those JavaScript assets.
+
+| Phase | JS requests, before → after | Transferred bytes, before → after | Background parse CPU, before → after | Visible frame, before → after |
+| --- | --- | --- | --- | --- |
+| Cold welcome screen | 1 → 4 | 350,574 → 172,291 | 10.1 → 6.3 ms | navigation to German tabs, 70 → 84 ms |
+| First switch to Playing | 2 → 12 | 23,362 → 37,899 | 0.9 → 1.6 ms | click to BG Quantum board, 50 → 51 ms |
+
+The two phases together transferred 210,190 bytes after the change and 373,936 before. With Forest, the changed build transferred 169,368 bytes before the click and requested zero BGBlitz catalog bytes. The split reduces cold transfer and background parsing while moving some work to the first workspace visit. The local frame timings include network scheduling, application work and browser rendering.
+
+To repeat the observation, serve `web/dist` from the production build with a disposable backend, save German and BG Quantum, start a Chrome Performance recording with the network cache disabled, reload the welcome screen, then switch to **Spielen**. Inspect the JavaScript requests and V8 background parse events. The Playwright test in [themes-languages.spec.ts](../../web/e2e/themes-languages.spec.ts) also holds both initial downloads open and delays a runtime language switch.
+
 ### Continuous integration
 
 [GitHub Actions](../../.github/workflows/ci.yml) runs the default tier every night at 02:17 UTC on `main` and on pushes to `release/**`. Pull requests and pushes to `main` do not trigger a run, so run the relevant checks locally before merging; `gh workflow run ci.yml --ref <branch>` starts a run for a pushed branch. The `Rust` job runs `cargo fmt`, Clippy, and `cargo test --workspace` against a PostgreSQL 17 service. The `Web` job runs Vitest, `typecheck:e2e`, the Python tests under `tools/`, and the production build. Both jobs run on Ubuntu. The Rust toolchain is pinned in the workflow, so new Clippy lints only arrive when someone updates that pin.

@@ -153,6 +153,72 @@ async function assertArtwork(svg: Locator) {
   expect(failures).toEqual([]);
 }
 
+async function holdModule(page: Page, url: string) {
+  const requested = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<void>();
+  await page.route(url, async (route) => {
+    requested.resolve();
+    await gate.promise;
+    await route.continue();
+  });
+  return { requested: requested.promise, release: gate.resolve };
+}
+
+test('waits for the saved language and artwork before mounting, and keeps the current language while switching', async ({
+  page,
+}) => {
+  const theme = themes.find(({ id }) => id === 'bgblitz:bg-quantum');
+  test.skip(!theme, 'optional local Quantum artwork');
+  await upload(page);
+  const initialModules = await page.evaluate(() =>
+    performance
+      .getEntriesByType('resource')
+      .map(({ name }) => new URL(name).pathname),
+  );
+  expect(
+    initialModules.some((path) => path.endsWith('/generated-themes.json')),
+  ).toBe(false);
+  expect(
+    initialModules.filter((path) => /\/locales\/[a-z]{2}\.ts$/.test(path)),
+  ).toEqual(['/src/shared/i18n/locales/de.ts']);
+
+  await applyTheme(page, theme!);
+
+  const language = await holdModule(page, '**/locales/de.ts*');
+  const artwork = await holdModule(page, '**/generated-themes.json*');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await Promise.all([language.requested, artwork.requested]);
+  await expect(page.locator('#root')).toBeEmpty();
+  language.release();
+  await expect(page.locator('#root')).toBeEmpty();
+  artwork.release();
+  await expect(
+    page.getByRole('tab', { name: 'Analyse', exact: true }),
+  ).toBeVisible();
+  const board = analysis(page).locator('.bgblitz-board');
+  await expect(board).toHaveAttribute('data-theme', theme!.id);
+
+  const polish = await holdModule(page, '**/locales/pl.ts*');
+  const { dialog, locale } = await openSettings(page);
+  await dialog
+    .getByLabel(settingsText(locale, 'language'), { exact: true })
+    .selectOption('pl');
+  await dialog
+    .getByRole('button', { name: profileText(locale, 'apply'), exact: true })
+    .click();
+  await polish.requested;
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+  await expect(
+    dialog.getByLabel(settingsText('de', 'language'), { exact: true }),
+  ).toBeVisible();
+  polish.release();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
+  await expect(
+    page.getByRole('dialog', { name: settingsText('pl', 'title') }),
+  ).toBeVisible();
+  await expect(board).toHaveAttribute('data-theme', theme!.id);
+});
+
 test('every local ZIP theme uses its original assets and survives reload on desktop/mobile', async ({
   page,
 }) => {

@@ -1,8 +1,9 @@
+import archiveThemes from './archive-themes';
 import { createElement } from 'react';
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import PlayBoardDice from './PlayBoardDice';
-import { archiveThemes, type BgBlitzTheme } from './themes';
+import { type BgBlitzTheme } from './themes';
 import type { DiceInteraction } from './PlayDice';
 const controls: DiceInteraction = {
   canSwap: false,
