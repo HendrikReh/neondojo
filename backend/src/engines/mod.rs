@@ -803,7 +803,7 @@ impl AnalysisEngine {
     /// GNUbg starts a process per evaluation anyway.
     pub(crate) fn interactive(self) -> Self {
         match self {
-            Self::Gnubg(engine) => Self::Gnubg(engine),
+            Self::Gnubg(engine) => Self::Gnubg(engine.interactive()),
             Self::OpenSage(mut engine) => {
                 engine.slot = process::Slot::Interactive;
                 Self::OpenSage(engine)
@@ -823,7 +823,7 @@ impl AnalysisEngine {
     pub(crate) async fn check_installation(&self) -> Result<String> {
         match self {
             Self::Gnubg(engine) => engine.check_installation().await,
-            Self::OpenSage(engine) => engine.version().await,
+            Self::OpenSage(engine) => engine.verify().await,
         }
     }
     /// GNUbg's saved checker move filter; other engines have none.

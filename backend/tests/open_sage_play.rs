@@ -462,3 +462,73 @@ async fn benchmark_hint_and_practice_finish_while_a_verified_batch_owns_general(
     let (rolls, ()) = tokio::try_join!(batch, requests).unwrap();
     assert_eq!(rolls.len(), 1);
 }
+
+#[cfg(unix)]
+#[sqlx::test(migrations = "./migrations")]
+async fn session_probes_each_distinct_neongammon_profile_once(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let rules = temp.path().join("rules");
+    let sage = temp.path().join("sidecar");
+    std::fs::write(&rules, "#!/bin/sh\necho 'GNU Backgammon test'\nif [ \"$1\" != --version ]; then printf ready > ready.txt; fi\n").unwrap();
+    std::fs::write(&sage, r#"#!/usr/bin/env python3
+import json, pathlib, sys
+for line in sys.stdin:
+    q = json.loads(line)
+    profile = q['profile']
+    if not profile['artifact_fingerprint']:
+        with pathlib.Path(__file__).with_name('probes').open('a') as probes:
+            print(profile['plies'], profile['threads'], file=probes)
+    print(json.dumps({'id': q['id'], 'result': {'package_version': '3.2.0', 'artifact_fingerprint': 'a' * 64}}), flush=True)
+"#).unwrap();
+    for path in [&rules, &sage] {
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let profile = json!({"python":sage, "artifact_fingerprint":"a".repeat(64), "package_version":"3.2.0",
+        "plies":2, "threads":2, "adapter_version":1, "one_ply_verified":true});
+    sqlx::query(
+        "UPDATE engine_installations SET python_path=$1,snapshot=$2 WHERE engine_id='bgsage'",
+    )
+    .bind(sage.to_str().unwrap())
+    .bind(profile)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO app_settings(singleton,gnubg_path,play_engine,analysis_engine,play_plies,analysis_plies,open_sage_play_threads,open_sage_threads)
+        VALUES(true,$1,'bgsage','bgsage',2,2,2,2)")
+        .bind(rules.to_str().unwrap()).execute(&pool).await.unwrap();
+    let app = api::router(AppState::new(
+        pool.clone(),
+        Engine::new(rules.to_string_lossy().into()),
+    ));
+    for (depth, threads, expected) in [(2, 2, "2 2\n"), (3, 2, "2 2\n3 2\n"), (2, 3, "2 2\n2 3\n")]
+    {
+        std::fs::write(temp.path().join("probes"), "").unwrap();
+        sqlx::query("UPDATE app_settings SET analysis_plies=$1,open_sage_threads=$2")
+            .bind(depth)
+            .bind(threads)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (status, session) = call(
+            app.clone(),
+            "POST",
+            "/api/play/sessions",
+            json!({"human_player":0,"match_length":5}),
+        )
+        .await;
+        assert_eq!(status, 201, "{session}");
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("probes")).unwrap(),
+            expected
+        );
+        assert_eq!(
+            session["engine_snapshots"]["analysis"]["open_sage"]["plies"],
+            depth
+        );
+        assert_eq!(
+            session["engine_snapshots"]["analysis"]["open_sage"]["threads"],
+            threads
+        );
+    }
+}

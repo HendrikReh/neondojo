@@ -253,6 +253,7 @@ impl PlaySession {
                     .with_expected_version(Some(self.engine.version.clone())))
             }
         }
+        .map(Engine::interactive)
     }
     fn analysis_engine(&self, path: &str) -> anyhow::Result<crate::engines::AnalysisEngine> {
         match &self.engine_snapshots {

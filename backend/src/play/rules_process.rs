@@ -55,6 +55,7 @@ impl RulesProcess {
         }
         // The startup banner supplies the saved version check.
         let installation = Installation::bind(engine).await?;
+        let _cpu = engine.reserve_cpu(1).await?;
         let mut child = Command::new(installation.executable())
             .args(["-t", "-q", "-r", "-c", "commands.txt"])
             .current_dir(directory.path())
@@ -123,6 +124,7 @@ impl RulesProcess {
         request: &NativeRequest<'_>,
     ) -> Result<(Self, NativeSnapshot, String)> {
         let (snapshot, sgf) = tokio::time::timeout(TIMEOUT, async {
+            let _cpu = self.engine.reserve_cpu(1).await?;
             ensure!(self.sequence < 64, "GNUbg rule action chain exceeds limit");
             self.sequence += 1;
             let mut frame =

@@ -7391,6 +7391,16 @@
               }
             }
           },
+          "409": {
+            "description": "A benchmark is using the engines",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "422": {
             "description": "",
             "content": {

@@ -4,6 +4,7 @@ use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use crate::engine::{GnubgMoveFilter, resolve_binary};
 use crate::engines::EngineId;
 use crate::json_errors::{Json, Path};
+use anyhow::Context;
 use axum::{
     Router,
     extract::State,
@@ -13,7 +14,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::{FromRow, types::Json as SqlJson};
+use sqlx::{FromRow, PgPool, types::Json as SqlJson};
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
@@ -316,17 +317,20 @@ enum Workload {
     Play(i32),
 }
 
+pub(crate) async fn running(pool: &PgPool) -> anyhow::Result<bool> {
+    Ok(
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='running')")
+            .fetch_one(pool)
+            .await?,
+    )
+}
+
 async fn enqueue(
     state: &AppState,
     engine_id: &str,
     workload: Workload,
 ) -> ApiResult<Vec<BenchmarkRun>> {
-    let running: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='running')")
-            .fetch_one(&state.pool)
-            .await
-            .map_err(anyhow::Error::from)?;
-    if running {
+    if running(&state.pool).await? {
         return Err(ApiError(
             StatusCode::CONFLICT,
             "A benchmark is already running; wait for it to finish".into(),
@@ -369,10 +373,19 @@ async fn enqueue(
         let path = engine
             .resolved_binary()
             .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
-        let version = engine
-            .check_installation()
-            .await
-            .map_err(|e| ApiError::invalid(format!("Engine check failed: {e:#}")))?;
+        // snapshot_for just verified the exact NeonGammon profile. GNUbg's
+        // snapshot only reads its version and still needs a real evaluation.
+        let version = if engine.id().requires_verified_profile() {
+            snapshot
+                .engine_version
+                .clone()
+                .context("Missing verified engine version")?
+        } else {
+            engine
+                .check_installation()
+                .await
+                .map_err(|e| ApiError::invalid(format!("Engine check failed: {e:#}")))?
+        };
         let rules_version = if engine.id().is_rules_engine() {
             Some(version.clone())
         } else if play.is_some() {

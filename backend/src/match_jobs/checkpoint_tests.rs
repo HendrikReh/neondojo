@@ -52,6 +52,43 @@ fn summary(game: &AnalyzedGame) -> MatchAnalysisSummary {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn incomplete_checkpoint_names_its_saved_provider(pool: PgPool) -> Result<()> {
+    let id = import_source(&pool, "(;GM[6]MI[length:7];W[31hefe])").await?;
+    let (mut job, token) = running_job(&pool, id, 1).await?;
+    let game = AnalyzedGame {
+        game_no: 1,
+        cube_enabled: true,
+        engine: "fixture".into(),
+        statistics: None,
+        decisions: Vec::new(),
+    };
+    for provider in [
+        crate::engines::EngineId::Gnubg,
+        crate::engines::EngineId::NeonGammon,
+    ] {
+        job.engine_snapshot = Some(crate::settings::EngineSnapshot {
+            engine_id: provider.id().into(),
+            gnubg_path: "/unused".into(),
+            engine_version: None,
+            gnubg_threads: None,
+            gnubg_move_filter: None,
+            open_sage: None,
+        });
+        let error = checkpoint(&pool, &job, token, &game, &mut summary(&game), None)
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            format!(
+                "Game 1: {} returned 0 of 1 checker decisions",
+                provider.display_name()
+            )
+        );
+    }
+    Ok(())
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn checkpoints_batch_rows_and_roll_back_together(pool: PgPool) -> Result<()> {
     let match_id = import_source(
         &pool,

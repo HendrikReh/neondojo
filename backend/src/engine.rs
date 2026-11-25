@@ -5,6 +5,7 @@ use std::{path::Path, process::Stdio, sync::OnceLock, time::Duration};
 use tokio::{io::AsyncReadExt, process::Command};
 use utoipa::ToSchema;
 
+pub(crate) mod cpu;
 mod installation;
 pub(crate) use installation::Installation;
 
@@ -26,6 +27,13 @@ async fn engine_permit() -> Option<tokio::sync::RwLockReadGuard<'static, ()>> {
 pub(crate) async fn with_shared_access<F: std::future::Future>(work: F) -> F::Output {
     let _permit = engine_permit().await;
     ENGINE_ACCESS.scope((), work).await
+}
+
+/// Hold admission through the entire Play startup. A pending benchmark writer
+/// also rejects new sessions; nested subprocesses reuse the outer read guard.
+pub(crate) async fn try_play_start<F: std::future::Future>(work: F) -> Option<F::Output> {
+    let _admission = ENGINE_WORK.try_read().ok()?;
+    Some(ENGINE_ACCESS.scope((), work).await)
 }
 
 /// Bound a request's total time, including admission to the shared engine gate.
@@ -120,6 +128,7 @@ const INSTALLATION_CHECK_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct Engine {
     binary: String,
     cubeless_checker: bool,
+    cpu_workload: cpu::Workload,
     expected_version: Option<String>,
     threads: Option<i32>,
     move_filter: Option<GnubgMoveFilter>,
@@ -205,12 +214,25 @@ impl Engine {
         Self {
             binary,
             cubeless_checker: false,
+            cpu_workload: cpu::Workload::Background,
             expected_version: None,
             threads: None,
             move_filter: None,
             installation_timeout: INSTALLATION_CHECK_TIMEOUT,
             roll_timeout: ROLL_TIMEOUT,
         }
+    }
+
+    pub(crate) fn interactive(mut self) -> Self {
+        self.cpu_workload = cpu::Workload::Foreground;
+        self
+    }
+
+    pub(crate) async fn reserve_cpu(&self, threads: u32) -> Result<cpu::CpuPermit<'static>> {
+        cpu::HostCpuBudget::host()
+            .await
+            .acquire(threads, self.cpu_workload)
+            .await
     }
 
     pub(crate) fn with_cubeless_checker(mut self) -> Self {
@@ -326,14 +348,26 @@ impl Engine {
     /// Keep the health check responsive when a benchmark owns the engine.
     /// A started version probe uses its normal subprocess timeout.
     pub(crate) async fn health_version(&self) -> Result<String> {
-        let _permit = tokio::time::timeout(Duration::from_millis(300), engine_permit())
-            .await
-            .context("GNUbg is busy")?;
-        self.version_unlocked(&resolve_binary_async(&self.binary).await?)
+        let (_permit, _cpu) = tokio::time::timeout(Duration::from_millis(300), async {
+            let permit = engine_permit().await;
+            let cpu = cpu::HostCpuBudget::host()
+                .await
+                .acquire(1, cpu::Workload::Foreground)
+                .await?;
+            anyhow::Ok((permit, cpu))
+        })
+        .await
+        .context("GNUbg is busy")??;
+        self.run_version(&resolve_binary_async(&self.binary).await?)
             .await
     }
 
     async fn version_unlocked(&self, binary: &str) -> Result<String> {
+        let _cpu = self.reserve_cpu(1).await?;
+        self.run_version(binary).await
+    }
+
+    async fn run_version(&self, binary: &str) -> Result<String> {
         let result = tokio::time::timeout(
             Duration::from_secs(5),
             Command::new(binary)
@@ -434,6 +468,9 @@ impl Engine {
         } else {
             tokio::fs::write(commands_path, commands).await?;
         }
+        let cpu = self
+            .reserve_cpu(u32::try_from(self.calculation_threads())?)
+            .await?;
         let mut child = Command::new(&binary)
             .args(["-t", "-q", "-r", "-c", "commands.txt"])
             .current_dir(directory)
@@ -515,6 +552,7 @@ impl Engine {
         } else {
             work.await?
         };
+        drop(cpu); // Wrapper rechecks start their own one-thread version process.
         if let Some(threads) = self.threads {
             ensure!(
                 reported_threads(&output) == Some(threads),
@@ -1822,6 +1860,30 @@ mod benchmark_gate_tests {
             release_rx.await.unwrap();
         }));
         entered_rx.await.unwrap();
+        use tower::ServiceExt;
+        let app = crate::api::router(crate::api::AppState::new(
+            sqlx::PgPool::connect_lazy("postgres://unused").unwrap(),
+            Engine::new("/missing-engine".into()),
+        ));
+        let response = tokio::time::timeout(
+            Duration::from_secs(1),
+            app.oneshot(
+                axum::http::Request::post("/api/play/sessions")
+                    .header("content-type", "application/json")
+                    .body(axum::body::Body::from(
+                        r#"{"human_player":0,"match_length":5}"#,
+                    ))
+                    .unwrap(),
+            ),
+        )
+        .await
+        .expect("Play startup waited on the benchmark writer")
+        .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::CONFLICT);
+        let body = axum::body::to_bytes(response.into_body(), 2048)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("benchmark"));
         let normal = Engine::new("/missing-engine".into());
         let waiting = normal.version();
         tokio::pin!(waiting);
