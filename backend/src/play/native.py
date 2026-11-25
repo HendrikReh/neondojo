@@ -70,7 +70,9 @@ else:
         if gnubg.posinfo()['gamestate'] != 1:
             gnubg.nextturn()
     assert gnubg.gnubgid() == request['native_id'], 'SGF did not restore exact saved state: %s != %s' % (gnubg.gnubgid(), request['native_id'])
-    if match_bots is not None:
+    # A duel worker owns the complete game schedule. Its file RNG cursor
+    # stays immediately after the most recent roll on every later action.
+    if match_bots is not None and not globals().get('_reuse_checkpoint', False):
         command('set rng file dice.txt')
     if action == 'opening_roll':
         command('set display on')

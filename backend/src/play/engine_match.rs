@@ -1,14 +1,52 @@
-use super::{NativeRequest, PlayPhase, open_sage, run_native_with_dice};
+use super::{NativeRequest, PlayPhase, open_sage, rules_process::RulesProcess};
 use crate::imported_analysis::sage::{RetainedChecker, retain};
 use crate::{
     engine::Engine,
-    engines::{AnalysisEngine, EngineCost},
+    engines::{AnalysisEngine, DuelWorkers, EngineCost},
 };
 use anyhow::{Context, Result, ensure};
 
 pub(crate) struct GameDice {
     pub opening: Vec<[u8; 2]>,
     pub turns: Vec<[u8; 2]>,
+}
+
+pub(super) const ACTION_LIMIT: u32 = 4096;
+
+impl GameDice {
+    pub(super) fn rng_file(&self) -> Result<Vec<u8>> {
+        ensure!(!self.opening.is_empty(), "Missing scheduled opening roll");
+        self.opening
+            .iter()
+            .chain(&self.turns)
+            .flatten()
+            .map(|&die| {
+                ensure!((1..=6).contains(&die), "Invalid scheduled die");
+                Ok(b'0' + die)
+            })
+            .collect()
+    }
+
+    /// Native rolls may reverse the two dice. Validate the complete played
+    /// prefix and reject a rewind, including use of GNUbg's end-of-file repeat.
+    fn verify_turns(&self, rolls: &[[u8; 2]], consumed: usize) -> Result<usize> {
+        let (opening, turns) = rolls.split_first().context("Missing played opening roll")?;
+        ensure!(
+            Some(sorted(*opening)) == self.opening.last().copied().map(sorted),
+            "GNUbg changed the opening roll"
+        );
+        ensure!(
+            (consumed..=self.turns.len()).contains(&turns.len())
+                && turns.iter().copied().map(sorted).eq(self
+                    .turns
+                    .iter()
+                    .copied()
+                    .take(turns.len())
+                    .map(sorted)),
+            "GNUbg did not use the scheduled turn rolls"
+        );
+        Ok(turns.len())
+    }
 }
 
 /// One duel unit: a point match with the cube, or a block of independent
@@ -115,134 +153,110 @@ pub(crate) async fn play(
     let mut saved: Option<(super::NativeSnapshot, String)> = None;
     let mut checker_evaluations = Vec::new();
     let mut meter = CostMeter::new();
+    let workers = DuelWorkers::new(bots.map(|bot| match bot {
+        AnalysisEngine::OpenSage(sage) => Some(sage.snapshot()),
+        AnalysisEngine::Gnubg(_) => None,
+    }));
     for game in 1..=last_game {
-        let GameDice { opening, turns } = dice(game)?;
-        let request = NativeRequest {
-            new: saved.is_none(),
-            external_bot: true,
-            accept_resignation: None,
-            human_player: 0,
-            match_length: length,
-            plies: 1,
-            native_id: "",
-            action: "opening_roll",
-            notation: None,
-            resign_level: None,
-            match_bots,
-            cubeless,
-        };
-        let (mut snapshot, mut sgf) = run_native_with_dice(
-            rules,
-            &NativeRequest {
+        let schedule = dice(game)?;
+        let (snapshot, sgf) = crate::engine::with_shared_access(async {
+            let request = NativeRequest {
+                new: saved.is_none(),
+                external_bot: true,
+                accept_resignation: None,
+                human_player: 0,
+                match_length: length,
+                plies: 1,
                 native_id: saved.as_ref().map_or("", |(s, _)| s.native_id.as_str()),
-                ..request
-            },
-            saved.as_ref().map(|(_, sgf)| sgf.as_str()),
-            Some(&opening),
-        )
+                action: "opening_roll",
+                notation: None,
+                resign_level: None,
+                match_bots,
+                cubeless,
+            };
+            let mut batches = workers.begin_game().await?;
+            let process = RulesProcess::start_with_dice(
+                rules,
+                saved.as_ref().map(|(_, sgf)| sgf.as_str()),
+                Some(&schedule),
+            )
+            .await?;
+            let (mut process, mut snapshot, _) = process.execute(&request).await?;
+            ensure!(snapshot.game_no == game, "Unexpected native game number");
+            let native_opening = snapshot
+                .opening
+                .as_ref()
+                .context("Missing native opening")?;
+            ensure!(
+                native_opening
+                    .rolls
+                    .iter()
+                    .copied()
+                    .eq(schedule.opening.iter().map(|roll| roll.map(i32::from))),
+                "GNUbg did not use the scheduled opening rolls"
+            );
+            let mut consumed = 0;
+            let mut choice = ("start_opening_move", None);
+            for _ in 0..ACTION_LIMIT {
+                let step = NativeRequest {
+                    new: false,
+                    native_id: &snapshot.native_id,
+                    action: choice.0,
+                    notation: choice.1.as_deref(),
+                    ..request
+                };
+                let sgf;
+                (process, snapshot, sgf) = process.execute(&step).await?;
+                meter.add_native(&snapshot, native_bots);
+                consumed = schedule.verify_turns(&snapshot.match_rolls, consumed)?;
+                if matches!(snapshot.phase, PlayPhase::MatchOver | PlayPhase::GameOver) {
+                    process.finish().await?;
+                    batches.finish().await?;
+                    return Ok((snapshot, sgf));
+                }
+                let side = usize::try_from(snapshot.player)?;
+                let Some(AnalysisEngine::OpenSage(bot)) = bots.get(side) else {
+                    anyhow::bail!("GNUbg did not yield to an external engine");
+                };
+                let chosen =
+                    open_sage::choose(bot, &snapshot, false, Some(batches.for_side(side)?)).await?;
+                meter.add(side, chosen.cost);
+                if let Some(candidates) = chosen.checker {
+                    checker_evaluations.push((
+                        snapshot.history.len(),
+                        RetainedChecker::new(
+                            snapshot.native_id.clone(),
+                            bot.snapshot(),
+                            candidates,
+                        ),
+                    ));
+                }
+                choice = (chosen.action, chosen.notation);
+            }
+            anyhow::bail!("Match game action limit exceeded")
+        })
         .await?;
-        ensure!(snapshot.game_no == game, "Unexpected native game number");
-        let native_opening = snapshot
-            .opening
-            .as_ref()
-            .context("Missing native opening")?;
-        ensure!(
-            native_opening
-                .rolls
-                .iter()
-                .copied()
-                .eq(opening.iter().map(|roll| roll.map(i32::from))),
-            "GNUbg did not use the scheduled opening rolls"
-        );
-        let first_roll = sorted(*opening.last().context("Missing scheduled opening roll")?);
-        let mut consumed = 0;
-        let mut choice = ("start_opening_move", None);
-        for _ in 0..4096 {
-            // An empty file would allow the native file RNG to fail or fall back.
-            // One sentinel roll permits a pending checker/cube decision to finish.
-            let remaining = if consumed < turns.len() {
-                &turns[consumed..]
-            } else {
-                &[[1, 1]]
-            };
-            let step = NativeRequest {
-                new: false,
-                native_id: &snapshot.native_id,
-                action: choice.0,
-                notation: choice.1.as_deref(),
-                ..request
-            };
-            (snapshot, sgf) =
-                run_native_with_dice(rules, &step, Some(&sgf), Some(remaining)).await?;
-            meter.add_native(&snapshot, native_bots);
-            let (actual_opening, actual_turns) = snapshot
-                .match_rolls
-                .split_first()
-                .context("Missing played opening roll")?;
+        let finished = if let Some(counts) = outcomes.as_mut() {
             ensure!(
-                sorted(*actual_opening) == first_roll,
-                "GNUbg changed the opening roll"
+                matches!(snapshot.phase, PlayPhase::GameOver),
+                "Unexpected money match end"
             );
-            ensure!(
-                (consumed..=turns.len()).contains(&actual_turns.len())
-                    && actual_turns.iter().copied().map(sorted).eq(turns
-                        .iter()
-                        .copied()
-                        .map(sorted)
-                        .take(actual_turns.len())),
-                "GNUbg did not use the scheduled turn rolls"
-            );
-            consumed = actual_turns.len();
-            match snapshot.phase {
-                PlayPhase::MatchOver if !cubeless => {
-                    return Ok(FinishedMatch {
-                        scores: snapshot.scores,
-                        games: game,
-                        outcomes: None,
-                        costs: meter.finish(&snapshot.history),
-                        sgf: tokio::task::spawn_blocking(move || retain(&sgf, checker_evaluations))
-                            .await??,
-                    });
-                }
-                PlayPhase::GameOver => {
-                    if let Some(outcomes) = outcomes.as_mut() {
-                        record_money_game(outcomes, previous_scores, snapshot.scores)?;
-                        previous_scores = snapshot.scores;
-                        if game == last_game {
-                            return Ok(FinishedMatch {
-                                scores: snapshot.scores,
-                                games: game,
-                                outcomes: Some(*outcomes),
-                                costs: meter.finish(&snapshot.history),
-                                sgf: tokio::task::spawn_blocking(move || {
-                                    retain(&sgf, checker_evaluations)
-                                })
-                                .await??,
-                            });
-                        }
-                    }
-                    break;
-                }
-                _ => {}
-            }
-            let side = usize::try_from(snapshot.player)?;
-            let Some(AnalysisEngine::OpenSage(bot)) = bots.get(side) else {
-                anyhow::bail!("GNUbg did not yield to an external engine");
-            };
-            let chosen = open_sage::choose(bot, &snapshot, false).await?;
-            meter.add(side, chosen.cost);
-            if let Some(candidates) = chosen.checker {
-                checker_evaluations.push((
-                    snapshot.history.len(),
-                    RetainedChecker::new(snapshot.native_id.clone(), bot.snapshot(), candidates),
-                ));
-            }
-            choice = (chosen.action, chosen.notation);
+            record_money_game(counts, previous_scores, snapshot.scores)?;
+            previous_scores = snapshot.scores;
+            game == last_game
+        } else {
+            matches!(snapshot.phase, PlayPhase::MatchOver)
+        };
+        if finished {
+            return Ok(FinishedMatch {
+                scores: snapshot.scores,
+                games: game,
+                outcomes,
+                costs: meter.finish(&snapshot.history),
+                sgf: tokio::task::spawn_blocking(move || retain(&sgf, checker_evaluations))
+                    .await??,
+            });
         }
-        ensure!(
-            matches!(snapshot.phase, PlayPhase::GameOver),
-            "Match game action limit exceeded"
-        );
         saved = Some((snapshot, sgf));
     }
     anyhow::bail!("Match game limit exceeded")
@@ -284,6 +298,32 @@ mod tests {
             dice: vec![],
             notation: notation.into(),
         }
+    }
+
+    #[test]
+    fn scheduled_rolls_include_opening_ties_and_never_rewind_or_wrap() {
+        let mut dice = super::GameDice {
+            opening: vec![[3, 3], [2, 6]],
+            turns: vec![[5, 2], [4, 4]],
+        };
+        assert_eq!(dice.rng_file().unwrap(), b"33265244");
+        let first = [[6, 2], [2, 5]];
+        assert_eq!(dice.verify_turns(&first, 0).unwrap(), 1);
+        assert_eq!(dice.verify_turns(&first, 1).unwrap(), 1);
+        assert_eq!(dice.verify_turns(&[[2, 6], [5, 2], [4, 4]], 1).unwrap(), 2);
+        for rolls in [
+            vec![],
+            vec![[2, 6]],
+            vec![[3, 3], [5, 2]],
+            vec![[2, 6], [2, 4]],
+            vec![[2, 6], [2, 5], [4, 4], [3, 3]],
+        ] {
+            assert!(dice.verify_turns(&rolls, 1).is_err());
+        }
+        dice.turns[0][0] = 7;
+        assert!(dice.rng_file().is_err());
+        dice.opening.clear();
+        assert!(dice.rng_file().is_err());
     }
 
     #[test]

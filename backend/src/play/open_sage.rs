@@ -5,7 +5,7 @@ use super::{
 };
 use crate::{
     engine::Engine,
-    engines::{EngineCost, SageCheckerCandidate, SageDifficulty, SageEngine},
+    engines::{EngineCost, SageCheckerCandidate, SageDifficulty, SageEngine, VerifiedBatch},
 };
 use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
@@ -63,17 +63,15 @@ async fn chosen_move(
     bot: &SageEngine,
     snapshot: &NativeSnapshot,
     top_two: bool,
+    batch: Option<&mut VerifiedBatch<'_>>,
 ) -> Result<CheckerChoice> {
     let (position, context) = snapshot
         .native_id
         .split_once(':')
         .context("Invalid native ID")?;
-    let (mut candidates, cost) = if top_two {
-        bot.top_two_checker_boards(position, context).await?
-    } else {
-        bot.checker_boards_costed(position, context, None, None)
-            .await?
-    };
+    let (mut candidates, cost) = bot
+        .play_checker_boards(position, context, top_two, batch)
+        .await?;
     let best = candidates
         .first()
         .context("NeonGammon returned no chosen move")?;
@@ -139,6 +137,7 @@ pub(super) async fn choose(
     bot: &SageEngine,
     snapshot: &NativeSnapshot,
     top_two: bool,
+    batch: Option<&mut VerifiedBatch<'_>>,
 ) -> Result<ChosenAction> {
     let (position, context) = snapshot
         .native_id
@@ -150,7 +149,7 @@ pub(super) async fn choose(
     let mut cost = Some(EngineCost::default());
     let action = match snapshot.phase {
         PlayPhase::Move => {
-            let (chosen, candidates, measured) = chosen_move(bot, snapshot, top_two).await?;
+            let (chosen, candidates, measured) = chosen_move(bot, snapshot, top_two, batch).await?;
             cost = measured;
             notation = chosen;
             checker = Some(candidates);
@@ -158,7 +157,7 @@ pub(super) async fn choose(
         }
         PlayPhase::Roll => {
             if snapshot.can_double {
-                let (cube, measured) = bot.cube_decision_costed(position, context).await?;
+                let (cube, measured) = bot.play_cube_decision(position, context, batch).await?;
                 cost = measured;
                 let (best, _, _) = crate::match_analysis::cube_options(
                     "no double",
@@ -173,7 +172,7 @@ pub(super) async fn choose(
             }
         }
         PlayPhase::DoubleResponse => {
-            let (cube, measured) = bot.cube_decision_costed(position, context).await?;
+            let (cube, measured) = bot.play_cube_decision(position, context, batch).await?;
             cost = measured;
             crate::match_analysis::cube_options("take", -cube.no_double, -cube.take, -cube.pass)
                 .context("Missing cube response options")?
@@ -324,7 +323,7 @@ pub(super) async fn advance(
                 )
                 .await?
             } else {
-                let choice = choose(bot, &snapshot, session.engine.top_two).await?;
+                let choice = choose(bot, &snapshot, session.engine.top_two, None).await?;
                 (choice.action, choice.notation)
             };
             let request = NativeRequest {
@@ -377,7 +376,7 @@ pub(super) async fn benchmark_checker_turn(
             before.player == bot_player && before.dice == dice,
             "Benchmark checkpoint differs from reference"
         );
-        let (notation, _, _) = chosen_move(bot, &before, false).await?;
+        let (notation, _, _) = chosen_move(bot, &before, false, None).await?;
         request.action = if notation.is_some() { "move" } else { "pass" };
         request.notation = notation.as_deref();
         request.native_id = &before.native_id;

@@ -240,14 +240,18 @@ impl Worker {
 /// Exclusive game-scoped ownership. Callers keep provisional results private
 /// until finish succeeds and hold the shared engine gate throughout this scope.
 /// Dropping an unfinished block kills/reaps its worker rather than caching it.
-pub(super) struct VerifiedBatch {
+pub(crate) struct VerifiedBatch<'a> {
     worker: Option<Worker>,
-    cache: MutexGuard<'static, Option<Worker>>,
+    cache: MutexGuard<'a, Option<Worker>>,
 }
 
-impl VerifiedBatch {
+impl<'a> VerifiedBatch<'a> {
     pub(super) async fn begin(profile: &SageSnapshot) -> Result<Self> {
-        let mut cache = GENERAL.lock().await;
+        Self::begin_in(&GENERAL, profile).await
+    }
+
+    async fn begin_in(slot: &'a Mutex<Option<Worker>>, profile: &SageSnapshot) -> Result<Self> {
+        let mut cache = slot.lock().await;
         let worker = tokio::time::timeout(Duration::from_secs(120), async {
             let _threads = acquire_threads(profile, Workload::Background).await?;
             reap_other_runtime(&mut cache).await?;
@@ -296,6 +300,55 @@ impl VerifiedBatch {
         .await
         .context("NeonGammon final integrity check timed out; worker terminated")??;
         *self.cache = Some(worker);
+        Ok(())
+    }
+}
+
+/// Each running duel owns its workers for one match (or money block). Equal
+/// immutable profiles share one worker, including a single integrity boundary.
+pub(crate) struct DuelWorkers<'a> {
+    profiles: [Option<&'a SageSnapshot>; 2],
+    slots: [Mutex<Option<Worker>>; 2],
+}
+
+impl<'a> DuelWorkers<'a> {
+    pub(crate) fn new(profiles: [Option<&'a SageSnapshot>; 2]) -> Self {
+        Self {
+            profiles,
+            slots: Default::default(),
+        }
+    }
+
+    pub(crate) async fn begin_game(&self) -> Result<DuelBatches<'_>> {
+        let shared = self.profiles[0].is_some() && self.profiles[0] == self.profiles[1];
+        let mut batches = [None, None];
+        for (side, &profile) in self.profiles.iter().enumerate() {
+            if let Some(profile) = profile
+                && !(shared && side == 1)
+            {
+                batches[side] = Some(VerifiedBatch::begin_in(&self.slots[side], profile).await?);
+            }
+        }
+        Ok(DuelBatches { batches, shared })
+    }
+}
+
+pub(crate) struct DuelBatches<'a> {
+    batches: [Option<VerifiedBatch<'a>>; 2],
+    shared: bool,
+}
+
+impl<'a> DuelBatches<'a> {
+    pub(crate) fn for_side(&mut self, side: usize) -> Result<&mut VerifiedBatch<'a>> {
+        self.batches[if self.shared { 0 } else { side }]
+            .as_mut()
+            .context("Missing verified NeonGammon duel worker")
+    }
+
+    pub(crate) async fn finish(self) -> Result<()> {
+        for batch in self.batches.into_iter().flatten() {
+            batch.finish().await?;
+        }
         Ok(())
     }
 }
@@ -633,11 +686,17 @@ for line in sys.stdin:
             if mode == 'batch_bad_json':
                 print('{invalid}', flush=True)
                 continue
+        elif operation == 'cube' and mode == 'batch_costed':
+            result = {'no_double': .25, 'take': .5, 'pass': 1.0}
         else:
             result = {key: profile[key] for key in ('package_version', 'artifact_fingerprint')}
             if (mode == 'batch_bad_end' and operation == 'end_batch') or (mode == 'batch_bad_begin' and operation == 'begin_batch'):
                 result['artifact_fingerprint'] = 'changed'
-        print(json.dumps({'id': request['id'], 'result': result}), flush=True)
+        envelope = {'id': request['id'], 'result': result}
+        if mode == 'batch_costed':
+            measured = {'checker': (31, 29), 'cube': (7, 5)}.get(operation, (999, 888))
+            envelope['cost'] = dict(zip(('cpu_us', 'wall_us'), measured))
+        print(json.dumps(envelope), flush=True)
         continue
     if mode == 'block':
         time.sleep(60)
@@ -688,8 +747,12 @@ for line in sys.stdin:
         }
 
         async fn wait_started(&self) {
+            self.wait_file("started").await;
+        }
+
+        async fn wait_file(&self, name: &str) {
             tokio::time::timeout(Duration::from_secs(5), async {
-                while !self.directory.path().join("started").is_file() {
+                while !self.directory.path().join(name).is_file() {
                     tokio::time::sleep(Duration::from_millis(10)).await;
                 }
             })
@@ -720,6 +783,69 @@ for line in sys.stdin:
     }
 
     const SINGLE_GAME: &str = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
+
+    #[tokio::test]
+    async fn duel_games_reuse_equal_profiles_and_return_only_decision_costs() {
+        let fake = FakeWorker::new("batch_costed");
+        let workers = DuelWorkers::new([Some(&fake.profile); 2]);
+        for _ in 0..2 {
+            let mut game = workers.begin_game().await.unwrap();
+            for (side, payload, cpu_us, wall_us) in [
+                (
+                    0,
+                    json!({"operation":"checker", "force_board":vec![0;26]}),
+                    31,
+                    29,
+                ),
+                (1, json!({"operation":"cube", "decision_only":true}), 7, 5),
+            ] {
+                let (_, cost) = game
+                    .for_side(side)
+                    .unwrap()
+                    .request_costed(payload, Duration::from_secs(5))
+                    .await
+                    .unwrap();
+                assert_eq!(cost, Some(EngineCost { cpu_us, wall_us }));
+            }
+            game.finish().await.unwrap();
+        }
+        assert_eq!(
+            std::fs::read_to_string(fake.directory.path().join("operations")).unwrap(),
+            "initialize\nbegin_batch\nchecker\ncube\nend_batch\nbegin_batch\nchecker\ncube\nend_batch\n"
+        );
+        drop(workers);
+        assert_reaped(&fake.pid()).await;
+    }
+
+    #[tokio::test]
+    async fn duel_game_verifies_both_profiles_and_reaps_workers_on_failure_or_cancellation() {
+        let a = FakeWorker::new("batch_healthy");
+        for mode in ["batch_bad_end", "batch_block"] {
+            let mut b = FakeWorker::new(mode);
+            b.profile.plies = 3;
+            let workers = DuelWorkers::new([Some(&a.profile), Some(&b.profile)]);
+            let mut game = workers.begin_game().await.unwrap();
+            if mode == "batch_block" {
+                {
+                    let request = game.for_side(1).unwrap().request_costed(
+                        json!({"operation":"checker", "force_board":vec![0;26]}),
+                        Duration::from_secs(60),
+                    );
+                    tokio::pin!(request);
+                    tokio::select! {
+                        _ = &mut request => panic!("Second worker should still be evaluating"),
+                        _ = b.wait_file("checker_started") => {}
+                    }
+                }
+                drop(game);
+            } else {
+                assert!(game.finish().await.is_err());
+            }
+            drop(workers);
+            assert_reaped(&a.pid()).await;
+            assert_reaped(&b.pid()).await;
+        }
+    }
 
     #[tokio::test]
     async fn ordinary_requests_cannot_cache_worker_with_open_batch() {

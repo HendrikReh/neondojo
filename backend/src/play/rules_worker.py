@@ -1,4 +1,4 @@
-"""One bounded GNUbg rule process for an atomic external-bot action chain.
+"""One bounded GNUbg rules process for a play action chain or seeded duel game.
 
 The ordinary adapter owns all game rules and snapshots. This loop only retains
 its native state between requests; no checkpoint is committed by the worker.
