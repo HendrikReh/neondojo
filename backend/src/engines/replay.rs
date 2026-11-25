@@ -10,6 +10,7 @@ pub(crate) struct PreparedMatch(Vec<PreparedGame>);
 pub(super) struct PreparedGame {
     pub(super) game_no: i32,
     pub(super) cube_enabled: bool,
+    cubeless_money: bool,
     pub(super) positions: Vec<ImportedPosition>,
     pub(super) events: Vec<SourceMove>,
 }
@@ -24,6 +25,7 @@ impl PreparedMatch {
             .map(|(game, context)| PreparedGame {
                 game_no: game.game_no,
                 cube_enabled: context.cube_enabled,
+                cubeless_money: context.length == 0 && !context.jacoby,
                 positions: Vec::new(),
                 events: Vec::new(),
             })
@@ -48,6 +50,10 @@ impl PreparedMatch {
 }
 
 impl PreparedGame {
+    pub(super) fn supports_cubeless_money(&self) -> bool {
+        self.cubeless_money
+    }
+
     pub(super) fn position(&self, event: &SourceMove) -> Result<&ImportedPosition> {
         let ply = event.checker_ply.context("Missing checker ply")?;
         let position = usize::try_from(ply)
@@ -87,5 +93,34 @@ mod tests {
         assert_eq!(lookups, 460);
         assert!(replay.game(0).is_err());
         assert!(replay.game(11).is_err());
+    }
+}
+
+#[cfg(test)]
+#[tokio::test]
+#[ignore = "requires a locked NeonGammon installation"]
+async fn native_neongammon_nocube_checker_game() {
+    let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
+    let engine = super::SageEngine::new(
+        super::SageEngine::probe_profile(python, 1, 2)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    for (rule, expected_cubes) in [("RU[NoCube]", 0), ("", 1)] {
+        let source = format!("(;GM[6]MI[length:0]{rule};W[31hefe];B[42qusu])");
+        let result = engine.analyze_game(&source, 1, 1).await.unwrap();
+        assert_eq!(
+            result
+                .decisions
+                .iter()
+                .filter(|d| d.kind == "checker")
+                .count(),
+            2
+        );
+        assert_eq!(
+            result.decisions.iter().filter(|d| d.kind == "cube").count(),
+            expected_cubes
+        );
     }
 }

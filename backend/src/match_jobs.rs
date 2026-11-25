@@ -77,21 +77,42 @@ pub(crate) async fn execute(
         summary.analyzed_moves,
     )
     .await?;
+    let prepared = match engine {
+        crate::engines::AnalysisEngine::OpenSage(_) => {
+            let source = source.clone();
+            Some(
+                tokio::task::spawn_blocking(move || {
+                    crate::engines::replay::PreparedMatch::parse(&source)
+                })
+                .await??,
+            )
+        }
+        _ => None,
+    };
     for &game_no in &game_numbers[job.completed_games as usize..] {
         crate::engine::with_shared_access(async {
             crate::analysis_timing::start_game(&state.pool, job, token).await?;
             let started = Instant::now();
             let work = async {
-                let analyzed = engine
-                    .analyze_game(&source, game_no, job.plies)
-                    .await
-                    .with_context(|| {
-                        format!(
-                            "{} analysis failed in game {game_no}/{}",
-                            engine.id().display_name(),
-                            job.total_games
+                let analyzed = match (engine, &prepared) {
+                    (crate::engines::AnalysisEngine::OpenSage(sage), Some(replay)) => {
+                        sage.analyze_prepared_game(
+                            replay,
+                            game_no,
+                            job.plies,
+                            Some(std::time::Duration::from_secs(600)),
                         )
-                    })?;
+                        .await
+                    }
+                    _ => engine.analyze_game(&source, game_no, job.plies).await,
+                }
+                .with_context(|| {
+                    format!(
+                        "{} analysis failed in game {game_no}/{}",
+                        engine.id().display_name(),
+                        job.total_games
+                    )
+                })?;
                 checkpoint(
                     &state.pool,
                     job,

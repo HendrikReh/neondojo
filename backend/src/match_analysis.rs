@@ -275,6 +275,9 @@ pub(crate) fn evaluated_cube_decision(
 /// https://sources.debian.org/src/gnubg/1.05.002-2/analysis.c/
 /// https://sources.debian.org/src/gnubg/1.05.002-2/eval.c/
 pub(crate) fn requires_cube_analysis(position: &crate::import::ImportedPosition) -> Result<bool> {
+    if !position.cube_enabled {
+        return Ok(false);
+    }
     cube_analysis_available(&position.board, &position.match_id, position.player)
 }
 

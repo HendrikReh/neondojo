@@ -436,6 +436,7 @@ fn parse_sgf_context(
                         ids::match_id(length, scores, cube, owner, crawford, jacoby, player, dice),
                     ));
                     result.positions.push(ImportedPosition {
+                        cube_enabled: !no_cube,
                         game_no: game_index as i32 + 1,
                         ply,
                         player,

@@ -29,6 +29,7 @@ pub struct ImportedMatch {
 
 #[derive(Debug, Clone)]
 pub struct ImportedPosition {
+    pub cube_enabled: bool,
     pub game_no: i32,
     pub ply: i32,
     pub player: i32,

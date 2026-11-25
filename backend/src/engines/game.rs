@@ -1,9 +1,9 @@
-use super::SageEngine;
-use crate::{
-    import::sgf::parse_sgf_source_moves,
-    match_analysis::{
-        AnalyzedGame, decision, evaluated_cube_decision, game_count, requires_cube_analysis,
-    },
+use super::{
+    SageEngine,
+    replay::{PreparedGame, PreparedMatch},
+};
+use crate::match_analysis::{
+    AnalyzedGame, decision, evaluated_cube_decision, requires_cube_analysis,
 };
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
@@ -21,14 +21,42 @@ impl SageEngine {
         plies: i32,
         limit: Option<Duration>,
     ) -> Result<AnalyzedGame> {
-        self.check_depth(plies)?;
         let source = sgf.to_owned();
-        let games = tokio::task::spawn_blocking(move || game_count(&source)).await??;
-        ensure!((1..=games).contains(&game_no), "Game number outside match");
+        let replay = tokio::task::spawn_blocking(move || PreparedMatch::parse(&source)).await??;
+        self.analyze_prepared_game(&replay, game_no, plies, limit)
+            .await
+    }
+
+    pub(crate) async fn analyze_prepared_game(
+        &self,
+        replay: &PreparedMatch,
+        game_no: i32,
+        plies: i32,
+        limit: Option<Duration>,
+    ) -> Result<AnalyzedGame> {
+        self.check_depth(plies)?;
+        let game = replay.game(game_no)?;
+        let cubeless_engine;
+        let evaluator = if game.cube_enabled {
+            ensure!(
+                !self.snapshot.cubeless,
+                "Cubeless profile cannot analyze a cube-enabled game"
+            );
+            self
+        } else {
+            ensure!(
+                game.supports_cubeless_money(),
+                "NeonGammon cubeless checker evaluation requires money play without Jacoby"
+            );
+            let mut snapshot = self.snapshot.clone();
+            snapshot.cubeless = true;
+            cubeless_engine = SageEngine::new(snapshot)?;
+            &cubeless_engine
+        };
         crate::engine::with_shared_access(async {
             let work = async {
-                let mut batch = super::process::VerifiedBatch::begin(&self.snapshot).await?;
-                let game = self.game(sgf, game_no, Some(&mut batch)).await?;
+                let mut batch = super::process::VerifiedBatch::begin(&evaluator.snapshot).await?;
+                let game = evaluator.game(game, Some(&mut batch)).await?;
                 // Provisional decisions never leave this scope or reach persistence
                 // until the final package/RECORD/model verification succeeds.
                 batch.finish().await?;
@@ -46,32 +74,19 @@ impl SageEngine {
 
     async fn game(
         &self,
-        sgf: &str,
-        game_no: i32,
+        game: &PreparedGame,
         mut batch: Option<&mut super::process::VerifiedBatch>,
     ) -> Result<AnalyzedGame> {
-        let source = sgf.to_owned();
-        let (imported, moves) =
-            tokio::task::spawn_blocking(move || parse_sgf_source_moves(&source)).await??;
+        let game_no = game.game_no;
         let mut decisions = Vec::new();
-        let expected_checkers = imported
-            .positions
-            .iter()
-            .filter(|position| position.game_no == game_no)
-            .count();
+        let expected_checkers = game.positions.len();
         let mut analyzed_checkers = 0;
-        for event in moves.iter().filter(|event| event.game_no == game_no) {
+        for event in &game.events {
             if event.kind == "resign" {
                 continue;
             }
             if event.kind == "checker" {
-                let position = imported
-                    .positions
-                    .iter()
-                    .find(|position| {
-                        position.game_no == game_no && Some(position.ply) == event.checker_ply
-                    })
-                    .context("Missing imported checker context")?;
+                let position = game.position(event)?;
                 if requires_cube_analysis(position)? {
                     let cube = self
                         .cube_with_batch(&event.position_id, &event.match_id, batch.as_deref_mut())
@@ -227,7 +242,11 @@ mod tests {
         for game_no in 1..=10 {
             // Same authoritative game mapping, but the established ordinary
             // transport verifies each request before and after evaluation.
-            let individual = engine.game(source, game_no, None).await.unwrap();
+            let replay = PreparedMatch::parse(source).unwrap();
+            let individual = engine
+                .game(replay.game(game_no).unwrap(), None)
+                .await
+                .unwrap();
             let atomic = engine.analyze_game(source, game_no, 2).await.unwrap();
             assert_eq!(
                 serde_json::to_value(&individual).unwrap(),
