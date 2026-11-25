@@ -52,12 +52,8 @@ async fn main() -> anyhow::Result<()> {
     let assessment_worker = tokio::spawn(neondojo::match_assessment::worker(state.clone()));
     let match_worker = tokio::spawn(neondojo::engine_matches::worker(state.clone()));
     let anki_worker = tokio::spawn(neondojo::learning::anki_sync_worker(state.clone()));
-    let mut app = api::router(state);
-    if let Ok(dir) = std::env::var("NEONDOJO_WEB_DIR") {
-        app = app.fallback_service(tower_http::services::ServeDir::new(&dir).not_found_service(
-            tower_http::services::ServeFile::new(format!("{dir}/index.html")),
-        ));
-    }
+    let web_dir = std::env::var_os("NEONDOJO_WEB_DIR").map(std::path::PathBuf::from);
+    let app = api::router_with_web_dir(state, web_dir.as_deref());
     let address = std::env::var("NEONDOJO_BIND").unwrap_or_else(|_| "127.0.0.1:8787".into());
     let listener = tokio::net::TcpListener::bind(&address).await?;
     let address = listener.local_addr()?;
