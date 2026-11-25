@@ -10,7 +10,7 @@ use serde_json::Value;
 use sqlx::{FromRow, PgPool};
 use uuid::Uuid;
 
-pub(crate) const REVISION: i32 = 1;
+pub(crate) const REVISION: i32 = 2;
 const BATCH: usize = 2_000;
 
 pub(crate) async fn ensure_saved(pool: &PgPool, database_id: Option<Uuid>) -> ApiResult<()> {
@@ -32,6 +32,7 @@ pub(crate) async fn ensure_saved(pool: &PgPool, database_id: Option<Uuid>) -> Ap
     }
     #[derive(FromRow)]
     struct Row {
+        cube_enabled: Option<bool>,
         id: Uuid,
         data: Value,
         format: crate::import::MatchFormat,
@@ -42,8 +43,9 @@ pub(crate) async fn ensure_saved(pool: &PgPool, database_id: Option<Uuid>) -> Ap
     // OFFSET 0 keeps the primary-record lookup per saved position. Joined
     // directly, PostgreSQL ranks the imported analyses of the whole library.
     let rows:Vec<Row> = sqlx::query_as(
-        "SELECT ia.id,ia.data,m.format,m.source_revision,p.ply AS checker_ply,to_jsonb(e) AS event
+        "SELECT ia.id,ia.data,m.format,m.source_revision,g.cube_enabled,p.ply AS checker_ply,to_jsonb(e) AS event
          FROM saved_positions saved JOIN positions p ON p.id=saved.position_uuid JOIN matches m ON m.id=p.match_uuid
+         LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no
          JOIN LATERAL (SELECT primary_record.* FROM primary_imported_analyses primary_record
              WHERE primary_record.position_uuid=p.id AND primary_record.match_uuid=m.id AND primary_record.kind='checker' OFFSET 0) ia ON true
          LEFT JOIN imported_analysis_projections cached ON cached.imported_analysis_id=ia.id AND cached.revision=$2 AND cached.source_revision=m.source_revision
@@ -57,7 +59,7 @@ pub(crate) async fn ensure_saved(pool: &PgPool, database_id: Option<Uuid>) -> Ap
             let projection = row.event.and_then(|event| {
                 let record=serde_json::from_value::<ImportedAnalysisData>(row.data).ok()?;
                 let source=imported_projection::source_move(&event.0,Some(row.checker_ply))?;
-                let projected=imported_projection::project(&record,&source,event.match_uuid,event.position_uuid,row.format)?;
+                let projected=imported_projection::project(&record,&source,event.match_uuid,event.position_uuid,row.format,row.cube_enabled)?;
                 Some(serde_json::json!({"decision":projected.decision,"depth":projected.depth,"plies":projected.depth_plies}))
             });
             (row.id,row.source_revision,projection)

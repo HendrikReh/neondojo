@@ -410,6 +410,9 @@ async fn execute(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
     )
     .await?
     .context("Position no longer exists")?;
+    let cube_enabled = store::game_cube_enabled(&state.pool, &position).await?;
+    let configured_engine =
+        configured_engine.for_checker_rules(cube_enabled, &position.gnubg_match_id)?;
     if job.kind == "analysis" {
         return Ok(serde_json::to_value(
             configured_engine

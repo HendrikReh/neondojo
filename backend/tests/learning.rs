@@ -1836,3 +1836,96 @@ async fn card_topic_delete_does_not_wait_for_a_pending_save(pool: PgPool) {
     let (status, body) = save.await.unwrap();
     assert_eq!(status, 201, "{body}");
 }
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires PostgreSQL and GNUbg"]
+async fn nocube_statistics_and_cards_follow_source_rules(pool: PgPool) {
+    let sgf = "(;GM[6]MI[length:0]RU[NoCube];W[31hefe];B[42qusu])";
+    let imported = store::import_match(
+        &pool,
+        "cubeless.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap();
+    let state = api::AppState::new(
+        pool.clone(),
+        Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
+    );
+    let app = api::router(state.clone());
+    let job = store::create_match_job(&pool, imported.r#match.id, 1, 1)
+        .await
+        .unwrap();
+    assert!(jobs::run_one(&state).await.unwrap());
+    let stats_url = format!("/api/jobs/{}/statistics", job.id);
+    let (_, statistics) = call(app.clone(), "GET", &stats_url, Value::Null).await;
+    let game = &statistics["games"][0];
+    assert_eq!(game["analyzed"], true, "{statistics}");
+    assert!(game["needs_cube_rule_reanalysis"].is_null());
+    for player in game["summary"]["players"].as_array().unwrap() {
+        assert_eq!(player["cube_decisions"], 0);
+        assert_eq!(player["checker_decisions"], 1);
+    }
+    assert!(
+        game["summary"]["performance_rating"]["profile"]
+            .as_str()
+            .unwrap()
+            .contains("source cube rules")
+    );
+
+    // Simulate the old engine result before the second checker. Its rows stay available
+    // for historical review, but the phantom cube must never become a practice card.
+    sqlx::query("UPDATE move_analyses SET decision_no=3,data=jsonb_set(data,'{decision_no}','3') WHERE job_id=$1 AND decision_no=2")
+        .bind(job.id).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO move_analyses(job_id,game_no,decision_no,player,kind,equity_loss,data)
+        SELECT job_id,game_no,2,player,'cube',0,data||jsonb_build_object('decision_no',2,'kind','cube','played','no double','best','no double') FROM move_analyses WHERE job_id=$1 AND decision_no=3")
+        .bind(job.id).execute(&pool).await.unwrap();
+    sqlx::query("UPDATE match_analysis_games SET summary=summary-'cube_enabled' WHERE job_id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, historical) = call(app.clone(), "GET", &stats_url, Value::Null).await;
+    assert_eq!(historical["games"][0]["needs_cube_rule_reanalysis"], true);
+    let (_, deck) = call(
+        app.clone(),
+        "POST",
+        "/api/decks",
+        json!({"name":"Cubeless checkers"}),
+    )
+    .await;
+    let cards = format!("/api/decks/{}/cards", deck["id"].as_str().unwrap());
+    let (status, added) = call(app.clone(), "POST", &cards, json!({"job_id":job.id})).await;
+    assert_eq!(status, 200, "{added}");
+    let (_, page) = call(app.clone(), "GET", &cards, Value::Null).await;
+    let items = page["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert!(items.iter().all(|card| card["kind"] == "checker"));
+
+    let enabled = sgf.replace("RU[NoCube]", "");
+    let second = store::import_match(
+        &pool,
+        "cube.sgf",
+        "sgf",
+        enabled.as_bytes(),
+        &enabled,
+        &import::parse_sgf(&enabled).unwrap(),
+    )
+    .await
+    .unwrap();
+    let second_job = store::create_match_job(&pool, second.r#match.id, 1, 1)
+        .await
+        .unwrap();
+    assert!(jobs::run_one(&state).await.unwrap());
+    let (status, added) = call(app.clone(), "POST", &cards, json!({"job_id":second_job.id})).await;
+    assert_eq!(status, 200, "{added}");
+    let (_, page) = call(app, "GET", &cards, Value::Null).await;
+    assert_eq!(
+        page["items"].as_array().unwrap().len(),
+        5,
+        "two distinct checker pairs and one cube offer"
+    );
+}

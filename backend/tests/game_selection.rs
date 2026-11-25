@@ -67,10 +67,10 @@ async fn game_catalog_preserves_all_games_and_queries_stay_inside_selected_game(
     assert_eq!(
         games,
         json!([
-            {"game_no":1,"position_count":2,"white_score":0,"black_score":0,"crawford":false,"result":{"winner":0,"points":1,"cube":1,"multiplier":null,"reason":"recorded","scores_after":[1,0]}},
-            {"game_no":2,"position_count":0,"white_score":1,"black_score":0,"crawford":false,"result":{"winner":0,"points":1,"cube":1,"multiplier":1,"reason":"drop","scores_after":[2,0]}},
-            {"game_no":3,"position_count":0,"white_score":6,"black_score":0,"crawford":true,"result":{"winner":1,"points":1,"cube":1,"multiplier":null,"reason":"recorded","scores_after":[6,1]}},
-            {"game_no":4,"position_count":2,"white_score":6,"black_score":1,"crawford":false}
+            {"game_no":1,"cube_enabled":true,"position_count":2,"white_score":0,"black_score":0,"crawford":false,"result":{"winner":0,"points":1,"cube":1,"multiplier":null,"reason":"recorded","scores_after":[1,0]}},
+            {"game_no":2,"cube_enabled":true,"position_count":0,"white_score":1,"black_score":0,"crawford":false,"result":{"winner":0,"points":1,"cube":1,"multiplier":1,"reason":"drop","scores_after":[2,0]}},
+            {"game_no":3,"cube_enabled":true,"position_count":0,"white_score":6,"black_score":0,"crawford":true,"result":{"winner":1,"points":1,"cube":1,"multiplier":null,"reason":"recorded","scores_after":[6,1]}},
+            {"game_no":4,"cube_enabled":true,"position_count":2,"white_score":6,"black_score":1,"crawford":false}
         ])
     );
     let prefix = format!("/api/positions?match_id={id}");

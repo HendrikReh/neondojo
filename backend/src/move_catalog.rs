@@ -75,8 +75,8 @@ pub async fn ensure_catalog(pool: &PgPool, match_id: Uuid) -> Result<bool> {
         tokio::task::spawn_blocking(move || crate::import::sgf::parse_sgf_source_moves(&source))
             .await??;
     for game in imported.games {
-        sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(match_uuid,game_no) DO NOTHING")
-            .bind(match_id).bind(game.game_no).bind(game.position_count).bind(game.white_score).bind(game.black_score).bind(game.crawford).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford,cube_enabled) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(match_uuid,game_no) DO NOTHING")
+            .bind(match_id).bind(game.game_no).bind(game.position_count).bind(game.white_score).bind(game.black_score).bind(game.crawford).bind(game.cube_enabled).execute(&mut *tx).await?;
     }
     let positions: Vec<(Uuid, i32, i32)> =
         sqlx::query_as("SELECT id,game_no,ply FROM positions WHERE match_uuid=$1")

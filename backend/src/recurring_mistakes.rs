@@ -260,7 +260,13 @@ fn can_practice_correct_cube(row: &SourceDecision) -> bool {
         Some(MistakeKind::PrematureDouble) => {
             let p = &row.question.position;
             cube_context(p, false).is_ok()
-                && cube_analysis_available(&p.board, &p.gnubg_match_id, p.player).unwrap_or(false)
+                && cube_analysis_available(
+                    &p.board,
+                    &p.gnubg_match_id,
+                    p.player,
+                    p.cube_enabled != Some(false),
+                )
+                .unwrap_or(false)
         }
         Some(MistakeKind::WrongTake | MistakeKind::WrongPass) => {
             evaluation_position(&row.question).is_ok_and(|p| cube_context(&p, true).is_ok())

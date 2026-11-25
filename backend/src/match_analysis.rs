@@ -27,6 +27,10 @@ pub(crate) fn performance_rating_profile(engine: &str, plies: i32) -> String {
     format!("{engine}; {plies}-ply cubeful deterministic")
 }
 
+pub(crate) fn rule_aware_rating_profile(engine: &str, plies: i32) -> String {
+    format!("{engine}; {plies}-ply source cube rules deterministic")
+}
+
 /// Return a whole-result rating only with complete native statistical coverage.
 /// Callers selecting match overview values must also require a completed,
 /// whole-match job (game_no IS NULL); a scoped game's result has the same format.
@@ -42,7 +46,8 @@ pub fn match_performance_rating(
         || summary.players.iter().any(|p| p.unavailable != 0)
         || rating.games != summary.total_games
         || rating.method != PERFORMANCE_RATING_METHOD
-        || rating.profile != performance_rating_profile(&summary.engine, summary.plies)
+        || !(rating.profile == performance_rating_profile(&summary.engine, summary.plies)
+            || rating.profile == rule_aware_rating_profile(&summary.engine, summary.plies))
     {
         return None;
     }
@@ -72,6 +77,8 @@ pub fn match_performance_rating(
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct AnalyzedGame {
+    #[serde(default = "crate::model::default_cube_enabled")]
+    pub cube_enabled: bool,
     pub engine: String,
     pub game_no: i32,
     pub decisions: Vec<Decision>,
@@ -275,11 +282,21 @@ pub(crate) fn evaluated_cube_decision(
 /// https://sources.debian.org/src/gnubg/1.05.002-2/analysis.c/
 /// https://sources.debian.org/src/gnubg/1.05.002-2/eval.c/
 pub(crate) fn requires_cube_analysis(position: &crate::import::ImportedPosition) -> Result<bool> {
-    cube_analysis_available(&position.board, &position.match_id, position.player)
+    cube_analysis_available(
+        &position.board,
+        &position.match_id,
+        position.player,
+        position.cube_enabled,
+    )
 }
 
-pub(crate) fn cube_analysis_available(board: &[i32], match_id: &str, player: i32) -> Result<bool> {
-    if board == crate::backgammon::initial_board() {
+pub(crate) fn cube_analysis_available(
+    board: &[i32],
+    match_id: &str,
+    player: i32,
+    cube_enabled: bool,
+) -> Result<bool> {
+    if !cube_enabled || board == crate::backgammon::initial_board() {
         return Ok(false);
     }
     use crate::backgammon::ids::{Field, MatchId};

@@ -176,7 +176,7 @@ async fn sage_benchmark_snapshots_are_independent_and_complete(pool: PgPool) {
     .await;
     assert_eq!(status, 202, "{runs}");
     assert_eq!(runs[0]["engine_id"], "bgsage");
-    assert_eq!(runs[0]["protocol"]["id"], "bgsage-match-v4-2ply-4threads");
+    assert_eq!(runs[0]["protocol"]["id"], "bgsage-match-v5-2ply-4threads");
     assert_eq!(
         call(app.clone(), "GET", "/api/settings", Value::Null)
             .await
@@ -500,7 +500,7 @@ async fn fork_depths_are_pinned_in_sessions_duels_and_benchmarks(pool: PgPool) {
         assert_eq!(saved["engine"]["open_sage"]["python"], fork);
         assert_eq!(
             runs[index]["protocol"]["id"],
-            format!("bgsage-match-v4-{depth}ply-4threads")
+            format!("bgsage-match-v5-{depth}ply-4threads")
         );
     }
     // Exercise both complete analysis depths through the durable benchmark worker.

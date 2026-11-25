@@ -89,6 +89,7 @@ pub(super) async fn start(
                         &position.board,
                         &position.gnubg_match_id,
                         position.player,
+                        position.cube_enabled != Some(false),
                     )
                     .unwrap_or(false))
         };

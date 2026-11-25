@@ -1,4 +1,4 @@
-import catalog from '../../generated-themes.json';
+import { use } from 'react';
 
 export interface ThemeImage {
   src: string;
@@ -27,13 +27,28 @@ export interface BgBlitzTheme {
   numbersY: number[];
 }
 
-// Generated from validated, local ZIPs by tools/prepare_themes.py.
-export const archiveThemes = catalog as BgBlitzTheme[];
-export const themes = [
+let archiveRequest: Promise<BgBlitzTheme[]> | undefined;
+let installed: BgBlitzTheme[] | undefined;
+
+export function loadArchiveThemes() {
+  return (archiveRequest ??= import('./archive-themes').then(
+    ({ default: themes }) => {
+      installed = themes;
+      return themes;
+    },
+  ));
+}
+
+const empty: BgBlitzTheme[] = [];
+export function useArchiveThemes(required: boolean) {
+  if (!required) return empty;
+  return installed ?? use(loadArchiveThemes());
+}
+
+export const builtInThemes = [
   { id: 'forest', name: 'Forest' },
   { id: 'walnut', name: 'Walnut' },
   { id: 'slate', name: 'Slate' },
-  ...archiveThemes.map(({ id, name }) => ({ id, name })),
 ];
 export type Theme = string;
 export const pointColumns = [

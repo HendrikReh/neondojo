@@ -4,7 +4,8 @@ import { configurationSummaryRows } from './ProfileSummary';
 import { defaultConfiguration } from '../configuration/configuration-model';
 import {
   profileFieldKey,
-  profileMessageKeys,
+  profileCatalogs,
+  type ProfileMessageKey,
   profileText,
 } from './profile-messages';
 describe('profile summary', () => {
@@ -16,14 +17,14 @@ describe('profile summary', () => {
       expect(
         row.path.startsWith('analysis.error_thresholds.')
           ? Object.hasOwn(errorThresholdLabels, row.path.split('.').at(-1)!)
-          : !!profileFieldKey(row.path),
+          : !!profileFieldKey('en', row.path),
         row.path,
       ).toBe(true);
     expect(new Set(rows.map((row) => row.path.split('.')[0])).size).toBe(10);
   });
   it('supplies every profile message in all supported languages', () => {
     for (const locale of ['en', 'de', 'es', 'fr', 'it', 'pl'] as const)
-      for (const key of profileMessageKeys)
+      for (const key of Object.keys(profileCatalogs.en) as ProfileMessageKey[])
         expect(
           profileText(locale, key, { name: 'Test', count: 2 }),
         ).toBeTruthy();

@@ -9,6 +9,7 @@ pub(super) fn parse_native_statistics(
     export: &str,
     game_no: i32,
     decisions: &[Decision],
+    cube_enabled: bool,
 ) -> Option<[NativePlayerStatistics; 2]> {
     static HEADER: OnceLock<Regex> = OnceLock::new();
     let header =
@@ -24,8 +25,9 @@ pub(super) fn parse_native_statistics(
         return None;
     }
     let statistics = &export[section.get(0)?.end()..];
-    let (checker, cube_and_overall) = statistics.split_once("Cube statistics")?;
-    let (cube, overall) = cube_and_overall.split_once("Overall statistics")?;
+    let (before_overall, overall) = statistics.split_once("Overall statistics")?;
+    let sections = before_overall.split_once("Cube statistics");
+    let checker = sections.map_or(before_overall, |(checker, _)| checker);
     let counts = |section: &str, label: &str| -> Option<[i32; 2]> {
         let mut values = section
             .lines()
@@ -42,8 +44,14 @@ pub(super) fn parse_native_statistics(
     };
     let total_moves = counts(checker, "Total moves")?;
     let unforced = counts(checker, "Unforced moves")?;
-    let total_cube = counts(cube, "Total cube decisions")?;
-    let close_cube = counts(cube, "Close or actual cube decisions")?;
+    let (total_cube, close_cube) = match sections {
+        Some((_, cube)) => (
+            counts(cube, "Total cube decisions")?,
+            counts(cube, "Close or actual cube decisions")?,
+        ),
+        None if !cube_enabled => ([0; 2], [0; 2]),
+        None => return None,
+    };
     static LOSS: OnceLock<Regex> = OnceLock::new();
     let loss = LOSS.get_or_init(|| {
         Regex::new(
@@ -217,6 +225,10 @@ pub(super) fn parse_source_game(
             !requires_cube_analysis(position)? || node.contains_key("DA"),
             "GNUbg omitted an available cube decision"
         );
+        ensure!(
+            position.cube_enabled || !node.contains_key("DA"),
+            "GNUbg analyzed a cube-disabled decision"
+        );
         if node.contains_key("DA") {
             let mut cube = cube_decision(block, player, "no double")?;
             cube.checker_no = Some(checker_no as i32);
@@ -227,7 +239,7 @@ pub(super) fn parse_source_game(
                 "Native cube analysis is inconsistent with SGF"
             );
         }
-        let mut rows = parse_checker_candidates(block)?;
+        let mut rows = parse_checker_candidates(block, position.cube_enabled)?;
         let mut checker = if rows.is_empty() {
             ensure!(
                 played.len() == 2 && block.lines().any(|l| l.trim() == "*    Cannot move"),

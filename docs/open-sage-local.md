@@ -70,7 +70,14 @@ The regular Python tests need neither NumPy nor NeonGammon and check in particul
 4. Under **Settings → Engines**, **NeonGammon threads for analysis** and **NeonGammon threads for playing** can each be set from 2 up to the number of logical CPUs. **Default (4)** uses 4 threads for analyses and engine duels, and **Default (2)** uses 2 threads for playing. New sessions, jobs and duel series store the value in effect. The workers reserve those threads for each evaluation from one shared budget. When both requests exceed the budget together, a waiting move can run between analysis evaluations. A saved profile from a larger machine keeps its thread count and runs on its own. The worker checks the configured limit with a real position evaluation. The serial cubeful 1-ply checker path stays serial.
 5. Under **Extras → Benchmark**, set the engine and depth independently. The NeonGammon reference protocols always use 4 threads for analysis and 2 for playing decisions, regardless of these settings.
 
-The sidecar uses `neongammon.DifficultyPolicy` from the verified 3.1.0 wheel.
+The [release manifest](../shared/neongammon-releases.json) records the supported capabilities for each verified wheel.
+Dice Distribution and match analysis send checker and cube rows in bounded frames inside the existing integrity checks.
+Cubeful checker rows use the native batch API from 3.1.2. Version 3.2.0 also batches recursive cube
+evaluations and shares the verified analyzer's models across batches and difficulty presets.
+Earlier wheels evaluate unsupported batch operations one row at a time. Cubeless checker evaluations
+always use the wheel's cubeless checker evaluator.
+
+The sidecar uses `neongammon.DifficultyPolicy` from version 3.1.0 onward.
 Preset selections and decisions apply to live NeonGammon opponents. New Full
 Strength matches use NeonDojo's verified 3-ply checker search and the wheel
 policy's 2-ply cube decisions. A saved named-preset match pinned to 3.0.0
@@ -79,8 +86,9 @@ requires the earlier NeonDojo build with the bundled policy. [Opponent presets](
 When **2-ply + Top-2 (10 mEq)** is enabled (`play_top_two` with NeonGammon at
 2-ply, without a named preset), the sidecar runs 2-ply first and, in contact
 positions where the two leading checker plays are at most 0.010 equity apart,
-re-evaluates both candidates at 3-ply (using a 2-worker pool with `n_threads=1`
-per candidate) and plays the better one. Races, wider equity gaps, and all cube
+re-evaluates both candidates at 3-ply and plays the better one. Version 3.2.0
+uses the public top-two search. Older wheels score the pair through the full
+3-ply checker search. Races, wider equity gaps, and all cube
 decisions stay at 2-ply. [Playing against an engine](reference/playing.md#playing-against-an-engine)
 
 The application process stays fully local. The sidecar has no download path; installation and updates are explicitly separate steps. Unknown or modified models, a missing Python environment and engine crashes produce errors, not substitute evaluations. NeonDojo never falls back to another engine on its own.
@@ -229,7 +237,7 @@ On the last bear-off move, NeonGammon can offer a premature final board even tho
 
 ### Performance and integrity boundaries
 
-For NeonGammon, the benchmarks use the protocols `bgsage-match-v4-{N}ply-4threads` (analysis) and `bgsage-checker-turn-v4-{N}ply-2threads-gnubg-rules` (play turn); `{N}` is the selected depth. The protocol explicitly restarts the NeonGammon worker, measures its initialization separately and adds it once to the total time. The worker is then reused within that run. The analysis time covers all ten reference games and 460 checker moves with their cube decisions; the play latency covers eleven fixed checker turns with GNUbg rules processes. Several fully compatible runs yield the median and range; a single measurement is not general evidence of speed. Historical results remain unchanged and are not aggregated with new protocols.
+For NeonGammon, the benchmarks use the protocols `bgsage-match-v5-{N}ply-4threads` (analysis) and `bgsage-checker-turn-v4-{N}ply-2threads-gnubg-rules` (play turn); `{N}` is the selected depth. The protocol explicitly restarts the NeonGammon worker, measures its initialization separately and adds it once to the total time. The worker is then reused within that run. The analysis time covers all ten reference games and 460 checker moves with their cube decisions; the play latency covers eleven fixed checker turns with GNUbg rules processes. Several fully compatible runs yield the median and range; a single measurement is not general evidence of speed. Historical results remain unchanged and are not aggregated with new protocols.
 
 A complete identity check hashes each file only once within that check. The next check reads all files again; manifest, fingerprint and existing installation snapshots stay compatible. A game analysis holds the worker exclusively and fully checks the installation, RECORD and weights before and after the game. Only after the final check may the complete block be returned and stored. Errors, timeouts or cancellation discard the block and terminate the worker. A dice distribution forms the same kind of block for its 21 rolls: one check before the first and one after the last roll, with only the number of evaluated rolls reported as progress in between.
 

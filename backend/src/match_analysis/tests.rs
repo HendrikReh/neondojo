@@ -177,7 +177,7 @@ async fn native_performance_statistics_cover_cube_only_and_forced_checker_games(
 fn native_performance_statistics_reject_missing_malformed_and_partial_exports() {
     let decisions = vec![decision(0, "checker", "played", "best", Some((0.0, 0.1)))];
     let export = "Game statistics for game 1\nChequerplay statistics\nTotal moves 1 0\nUnforced moves 1 0\nCube statistics\nTotal cube decisions 0 0\nClose or actual cube decisions 0 0\nOverall statistics\nError total EMG (MWC) -0.100000 ( -1.000%) -0.000000 ( -0.000%)\n";
-    let native = parse_native_statistics(export, 1, &decisions).unwrap();
+    let native = parse_native_statistics(export, 1, &decisions, true).unwrap();
     assert_eq!(native[0].normalized_equity_loss, 0.1);
     for changed in [
         export.replace("Game statistics for game 1", "Game statistics for game 10"),
@@ -190,14 +190,14 @@ fn native_performance_statistics_reject_missing_malformed_and_partial_exports() 
         format!("{export}{export}"),
     ] {
         assert!(
-            parse_native_statistics(&changed, 1, &decisions).is_none(),
+            parse_native_statistics(&changed, 1, &decisions, true).is_none(),
             "{changed}"
         );
     }
-    assert!(parse_native_statistics(export, 2, &decisions).is_none());
+    assert!(parse_native_statistics(export, 2, &decisions, true).is_none());
     let mut unavailable = decisions;
     unavailable[0].evaluation_status = "unavailable".into();
-    assert!(parse_native_statistics(export, 1, &unavailable).is_none());
+    assert!(parse_native_statistics(export, 1, &unavailable, true).is_none());
 }
 
 #[test]
@@ -412,6 +412,9 @@ fn cube_eligibility_handles_opening_setup_ownership_crawford_and_dead_cube() {
         ("MI[length:7][ws:0][bs:6]RU[Crawford]", false),
         ("MI[length:7][ws:0][bs:5]CV[2]CO[b]", false),
         ("MI[length:0][ws:0][bs:0]", true),
+        ("MI[length:0][ws:0][bs:0]RU[NoCube]", false),
+        ("MI[length:0]RU[Jacoby]", true),
+        ("MI[length:0]RU[Jacoby:NoCube]", false),
     ] {
         let source = format!("(;GM[6]{metadata};W[31hefe];B[42qusu])");
         let positions = parse_sgf(&source).unwrap().positions;
@@ -631,5 +634,36 @@ async fn native_analysis_reports_off_thread_validation_errors_before_starting_gn
     ] {
         let error = engine.analyze_game(source, game_no, 1).await.unwrap_err();
         assert_eq!(error.to_string(), message);
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires local GNUbg with weights"]
+async fn native_gnubg_nocube_checker_game() {
+    let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
+    for (rule, expected_cubes) in [("RU[NoCube]", 0), ("", 1)] {
+        let source = format!("(;GM[6]MI[length:0]{rule};W[31hefe];B[42qusu])");
+        let result = engine.analyze_game(&source, 1, 1).await.unwrap();
+        assert_eq!(result.cube_enabled, expected_cubes != 0);
+        let statistics = result.statistics.as_ref().unwrap();
+        assert_eq!(
+            statistics
+                .iter()
+                .map(|s| s.total_cube_decisions)
+                .sum::<i32>(),
+            expected_cubes as i32
+        );
+        assert_eq!(
+            result
+                .decisions
+                .iter()
+                .filter(|d| d.kind == "checker")
+                .count(),
+            2
+        );
+        assert_eq!(
+            result.decisions.iter().filter(|d| d.kind == "cube").count(),
+            expected_cubes
+        );
     }
 }

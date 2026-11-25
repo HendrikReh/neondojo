@@ -1,3 +1,4 @@
+import LazyPanel from '../app/LazyPanel';
 import { useOpenSageInstallation } from './OpenSageInstallation';
 import configurationOptions from '../../../shared/configuration-options.json' with { type: 'json' };
 import { ConfigurationConflict } from './configuration/configuration-api';
@@ -38,7 +39,6 @@ import {
 import {
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
@@ -171,7 +171,6 @@ export default function SettingsDialog({
   const virtualT = useVirtualPlayerText();
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
-  const boardGallery = useRef<HTMLDivElement>(null);
   const preferences = useLatest({ theme, locale, appearance });
   const [initialPreferences, setInitialPreferences] = useState({
     theme,
@@ -351,22 +350,6 @@ export default function SettingsDialog({
     if (open) dialogTrigger.current?.focus();
     dialogTrigger.current = null;
   }, [destination, bookOpen, open]);
-  const boardGalleryVisible = open && category === 'board' && draft !== null;
-  useLayoutEffect(() => {
-    const gallery = boardGallery.current;
-    if (!boardGalleryVisible || !gallery) return;
-    const selected = gallery.querySelector('button[aria-pressed="true"]');
-    if (!selected) return;
-
-    const item = selected.getBoundingClientRect();
-    const galleryBox = gallery.getBoundingClientRect();
-    const padding = getComputedStyle(gallery);
-    const top = galleryBox.top + parseFloat(padding.paddingTop);
-    const bottom = galleryBox.bottom - parseFloat(padding.paddingBottom);
-    if (item.top < top) gallery.scrollTop += Math.floor(item.top - top);
-    else if (item.bottom > bottom)
-      gallery.scrollTop += Math.ceil(item.bottom - bottom);
-  }, [boardGalleryVisible]);
   const gnubgEdited = !!(
     draft &&
     initial &&
@@ -1087,13 +1070,15 @@ export default function SettingsDialog({
                   sounds={draftSounds}
                   onSounds={setDraftSounds}
                 />
-                <BoardSettingsSection
-                  galleryRef={boardGallery}
-                  disabled={saving}
-                  hidden={category !== 'board'}
-                  theme={draftTheme}
-                  onTheme={setDraftTheme}
-                />
+                {open && category === 'board' && (
+                  <LazyPanel>
+                    <BoardSettingsSection
+                      disabled={saving}
+                      theme={draftTheme}
+                      onTheme={setDraftTheme}
+                    />
+                  </LazyPanel>
+                )}
                 <EngineSettingsSection
                   id={id}
                   draft={draft}

@@ -31,8 +31,13 @@ impl Engine {
         let mut commands = String::from(
             "set confirm default yes\nset confirm new no\nset display off\nset analysis moves on\nset analysis cube on\nset analysis luck off\nset analysis player 0 analyse on\nset analysis player 1 analyse on\nset output mwc off\nset output digits 6\nset export moves number 10000\nset export include statistics on\n",
         );
+        let cube_enabled = source.contexts[(game_no - 1) as usize].cube_enabled;
+        let cubeful = if cube_enabled { "on" } else { "off" };
+        if !cube_enabled {
+            commands.push_str("set analysis cube off\nset cube use off\n");
+        }
         for kind in ["chequerplay", "cubedecision"] {
-            commands.push_str(&format!("set analysis {kind} type evaluation\nset analysis {kind} evaluation plies {native}\nset analysis {kind} evaluation cubeful on\nset analysis {kind} evaluation deterministic on\nset analysis {kind} evaluation noise 0\n"));
+            commands.push_str(&format!("set analysis {kind} type evaluation\nset analysis {kind} evaluation plies {native}\nset analysis {kind} evaluation cubeful {cubeful}\nset analysis {kind} evaluation deterministic on\nset analysis {kind} evaluation noise 0\n"));
         }
         self.append_move_filter(&mut commands, "analysis", plies);
         for mark in ["verybad", "bad", "doubtful", "unmarked"] {
@@ -62,7 +67,7 @@ impl Engine {
         let export = read_analysis_artifact(&temp.path().join("analyzed.txt")).await?;
         let (decisions, statistics) = tokio::task::spawn_blocking(move || {
             let decisions = parse_source_game(&source, game_no, &native, &export)?;
-            let statistics = parse_native_statistics(&export, game_no, &decisions);
+            let statistics = parse_native_statistics(&export, game_no, &decisions, cube_enabled);
             anyhow::Ok((decisions, statistics))
         })
         .await??;
@@ -72,6 +77,7 @@ impl Engine {
             .context("GNUbg engine version missing")?
             .to_owned();
         Ok(AnalyzedGame {
+            cube_enabled,
             engine,
             game_no,
             decisions,
@@ -208,7 +214,11 @@ pub(super) fn analysis_input(source: &AnalysisSource) -> String {
                         if key == "RU" && context.crawford {
                             // Native GNUbg recognizes CrawfordGame only together
                             // with its Crawford rule flag; strict SGF accepts either.
-                            write_property(&mut out, key, &["Crawford:CrawfordGame".into()]);
+                            let mut rules = values[0].split(':').map(str::trim).collect::<Vec<_>>();
+                            if !rules.contains(&"Crawford") {
+                                rules.insert(0, "Crawford");
+                            }
+                            write_property(&mut out, key, &[rules.join(":")]);
                         } else {
                             write_property(&mut out, key, values);
                         }

@@ -42,6 +42,8 @@ impl From<MatchAnalysisSummary> for CatalogAnalysisSummary {
 }
 #[derive(Serialize, ToSchema)]
 pub struct CatalogGameStatistics {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub needs_cube_rule_reanalysis: bool,
     pub game_no: i32,
     pub white_score: i32,
     pub black_score: i32,
@@ -53,6 +55,7 @@ pub struct CatalogGameStatistics {
 impl From<GameAnalysisStatistics> for CatalogGameStatistics {
     fn from(g: GameAnalysisStatistics) -> Self {
         Self {
+            needs_cube_rule_reanalysis: g.needs_cube_rule_reanalysis,
             game_no: g.game_no,
             white_score: g.white_score,
             black_score: g.black_score,
@@ -212,11 +215,17 @@ async fn statistics(
             ]
         };
         let mut expected_cubes: BTreeMap<_, _> = explicit_cubes.into_iter().collect();
+        let disabled: BTreeSet<_> = source_games
+            .iter()
+            .filter(|g| g.cube_enabled == Some(false))
+            .map(|g| g.game_no)
+            .collect();
         for p in &positions {
             if crate::match_analysis::cube_analysis_available(
                 &p.board,
                 &p.gnubg_match_id,
                 p.player,
+                !disabled.contains(&p.game_no),
             )? {
                 *expected_cubes.entry(p.game_no).or_default() += 1;
             }
@@ -226,6 +235,9 @@ async fn statistics(
         let mut games = Vec::with_capacity(source_games.len());
         let mut by_game: BTreeMap<i32, Vec<_>> = BTreeMap::new();
         for row in rows {
+            if row.decision.kind == "cube" && disabled.contains(&row.game_no) {
+                continue;
+            }
             by_game.entry(row.game_no).or_default().push(row);
         }
         for g in source_games {
@@ -254,12 +266,14 @@ async fn statistics(
                 .iter()
                 .map(|p| p.cube_decisions)
                 .sum::<i32>();
-            let complete = checker_count == g.position_count
+            let complete = g.cube_enabled.is_some()
+                && checker_count == g.position_count
                 && i64::from(cube_count) == *expected_cubes.get(&g.game_no).unwrap_or(&0);
             summary.completed_games = i32::from(complete);
             overall.completed_games += i32::from(complete);
             let has_results = checker_count + cube_count > 0;
             games.push(CatalogGameStatistics {
+                needs_cube_rule_reanalysis: false,
                 game_no: g.game_no,
                 white_score: g.white_score,
                 black_score: g.black_score,

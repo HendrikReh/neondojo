@@ -323,7 +323,8 @@ fn reconstruct(games: Vec<Game>, rows: Vec<Row>) -> ApiResult<Vec<SourceDecision
             let Ok(d) = serde_json::from_value::<Decision>(row.data) else {
                 continue;
             };
-            if d.decision_no != row.decision_no
+            if (!context.cube_enabled && d.kind == "cube")
+                || d.decision_no != row.decision_no
                 || d.player != row.player
                 || d.kind != row.kind
                 || !row.equity_loss.is_finite()
@@ -396,6 +397,7 @@ fn reconstruct(games: Vec<Game>, rows: Vec<Row>) -> ApiResult<Vec<SourceDecision
                     },
                     kind: question_kind.into(),
                     position: Position {
+                        cube_enabled: Some(context.cube_enabled),
                         id: row.position_uuid.unwrap_or(Uuid::nil()),
                         match_uuid: game.match_id,
                         ordinal: d.checker_no.unwrap_or(d.decision_no),

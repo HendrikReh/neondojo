@@ -118,6 +118,7 @@ pub(crate) struct GameContext {
     pub scores: [i32; 2],
     pub crawford: bool,
     pub jacoby: bool,
+    pub cube_enabled: bool,
     pub decision_ids: Vec<(String, String)>,
 }
 
@@ -294,6 +295,7 @@ fn parse_sgf_context(
             scores,
             crawford,
             jacoby,
+            cube_enabled: !no_cube,
             decision_ids: Vec::new(),
         };
         let mut board = initial_board();
@@ -434,6 +436,7 @@ fn parse_sgf_context(
                         ids::match_id(length, scores, cube, owner, crawford, jacoby, player, dice),
                     ));
                     result.positions.push(ImportedPosition {
+                        cube_enabled: !no_cube,
                         game_no: game_index as i32 + 1,
                         ply,
                         player,
@@ -576,6 +579,7 @@ fn parse_sgf_context(
         );
         result_cubes.push(result_cube);
         result.games.push(crate::model::MatchGame {
+            cube_enabled: Some(!no_cube),
             result: outcome.clone(),
             game_no: game_index as i32 + 1,
             position_count: ply,

@@ -677,6 +677,7 @@ mod tests {
 
     fn game(game_no: i32, scores: [i32; 2], after: Option<[i32; 2]>) -> MatchGame {
         MatchGame {
+            cube_enabled: Some(true),
             result: after.map(|scores_after| GameResult {
                 winner: 0,
                 points: 1,

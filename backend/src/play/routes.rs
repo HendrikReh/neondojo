@@ -205,6 +205,7 @@ pub(super) async fn create_session(
             difficulty: request.play_difficulty,
         },
         position: Position {
+            cube_enabled: None,
             id,
             match_uuid: id,
             ordinal: 0,

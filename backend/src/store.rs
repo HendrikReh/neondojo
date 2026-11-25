@@ -1,5 +1,5 @@
 use crate::{import::ImportedMatch, model::*, search::literal_pattern};
-use anyhow::{Result, ensure};
+use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, QueryBuilder, Transaction};
 use uuid::Uuid;
@@ -231,7 +231,7 @@ async fn insert_games(
 ) -> Result<()> {
     for batch in games.chunks(500) {
         let mut query = QueryBuilder::<Postgres>::new(
-            "INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford) ",
+            "INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford,cube_enabled) ",
         );
         query.push_values(batch, |mut q, game| {
             q.push_bind(match_id)
@@ -239,7 +239,8 @@ async fn insert_games(
                 .push_bind(game.position_count)
                 .push_bind(game.white_score)
                 .push_bind(game.black_score)
-                .push_bind(game.crawford);
+                .push_bind(game.crawford)
+                .push_bind(game.cube_enabled);
         });
         query.build().execute(&mut **tx).await?;
     }
@@ -250,7 +251,7 @@ async fn insert_games(
 /// under the match row lock for libraries created before the catalog migration.
 /// The game catalog of a match, built once from the stored SGF for older
 /// imports. Results are not derived; scope checks need only the games.
-const GAME_CATALOG: &str = "SELECT game_no,position_count,white_score,black_score,crawford FROM match_games WHERE match_uuid=$1 ORDER BY game_no";
+const GAME_CATALOG: &str = "SELECT game_no,position_count,white_score,black_score,crawford,cube_enabled FROM match_games WHERE match_uuid=$1 ORDER BY game_no";
 pub async fn game_catalog(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<MatchGame>>> {
     let games = sqlx::query_as::<_, MatchGame>(GAME_CATALOG)
         .bind(match_id)
@@ -277,15 +278,23 @@ pub async fn game_catalog(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Ma
         tx.commit().await?;
         return Ok(Some(games));
     }
-    let games =
-        tokio::task::spawn_blocking(move || crate::import::parse_sgf(&source).map(|m| m.games))
-            .await??;
-    insert_games(&mut tx, match_id, &games).await?;
+    let games = catalog_source_games(&mut tx, match_id, source).await?;
     tx.commit().await?;
     Ok(Some(games))
 }
 
-/// The game catalog with each game's result, derived from the stored SGF.
+pub(crate) async fn catalog_source_games(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    match_id: Uuid,
+    source: String,
+) -> Result<Vec<MatchGame>> {
+    let games =
+        tokio::task::spawn_blocking(move || crate::import::parse_sgf(&source).map(|m| m.games))
+            .await??;
+    insert_games(tx, match_id, &games).await?;
+    Ok(games)
+}
+
 pub async fn import_warnings(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<ImportWarning>>> {
     let warnings: Option<sqlx::types::Json<Vec<ImportWarning>>> =
         sqlx::query_scalar("SELECT import_warnings FROM matches WHERE id=$1")
@@ -384,6 +393,29 @@ pub async fn matches(pool: &PgPool, q: &str, after: Option<Uuid>, limit: i64) ->
         None
     };
     Ok(MatchPage { items, next_cursor })
+}
+
+/// Positions embedded in independent cards can have no local match. For a
+/// local match, use the game's source rule (including pre-catalog imports).
+pub(crate) async fn game_cube_enabled(pool: &PgPool, position: &Position) -> Result<bool> {
+    let rule: Option<Option<bool>> = sqlx::query_scalar(
+        "SELECT cube_enabled FROM match_games WHERE match_uuid=$1 AND game_no=$2",
+    )
+    .bind(position.match_uuid)
+    .bind(position.game_no)
+    .fetch_optional(pool)
+    .await?;
+    if let Some(rule) = rule {
+        return rule.context("The source game's cube rule is unavailable");
+    }
+    let Some(games) = game_catalog(pool, position.match_uuid).await? else {
+        return Ok(position.cube_enabled.unwrap_or(true));
+    };
+    games
+        .iter()
+        .find(|game| game.game_no == position.game_no)
+        .and_then(|game| game.cube_enabled)
+        .context("The source game's cube rule is unavailable")
 }
 
 pub async fn get_position(pool: &PgPool, id: Uuid) -> Result<Option<Position>> {

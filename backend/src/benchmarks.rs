@@ -69,10 +69,10 @@ fn reference_for(
     let value = &mut reference.protocol;
     match EngineId::parse(engine) {
         Some(EngineId::NeonGammon) => {
-            value.id = format!("bgsage-match-v4-{plies}ply-4threads");
+            value.id = format!("bgsage-match-v5-{plies}ply-4threads");
             value.process_strategy =
-                "persistent-worker-atomic-game-verified-at-both-boundaries".into();
-            value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
+                "persistent-worker-batched-game-verified-at-both-boundaries".into();
+            value.timing_scope = "cold-worker-startup-and-replay-once-plus-verified-games".into();
             value.move_filter = format!("all-cubeful-{plies}ply-candidates-played-board-included");
         }
         Some(EngineId::Gnubg) => {
@@ -488,20 +488,20 @@ mod tests {
             "bgsage",
             4,
             None,
+            "bgsage-match-v5-4ply-4threads"
+        ));
+        assert!(!known_protocol_id(
+            "bgsage",
+            4,
+            None,
+            "bgsage-match-v5-3ply-4threads"
+        ));
+        // v4 and earlier timed the serial game pipeline.
+        assert!(!known_protocol_id(
+            "bgsage",
+            4,
+            None,
             "bgsage-match-v4-4ply-4threads"
-        ));
-        assert!(!known_protocol_id(
-            "bgsage",
-            4,
-            None,
-            "bgsage-match-v4-3ply-4threads"
-        ));
-        // v3 timings predate the cheaper per-request checks and stay historical.
-        assert!(!known_protocol_id(
-            "bgsage",
-            4,
-            None,
-            "bgsage-match-v3-4ply-4threads"
         ));
         assert_eq!(
             play_latency::reference_for("bgsage", 2)

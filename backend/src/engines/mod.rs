@@ -1,8 +1,10 @@
 //! Local analysis adapters. GNUbg remains the independent import/rules engine.
 mod context;
 mod game;
+pub(crate) use game::GAME_TIMEOUT;
 mod process;
 mod provider;
+pub(crate) mod replay;
 
 pub(crate) use provider::{EngineId, display_name};
 
@@ -19,10 +21,22 @@ use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 use utoipa::ToSchema;
 
-/// NeonGammon package versions NeonDojo accepts (`neongammon` releases of
-/// HendrikReh/neongammon). The sidecar checks the same list in
-/// `SUPPORTED_VERSIONS` of `tools/probe_open_sage.py`.
-pub const SUPPORTED_SAGE_PACKAGE_VERSIONS: [&str; 4] = ["3.0.0", "3.1.0", "3.1.1", "3.1.2"];
+pub(super) const RELEASES_JSON: &str = include_str!("../../../shared/neongammon-releases.json");
+
+#[derive(Deserialize)]
+struct Release {
+    presets: bool,
+    fingerprint: Option<&'static str>,
+    revision: Option<&'static str>,
+}
+
+static RELEASES: std::sync::LazyLock<std::collections::BTreeMap<&str, Release>> =
+    std::sync::LazyLock::new(|| {
+        serde_json::from_str(RELEASES_JSON).expect("embedded NeonGammon releases")
+    });
+
+pub static SUPPORTED_SAGE_PACKAGE_VERSIONS: std::sync::LazyLock<Vec<&str>> =
+    std::sync::LazyLock::new(|| RELEASES.keys().copied().collect());
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct SageSnapshot {
@@ -47,31 +61,30 @@ pub struct EngineFork {
 }
 
 impl SageSnapshot {
+    pub(crate) fn describe(&self, cube_mode: &str) -> String {
+        format!(
+            "NeonGammon {}; model {}; {}ply {}; threads {}; adapter {}",
+            self.package_version,
+            self.artifact_fingerprint,
+            self.plies,
+            cube_mode,
+            self.threads,
+            self.adapter_version
+        )
+    }
+
     pub(crate) fn supports_difficulty_presets(&self) -> bool {
-        matches!(self.package_version.as_str(), "3.1.0" | "3.1.1" | "3.1.2")
+        RELEASES
+            .get(self.package_version.as_str())
+            .is_some_and(|release| release.presets)
     }
 
     pub fn known_fork(&self) -> Option<EngineFork> {
         // Identify the documented releases by their full runtime fingerprints.
-        let revision = match self.artifact_fingerprint.as_str() {
-            // Release v3.1.2, official GitHub cp312 wheel.
-            "02d3ad593cf480a0813858fdcb8373645b0b0048e2ce31080180730a90192199" => {
-                "758d701441cdaaa30c042c96b53953039ba2ba29"
-            }
-            // Release v3.1.1, official GitHub cp312 wheel.
-            "eaa6f2a81b42320a80dc8ed2114dd84fc18239ce1f9cfcc1ca31b503e66bfebe" => {
-                "abaedf9799d442fb4d53b83f2e3079cf17d8b6ce"
-            }
-            // Release v3.1.0, official GitHub cp312 wheel.
-            "26e7701c27c6c5e0cd3cc864768e27675f0d72149c2ad545ffb0c5293ff705d5" => {
-                "04e0bb702c3f7549a05f91af4e862fdef2af954f"
-            }
-            // Release v3.0.0, official GitHub cp312 wheel.
-            "621c35546142fe9d4762ad763e3c2dac3372a03c8a67c6d264fa634dfc69f7f7" => {
-                "cbfcb014c7f8cf33d75e7f06cbdfc77260cb53ed"
-            }
-            _ => return None,
-        };
+        let revision = RELEASES
+            .values()
+            .find(|release| release.fingerprint == Some(self.artifact_fingerprint.as_str()))?
+            .revision?;
         Some(EngineFork {
             repository: "HendrikReh/neongammon",
             revision,
@@ -226,24 +239,28 @@ impl SageEngine {
             Path::new(&snapshot.python).is_absolute(),
             "NeonGammon Python path must be absolute"
         );
-        let version = format!(
-            "NeonGammon {}; model {}; {}ply {}; threads {}; adapter {}",
-            snapshot.package_version,
-            snapshot.artifact_fingerprint,
-            snapshot.plies,
-            if snapshot.cubeless {
-                "cubeless"
-            } else {
-                "cubeful"
-            },
-            snapshot.threads,
-            snapshot.adapter_version
-        );
+        let version = snapshot.describe(if snapshot.cubeless {
+            "cubeless"
+        } else {
+            "cubeful"
+        });
         Ok(Self {
             snapshot,
             version,
             slot: process::Slot::General,
         })
+    }
+
+    fn for_cubeless_checker(&self, money_without_jacoby: bool) -> Result<Self> {
+        ensure!(
+            money_without_jacoby,
+            "NeonGammon cubeless checker evaluation requires money play without Jacoby"
+        );
+        let mut snapshot = self.snapshot.clone();
+        snapshot.cubeless = true;
+        let mut engine = Self::new(snapshot)?;
+        engine.slot = self.slot;
+        Ok(engine)
     }
 
     pub(crate) fn for_play(snapshot: SageSnapshot) -> Result<Self> {
@@ -355,8 +372,10 @@ impl SageEngine {
         dice: Option<[i32; 2]>,
         force_board: Option<[i32; 26]>,
     ) -> Result<Vec<SageCheckerCandidate>> {
-        self.checker_boards_with_batch(position_id, match_id, dice, force_board, None)
-            .await
+        Ok(self
+            .checker_boards_costed(position_id, match_id, dice, force_board)
+            .await?
+            .0)
     }
 
     /// Every legal checker play at the profile depth, for hints that rate any
@@ -367,7 +386,7 @@ impl SageEngine {
         match_id: &str,
     ) -> Result<Vec<SageCheckerCandidate>> {
         Ok(self
-            .checker_boards_scoped(position_id, match_id, None, CheckerScope::AllLegal, None)
+            .checker_boards_scoped(position_id, match_id, None, CheckerScope::AllLegal)
             .await?
             .0)
     }
@@ -380,7 +399,8 @@ impl SageEngine {
         dice: Option<[i32; 2]>,
         force_board: Option<[i32; 26]>,
     ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
-        self.checker_boards_costed_with_batch(position_id, match_id, dice, force_board, None)
+        let scope = force_board.map_or(CheckerScope::Searched, CheckerScope::Played);
+        self.checker_boards_scoped(position_id, match_id, dice, scope)
             .await
     }
 
@@ -389,34 +409,7 @@ impl SageEngine {
         position_id: &str,
         match_id: &str,
     ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
-        self.checker_boards_scoped(position_id, match_id, None, CheckerScope::BotTopTwo, None)
-            .await
-    }
-
-    async fn checker_boards_with_batch(
-        &self,
-        position_id: &str,
-        match_id: &str,
-        dice: Option<[i32; 2]>,
-        force_board: Option<[i32; 26]>,
-        batch: Option<&mut process::VerifiedBatch>,
-    ) -> Result<Vec<SageCheckerCandidate>> {
-        Ok(self
-            .checker_boards_costed_with_batch(position_id, match_id, dice, force_board, batch)
-            .await?
-            .0)
-    }
-
-    async fn checker_boards_costed_with_batch(
-        &self,
-        position_id: &str,
-        match_id: &str,
-        dice: Option<[i32; 2]>,
-        force_board: Option<[i32; 26]>,
-        batch: Option<&mut process::VerifiedBatch>,
-    ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
-        let scope = force_board.map_or(CheckerScope::Searched, CheckerScope::Played);
-        self.checker_boards_scoped(position_id, match_id, dice, scope, batch)
+        self.checker_boards_scoped(position_id, match_id, None, CheckerScope::BotTopTwo)
             .await
     }
 
@@ -426,8 +419,18 @@ impl SageEngine {
         match_id: &str,
         dice: Option<[i32; 2]>,
         scope: CheckerScope,
-        batch: Option<&mut process::VerifiedBatch>,
     ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
+        let (payload, player) = Self::checker_request(position_id, match_id, dice, scope)?;
+        let (result, cost) = self.request_costed(payload).await?;
+        Ok((Self::absolute_candidates(result, player)?, cost))
+    }
+
+    fn checker_request(
+        position_id: &str,
+        match_id: &str,
+        dice: Option<[i32; 2]>,
+        scope: CheckerScope,
+    ) -> Result<(Value, i32)> {
         let context = context::Context::decode(match_id)?;
         ensure!(
             !context.pending_double,
@@ -449,33 +452,21 @@ impl SageEngine {
             CheckerScope::AllLegal => payload["all_legal"] = json!(true),
             CheckerScope::BotTopTwo => payload["top_two"] = json!(true),
         }
-        let (result, cost) = self.request_with_batch(payload, batch).await?;
+        Ok((payload, context.player))
+    }
+
+    // The transport has already checked probability nesting, forced moves and
+    // forced-pass legality for this exact row before releasing the worker.
+    fn absolute_candidates(result: Value, player: i32) -> Result<Vec<SageCheckerCandidate>> {
         let mut candidates: Vec<SageCheckerCandidate> = serde_json::from_value(result)?;
-        ensure!(
-            !candidates.is_empty(),
-            "NeonGammon returned no checker candidates"
-        );
         for candidate in &mut candidates {
-            validate_evaluation(candidate.equity, &candidate.probabilities)?;
-            if candidate.board == board {
-                ensure!(
-                    candidate.notation.is_empty(),
-                    "Invalid forced-pass notation"
-                );
-                // Existing rule validation independently proves that no die can be played.
-                let absolute = context::from_sage(&board, context.player)?;
-                crate::backgammon::apply_checker_turn(&absolute, context.player, dice, &[])?;
+            if candidate.notation.is_empty() {
                 candidate.notation = "Cannot move".into();
-            } else {
-                ensure!(
-                    !candidate.notation.is_empty(),
-                    "NeonGammon omitted checker notation"
-                );
             }
-            candidate.board = context::from_sage(&candidate.board, context.player)?;
+            candidate.board = context::from_sage(&candidate.board, player)?;
         }
         candidates.sort_by(|a, b| b.equity.total_cmp(&a.equity));
-        Ok((candidates, cost))
+        Ok(candidates)
     }
 
     pub(crate) async fn opponent_checker_board(
@@ -492,10 +483,9 @@ impl SageEngine {
         );
         let board = context.board(position_id, match_id)?;
         let (result, _) = self
-            .request_with_batch(
+            .request_costed(
                 json!({"operation":"opponent_checker", "board":board, "context":context,
                        "dice":context.dice, "difficulty":difficulty, "seed":seed}),
-                None,
             )
             .await?;
         context::from_sage(&serde_json::from_value(result)?, context.player)
@@ -511,10 +501,9 @@ impl SageEngine {
         let context = context::Context::decode(match_id)?;
         let board = context.board(position_id, match_id)?;
         let (result, _) = self
-            .request_with_batch(
+            .request_costed(
                 json!({"operation":"opponent_cube", "board":board, "context":context,
                        "difficulty":difficulty, "seed":seed}),
-                None,
             )
             .await?;
         Ok(serde_json::from_value(result)?)
@@ -557,22 +546,32 @@ impl SageEngine {
         crate::engine::with_shared_access(async {
             let mut batch = process::VerifiedBatch::begin(&self.snapshot).await?;
             let mut analyses = Vec::with_capacity(rolls.len());
-            for &dice in rolls {
-                let candidates = self
-                    .checker_boards_with_batch(
-                        position_id,
-                        match_id,
-                        Some(dice),
-                        None,
-                        Some(&mut batch),
-                    )
+            for chunk in rolls.chunks(self.chunk_size()) {
+                let (rows, players): (Vec<_>, Vec<_>) = chunk
+                    .iter()
+                    .map(|&dice| {
+                        Self::checker_request(
+                            position_id,
+                            match_id,
+                            Some(dice),
+                            CheckerScope::Searched,
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()?
+                    .into_iter()
+                    .unzip();
+                let results = self
+                    .evaluate_rows("checker_batch", &rows, Some(&mut batch))
                     .await?;
-                analyses.push(Analysis {
-                    engine: self.version.clone(),
-                    plies,
-                    candidates: self.ranked_candidates(candidates),
-                });
-                evaluated(analyses.len()).await?;
+                for (row, player) in results.into_iter().zip(players) {
+                    let candidates = Self::absolute_candidates(row, player)?;
+                    analyses.push(Analysis {
+                        engine: self.version.clone(),
+                        plies,
+                        candidates: self.ranked_candidates(candidates),
+                    });
+                    evaluated(analyses.len()).await?;
+                }
             }
             batch.finish().await?;
             Ok(analyses)
@@ -640,7 +639,12 @@ impl SageEngine {
     }
 
     pub async fn cube(&self, position_id: &str, match_id: &str) -> Result<SageCubeEvaluation> {
-        self.cube_with_batch(position_id, match_id, None).await
+        let context = context::Context::decode(match_id)?;
+        let board = context.board(position_id, match_id)?;
+        let (value, _) = self
+            .request_costed(cube_request(&board, &context, CubeScope::Evaluation))
+            .await?;
+        Ok(serde_json::from_value(value)?)
     }
 
     /// The cube decision alone, plus the engine cost the worker measured for
@@ -655,53 +659,57 @@ impl SageEngine {
         let context = context::Context::decode(match_id)?;
         let board = context.board(position_id, match_id)?;
         let (value, cost) = self
-            .request_with_batch(cube_request(&board, &context, CubeScope::Decision), None)
+            .request_costed(cube_request(&board, &context, CubeScope::Decision))
             .await?;
         let result: SageCubeDecision = serde_json::from_value(value)?;
         result.validate()?;
         Ok((result, cost))
     }
 
-    async fn cube_with_batch(
-        &self,
-        position_id: &str,
-        match_id: &str,
-        batch: Option<&mut process::VerifiedBatch>,
-    ) -> Result<SageCubeEvaluation> {
-        Ok(self
-            .cube_costed_with_batch(position_id, match_id, batch)
-            .await?
-            .0)
+    // Deep searches yield the shared worker thread budget more frequently.
+    fn chunk_size(&self) -> usize {
+        if self.snapshot.plies >= 3 { 4 } else { 64 }
     }
 
-    async fn cube_costed_with_batch(
+    async fn evaluate_rows(
         &self,
-        position_id: &str,
-        match_id: &str,
+        operation: &str,
+        rows: &[Value],
         batch: Option<&mut process::VerifiedBatch>,
-    ) -> Result<(SageCubeEvaluation, Option<EngineCost>)> {
-        let context = context::Context::decode(match_id)?;
-        let board = context.board(position_id, match_id)?;
-        let (value, cost) = self
-            .request_with_batch(cube_request(&board, &context, CubeScope::Evaluation), batch)
-            .await?;
-        let result: SageCubeEvaluation = serde_json::from_value(value)?;
-        for equity in [result.no_double, result.take, result.pass] {
-            validate_evaluation(equity, &result.probabilities)?;
+    ) -> Result<Vec<Value>> {
+        let mut results = Vec::with_capacity(rows.len());
+        if let Some(batch) = batch {
+            for chunk in rows.chunks(self.chunk_size()) {
+                let mut parts = vec![chunk];
+                while let Some(part) = parts.pop() {
+                    let (result, _) = batch
+                        .request_costed(
+                            json!({"operation": operation, "rows": part}),
+                            Duration::from_secs(180 * part.len() as u64),
+                        )
+                        .await?;
+                    match result {
+                        Value::Array(values) => results.extend(values),
+                        // A legal roll can have hundreds of moves. Retry smaller
+                        // frames inside the same integrity boundary.
+                        _ if part.len() > 1 && result == json!({"split": true}) => {
+                            let (left, right) = part.split_at(part.len() / 2);
+                            parts.extend([right, left]);
+                        }
+                        _ => anyhow::bail!("Invalid NeonGammon batch result"),
+                    }
+                }
+            }
+        } else {
+            for row in rows {
+                results.push(self.request_costed(row.clone()).await?.0);
+            }
         }
-        Ok((result, cost))
+        Ok(results)
     }
 
-    async fn request_with_batch(
-        &self,
-        payload: serde_json::Value,
-        batch: Option<&mut process::VerifiedBatch>,
-    ) -> Result<(serde_json::Value, Option<EngineCost>)> {
-        let timeout = Duration::from_secs(180);
-        match batch {
-            Some(batch) => batch.request_costed(payload, timeout).await,
-            None => process::request_costed(&self.snapshot, payload, timeout, self.slot).await,
-        }
+    async fn request_costed(&self, payload: Value) -> Result<(Value, Option<EngineCost>)> {
+        process::request_costed(&self.snapshot, payload, Duration::from_secs(180), self.slot).await
     }
 }
 
@@ -762,6 +770,21 @@ pub enum AnalysisEngine {
     OpenSage(SageEngine),
 }
 impl AnalysisEngine {
+    pub(crate) fn for_checker_rules(self, cube_enabled: bool, match_id: &str) -> Result<Self> {
+        if cube_enabled {
+            return Ok(self);
+        }
+        match self {
+            Self::Gnubg(engine) => Ok(Self::Gnubg(engine.with_cubeless_checker())),
+            Self::OpenSage(engine) => {
+                let context = context::Context::decode(match_id)?;
+                Ok(Self::OpenSage(engine.for_cubeless_checker(
+                    context.away1 == 0 && !context.jacoby,
+                )?))
+            }
+        }
+    }
+
     pub(crate) fn id(&self) -> EngineId {
         match self {
             Self::Gnubg(_) => EngineId::Gnubg,
@@ -1019,19 +1042,8 @@ mod tests {
     }
 
     #[test]
-    fn supported_package_versions_match_the_sidecar_check() {
-        let probe = include_str!("../../../tools/probe_open_sage.py");
-        let line = probe
-            .lines()
-            .find(|line| line.starts_with("SUPPORTED_VERSIONS = "))
-            .expect("probe lists its supported versions");
-        let listed: Vec<&str> = line.split('\'').skip(1).step_by(2).collect();
-        assert_eq!(listed, super::SUPPORTED_SAGE_PACKAGE_VERSIONS);
-    }
-
-    #[test]
     fn engine_accepts_only_supported_package_versions() {
-        for version in super::SUPPORTED_SAGE_PACKAGE_VERSIONS {
+        for &version in super::SUPPORTED_SAGE_PACKAGE_VERSIONS.iter() {
             let snapshot = SageSnapshot {
                 python: "/usr/bin/python3".into(),
                 package_version: version.into(),

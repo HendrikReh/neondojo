@@ -530,6 +530,7 @@ mod tests {
         let mut content = CardContent {
             kind: "checker".into(),
             position: Position {
+                cube_enabled: None,
                 id,
                 match_uuid: id,
                 ordinal: 0,
@@ -611,6 +612,7 @@ mod tests {
         let content = CardContent {
             kind: "checker".into(),
             position: Position {
+                cube_enabled: None,
                 id,
                 match_uuid: deck,
                 ordinal: 0,

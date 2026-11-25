@@ -77,6 +77,72 @@ async fn analysis_snapshot(pool: &PgPool, match_id: uuid::Uuid) -> serde_json::V
     .unwrap()
 }
 
+#[sqlx::test(migrations = false)]
+async fn restores_pre_cube_rule_archive_using_each_games_sgf(pool: PgPool) {
+    // Export real pre-0095 COPY rows and their original manifest fingerprint.
+    let mut previous = sqlx::migrate!("./migrations");
+    previous.migrations.to_mut().retain(|m| m.version <= 94);
+    previous.run(&pool).await.unwrap();
+    let (id, _) = insert_match(&pool, "mixed-rules.sgf").await;
+    let sgf = r"(;GM[6]MI[length:0]RU[No\Cube];W[31hefe])(;GM[6]MI[length:0];W[31hefe])";
+    sqlx::query("UPDATE matches SET sgf=$2 WHERE id=$1")
+        .bind(id)
+        .bind(sgf)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO match_games(id,match_uuid,game_no,position_count,white_score,black_score,crawford)
+        SELECT gen_random_uuid(),$1,n,1,0,0,false FROM generate_series(1,2) n")
+        .bind(id).execute(&pool).await.unwrap();
+    let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    let response = app
+        .clone()
+        .oneshot(Request::get(BACKUP).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let archive = to_bytes(response.into_body(), 1024 * 1024).await.unwrap();
+
+    let mut target = sqlx::migrate!("./migrations");
+    target.migrations.to_mut().retain(|m| m.version <= 95);
+    target.run(&pool).await.unwrap();
+    sqlx::query("DELETE FROM match_games WHERE match_uuid=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        check_result(&app, archive.clone()).await.1["status"],
+        "compatible"
+    );
+    let response = app
+        .clone()
+        .oneshot(restore(archive.clone(), true))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let rules: Vec<bool> = sqlx::query_scalar(
+        "SELECT cube_enabled FROM match_games WHERE match_uuid=$1 ORDER BY game_no",
+    )
+    .bind(id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rules, vec![false, true]);
+
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time)
+        SELECT 96,'unrelated layout change',true,checksum,0 FROM _sqlx_migrations WHERE version=95",
+    )
+    .execute(&pool)
+    .await
+    .unwrap();
+    assert_eq!(
+        check_result(&app, archive).await.1["status"],
+        "incompatible_schema"
+    );
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn restores_data_and_keeps_target_installation_settings(pool: PgPool) {
     let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));

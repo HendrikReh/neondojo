@@ -385,7 +385,7 @@ pub(super) async fn analyze_decision(
             }]);
         }
         let (candidates, _) =
-            crate::engine::parse_full_checker_hints(&output, session.analysis_plies)?;
+            crate::engine::parse_full_checker_hints(&output, session.analysis_plies, true)?;
         let best = candidates
             .iter()
             .map(|c| c.equity)
@@ -539,7 +539,7 @@ mod tests {
         state.position.gnubg_match_id = "cInlAAAAAAAE".into();
         let directory = tempfile::tempdir().unwrap();
         let output=engine.run_with_timeout(directory.path(),"set display off\nset gnubgid 4HPwATDgc/ABMA:cInlAAAAAAAE\nset evaluation chequerplay evaluation plies 0\nhint 10000\n",std::time::Duration::from_secs(30)).await.unwrap();
-        state.legal_moves = crate::engine::parse_hints(&output)
+        state.legal_moves = crate::engine::parse_hints(&output, true)
             .unwrap()
             .into_iter()
             .map(|c| PlayMove {
@@ -723,6 +723,7 @@ mod tests {
             decisions.push(serde_json::from_value(serde_json::json!({"decision_no":index,"checker_no":index,"player":0,"kind":if index==8{"cube"}else{"checker"},"played":"played","best":"best","played_equity":0.0,"best_equity":0.0375,"equity_loss":0.0375,"severity":"none","dice":null,"evaluation_status":"evaluated"})).unwrap());
         }
         let games = vec![crate::match_analysis::AnalyzedGame {
+            cube_enabled: true,
             engine: "test".into(),
             game_no: 1,
             decisions,

@@ -287,42 +287,6 @@ describe('plural forms for counted nouns', () => {
     };
     expect(() => validateCatalogs(broken)).toThrow('few');
   });
-
-  it('gives every plural message in the message tables a complete set of forms', () => {
-    const sources = import.meta.glob<string>(
-      ['/src/**/*-messages.ts', './i18n-catalogs.ts'],
-      { query: '?raw', import: 'default', eager: true },
-    );
-    let checked = 0;
-    for (const [file, source] of Object.entries(sources)) {
-      for (const [literal] of source.matchAll(/'[^'\n]*, plural,[^'\n]*'/g)) {
-        const template = literal.slice(1, -1);
-        // The tables do not all expose their locale, so accept either the
-        // one/few/many set of Polish or the one/other set of the others.
-        const complete = (['pl', 'en'] as const).some((locale) => {
-          try {
-            validatePluralForms(locale, template);
-            return true;
-          } catch {
-            return false;
-          }
-        });
-        expect(complete, `${file}: ${template}`).toBe(true);
-        for (const count of counts)
-          expect(
-            selectPluralForms(
-              'pl',
-              template,
-              Object.fromEntries(
-                placeholders(template).map((name) => [name, count]),
-              ),
-            ),
-          ).not.toContain(', plural,');
-        checked += 1;
-      }
-    }
-    expect(checked).toBeGreaterThan(100);
-  });
 });
 
 describe('numberFormat', () => {

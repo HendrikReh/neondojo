@@ -281,21 +281,56 @@ struct Sequence {
     column_name: String,
 }
 
-async fn schema(connection: &mut PgConnection) -> Result<String> {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ArchiveLayout {
+    Current,
+    BeforeGameCubeRules,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct ArchiveSchema {
+    current: String,
+    before_game_cube_rules: Option<String>,
+}
+
+impl ArchiveSchema {
+    fn layout(&self, fingerprint: &str) -> Option<ArchiveLayout> {
+        if fingerprint == self.current {
+            Some(ArchiveLayout::Current)
+        } else if self.before_game_cube_rules.as_deref() == Some(fingerprint) {
+            Some(ArchiveLayout::BeforeGameCubeRules)
+        } else {
+            None
+        }
+    }
+}
+
+async fn schema(connection: &mut PgConnection) -> Result<ArchiveSchema> {
     let migrations: Vec<(i64, Vec<u8>)> = sqlx::query_as(
         "SELECT version, checksum FROM public._sqlx_migrations WHERE success ORDER BY version",
     )
     .fetch_all(connection)
     .await?;
     let mut digest = Sha256::new();
+    let mut before_game_cube_rules = None;
     for (version, checksum) in crate::schema_migrations::expanded_history(migrations) {
         if ARCHIVE_COMPATIBLE_MIGRATIONS.contains(&version) {
             continue;
         }
+        // This adapter covers exactly one layout transition. A later change
+        // to a backed-up table invalidates it until compatibility is reviewed.
+        before_game_cube_rules = (version == 95
+            && crate::schema_migrations::MIGRATOR
+                .iter()
+                .any(|m| m.version == version && m.checksum.as_ref() == checksum))
+        .then(|| format!("{:x}", digest.clone().finalize()));
         digest.update(version.to_be_bytes());
         digest.update(checksum);
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(ArchiveSchema {
+        current: format!("{:x}", digest.finalize()),
+        before_game_cube_rules,
+    })
 }
 
 fn identifier(name: &str) -> String {
@@ -306,7 +341,11 @@ fn relation(name: &str) -> String {
     format!("public.{}", identifier(name))
 }
 
-async fn columns(connection: &mut PgConnection, table: &str) -> Result<String> {
+async fn columns(
+    connection: &mut PgConnection,
+    table: &str,
+    layout: ArchiveLayout,
+) -> Result<String> {
     let columns: Vec<String> = sqlx::query_scalar(
         "SELECT attname::text FROM pg_attribute
          WHERE attrelid=$1::regclass AND attnum>0 AND NOT attisdropped AND attgenerated=''
@@ -316,8 +355,10 @@ async fn columns(connection: &mut PgConnection, table: &str) -> Result<String> {
     .fetch_all(connection)
     .await?;
     anyhow::ensure!(!columns.is_empty(), "Backup table has no columns");
+    let legacy_games = layout == ArchiveLayout::BeforeGameCubeRules && table == "match_games";
     Ok(columns
         .iter()
+        .filter(|name| !legacy_games || name.as_str() != "cube_enabled")
         .map(|name| identifier(name))
         .collect::<Vec<_>>()
         .join(","))

@@ -1,11 +1,14 @@
-import { themes, type Theme } from '../shared/board/themes';
+import configurationOptions from '../../../shared/configuration-options.json' with { type: 'json' };
+import type { Theme } from '../shared/board/themes';
 
 export const themeStorageKey = 'neondojo.theme';
 
 export function readTheme(storage?: Pick<Storage, 'getItem'>): Theme {
   try {
     const value = (storage ?? localStorage).getItem(themeStorageKey);
-    return themes.find(({ id }) => id === value)?.id ?? 'forest';
+    return value && configurationOptions.board_themes.includes(value)
+      ? value
+      : 'forest';
   } catch {
     return 'forest';
   }

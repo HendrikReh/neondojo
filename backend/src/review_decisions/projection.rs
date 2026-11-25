@@ -123,8 +123,14 @@ pub(super) fn project(
         if record.kind != row.kind {
             return None;
         }
-        let projected =
-            imported_projection::project(&record, &source, match_id, row.position_uuid, format)?;
+        let projected = imported_projection::project(
+            &record,
+            &source,
+            match_id,
+            row.position_uuid,
+            format,
+            row.cube_enabled,
+        )?;
         let engine = record
             .engine_version
             .as_deref()

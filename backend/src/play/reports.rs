@@ -1,6 +1,6 @@
 //! Immutable report checkpoints outlive later games in the same native session.
 use super::{PlayPhase, PlaySession, feedback, library};
-use anyhow::Result;
+use anyhow::{Context, Result};
 use sqlx::{Postgres, Transaction};
 use uuid::Uuid;
 
@@ -29,6 +29,12 @@ pub(super) async fn build(session: &mut PlaySession, sgf: &str, path: &str) -> R
                 .any(|position| position.game_no == game)
         {
             games.push(crate::match_analysis::AnalyzedGame {
+                cube_enabled: imported
+                    .games
+                    .iter()
+                    .find(|g| g.game_no == game)
+                    .and_then(|g| g.cube_enabled)
+                    .context("Missing game rules")?,
                 engine: session.analysis_version().into(),
                 game_no: game,
                 decisions: Vec::new(),

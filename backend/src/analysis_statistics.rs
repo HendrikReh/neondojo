@@ -24,6 +24,9 @@ pub struct JobAnalysisStatistics {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct GameAnalysisStatistics {
+    /// Historical checkpoint evaluated before NoCube rules were recorded.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub needs_cube_rule_reanalysis: bool,
     pub game_no: i32,
     pub white_score: i32,
     pub black_score: i32,
@@ -54,6 +57,7 @@ pub struct PlayerErrorBreakdown {
 
 #[derive(FromRow)]
 struct GameRow {
+    cube_enabled: Option<bool>,
     game_no: i32,
     white_score: i32,
     black_score: i32,
@@ -144,7 +148,7 @@ pub(crate) async fn load_statistics(
         .map(serde_json::from_value)
         .transpose()
         .map_err(anyhow::Error::from)?;
-    let mut rows: Vec<GameRow> = sqlx::query_as("SELECT g.game_no,g.white_score,g.black_score,g.crawford,g.position_count,c.job_id IS NOT NULL AS analyzed,c.summary FROM match_games g LEFT JOIN match_analysis_games c ON c.job_id=$1 AND c.game_no=g.game_no WHERE g.match_uuid=$2 AND ($3::integer IS NULL OR g.game_no=$3) ORDER BY g.game_no")
+    let mut rows: Vec<GameRow> = sqlx::query_as("SELECT g.game_no,g.white_score,g.black_score,g.crawford,g.cube_enabled,g.position_count,c.job_id IS NOT NULL AS analyzed,c.summary FROM match_games g LEFT JOIN match_analysis_games c ON c.job_id=$1 AND c.game_no=g.game_no WHERE g.match_uuid=$2 AND ($3::integer IS NULL OR g.game_no=$3) ORDER BY g.game_no")
         .bind(id).bind(job.match_uuid).bind(job.game_no).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
     // Pre-catalog libraries still have immutable SGF and durable checkpoints.
     // Recover the source metadata in memory, keeping this endpoint read-only.
@@ -170,6 +174,7 @@ pub(crate) async fn load_statistics(
             .map(|g| {
                 let checkpoint = checkpoints.iter().find(|(n, _)| *n == g.game_no);
                 GameRow {
+                    cube_enabled: g.cube_enabled,
                     game_no: g.game_no,
                     white_score: g.white_score,
                     black_score: g.black_score,
@@ -236,6 +241,13 @@ pub(crate) async fn load_statistics(
     let games = rows
         .into_iter()
         .map(|row| {
+            let needs_cube_rule_reanalysis = row.analyzed
+                && row.cube_enabled == Some(false)
+                && row
+                    .summary
+                    .as_ref()
+                    .and_then(|s| s["cube_enabled"].as_bool())
+                    != Some(false);
             let saved_summary = row.summary.is_some();
             let game_summary = if !row.analyzed {
                 None
@@ -298,6 +310,7 @@ pub(crate) async fn load_statistics(
                 complete.then(|| typed_errors(&game_totals))
             });
             Ok(GameAnalysisStatistics {
+                needs_cube_rule_reanalysis,
                 game_no: row.game_no,
                 white_score: row.white_score,
                 black_score: row.black_score,

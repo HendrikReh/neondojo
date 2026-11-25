@@ -87,6 +87,7 @@ pub(super) async fn catalog_legacy(
 }
 #[derive(FromRow)]
 pub(super) struct ImportedGame {
+    cube_enabled: Option<bool>,
     match_id: Uuid,
     game_no: i32,
     format: MatchFormat,
@@ -132,7 +133,7 @@ pub(super) async fn load(
     if count + native_games as i64 > MAX_GAMES as i64 {
         return Err(ApiError::invalid(TOO_BROAD));
     }
-    let games=sqlx::query_as(&format!("{CHOSEN} SELECT m.id AS match_id,g.game_no,m.format,m.white,m.black {FOREIGN} ORDER BY m.id,g.game_no"))
+    let games=sqlx::query_as(&format!("{CHOSEN} SELECT m.id AS match_id,g.game_no,g.cube_enabled,m.format,m.white,m.black {FOREIGN} ORDER BY m.id,g.game_no"))
         .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     let events:Vec<ImportedEvent>=sqlx::query_as(&format!("{CHOSEN} SELECT e.*,p.ply AS checker_ply FROM eligible m JOIN match_moves e ON e.match_uuid=m.id LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no WHERE {DECISION_FORMATS} AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,e.game_no,e.move_no LIMIT {}",MAX_DECISIONS+1))
         .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
@@ -200,6 +201,7 @@ pub(super) fn reconstruct(imported: Imported) -> Vec<SourceDecision> {
                 game.match_id,
                 row.position_uuid,
                 game.format,
+                game.cube_enabled,
             ) else {
                 continue;
             };

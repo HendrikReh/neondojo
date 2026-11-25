@@ -61,8 +61,9 @@ const REVIEW_SQL: &str = r#"
             AND ($12::text[] IS NULL OR id=ANY($12))
           ORDER BY game_no,decision_no,(kind='checker'),id LIMIT $10
         )
-        SELECT s.*, nxt.ply AS next_checker_no
-        FROM slice s LEFT JOIN LATERAL (
+        SELECT s.*, g.cube_enabled, nxt.ply AS next_checker_no
+        FROM slice s LEFT JOIN match_games g ON g.match_uuid=$1 AND g.game_no=s.game_no
+        LEFT JOIN LATERAL (
           SELECT p.ply FROM match_moves e JOIN positions p ON p.id=e.position_uuid
           WHERE s.kind='cube' AND s.checker_ply IS NULL AND e.match_uuid=$1
             AND e.game_no=s.game_no AND e.move_no>s.source_move_no AND e.kind='checker'
@@ -73,7 +74,7 @@ const REVIEW_SQL: &str = r#"
 
 const SCAN_LIMIT: i64 = 512;
 /// Bump when `project` accepts or rejects other rows or derives another loss.
-const HITS_VERSION: i32 = 1;
+const HITS_VERSION: i32 = 2;
 /// Numbered pages up to this size use the narrow hit set.
 const HIT_PAGE_LIMIT: i64 = 100;
 
@@ -137,6 +138,7 @@ struct Cursor {
 }
 #[derive(FromRow)]
 struct Row {
+    cube_enabled: Option<bool>,
     id: String,
     game_no: i32,
     decision_no: i32,

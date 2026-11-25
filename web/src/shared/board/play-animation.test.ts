@@ -146,7 +146,7 @@ it('animates human rolls, ignores stale states and offers no checker animation f
 
 it('provides finite, in-board motion endpoints for every theme, bar and off tray', async () => {
   const { checkerCenter } = await import('./PlayCheckerMotion');
-  const { archiveThemes } = await import('./themes');
+  const { default: archiveThemes } = await import('./archive-themes');
   const b = board();
   b[6] = 15;
   b[19] = -15;

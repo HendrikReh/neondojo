@@ -10,12 +10,12 @@ import PlayCube from './PlayCube';
 import PlayCheckerMotion from './PlayCheckerMotion';
 import { underlayBoard, type PlaybackFrame } from './play-animation';
 import BoardPlayTargets, { type BoardInteraction } from './BoardPlayTargets';
-import { archiveThemes, type Theme } from './themes';
+import { useArchiveThemes, type Theme } from './themes';
 import MoveArrows from './MoveArrows';
 import type { BoardView, MovePreview } from './move-preview';
 import { displayedBoardPosition } from './displayed-board';
 import './board-preview.css';
-export { themes, type Theme } from './themes';
+export type { Theme } from './themes';
 
 function Checkers({
   count,
@@ -92,6 +92,8 @@ export default function Board({
   const review = useBoardReviewText();
   const [failedTheme, setFailedTheme] = useState('');
   useEffect(() => setFailedTheme(''), [theme]);
+  const archiveSelected = theme.startsWith('bgblitz:');
+  const archiveThemes = useArchiveThemes(archiveSelected);
   const archive = archiveThemes.find((entry) => entry.id === theme);
   const custom = failedTheme === theme ? undefined : archive;
   const effectiveMode = preview?.ok ? (previewMode ?? 'before') : 'before';
@@ -146,7 +148,7 @@ export default function Board({
   const label = previewLabel ? `${previewLabel}. ${stateLabel}` : stateLabel;
   return (
     <div
-      className={`board-shell theme-${custom ? 'bgblitz' : archive ? 'forest' : theme}`}
+      className={`board-shell theme-${custom ? 'bgblitz' : archiveSelected ? 'forest' : theme}`}
       data-preview-mode={effectiveMode}
     >
       <div className="player-bar">

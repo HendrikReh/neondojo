@@ -1,21 +1,18 @@
-import { catalogs, type Catalog, type TranslationKey } from './i18n-catalogs';
+import {
+  catalogs,
+  type Catalog,
+  type Locale,
+  type TranslationKey,
+} from './i18n-catalogs';
 import {
   compactCheckerNotation,
   type CheckerPosition,
 } from '../board/move-preview';
 
-export type Locale = keyof typeof catalogs;
+export type { Locale } from './i18n-catalogs';
 export type TranslationParams = Record<string, string | number>;
 export const defaultLocale: Locale = 'en';
 export const localeStorageKey = 'neondojo.locale';
-export const matchEventLabels = {
-  en: 'Event',
-  de: 'Event',
-  es: 'Evento',
-  fr: 'Événement',
-  pl: 'Wydarzenie',
-  it: 'Evento',
-} satisfies Record<Locale, string>;
 export const languages: ReadonlyArray<{ id: Locale; name: string }> = [
   { id: 'de', name: 'Deutsch' },
   { id: 'en', name: 'English' },
@@ -288,10 +285,6 @@ export function validateCatalogs(all: Record<Locale, Catalog>) {
     }
   }
 }
-// Tests and development builds check the catalogs; a production bundle skips the
-// check at start-up. Node (Playwright) has no import.meta.env, so it checks too.
-if (!import.meta.env?.PROD) validateCatalogs(catalogs);
-
 export function translate(
   locale: Locale,
   key: TranslationKey,

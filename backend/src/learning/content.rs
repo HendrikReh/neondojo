@@ -135,9 +135,10 @@ pub(crate) async fn saved_position_cards(
 /// directly, PostgreSQL may build the analysis catalog of the whole library.
 pub(crate) fn position_cards_sql() -> String {
     format!(
-        "SELECT to_jsonb(p) AS position,m.white,m.black,m.format,c.analysis_id,c.engine,j.id AS job_id,j.kind AS job_kind,j.plies,j.result,
+        "SELECT to_jsonb(p)||jsonb_build_object('cube_enabled',g.cube_enabled) AS position,m.white,m.black,m.format,c.analysis_id,c.engine,j.id AS job_id,j.kind AS job_kind,j.plies,j.result,
                 ma.data AS decision,ia.id AS imported_id,ia.data AS imported,to_jsonb(e) AS event
          FROM positions p JOIN matches m ON m.id=p.match_uuid
+         LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no
          LEFT JOIN LATERAL (SELECT effective.analysis_id FROM effective_analysis_selections effective WHERE effective.match_id=m.id OFFSET 0) selected ON true
          LEFT JOIN LATERAL (SELECT catalog.analysis_id,catalog.engine,catalog.job_id,catalog.source FROM analysis_catalog_sources catalog WHERE catalog.match_id=m.id AND catalog.analysis_id=coalesce($2,selected.analysis_id) OFFSET 0) c ON true
          LEFT JOIN jobs j ON j.id=c.job_id AND (j.kind='match' AND (j.game_no IS NULL OR j.game_no=p.game_no) OR j.kind='analysis' AND j.position_uuid=p.id)
@@ -201,6 +202,7 @@ async fn position_cards(
                 Some(position.ply),
                 players,
                 row.format,
+                position.cube_enabled,
             )
         } else if let (Some(job_id), Some(kind), Some(plies), Some(engine)) =
             (row.job_id, row.job_kind, row.plies, row.engine)
@@ -265,6 +267,7 @@ fn imported_card(
     checker_ply: Option<i32>,
     players: [String; 2],
     format: MatchFormat,
+    cube_enabled: Option<bool>,
 ) -> Option<CardContent> {
     let record =
         serde_json::from_value::<crate::imported_analysis::ImportedAnalysisData>(value).ok()?;
@@ -275,6 +278,7 @@ fn imported_card(
         event.match_uuid,
         event.position_uuid,
         format,
+        cube_enabled,
     )?;
     let kind = if record.kind == "checker" {
         "checker"
@@ -353,6 +357,7 @@ pub(super) async fn imported_decision_cards(
     crate::move_catalog::ensure_catalog(pool, match_id).await?;
     #[derive(FromRow)]
     struct Row {
+        cube_enabled: Option<bool>,
         id: Uuid,
         data: serde_json::Value,
         event: Option<sqlx::types::Json<crate::move_catalog::StoredMove>>,
@@ -361,7 +366,7 @@ pub(super) async fn imported_decision_cards(
         black: String,
         format: MatchFormat,
     }
-    let rows=sqlx::query_as::<_,Row>("SELECT ia.id,ia.data,to_jsonb(e) AS event,p.ply AS checker_ply,m.white,m.black,m.format FROM primary_imported_analyses ia JOIN matches m ON m.id=ia.match_uuid LEFT JOIN match_moves e ON e.match_uuid=ia.match_uuid AND e.game_no=ia.game_no AND e.move_no=ia.source_move_no AND e.position_uuid IS NOT DISTINCT FROM ia.position_uuid LEFT JOIN positions p ON p.id=e.position_uuid WHERE m.id=$1 AND NOT m.collection_only AND ia.kind IN ('checker','cube') AND ($2::integer IS NULL OR ia.game_no=$2) AND ($3::integer IS NULL OR e.player=$3) ORDER BY ia.game_no,ia.source_move_no,ia.source_ordinal LIMIT 200001")
+    let rows=sqlx::query_as::<_,Row>("SELECT g.cube_enabled,ia.id,ia.data,to_jsonb(e) AS event,p.ply AS checker_ply,m.white,m.black,m.format FROM primary_imported_analyses ia JOIN matches m ON m.id=ia.match_uuid LEFT JOIN match_moves e ON e.match_uuid=ia.match_uuid AND e.game_no=ia.game_no AND e.move_no=ia.source_move_no AND e.position_uuid IS NOT DISTINCT FROM ia.position_uuid LEFT JOIN positions p ON p.id=e.position_uuid JOIN match_games g ON g.match_uuid=ia.match_uuid AND g.game_no=ia.game_no WHERE m.id=$1 AND NOT m.collection_only AND (g.cube_enabled OR ia.kind='checker') AND ia.kind IN ('checker','cube') AND ($2::integer IS NULL OR ia.game_no=$2) AND ($3::integer IS NULL OR e.player=$3) ORDER BY ia.game_no,ia.source_move_no,ia.source_ordinal LIMIT 200001")
         .bind(match_id).bind(game_no).bind(player).fetch_all(pool).await.map_err(anyhow::Error::from)?;
     if rows.len() > 200000 {
         return Err(ApiError::invalid(
@@ -373,7 +378,7 @@ pub(super) async fn imported_decision_cards(
         .map(|row| {
             let card = match row.event {
                 None => Err("The selected imported analysis lacks its original decision context".to_owned()),
-                Some(event) => imported_card(row.id, row.data, event.0, row.checker_ply, [row.white, row.black], row.format)
+                Some(event) => imported_card(row.id, row.data, event.0, row.checker_ply, [row.white, row.black], row.format, row.cube_enabled)
                     .ok_or_else(|| "The selected imported analysis contains an unsupported solution; select supported positions individually".to_owned()),
             };
             (row.id, card)
@@ -582,7 +587,7 @@ pub(super) async fn match_decision_cards(
                     action += 1;
                 }
                 // Advance through every decision before filtering: cube responses have their own IDs.
-                if !keep(&d) {
+                if !keep(&d) || (d.kind == "cube" && !context.cube_enabled) {
                     continue;
                 }
                 let decision_no = d.decision_no;
@@ -598,6 +603,10 @@ pub(super) async fn match_decision_cards(
                     job.plies,
                     d,
                 )
+                .map(|mut card| {
+                    card.position.cube_enabled = Some(context.cube_enabled);
+                    card
+                })
                 .map_err(|error| error.to_string());
                 output.push((decision_no, card));
             }
@@ -638,6 +647,7 @@ fn decision_card(
         "Decision player differs from source GNU ID"
     );
     let position = Position {
+        cube_enabled: None,
         id: position_uuid.unwrap_or(Uuid::nil()),
         match_uuid: match_id,
         ordinal: d.checker_no.unwrap_or(d.decision_no),
