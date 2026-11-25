@@ -63,6 +63,7 @@ function publish(watch: Watch, job: Job) {
 }
 
 function stop(id: string, watch: Watch) {
+  watch.readAgain = false;
   watch.stream?.close();
   watch.stream = undefined;
   clearInterval(watch.timer);

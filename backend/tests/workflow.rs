@@ -117,6 +117,55 @@ fn event_ids(text: &str) -> Vec<i64> {
         .collect()
 }
 
+async fn assert_stream_ended(mut body: Body) {
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), body.frame())
+            .await
+            .expect("Job stream did not end")
+            .is_none()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn job_events_end_after_a_watched_job_disappears(pool: PgPool) {
+    let job = queued_job(&pool).await;
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let mut body = event_body(&app, job.id, 0).await;
+    assert!(event_frame(&mut body).await.contains("event: queued"));
+    sqlx::query("DELETE FROM jobs WHERE id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_stream_ended(body).await;
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn job_events_end_for_a_terminal_job_without_history(pool: PgPool) {
+    let job = queued_job(&pool).await;
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    sqlx::query("DELETE FROM job_events WHERE job_id=$1")
+        .bind(job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for status in ["failed", "completed"] {
+        sqlx::query("UPDATE jobs SET status=$2 WHERE id=$1")
+            .bind(job.id)
+            .bind(status)
+            .execute(&pool)
+            .await
+            .unwrap();
+        assert_stream_ended(event_body(&app, job.id, 0).await).await;
+    }
+}
+
 #[sqlx::test(migrations = "./migrations")]
 async fn job_events_replay_committed_rows_after_listener_disconnect(pool: PgPool) {
     let job = queued_job(&pool).await;
