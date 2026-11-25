@@ -6,6 +6,10 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-25
+
+NeonDojo 1.3.0 makes large libraries, NeonGammon and the first load faster, keeps Playing, hints and Study responsive while NeonGammon analyzes, adds decks built from decision searches, and restricts the local API to local callers. NeonGammon 3.1.2 is the recommended engine release; 3.1.1, 3.1.0 and 3.0.0 installations keep working. No change requires action from users; analysis time estimates return after a new benchmark for each engine. Migrations `0090_job_event_notifications`, `0091_similar_position_pips`, `0092_matches_effective_database`, `0093_decision_search_indexes` and `0094_duplicate_finder_and_job_history` run at startup; backups made with 1.2.0 stay restorable.
+
 ### Added
 
 - **Decision search fills itself and builds decks.** When **My player profile** pre-selects the player, **All analyzed decisions** lists that player's decisions on the first visit without a click. **Add to deck** in the preview now covers cube decisions and imported analyses as well as checker plays, and **Add page to deck** adds every decision of the current page in one step, reporting how many were added, updated, already in the deck or not available. `POST /api/decks/{id}/decisions` accepts up to 200 decision references with an outcome for each. [Saved positions and searches](docs/reference/library.md#saved-positions-and-searches)
@@ -22,7 +26,6 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 - **Faster start.** Playing, Study, Positions, the Player database, Extras and the Settings dialog now load on their first visit and then stay open in the background, so returning to them keeps their state. The code loaded at start shrinks from 1,510 KB to 1,095 KB (475 to 352 KB compressed). On a Mac mini M4 Pro, the header appears after about 129 ms instead of 153 ms, with 51 instead of 72 ms of script time. If NeonDojo was updated while a page was open and a part can no longer be loaded, that part asks you to reload the page. All stylesheets now load in one fixed order, so the layout no longer depends on which workspace you open first. [Architecture](docs/development/architecture.md#web-client-layout)
 - The five-point NeonGammon preset labels now show approximately 20.3, 15.8, 9.3, and 1.0 PR. All four presets were scored on the same 6,912 decisions against a shared rollout reference. [Five-point preset PR benchmark](docs/open-sage-local.md#five-point-preset-pr-benchmark)
 - **Theme preparation no longer edits the tracked theme list.** With `NEONDOJO_ALLOW_MISSING_THEMES=1`, `npm run themes:prepare` only writes the untracked catalog and artwork and leaves `shared/configuration-options.json` unchanged, so the backend keeps accepting saved BGBlitz themes. Adding or removing a theme now requires `npm run themes:prepare --prefix web -- --update-options`; a new archive in `themes/` without that flag stops preparation and names it. [Board artwork](docs/reference/settings.md#board-artwork)
-
 - **Match database columns and toolbar.** PR, play mode and date columns are wide enough for their values in all six languages; hovering a row no longer covers the rows below it, and only clipped cells show their full text. The toolbar groups single-match, batch and destructive actions, delete buttons are tinted, disabled icons stay readable on light palettes, and the import destination is labelled **Into:**. [Library](docs/reference/library.md)
 - **Fewer background requests.** The Match database and the analysis catalog follow running jobs over the job event stream instead of reloading every few seconds, and the benchmark status is only polled while a run is active or after the window regains focus.
 - **Analysis review controls.** **Previous/Next error** (`⇧E`/`E`) are available directly in **Checker**, opening **Cube** shows the next matching cube decision, and the Analysis workspace fits the window without a page scrollbar. [Analysis workspace](docs/reference/analysis.md#analysis-workspace)
@@ -284,7 +287,8 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/neondojo/pull/4) · [#5](https://github.com/HendrikReh/neondojo/pull/5) · [#6](https://github.com/HendrikReh/neondojo/pull/6) · [#7](https://github.com/HendrikReh/neondojo/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/HendrikReh/neondojo/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/HendrikReh/neondojo/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/HendrikReh/neondojo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/HendrikReh/neondojo/compare/v0.3.0...v1.0.0
