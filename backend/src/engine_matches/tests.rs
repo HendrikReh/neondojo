@@ -1,3 +1,6 @@
+#[cfg(unix)]
+mod worker_lifetime;
+
 use super::dice;
 use crate::{
     engine::Engine,
