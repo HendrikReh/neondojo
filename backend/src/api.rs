@@ -149,7 +149,11 @@ impl IntoResponse for ApiError {
 pub(crate) type ApiResult<T> = Result<T, ApiError>;
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
+    router_with_web_dir(state, None)
+}
+
+pub fn router_with_web_dir(state: AppState, web_dir: Option<&std::path::Path>) -> Router {
+    let mut app = Router::new()
         .merge(crate::settings::routes())
         .merge(crate::configuration::routes())
         .merge(crate::profiles::routes())
@@ -238,10 +242,15 @@ pub fn router(state: AppState) -> Router {
                     header::CONTENT_TYPE,
                     header::HeaderName::from_static("last-event-id"),
                 ]),
-        )
-        // Outside CORS and every merged router, including the backup routes;
-        // inside tracing, so rejected requests are still logged.
-        .layer(middleware::from_fn(crate::local_origin::guard))
+        );
+    if let Some(dir) = web_dir {
+        app = app.fallback_service(
+            tower_http::services::ServeDir::new(dir)
+                .not_found_service(tower_http::services::ServeFile::new(dir.join("index.html"))),
+        );
+    }
+    // Trace and guard every route, including the frontend and database backups.
+    app.layer(middleware::from_fn(crate::local_origin::guard))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

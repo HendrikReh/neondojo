@@ -57,6 +57,64 @@ async fn matches(pool: &PgPool) -> i64 {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn frontend_and_api_share_the_local_access_guard(pool: PgPool) {
+    use neondojo::{api, engine::Engine};
+
+    let dir = tempfile::tempdir().unwrap();
+    let index = "<html>NeonDojo</html>";
+    std::fs::write(dir.path().join("index.html"), index).unwrap();
+    std::fs::write(dir.path().join("app.js"), "boot()").unwrap();
+    let state = api::AppState::new(pool, Engine::new("/missing/gnubg".into()));
+    let app = api::router_with_web_dir(state, Some(dir.path()));
+
+    for (uri, expected) in [("/", index), ("/app.js", "boot()")] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::get(uri)
+                    .header("host", "localhost")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), 200);
+        assert_eq!(
+            response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .as_ref(),
+            expected.as_bytes()
+        );
+    }
+    for uri in ["/", "/app.js", "/client-route"] {
+        let (status, body) = send(
+            &app,
+            "GET",
+            uri,
+            &[("host", "outside.example")],
+            Body::empty(),
+        )
+        .await;
+        assert_eq!(status, 403);
+        assert!(body["error"].as_str().unwrap().contains("loopback"));
+    }
+    let (status, body) = send(
+        &app,
+        "GET",
+        "/api/unknown-route",
+        &[("host", "localhost")],
+        Body::empty(),
+    )
+    .await;
+    assert_eq!(status, 404);
+    assert_eq!(body["error"], "Not found");
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn foreign_hosts_are_refused_on_every_route(pool: PgPool) {
     let app = support::app(&pool, "/missing/gnubg");
     let multipart_type = format!("multipart/form-data; boundary={BOUNDARY}");

@@ -8,7 +8,7 @@ npm run api:types --prefix web
 
 ### Local access
 
-The API has no authentication and is meant to be reached from the same machine only. Besides binding to loopback (`NEONDOJO_BIND`), every request passes one guard (`backend/src/local_origin.rs`) that answers HTTP 403 with the usual `{ "error": ... }` body when:
+The API has no authentication and is meant to be reached from the same machine only. Besides binding to loopback (`NEONDOJO_BIND`), requests to the API and the built frontend (including static assets and client-side routes) pass one guard (`backend/src/local_origin.rs`) that answers HTTP 403 with the usual `{ "error": ... }` body when:
 
 - `Host` (or the HTTP/2 authority) is not `localhost`, `127.0.0.1` or `[::1]`, with any port. This blocks DNS rebinding, so the API cannot be reached through another host name, including a LAN address.
 - A `POST`, `PUT`, `PATCH` or `DELETE` carries an `Origin` other than `http://localhost`, `http://127.0.0.1` or `http://[::1]` (any port), `tauri://localhost` or `http(s)://tauri.localhost`. `Origin: null` is refused.

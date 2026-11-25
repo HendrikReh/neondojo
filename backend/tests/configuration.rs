@@ -222,6 +222,76 @@ async fn legacy_settings_and_book_writes_update_current_only(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn repeating_a_book_save_preserves_the_open_profile_draft(pool: PgPool) {
+    let (app, initial) = profile_support::initialized(&pool, false).await;
+    let (_, book) = call(app.clone(), "GET", "/api/opening-book", Value::Null).await;
+    let (code, saved) = call(
+        app.clone(),
+        "PUT",
+        "/api/opening-book",
+        book["config"].clone(),
+    )
+    .await;
+    assert_eq!(code, 200, "{saved}");
+    let (code, _) = call(
+        app.clone(),
+        "PUT",
+        "/api/opening-book",
+        book["config"].clone(),
+    )
+    .await;
+    assert_eq!(code, 409, "the book still checks its own version");
+    let mut config = initial["current_configuration"].clone();
+    config["general"]["player_name"] = json!("Draft edit");
+    let draft = json!({"expected_revision": initial["revision"], "configuration": config});
+    let (code, changed) = call(app.clone(), "PUT", "/api/configuration", draft.clone()).await;
+    assert_eq!(code, 200, "{changed}");
+    assert_eq!(
+        changed["revision"],
+        initial["revision"].as_i64().unwrap() + 1
+    );
+    let (code, _) = call(app, "PUT", "/api/configuration", draft).await;
+    assert_eq!(
+        code, 409,
+        "a real profile edit invalidates the old revision"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires native GNUbg to verify PUT /api/settings"]
+async fn host_settings_keep_the_profile_revision_until_a_profile_field_changes(pool: PgPool) {
+    let (app, initial) = profile_support::initialized(&pool, true).await;
+    let (_, mut host) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
+    host["parallel_analysis_jobs"] = json!(if host["parallel_analysis_jobs"] == 1 {
+        2
+    } else {
+        1
+    });
+    let (code, mut saved) = call(app.clone(), "PUT", "/api/settings", host.clone()).await;
+    assert_eq!(code, 200, "{saved}");
+    assert_eq!(
+        saved["parallel_analysis_jobs"],
+        host["parallel_analysis_jobs"]
+    );
+    let (_, after) = call(app.clone(), "GET", "/api/configuration", Value::Null).await;
+    assert_eq!(after, initial);
+    let (code, _) = call(app.clone(), "PUT", "/api/settings", host).await;
+    assert_eq!(code, 409);
+    saved["player_name"] = json!("Profile edit");
+    let (code, result) = call(app.clone(), "PUT", "/api/settings", saved).await;
+    assert_eq!(code, 200, "{result}");
+    let (_, changed) = call(app, "GET", "/api/configuration", Value::Null).await;
+    assert_eq!(
+        changed["revision"],
+        initial["revision"].as_i64().unwrap() + 1
+    );
+    assert_eq!(
+        changed["current_configuration"]["general"]["player_name"],
+        "Profile edit"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn a_failure_in_the_second_projection_rolls_back_the_first(pool: PgPool) {
     let (app, state) = profile_support::initialized(&pool, false).await;
     let (_, settings_before) = call(app.clone(), "GET", "/api/settings", Value::Null).await;
