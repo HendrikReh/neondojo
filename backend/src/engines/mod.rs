@@ -6,6 +6,9 @@ mod provider;
 
 pub(crate) use provider::{EngineId, display_name};
 
+#[cfg(all(test, unix))]
+pub(crate) use process::tests::{hold_general_worker, unstartable_engine};
+
 use crate::{
     engine::{Analysis, Candidate, Engine},
     match_analysis::AnalyzedGame,
@@ -766,6 +769,18 @@ impl AnalysisEngine {
         match self {
             Self::Gnubg(engine) => Ok(engine),
             Self::OpenSage(_) => anyhow::bail!("Saved play rules engine must be GNUbg"),
+        }
+    }
+    /// The same engine for an evaluation a person waits for. NeonGammon then
+    /// uses its interactive worker, which no analysis holds for a whole game;
+    /// GNUbg starts a process per evaluation anyway.
+    pub(crate) fn interactive(self) -> Self {
+        match self {
+            Self::Gnubg(engine) => Self::Gnubg(engine),
+            Self::OpenSage(mut engine) => {
+                engine.slot = process::Slot::Interactive;
+                Self::OpenSage(engine)
+            }
         }
     }
     /// The executable identity benchmarks are keyed by: GNUbg's resolved

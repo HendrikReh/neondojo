@@ -636,7 +636,7 @@ where
                 Some(snapshot) => snapshot,
                 None => crate::settings::snapshot_for_practice(state).await?,
             };
-            work(snapshot.engine()?, plies).await
+            work(snapshot.engine()?.interactive(), plies).await
         }),
     )
     .await
@@ -686,6 +686,27 @@ mod tests {
         );
         assert!(score(0.400, 0.340000).is_none());
         assert!(score(f64::NAN, 0.340000).is_none());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn neongammon_study_answers_do_not_wait_for_a_game_analysis() {
+        let pool = sqlx::PgPool::connect_lazy("postgres://unused").unwrap();
+        let state = AppState::new(pool, Engine::new("/unused".into()));
+        let snapshot = crate::engines::unstartable_engine(2);
+        let analysis = crate::engines::hold_general_worker().await;
+        let start = Instant::now();
+        let answer =
+            with_practice_engine(&state, Some((2, snapshot)), |engine, plies| async move {
+                let checker = position(0, [3, 1]);
+                let board = after_play(&checker, "8/5 6/5").unwrap();
+                fresh_checker(engine, plies, &checker, &board).await
+            })
+            .await;
+        drop(analysis);
+        // It reached its own worker, which this profile cannot start.
+        assert_eq!(answer.err().unwrap().0, StatusCode::SERVICE_UNAVAILABLE);
+        assert!(start.elapsed() < Duration::from_secs(5));
     }
 
     async fn native_checker_and_cube(engine: AnalysisEngine) {
