@@ -311,6 +311,14 @@ impl ConfigurationBook {
         Ok(())
     }
 }
+async fn project_settings(
+    tx: &mut Transaction<'_, Postgres>,
+    config: &ProfileConfiguration,
+) -> Result<()> {
+    ProfileSettings::from(config).project(tx).await?;
+    config.opening_book.project(tx).await
+}
+
 /// The one way to change the current configuration. The profile settings that
 /// engine, job and book code read from their own tables follow it.
 pub(crate) async fn write_state(
@@ -318,8 +326,7 @@ pub(crate) async fn write_state(
     config: &ProfileConfiguration,
     active: Uuid,
 ) -> Result<()> {
-    ProfileSettings::from(config).project(tx).await?;
-    config.opening_book.project(tx).await?;
+    project_settings(tx, config).await?;
     sqlx::query("UPDATE configuration_state SET revision=revision+1,current_configuration=$1,active_profile_id=$2,updated_at=now() WHERE singleton=true").bind(value(config)).bind(active).execute(&mut **tx).await?;
     Ok(())
 }
@@ -382,6 +389,22 @@ async fn initialized(tx: &mut Transaction<'_, Postgres>) -> Result<bool> {
             .await?,
     )
 }
+/// Compare the effective configuration so a legacy row with defaulted fields
+/// also keeps its revision. Refresh the derived settings tables in either case.
+async fn edit_current_settings(
+    tx: &mut Transaction<'_, Postgres>,
+    edit: impl FnOnce(&mut ProfileConfiguration),
+) -> Result<()> {
+    let state = state(tx).await?;
+    let mut config = state.current_configuration;
+    let before = value(&config);
+    edit(&mut config);
+    if value(&config) == before {
+        return project_settings(tx, &config).await;
+    }
+    write_state(tx, &config, state.active_profile.id).await
+}
+
 /// Saves the profile settings of `PUT /api/settings`. Until the configuration
 /// is initialized, which imports them, the settings table is their only place.
 pub(crate) async fn save_app(
@@ -392,10 +415,7 @@ pub(crate) async fn save_app(
     if !initialized(tx).await? {
         return settings.project(tx).await;
     }
-    let state = state(tx).await?;
-    let mut config = state.current_configuration;
-    settings.apply(&mut config);
-    write_state(tx, &config, state.active_profile.id).await
+    edit_current_settings(tx, |config| settings.apply(config)).await
 }
 /// Saves the book choice of `PUT /api/opening-book`, like [`save_app`].
 pub(crate) async fn save_book(
@@ -406,10 +426,7 @@ pub(crate) async fn save_book(
     if !initialized(tx).await? {
         return book.project(tx).await;
     }
-    let state = state(tx).await?;
-    let mut config = state.current_configuration;
-    config.opening_book = book;
-    write_state(tx, &config, state.active_profile.id).await
+    edit_current_settings(tx, |config| config.opening_book = book).await
 }
 
 #[cfg(test)]
@@ -579,6 +596,26 @@ mod tests {
             "the tables are the source until the configuration exists"
         );
         assert!(!imported.dirty);
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn unchanged_legacy_book_repairs_projections_without_revising_the_profile(pool: PgPool) {
+        initialize_base(&pool).await;
+        // Older configurations acquire the default for top_two when read.
+        sqlx::query("UPDATE configuration_state SET current_configuration = current_configuration #- '{play,top_two}'")
+            .execute(&pool).await.unwrap();
+        sqlx::query("UPDATE app_settings SET player_name='Drifted'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let before = read(&pool).await.unwrap();
+        let mut tx = pool.begin().await.unwrap();
+        save_book(&mut tx, &book_settings(&before.current_configuration))
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        assert_projected(&pool, &before.current_configuration).await;
+        assert_eq!(read(&pool).await.unwrap().revision, before.revision);
     }
 
     /// A changed table value cannot outlive the next write.
