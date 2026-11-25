@@ -41,7 +41,7 @@ export default function StudyCardExercise({
   revealed,
   busy,
   visible,
-  onAttempt,
+  onAttemptStart,
   onAttemptBusy,
   onConflict,
   onReveal,
@@ -54,7 +54,8 @@ export default function StudyCardExercise({
   revealed: RevealedCard | null;
   busy: boolean;
   visible: boolean;
-  onAttempt: (result: AttemptedCard) => void;
+  /** Called as an answer is submitted; returns what takes its result. */
+  onAttemptStart: () => (result: AttemptedCard) => void;
   onAttemptBusy: (busy: boolean) => void;
   onConflict: () => void;
   onReveal: () => void;
@@ -74,6 +75,7 @@ export default function StudyCardExercise({
       busy={busy}
       visible={visible}
       onCheck={async (body, signal) => {
+        const onAttempt = onAttemptStart();
         const result = await request<AttemptedCard>(
           `/cards/${card.id}/attempt`,
           {

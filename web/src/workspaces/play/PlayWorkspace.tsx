@@ -103,7 +103,7 @@ export default function PlayWorkspace({
   const focusResume = useRef(false);
   const newMatchTrigger = useRef<HTMLButtonElement>(null);
   // Only a setup the user opened takes the focus; an automatic one leaves it.
-  const focusSetup = useRef(false);
+  const [focusSetup, setFocusSetup] = useState(false);
   const autoMoneyReviews = useRef(new Set<string>());
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const resignTrigger = useRef<HTMLButtonElement>(null);
@@ -232,7 +232,7 @@ export default function PlayWorkspace({
     else setSetup(false);
   }
   function openMatchSetup() {
-    focusSetup.current = true;
+    setFocusSetup(true);
     setSetupOptions({});
     dialogs.setPauseWarning(false);
     dialogs.setForfeitOpen(false);
@@ -755,7 +755,7 @@ export default function PlayWorkspace({
           busy={uiBusy}
           className="play-setup-dialog"
           modal={false}
-          focusOnOpen={focusSetup.current}
+          focusOnOpen={focusSetup}
           returnFocus={session ? menuTrigger : newMatchTrigger}
           onClose={closeSetup}
         >

@@ -173,14 +173,20 @@ export default function SettingsDialog({
   const dialog = useRef<HTMLDialogElement>(null);
   const boardGallery = useRef<HTMLDivElement>(null);
   const preferences = useLatest({ theme, locale, appearance });
-  const initialPreferences = useRef({ theme, locale, appearance });
+  const [initialPreferences, setInitialPreferences] = useState({
+    theme,
+    locale,
+    appearance,
+  });
   const [category, setCategory] = useState<Category>('general');
   const [draftSounds, setDraftSounds] = useState(readPlaySounds);
   const [initialSounds, setInitialSounds] = useState(readPlaySounds);
   const [draftTheme, setDraftTheme] = useState(theme);
   const [draftLocale, setDraftLocale] = useState(locale);
   const [draftAppearance, setDraftAppearance] = useState(appearance);
-  const initialThresholds = useRef(defaultErrorThresholds);
+  const [initialThresholds, setInitialThresholds] = useState(
+    defaultErrorThresholds,
+  );
   const [thresholdFields, setThresholdFields] = useState<
     Record<keyof ErrorThresholds, string>
   >({
@@ -285,10 +291,10 @@ export default function SettingsDialog({
     sounds: draftSounds,
   };
   const initialDraft = initial && {
-    ...initialPreferences.current,
+    ...initialPreferences,
     sounds: initialSounds,
     settings: initial,
-    errorThresholds: initialThresholds.current,
+    errorThresholds: initialThresholds,
   };
   const settingsDraft = draft && {
     ...draftPreferences,
@@ -375,7 +381,7 @@ export default function SettingsDialog({
   const rememberedDepths = useRef<Record<string, number>>({});
 
   function resetThresholds(values: ErrorThresholds, language: Locale) {
-    initialThresholds.current = values;
+    setInitialThresholds(values);
     const formatter = numberFormat(language, {
       minimumFractionDigits: 3,
       maximumFractionDigits: 20,
@@ -393,7 +399,7 @@ export default function SettingsDialog({
     const { sounds, ...values } = current
       ? profilePreferences(current)
       : { ...preferences.current, sounds: readPlaySounds() };
-    initialPreferences.current = values;
+    setInitialPreferences(values);
     setDraftTheme(values.theme);
     setDraftLocale(values.locale);
     setDraftAppearance(values.appearance);
@@ -499,7 +505,7 @@ export default function SettingsDialog({
     const currentSession = session.current;
     let settings: AppSettings;
     let savedPreferences = draftPreferences;
-    let savedThresholds = initialThresholds.current;
+    let savedThresholds = initialThresholds;
     const myProfileChanged = myProfile.changed;
     try {
       if (myProfileChanged) await myProfile.save(abort.signal);
@@ -568,7 +574,7 @@ export default function SettingsDialog({
     setDraftAppearance(appearance);
     setDraftSounds(sounds);
     setInitialSounds(sounds);
-    initialPreferences.current = savedPreferences;
+    setInitialPreferences(savedPreferences);
     resetThresholds(savedThresholds, locale);
     setInitial(settings);
     setDraft(settings);
@@ -650,9 +656,9 @@ export default function SettingsDialog({
 
   function discardDraft(next: GuardedDestination) {
     setDraft(initial);
-    setDraftLocale(initialPreferences.current.locale);
-    setDraftTheme(initialPreferences.current.theme);
-    setDraftAppearance(initialPreferences.current.appearance);
+    setDraftLocale(initialPreferences.locale);
+    setDraftTheme(initialPreferences.theme);
+    setDraftAppearance(initialPreferences.appearance);
     setDraftSounds(initialSounds);
     setSaveError(null);
     setRecoveryError(null);
