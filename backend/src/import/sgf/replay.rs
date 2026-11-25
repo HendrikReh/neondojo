@@ -118,6 +118,7 @@ pub(crate) struct GameContext {
     pub scores: [i32; 2],
     pub crawford: bool,
     pub jacoby: bool,
+    pub cube_enabled: bool,
     pub decision_ids: Vec<(String, String)>,
 }
 
@@ -294,6 +295,7 @@ fn parse_sgf_context(
             scores,
             crawford,
             jacoby,
+            cube_enabled: !no_cube,
             decision_ids: Vec::new(),
         };
         let mut board = initial_board();

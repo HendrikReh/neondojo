@@ -3,6 +3,7 @@ mod context;
 mod game;
 mod process;
 mod provider;
+pub(crate) mod replay;
 
 pub(crate) use provider::{EngineId, display_name};
 
