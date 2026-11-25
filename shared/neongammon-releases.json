@@ -30,6 +30,8 @@
   "3.2.0": {
     "presets": true,
     "checker_batch": true,
-    "shared_models": true
+    "shared_models": true,
+    "fingerprint": "e876576f9a9daabefb8a5e98b1f19d4f79272b1e49a66d332f91aa9a705cdd92",
+    "revision": "9d9486074fdabc6957e3694d20be354c008515d9"
   }
 }
