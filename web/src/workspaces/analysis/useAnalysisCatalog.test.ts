@@ -178,6 +178,53 @@ it('does not expose previous-position evaluations before effect cleanup', async 
   expect(useAnalysisResult('one', 'imported:match').result).toBeUndefined();
 });
 
+it('keeps a result while it is read again, but not across sources', async () => {
+  const result = (engine: string) =>
+    response({
+      analysis_id: 'job:native',
+      position_id: 'one',
+      engine,
+      depth: '2-ply',
+      records: [],
+      analysis: null,
+      decision: null,
+    });
+  const read = (revision: string, source = 0) => {
+    hooks.index = 0;
+    return useAnalysisResult('one', 'job:native', revision, source);
+  };
+  fetch.mockResolvedValueOnce(result('first'));
+  read('a');
+  commit();
+  await tick();
+  expect(read('a').result?.engine).toBe('first');
+
+  let answer!: (response: Response) => void;
+  fetch.mockImplementationOnce(
+    () => new Promise((resolve) => (answer = resolve)),
+  );
+  expect(read('b')).toMatchObject({
+    loading: false,
+    result: { engine: 'first' },
+  });
+  commit();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  expect(read('b').result?.engine).toBe('first');
+  answer(result('second'));
+  await tick();
+  expect(read('b').result?.engine).toBe('second');
+
+  // A failed read replaces the result instead of hiding the failure.
+  fetch.mockRejectedValueOnce(new TypeError('offline'));
+  read('c');
+  commit();
+  await tick();
+  expect(read('c').error).toBeDefined();
+  expect(read('c').result).toBeUndefined();
+
+  expect(read('c', 1)).toMatchObject({ loading: true, result: undefined });
+});
+
 it('updates polled entries and preserves already loaded older pages', async () => {
   vi.useFakeTimers();
   try {

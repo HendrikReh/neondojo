@@ -274,16 +274,22 @@ export function useAnalysisCatalog(
 }
 export type AnalysisCatalog = ReturnType<typeof useAnalysisCatalog>;
 
+/**
+ * The saved result of one position in one analysis. A new `revision` reads it
+ * again and keeps showing the last result until the answer arrives; another
+ * position, analysis or source revision starts empty.
+ */
 export function useAnalysisResult(
   positionId?: string,
   analysisId?: string,
   revision?: string,
+  sourceRevision?: number,
 ) {
   const path =
     positionId && analysisId
       ? analysisResultPath(positionId, analysisId)
       : undefined;
-  const scope = JSON.stringify([path, revision]);
+  const scope = JSON.stringify([path, sourceRevision]);
   const [state, setState] = useState<{
     scope: string;
     result?: PositionAnalysisResult | null;
@@ -312,7 +318,7 @@ export function useAnalysisResult(
       },
     );
     return () => abort.abort();
-  }, [path, scope, positionId, analysisId]);
+  }, [path, scope, revision, positionId, analysisId]);
   return path && state?.scope === scope
     ? { ...state, loading: false }
     : { loading: !!path, result: undefined, error: undefined };
