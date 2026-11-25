@@ -128,6 +128,28 @@ async fn insert_run(pool: &PgPool, status: &str) -> uuid::Uuid {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn play_start_resumes_after_a_benchmark_lease_expires(pool: PgPool) {
+    let app = api::router(AppState::new(
+        pool.clone(),
+        Engine::new("/missing/gnubg".into()),
+    ));
+    let id = insert_run(&pool, "running").await;
+    for (seconds, expected) in [(60.0, 409), (-1.0, 503)] {
+        sqlx::query("UPDATE benchmark_runs SET worker_token=$2,lease_until=now()+make_interval(secs=>$3) WHERE id=$1")
+            .bind(id).bind(uuid::Uuid::new_v4()).bind(seconds).execute(&pool).await.unwrap();
+        let (status, body) = call(
+            app.clone(),
+            "POST",
+            "/api/play/sessions",
+            json!({"human_player":0,"match_length":1}),
+        )
+        .await;
+        // Once the lease expires, Play can reach its own engine availability check.
+        assert_eq!(status, expected, "{body}");
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn deletes_only_finished_runs_from_the_history(pool: PgPool) {
     let app = api::router(AppState::new(pool.clone(), engine()));
     let mut kept = Vec::new();

@@ -317,12 +317,12 @@ enum Workload {
     Play(i32),
 }
 
-pub(crate) async fn running(pool: &PgPool) -> anyhow::Result<bool> {
-    Ok(
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='running')")
-            .fetch_one(pool)
-            .await?,
+pub(crate) async fn has_live_run(pool: &PgPool) -> anyhow::Result<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='running' AND lease_until>now())",
     )
+    .fetch_one(pool)
+    .await?)
 }
 
 async fn enqueue(
@@ -330,7 +330,7 @@ async fn enqueue(
     engine_id: &str,
     workload: Workload,
 ) -> ApiResult<Vec<BenchmarkRun>> {
-    if running(&state.pool).await? {
+    if has_live_run(&state.pool).await? {
         return Err(ApiError(
             StatusCode::CONFLICT,
             "A benchmark is already running; wait for it to finish".into(),

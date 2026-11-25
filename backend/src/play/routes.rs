@@ -125,7 +125,7 @@ async fn start_session(
             "tutor_threshold must be greater than 0 and at most 1",
         ));
     }
-    if crate::benchmarks::running(&state.pool).await? {
+    if crate::benchmarks::has_live_run(&state.pool).await? {
         return Err(benchmark_conflict());
     }
     let pinned_path = resolve_binary(&settings.gnubg_path).map_err(native_error)?;
