@@ -1,13 +1,12 @@
+import { fulfillJson, fulfillJsonList, settingsFixture } from './api-fixtures';
 import type { Page, Route } from '@playwright/test';
 import {
   defaultConfiguration,
   configurationDifferences,
   type ProfileConfiguration,
+  type ConfigurationDifference,
 } from '../src/settings/configuration/configuration-model';
-import type {
-  ConfigurationProfile,
-  ConfigurationState,
-} from '../src/settings/configuration/configuration-api';
+import type { ConfigurationProfile } from '../src/settings/configuration/configuration-api';
 
 export const secondProfileId = '00000000-0000-4000-8000-000000000002';
 export interface ProfileBackendOptions {
@@ -28,32 +27,34 @@ export async function profileBackend(
   other.appearance.mode = 'dark';
   other.analysis.plies = 4;
   const now = '2026-11-10T12:00:00Z';
-  const profiles = options.profiles ?? [
+  const initialProfiles: ConfigurationProfile[] = options.profiles ?? [
     {
       id: '00000000-0000-4000-8000-000000000001',
       name: 'Standard',
       revision: 1,
       configuration: first,
-      created_at: now,
-      updated_at: now,
     },
     {
       id: secondProfileId,
       name: 'Deep analysis',
       revision: 1,
       configuration: other,
-      created_at: now,
-      updated_at: now,
     },
   ];
+  const profiles = initialProfiles.map((profile) => ({
+    ...profile,
+    created_at: profile.created_at ?? now,
+    updated_at: profile.updated_at ?? now,
+  }));
+  const differences: ConfigurationDifference[] = [];
   const control = {
     state: {
       revision: 1,
       active_profile: profiles[0],
       current_configuration: first,
       dirty: false,
-      differences: [],
-    } as ConfigurationState,
+      differences,
+    },
     profiles: structuredClone(profiles),
     calls: [] as {
       method: string;
@@ -99,10 +100,11 @@ export async function profileBackend(
     code: string,
     message = code,
   ) {
-    return route.fulfill({
+    return fulfillJson<'ErrorBody'>(
+      route,
+      { error: message, code, issues: [] },
       status,
-      json: { error: message, code, issues: [] },
-    });
+    );
   }
   await page.route(
     /\/api\/(?:configuration|profiles)(?:[/?].*)?$/,
@@ -138,24 +140,29 @@ export async function profileBackend(
           };
           sync();
         }
-        return route.fulfill({ json: control.state });
+        return fulfillJson<'ConfigurationState'>(route, control.state);
       }
       if (!initialized)
         return error(route, 409, 'configuration_not_initialized');
       if (method === 'GET') {
         if (path === '/configuration/availability')
-          return route.fulfill({
-            json: { revision: control.state.revision, valid: true, issues: [] },
+          return fulfillJson<'ConfigurationAvailability'>(route, {
+            revision: control.state.revision,
+            valid: true,
+            issues: [],
           });
         if (path === '/configuration')
-          return route.fulfill({ json: control.state });
+          return fulfillJson<'ConfigurationState'>(route, control.state);
         if (path === '/profiles')
-          return route.fulfill({ json: control.profiles });
+          return fulfillJsonList<'ConfigurationProfile'>(
+            route,
+            control.profiles,
+          );
         const profile = control.profiles.find(
           (p) => `/profiles/${p.id}` === path,
         );
         return profile
-          ? route.fulfill({ json: profile })
+          ? fulfillJson<'ConfigurationProfile'>(route, profile)
           : error(route, 404, 'not_found');
       }
       const expected = body?.expected_state_revision ?? body?.expected_revision;
@@ -194,7 +201,7 @@ export async function profileBackend(
           body!.configuration as ProfileConfiguration,
         );
       else if (path === '/profiles' && method === 'POST') {
-        const created: ConfigurationProfile = {
+        const created = {
           id: `00000000-0000-4000-8000-${String(control.profiles.length + 10).padStart(12, '0')}`,
           name: name!,
           revision: 1,
@@ -245,7 +252,10 @@ export async function profileBackend(
           profile.configuration,
         );
       } else if (path.endsWith('/validate'))
-        return route.fulfill({ json: { valid: true, issues: [] } });
+        return fulfillJson<'ConfigurationValidation'>(route, {
+          valid: true,
+          issues: [],
+        });
       else if (path === '/configuration/restore-profile') {
         control.state.current_configuration = structuredClone(
           control.state.active_profile.configuration,
@@ -253,48 +263,43 @@ export async function profileBackend(
       } else return error(route, 404, 'not_found');
       control.state.revision++;
       sync();
-      return route.fulfill({ json: control.state });
+      return fulfillJson<'ConfigurationState'>(route, control.state);
     },
   );
   if (options.legacyEndpoints !== false) {
     await page.route('**/api/settings', async (route) => {
       if (route.request().method() !== 'GET')
         return error(route, 422, 'unexpected_legacy_write');
-      const c = control.state.current_configuration;
-      return route.fulfill({
-        json: {
+      return fulfillJson<'AppSettings'>(
+        route,
+        settingsFixture(control.state.current_configuration),
+      );
+    });
+    await page.route('**/api/opening-book', async (route) => {
+      if (route.request().method() !== 'GET')
+        return error(route, 422, 'unexpected_legacy_write');
+      return fulfillJson<'BookSettings'>(route, {
+        config: {
           version: 1,
-          player_name: c.general.player_name,
-          analysis_engine: c.analysis.engine,
-          analysis_plies: c.analysis.plies,
-          play_engine: c.play.engine,
-          play_plies: c.play.plies,
-          gnubg_path: '/usr/bin/gnubg',
-          bearoff_direction: c.appearance.bearoff_direction,
-          default_play_mode: c.play.default_mode,
-          tutor_threshold: c.play.tutor_threshold,
-          training_auto_analysis: c.play.training_auto_analysis,
+          ...control.state.current_configuration.opening_book,
+        },
+        status: {
+          available: true,
+          path: control.state.current_configuration.opening_book.path,
+          entries: 0,
+          contexts: [],
+          error: null,
+        },
+        xg_status: {
+          available: true,
+          path: control.state.current_configuration.opening_book.xg_path,
+          entries: 0,
+          source_url: 'https://www.extremegammon.com/GetOb.aspx',
+          license: 'Public domain',
+          notes: '',
         },
       });
     });
-    await page.route('**/api/opening-book', async (route) =>
-      route.fulfill({
-        json: {
-          config: {
-            version: 1,
-            ...control.state.current_configuration.opening_book,
-          },
-          status: {
-            available: true,
-            path: '',
-            entries: 0,
-            contexts: [],
-            error: null,
-          },
-          xg_status: { available: true, path: '' },
-        },
-      }),
-    );
   }
   return control;
 }

@@ -1,3 +1,5 @@
+import { fulfillJson, fulfillJsonList } from './api-fixtures';
+import type { components } from '../src/generated-api';
 import { eitherOrder } from './play-turn-fixtures';
 import { rollDice, playMenuItem } from './play-board-actions';
 import { test, expect } from './test';
@@ -11,7 +13,7 @@ const board = [
   0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 2,
   0,
 ];
-const saved = (sessionId = id) => ({
+const saved = (sessionId = id): components['schemas']['PlaySession'] => ({
   id: sessionId,
   version: 6,
   human_player: 0,
@@ -41,7 +43,10 @@ const saved = (sessionId = id) => ({
   game_no: 2,
   winner: null,
 });
-const row = (sessionId: string | null = id, phase: string | null = 'move') => ({
+const row = (
+  sessionId: string | null = id,
+  phase: string | null = 'move',
+): components['schemas']['DatabaseMatch'] => ({
   id: '994b5330-bf4c-4d57-88c0-333333333333',
   match_no: 432,
   source_available: true,
@@ -70,6 +75,9 @@ const row = (sessionId: string | null = id, phase: string | null = 'move') => ({
   tags: [],
   comment: '',
   version: 0,
+  import_warning_count: 0,
+  play_paused: false,
+  play_assisted: false,
   play_session_id: sessionId,
   play_phase: phase,
 });
@@ -106,10 +114,13 @@ test('bot matches resume from Match Database and Playing has no Saved Matches li
   }, other);
   await page.route('**/api/play/sessions', (route) => {
     reads++;
-    return route.fulfill({ json: [] });
+    return fulfillJsonList<'PlaySession'>(route, []);
   });
   await page.route('**/api/play/sessions/*', (route) =>
-    route.fulfill({ json: saved(route.request().url().split('/').pop()) }),
+    fulfillJson<'PlaySession'>(
+      route,
+      saved(route.request().url().split('/').pop()),
+    ),
   );
   await page.route('**/api/databases', (route) =>
     route.fulfill({
@@ -129,7 +140,7 @@ test('bot matches resume from Match Database and Playing has no Saved Matches li
     }),
   );
   await page.route('**/api/library/matches?*', (route) =>
-    route.fulfill({ json: { items: [row()], next_cursor: null } }),
+    fulfillJson<'LibraryPage'>(route, { items: [row()], next_cursor: null }),
   );
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
@@ -171,8 +182,9 @@ for (const [label, sessionId, phase] of [
       localStorage.setItem('neondojo.locale', 'en'),
     );
     await page.route('**/api/library/matches?*', (route) =>
-      route.fulfill({
-        json: { items: [row(sessionId, phase)], next_cursor: null },
+      fulfillJson<'LibraryPage'>(route, {
+        items: [row(sessionId, phase)],
+        next_cursor: null,
       }),
     );
     await page.goto('/');
@@ -215,13 +227,13 @@ for (const retry of [false, true])
         return;
       }
       await gate;
-      await route.fulfill({ json: saved(other) }).catch(() => {});
+      await fulfillJson<'PlaySession'>(route, saved(other)).catch(() => {});
     });
     await page.route(`**/api/play/sessions/${id}`, (route) =>
-      route.fulfill({ json: saved() }),
+      fulfillJson<'PlaySession'>(route, saved()),
     );
     await page.route('**/api/library/matches?*', (route) =>
-      route.fulfill({ json: { items: [row()], next_cursor: null } }),
+      fulfillJson<'LibraryPage'>(route, { items: [row()], next_cursor: null }),
     );
     try {
       await page.goto('/');
@@ -263,7 +275,7 @@ for (const primary of ['white', 'black'] as const) {
   test(`mode metadata never displaces the ${primary} player name in the match library`, async ({
     page,
   }) => {
-    const match = {
+    const match: components['schemas']['DatabaseMatch'] = {
       ...row(),
       match_no: 34,
       white: 'Hendrik',
@@ -319,7 +331,7 @@ for (const primary of ['white', 'black'] as const) {
       }),
     );
     await page.route('**/api/library/matches?*', (route) =>
-      route.fulfill({ json: { items: [match], next_cursor: null } }),
+      fulfillJson<'LibraryPage'>(route, { items: [match], next_cursor: null }),
     );
     await page.goto('/');
     await page
@@ -371,7 +383,11 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
   const { saved: session } = await historyFixture(page);
   const pausedDb = '00000000-0000-0000-0000-000000000004';
   const match = row(session.id, 'roll');
-  const checkpoint = { ...session, phase: 'roll', paused: false };
+  const checkpoint: components['schemas']['PlaySession'] = {
+    ...session,
+    phase: 'roll',
+    paused: false,
+  };
   Object.assign(session, checkpoint);
   await page.route('**/api/databases', (route) =>
     route.fulfill({
@@ -405,14 +421,12 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
     const scope = new URL(route.request().url()).searchParams.get(
       'database_id',
     );
-    return route.fulfill({
-      json: {
-        items:
-          checkpoint.paused && scope === pausedDb
-            ? [{ ...match, database_id: pausedDb, play_paused: true }]
-            : [],
-        next_cursor: null,
-      },
+    return fulfillJson<'LibraryPage'>(route, {
+      items:
+        checkpoint.paused && scope === pausedDb
+          ? [{ ...match, database_id: pausedDb, play_paused: true }]
+          : [],
+      next_cursor: null,
     });
   });
   const actions: string[] = [];
@@ -428,7 +442,7 @@ test('a paused match resumes from Paused Matches at its saved decision', async (
       checkpoint.paused = !checkpoint.paused;
       checkpoint.version++;
       Object.assign(session, checkpoint);
-      await route.fulfill({ json: checkpoint });
+      await fulfillJson<'PlaySession'>(route, checkpoint);
     },
   );
   await page.reload();
@@ -493,7 +507,7 @@ test('pausing from the checker board keeps the confirmed turn checkpoint', async
         paused: body.action === 'pause',
         version: session.version + 1,
       });
-      await route.fulfill({ json: session });
+      await fulfillJson<'PlaySession'>(route, session);
     },
   );
   const undo = page.getByRole('button', { name: 'Undo step', exact: true });
