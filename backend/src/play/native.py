@@ -298,6 +298,11 @@ if phase == 'move':
             return n if position['turn'] == 0 else 25 - n
         steps = [{'from': absolute(a), 'to': absolute(b)} for a, b in gnubg.parsemove(notation)]
         legal_moves.append({'notation': notation, 'steps': steps})
+    if match_bots is not None:
+        # hint() enumerates GNUbg's legal moves for the external bot. Without
+        # clearing that pending analysis, the next live move copies it into
+        # the SGF as if GNUbg had evaluated the external bot's decision.
+        command('clear hint')
 
 result = {'resignation_declined': resignation_declined, 'native_id': native_id, 'board': board, 'player': position['turn'],
           'dice': list(position['dice']) if position['dice'][0] else [],
