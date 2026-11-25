@@ -21,7 +21,7 @@ test('five-point difficulty labels and the selected opponent survive pause and r
     },
   });
   expect(verified.status(), await verified.text()).toBe(200);
-  expect(['3.1.0', '3.1.1']).toContain(
+  expect(['3.1.0', '3.1.1', '3.1.2']).toContain(
     (await verified.json()).snapshot.package_version,
   );
 
