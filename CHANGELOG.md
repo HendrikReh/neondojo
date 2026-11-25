@@ -6,9 +6,20 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-11-25
+
+NeonDojo now carries each game's cube rule through import, analysis, statistics and practice. The recommended NeonGammon release is 3.2.0. Migrations `0095_game_cube_rules` and `0096_analysis_selection_probes` run at startup. Backups from 1.3.0 remain restorable.
+
+### Added
+
+- **Cube-disabled games.** An imported SGF game marked `RU[NoCube]` has cubeless checker decisions and zero cube decisions. Statistics flags historical native analyses that need reanalysis. Saved decisions and study schedules remain available. GNUbg applies the source game rules. NeonGammon supports cubeless money play without Jacoby. [Match analysis](docs/reference/analysis.md)
+- **Engine verification in Settings.** Settings shows the NeonGammon installation and the depths its position probe verified. NeonDojo pins the official 3.2.0 Apple Silicon wheel. Older supported installations can continue saved matches using their original engine. [Installation and compatibility evidence](docs/open-sage-local.md#neongammon-320--november-25-2026)
+
 ### Changed
 
-- The recommended NeonGammon engine is now 3.2.0. The verified wheel supports recursive cube batches and shares model weights across checker and cube evaluations. Existing 3.0.0 and 3.1.x installations remain supported. [Installation and verification](docs/open-sage-local.md#neongammon-320--november-25-2026)
+- **Match analysis and engine duels.** NeonGammon prepares the saved replay once per job, batches checker and cube evaluations where supported, and resumes from completed games. Engine duels reuse verified workers across turns. GNUbg and NeonGammon share a CPU budget across analysis and interactive requests.
+- **Large libraries and startup.** Selecting a saved analysis uses indexed lookups for imported results and explicit selections. The client loads the active language and board artwork on demand. [Library measurements](docs/development/testing.md)
+- **Benchmarks and job status.** A benchmark can recover from a temporary database connection timeout while its lease is valid. A worker whose lease has expired cannot overwrite the result. Job event streams finish when terminal history is exhausted, and the client reconciles the final status. [Engine benchmark](docs/reference/extras.md#engine-benchmark)
 
 ## [1.3.0] - 2026-11-25
 
@@ -291,7 +302,8 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/neondojo/pull/4) · [#5](https://github.com/HendrikReh/neondojo/pull/5) · [#6](https://github.com/HendrikReh/neondojo/pull/6) · [#7](https://github.com/HendrikReh/neondojo/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/HendrikReh/neondojo/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/HendrikReh/neondojo/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/HendrikReh/neondojo/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/HendrikReh/neondojo/compare/v1.0.0...v1.1.0
