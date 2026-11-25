@@ -3,7 +3,7 @@
 # NeonDojo
 
 <!-- The repository is private: Shields.io cannot read it, so its badges are static, and GitHub shows the CI badge only to viewers with access. Update the version badge together with backend/Cargo.toml and web/package.json for each release. -->
-[![Version 1.3.0](https://img.shields.io/badge/version-1.3.0-2ea44f)](CHANGELOG.md)
+[![Version 1.4.0](https://img.shields.io/badge/version-1.4.0-2ea44f)](CHANGELOG.md)
 [![CI](https://github.com/HendrikReh/neondojo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/HendrikReh/neondojo/actions/workflows/ci.yml?query=branch%3Amain)
 [![Platform: macOS on Apple Silicon](https://img.shields.io/badge/platform-macOS%20%7C%20Apple%20Silicon-000000?logo=apple&logoColor=white)](#requirements)
 [![Rust 1.93.1](https://img.shields.io/badge/Rust-1.93.1-CE422B?logo=rust&logoColor=white)](#requirements)
