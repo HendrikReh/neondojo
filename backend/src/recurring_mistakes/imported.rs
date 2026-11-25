@@ -195,19 +195,16 @@ pub(super) fn reconstruct(imported: Imported) -> Vec<SourceDecision> {
             if row.position_uuid != *position_uuid {
                 continue;
             }
-            if game.cube_enabled != Some(true) && record.kind == "cube" {
-                continue;
-            }
-            let Some(mut p) = imported_projection::project(
+            let Some(p) = imported_projection::project(
                 &record,
                 source,
                 game.match_id,
                 row.position_uuid,
                 game.format,
+                game.cube_enabled,
             ) else {
                 continue;
             };
-            p.position.cube_enabled = game.cube_enabled;
             let Ok(board) = <&[i32; 26]>::try_from(p.position.board.as_slice()) else {
                 continue;
             };

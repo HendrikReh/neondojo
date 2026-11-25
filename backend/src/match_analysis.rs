@@ -282,14 +282,21 @@ pub(crate) fn evaluated_cube_decision(
 /// https://sources.debian.org/src/gnubg/1.05.002-2/analysis.c/
 /// https://sources.debian.org/src/gnubg/1.05.002-2/eval.c/
 pub(crate) fn requires_cube_analysis(position: &crate::import::ImportedPosition) -> Result<bool> {
-    if !position.cube_enabled {
-        return Ok(false);
-    }
-    cube_analysis_available(&position.board, &position.match_id, position.player)
+    cube_analysis_available(
+        &position.board,
+        &position.match_id,
+        position.player,
+        position.cube_enabled,
+    )
 }
 
-pub(crate) fn cube_analysis_available(board: &[i32], match_id: &str, player: i32) -> Result<bool> {
-    if board == crate::backgammon::initial_board() {
+pub(crate) fn cube_analysis_available(
+    board: &[i32],
+    match_id: &str,
+    player: i32,
+    cube_enabled: bool,
+) -> Result<bool> {
+    if !cube_enabled || board == crate::backgammon::initial_board() {
         return Ok(false);
     }
     use crate::backgammon::ids::{Field, MatchId};

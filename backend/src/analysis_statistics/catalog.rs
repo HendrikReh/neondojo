@@ -221,13 +221,11 @@ async fn statistics(
             .map(|g| g.game_no)
             .collect();
         for p in &positions {
-            if disabled.contains(&p.game_no) {
-                continue;
-            }
             if crate::match_analysis::cube_analysis_available(
                 &p.board,
                 &p.gnubg_match_id,
                 p.player,
+                !disabled.contains(&p.game_no),
             )? {
                 *expected_cubes.entry(p.game_no).or_default() += 1;
             }

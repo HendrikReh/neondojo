@@ -278,15 +278,23 @@ pub async fn game_catalog(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<Ma
         tx.commit().await?;
         return Ok(Some(games));
     }
-    let games =
-        tokio::task::spawn_blocking(move || crate::import::parse_sgf(&source).map(|m| m.games))
-            .await??;
-    insert_games(&mut tx, match_id, &games).await?;
+    let games = catalog_source_games(&mut tx, match_id, source).await?;
     tx.commit().await?;
     Ok(Some(games))
 }
 
-/// The game catalog with each game's result, derived from the stored SGF.
+pub(crate) async fn catalog_source_games(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    match_id: Uuid,
+    source: String,
+) -> Result<Vec<MatchGame>> {
+    let games =
+        tokio::task::spawn_blocking(move || crate::import::parse_sgf(&source).map(|m| m.games))
+            .await??;
+    insert_games(tx, match_id, &games).await?;
+    Ok(games)
+}
+
 pub async fn import_warnings(pool: &PgPool, match_id: Uuid) -> Result<Option<Vec<ImportWarning>>> {
     let warnings: Option<sqlx::types::Json<Vec<ImportWarning>>> =
         sqlx::query_scalar("SELECT import_warnings FROM matches WHERE id=$1")

@@ -35,6 +35,13 @@ pub(crate) async fn preserve(tx: &mut Transaction<'_, Postgres>, source: Uuid) -
     if positions.is_empty() {
         return Ok(());
     }
+    // Early imports may still have no game catalog. Recover their rules before
+    // the deletion removes the only copy of the SGF.
+    let uncataloged: Option<String> = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1 AND sgf<>'' AND NOT EXISTS(SELECT FROM match_games WHERE match_uuid=$1)")
+        .bind(source).fetch_optional(&mut **tx).await?;
+    if let Some(sgf) = uncataloged {
+        crate::store::catalog_source_games(tx, source, sgf).await?;
+    }
     // Game annotation PUT locks only its game target, not the parent match.
     // Serialize it before cloning/retargeting so a successful first save cannot
     // land on the old game after the annotation move and disappear in its cascade.
@@ -46,7 +53,7 @@ pub(crate) async fn preserve(tx: &mut Transaction<'_, Postgres>, source: Uuid) -
 
     // Clone just the games needed by the retained occurrences. Legacy rows with
     // no game catalog still have their exact score/cube context in GNU IDs.
-    sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford,cube_enabled) SELECT $2,p.game_no,count(*)::integer,coalesce(max(g.white_score),max(p.source_white_score),0),coalesce(max(g.black_score),max(p.source_black_score),0),coalesce(bool_or(g.crawford),bool_or(p.source_crawford),false),coalesce(bool_and(g.cube_enabled),true) FROM positions p LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no WHERE p.id=ANY($1) GROUP BY p.game_no")
+    sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford,cube_enabled) SELECT $2,p.game_no,count(*)::integer,coalesce(max(g.white_score),max(p.source_white_score),0),coalesce(max(g.black_score),max(p.source_black_score),0),coalesce(bool_or(g.crawford),bool_or(p.source_crawford),false),bool_and(g.cube_enabled) FROM positions p LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no WHERE p.id=ANY($1) GROUP BY p.game_no")
         .bind(&positions).bind(host).execute(&mut **tx).await?;
     sqlx::query("UPDATE annotations a SET game_uuid=new.id FROM match_games old JOIN match_games new ON new.match_uuid=$2 AND new.game_no=old.game_no WHERE old.match_uuid=$1 AND a.game_uuid=old.id")
         .bind(source).bind(host).execute(&mut **tx).await?;

@@ -62,9 +62,11 @@ pub(crate) async fn execute(
     } else {
         (1..=job.total_games).collect()
     };
+    let (prior, remaining) = game_numbers
+        .split_at_checked(usize::try_from(job.completed_games)?)
+        .context("Invalid completed game count")?;
     ensure!(
-        completed == game_numbers[..job.completed_games as usize]
-            && summary.completed_games == job.completed_games,
+        completed == prior && summary.completed_games == job.completed_games,
         "Inconsistent match analysis checkpoint"
     );
     crate::analysis_timing::initialize(
@@ -72,50 +74,52 @@ pub(crate) async fn execute(
         job,
         token,
         engine,
-        &summary.engine,
+        engine.saved_version().unwrap_or(&summary.engine),
         total_moves,
         summary.analyzed_moves,
     )
     .await?;
-    let prepared = crate::engines::replay::MatchEvaluator::prepare(engine, source).await?;
-    for &game_no in &game_numbers[job.completed_games as usize..] {
-        crate::engine::with_shared_access(async {
-            crate::analysis_timing::start_game(&state.pool, job, token).await?;
-            let started = Instant::now();
-            let work = async {
-                let analyzed = prepared
-                    .analyze_game(game_no, job.plies)
+    if !remaining.is_empty() {
+        let prepared = crate::engines::replay::MatchEvaluator::prepare(engine, source).await?;
+        for &game_no in remaining {
+            crate::engine::with_shared_access(async {
+                crate::analysis_timing::start_game(&state.pool, job, token).await?;
+                let started = Instant::now();
+                let work = async {
+                    let analyzed = prepared
+                        .analyze_game(game_no, job.plies, Some(crate::engines::GAME_TIMEOUT))
+                        .await
+                        .with_context(|| {
+                            format!(
+                                "{} analysis failed in game {game_no}/{}",
+                                engine.id().display_name(),
+                                job.total_games
+                            )
+                        })?;
+                    checkpoint(
+                        &state.pool,
+                        job,
+                        token,
+                        &analyzed,
+                        &mut summary,
+                        Some(started),
+                    )
                     .await
-                    .with_context(|| {
-                        format!(
-                            "{} analysis failed in game {game_no}/{}",
-                            engine.id().display_name(),
-                            job.total_games
-                        )
-                    })?;
-                checkpoint(
+                };
+                let samples = crate::analysis_timing::sample_until_lease_lost(
                     &state.pool,
                     job,
                     token,
-                    &analyzed,
-                    &mut summary,
-                    Some(started),
-                )
-                .await
-            };
-            let samples = crate::analysis_timing::sample_until_lease_lost(
-                &state.pool,
-                job,
-                token,
-                started,
-                std::time::Duration::from_secs(1),
-            );
-            tokio::select! {
-                result = work => result,
-                result = samples => result,
-            }
-        })
-        .await?;
+                    started,
+                    std::time::Duration::from_secs(1),
+                );
+                tokio::select! {
+                    result = work => result,
+                    result = samples => result,
+                }
+            })
+            .await?;
+        }
     }
     ensure!(
         summary.analyzed_moves == total_moves,
@@ -181,7 +185,15 @@ async fn checkpoint(
     }
     let mut next = summary.clone();
     accumulate_performance_rating(&mut next, game);
-    next.engine.clone_from(&game.engine);
+    next.engine = match &job.engine_snapshot {
+        Some(snapshot) if summary.completed_games > 0 && summary.engine != game.engine => {
+            snapshot.open_sage.as_ref().map_or_else(
+                || game.engine.clone(),
+                |sage| sage.describe("source cube rules"),
+            )
+        }
+        _ => game.engine.clone(),
+    };
     next.completed_games += 1;
     next.analyzed_moves += positions.len() as i32;
     let mut game_summary = MatchAnalysisSummary {

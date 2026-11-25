@@ -45,7 +45,7 @@ pub async fn run(pool: &PgPool) -> Result<()> {
 /// Only candidate sources marked by migration 0095 need to be replayed.
 /// Repeated startup and concurrent backfills keep all analysis rows intact.
 pub(super) async fn resolve_game_cube_rules(connection: &mut sqlx::PgConnection) -> Result<()> {
-    let matches: Vec<uuid::Uuid> = sqlx::query_scalar("SELECT DISTINCT match_uuid FROM match_games WHERE cube_enabled IS NULL ORDER BY match_uuid")
+    let matches: Vec<uuid::Uuid> = sqlx::query_scalar("SELECT DISTINCT g.match_uuid FROM match_games g JOIN matches m ON m.id=g.match_uuid LEFT JOIN matches origin ON m.collection_only AND origin.id=m.source_match_id WHERE g.cube_enabled IS NULL AND coalesce(origin.sgf,m.sgf)<>'' ORDER BY g.match_uuid")
         .fetch_all(&mut *connection).await?;
     for id in matches {
         let source: Option<String> =

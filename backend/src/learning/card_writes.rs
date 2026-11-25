@@ -1,10 +1,14 @@
 use super::*;
 
 pub(super) fn card_signature(content: &CardContent) -> String {
-    format!(
+    let mut signature = format!(
         "{}:{}:{}",
         content.position.position_id, content.position.gnubg_match_id, content.kind
-    )
+    );
+    if content.position.cube_enabled == Some(false) {
+        signature.push_str(":nocube");
+    }
+    signature
 }
 
 // Bulk selection reports unavailable historical native results explicitly, while

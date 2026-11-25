@@ -1900,8 +1900,32 @@ async fn nocube_statistics_and_cards_follow_source_rules(pool: PgPool) {
     let cards = format!("/api/decks/{}/cards", deck["id"].as_str().unwrap());
     let (status, added) = call(app.clone(), "POST", &cards, json!({"job_id":job.id})).await;
     assert_eq!(status, 200, "{added}");
-    let (_, page) = call(app, "GET", &cards, Value::Null).await;
+    let (_, page) = call(app.clone(), "GET", &cards, Value::Null).await;
     let items = page["items"].as_array().unwrap();
     assert_eq!(items.len(), 2);
     assert!(items.iter().all(|card| card["kind"] == "checker"));
+
+    let enabled = sgf.replace("RU[NoCube]", "");
+    let second = store::import_match(
+        &pool,
+        "cube.sgf",
+        "sgf",
+        enabled.as_bytes(),
+        &enabled,
+        &import::parse_sgf(&enabled).unwrap(),
+    )
+    .await
+    .unwrap();
+    let second_job = store::create_match_job(&pool, second.r#match.id, 1, 1)
+        .await
+        .unwrap();
+    assert!(jobs::run_one(&state).await.unwrap());
+    let (status, added) = call(app.clone(), "POST", &cards, json!({"job_id":second_job.id})).await;
+    assert_eq!(status, 200, "{added}");
+    let (_, page) = call(app, "GET", &cards, Value::Null).await;
+    assert_eq!(
+        page["items"].as_array().unwrap().len(),
+        5,
+        "two distinct checker pairs and one cube offer"
+    );
 }

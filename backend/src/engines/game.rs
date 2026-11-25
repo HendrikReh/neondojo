@@ -8,7 +8,7 @@ use crate::match_analysis::{
 use anyhow::{Context, Result, ensure};
 use std::time::Duration;
 
-pub(super) const GAME_TIMEOUT: Duration = Duration::from_secs(600);
+pub(crate) const GAME_TIMEOUT: Duration = Duration::from_secs(600);
 
 impl SageEngine {
     pub async fn analyze_game(&self, sgf: &str, game_no: i32, plies: i32) -> Result<AnalyzedGame> {

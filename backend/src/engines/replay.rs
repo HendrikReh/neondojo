@@ -26,12 +26,17 @@ impl<'a> MatchEvaluator<'a> {
         &self,
         game_no: i32,
         plies: i32,
+        timeout: Option<std::time::Duration>,
     ) -> Result<crate::match_analysis::AnalyzedGame> {
         match self {
-            Self::Gnubg(engine, source) => engine.analyze_game(source, game_no, plies).await,
+            Self::Gnubg(engine, source) => {
+                engine
+                    .analyze_game_with_limit(source, game_no, plies, timeout)
+                    .await
+            }
             Self::NeonGammon(engine, replay) => {
                 engine
-                    .analyze_prepared_game(replay, game_no, plies, Some(super::game::GAME_TIMEOUT))
+                    .analyze_prepared_game(replay, game_no, plies, timeout)
                     .await
             }
         }

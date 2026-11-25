@@ -1,6 +1,7 @@
 //! Local analysis adapters. GNUbg remains the independent import/rules engine.
 mod context;
 mod game;
+pub(crate) use game::GAME_TIMEOUT;
 mod process;
 mod provider;
 pub(crate) mod replay;
@@ -60,6 +61,18 @@ pub struct EngineFork {
 }
 
 impl SageSnapshot {
+    pub(crate) fn describe(&self, cube_mode: &str) -> String {
+        format!(
+            "NeonGammon {}; model {}; {}ply {}; threads {}; adapter {}",
+            self.package_version,
+            self.artifact_fingerprint,
+            self.plies,
+            cube_mode,
+            self.threads,
+            self.adapter_version
+        )
+    }
+
     pub(crate) fn supports_difficulty_presets(&self) -> bool {
         RELEASES
             .get(self.package_version.as_str())
@@ -226,19 +239,11 @@ impl SageEngine {
             Path::new(&snapshot.python).is_absolute(),
             "NeonGammon Python path must be absolute"
         );
-        let version = format!(
-            "NeonGammon {}; model {}; {}ply {}; threads {}; adapter {}",
-            snapshot.package_version,
-            snapshot.artifact_fingerprint,
-            snapshot.plies,
-            if snapshot.cubeless {
-                "cubeless"
-            } else {
-                "cubeful"
-            },
-            snapshot.threads,
-            snapshot.adapter_version
-        );
+        let version = snapshot.describe(if snapshot.cubeless {
+            "cubeless"
+        } else {
+            "cubeful"
+        });
         Ok(Self {
             snapshot,
             version,

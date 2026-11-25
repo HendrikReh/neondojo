@@ -125,6 +125,7 @@ fn score_positions(content: &CardContent) -> ApiResult<Vec<Position>> {
                     &position.board,
                     &position.gnubg_match_id,
                     position.player,
+                    position.cube_enabled != Some(false),
                 )
                 .unwrap_or(false))
         {

@@ -109,7 +109,7 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
     let imported = crate::import::parse_sgf(&source)?;
     ensure!(
         imported.positions.len() == reference.total_moves as usize
-            && crate::match_analysis::game_count(&source)? == reference.total_games,
+            && imported.games.len() == reference.total_games as usize,
         "Incomplete reference workload"
     );
     let engine = saved_engine(&state.pool, run).await?;
@@ -120,7 +120,15 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
         .await
         .context("Benchmark engine changed or is unavailable")?;
     mark_started(&state.pool, run.id, token).await?;
+    let preparing = Instant::now();
+    let evaluator = crate::engines::replay::MatchEvaluator::prepare(&engine, source).await?;
     let mut elapsed_ms = startup;
+    if matches!(
+        evaluator,
+        crate::engines::replay::MatchEvaluator::NeonGammon(..)
+    ) {
+        elapsed_ms += preparing.elapsed().as_secs_f64() * 1000.0;
+    }
     let mut moves = 0;
     for game_no in 1..=reference.total_games {
         guard_engine
@@ -128,9 +136,8 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
             .await
             .context("Benchmark engine changed before game")?;
         let start = Instant::now();
-        let game = engine
-            .analyze_game_with_limit(
-                &source,
+        let game = evaluator
+            .analyze_game(
                 game_no,
                 run.plies,
                 protocol
@@ -162,11 +169,7 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
             .iter()
             .filter(|d| d.kind == "checker")
             .count();
-        let expected = imported
-            .positions
-            .iter()
-            .filter(|p| p.game_no == game_no)
-            .count();
+        let expected = imported.games[(game_no - 1) as usize].position_count as usize;
         ensure!(
             count == expected,
             "Incomplete checker coverage in game {game_no}: {count}/{expected}"

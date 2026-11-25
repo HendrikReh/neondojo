@@ -748,3 +748,35 @@ async fn numbered_pages_follow_native_checkpoints_and_in_place_updates(pool: PgP
     );
     assert_eq!(assert_numbered_pages_match_cursor(&app, &base).await, 1);
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn imported_nocube_gnubg_checker_rows_cover_the_game(pool: PgPool) {
+    // The played candidates from GNUbg 1.08.003's cubeless 0-ply export of
+    // the two-checker SGF. Its "0" evaluation flags have no cubeful C suffix.
+    let sgf = "(;GM[6]FF[4]MI[length:0]RU[NoCube]AP[GNU Backgammon:1.08.003];W[31hefe]A[0][hefe E ver 3 0.551469 0.173548 0.012695 0.124446 0.005039 0.159696 0 0 1 0.000000 1];B[42qusu]A[0][qusu E ver 3 0.455755 0.134102 0.007872 0.175897 0.008552 -0.130966 0 0 1 0.000000 1])";
+    let id = store::import_match(
+        &pool,
+        "cubeless-analysis.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    let (status, data) = call(
+        &app(&pool),
+        "GET",
+        &format!("/api/matches/{id}/analysis-statistics?analysis_id=imported:{id}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{data}");
+    assert_eq!(data["games"][0]["analyzed"], true, "{data}");
+    assert_eq!(data["summary"]["analyzed_moves"], 2);
+    for player in data["summary"]["players"].as_array().unwrap() {
+        assert_eq!(player["cube_decisions"], 0);
+    }
+}

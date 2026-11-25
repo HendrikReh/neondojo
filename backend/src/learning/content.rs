@@ -272,14 +272,14 @@ fn imported_card(
     let record =
         serde_json::from_value::<crate::imported_analysis::ImportedAnalysisData>(value).ok()?;
     let source = crate::recurring_mistakes::imported_projection::source_move(&event, checker_ply)?;
-    let mut projected = crate::recurring_mistakes::imported_projection::project(
+    let projected = crate::recurring_mistakes::imported_projection::project(
         &record,
         &source,
         event.match_uuid,
         event.position_uuid,
         format,
+        cube_enabled,
     )?;
-    projected.position.cube_enabled = cube_enabled;
     let kind = if record.kind == "checker" {
         "checker"
     } else if matches!(projected.decision.played.as_str(), "take" | "drop") {

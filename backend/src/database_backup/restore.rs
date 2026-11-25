@@ -315,12 +315,10 @@ pub(super) async fn replace(state: &AppState, mut input: Prepared) -> ApiResult<
         .context("Preparing target backup tables")?;
     copy_tables(&mut tx, &mut input.file, input.lengths, layout).await?;
     if layout == ArchiveLayout::BeforeGameCubeRules {
-        sqlx::query(include_str!(
-            "../schema_migrations/mark_legacy_cube_rules.sql"
-        ))
-        .execute(&mut *tx)
-        .await
-        .context("Marking restored games for cube-rule replay")?;
+        sqlx::query("SELECT mark_legacy_game_cube_rules()")
+            .execute(&mut *tx)
+            .await
+            .context("Marking restored games for cube-rule replay")?;
     }
     crate::schema_migrations::resolve_game_cube_rules(&mut tx).await?;
 

@@ -72,7 +72,7 @@ fn reference_for(
             value.id = format!("bgsage-match-v5-{plies}ply-4threads");
             value.process_strategy =
                 "persistent-worker-batched-game-verified-at-both-boundaries".into();
-            value.timing_scope = "cold-worker-startup-once-plus-full-game-pipeline".into();
+            value.timing_scope = "cold-worker-startup-and-replay-once-plus-verified-games".into();
             value.move_filter = format!("all-cubeful-{plies}ply-candidates-played-board-included");
         }
         Some(EngineId::Gnubg) => {

@@ -106,6 +106,7 @@ pub(crate) fn project(
     match_id: Uuid,
     position_uuid: Option<Uuid>,
     source_format: MatchFormat,
+    cube_enabled: Option<bool>,
 ) -> Option<Projection> {
     if !source_format.supplies_decisions(&record.kind)
         || record.game_no != source.game_no
@@ -133,7 +134,11 @@ pub(crate) fn project(
     {
         return None;
     }
-    let position = review_position(source, match_id, position_uuid, virtual_cube)?;
+    if !checker && cube_enabled == Some(false) {
+        return None;
+    }
+    let mut position = review_position(source, match_id, position_uuid, virtual_cube)?;
+    position.cube_enabled = cube_enabled;
     if record
         .gnubg_match_id
         .as_ref()
@@ -159,7 +164,7 @@ pub(crate) fn project(
             return None;
         }
         crate::move_assessments::after_play(&position, &best.notation)?;
-        let best_eq = checker_equity(best, source_format)?;
+        let best_eq = checker_equity(best, source_format, cube_enabled)?;
         // Every matching candidate must demonstrate the same value. Ambiguous
         // duplicated finals cannot supply a guessed played loss.
         let mut played_eq = None;
@@ -168,7 +173,7 @@ pub(crate) fn project(
                 if c.rank <= 0 {
                     return None;
                 }
-                let value = checker_equity(c, source_format)?;
+                let value = checker_equity(c, source_format, cube_enabled)?;
                 if played_eq.is_some_and(|old: f64| (old - value).abs() > 1e-7) {
                     return None;
                 }
@@ -284,18 +289,24 @@ fn number(value: &serde_json::Value) -> Option<f64> {
 fn checker_equity(
     c: &crate::imported_analysis::ImportedCandidate,
     format: MatchFormat,
+    cube_enabled: Option<bool>,
 ) -> Option<f64> {
     if format == MatchFormat::Bgf {
         // The displayed MWC/cubeless value is never an EMG substitute.
         if c.raw["eq"]["hasEMG"] != true {
             return None;
         }
-        number(&c.raw["eq"]["emg"]).filter(|v| *v != -99.0)
-    } else if c.equity_kind == "cubeful" {
-        c.equity.filter(|n| n.is_finite() && *n != -99.0)
-    } else {
-        None
+        return number(&c.raw["eq"]["emg"]).filter(|v| *v != -99.0);
     }
+    let unit = if format == MatchFormat::Sgf && cube_enabled == Some(false) {
+        "cubeless"
+    } else {
+        "cubeful"
+    };
+    if c.equity_kind != unit {
+        return None;
+    }
+    c.equity.filter(|n| n.is_finite() && *n != -99.0)
 }
 fn loss(best: f64, played: f64) -> Option<f64> {
     let difference = best - played;
@@ -423,7 +434,14 @@ mod tests {
         s: &SourceMove,
         format: MatchFormat,
     ) -> Option<Projection> {
-        project(r, s, Uuid::nil(), Some(Uuid::from_u128(7)), format)
+        project(
+            r,
+            s,
+            Uuid::nil(),
+            Some(Uuid::from_u128(7)),
+            format,
+            Some(true),
+        )
     }
     #[test]
     fn xg_checker_joins_legal_final_board_and_preserves_depth_without_revealing_notation() {
