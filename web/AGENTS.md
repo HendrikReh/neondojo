@@ -5,7 +5,7 @@ These rules extend the root [AGENTS.md](../AGENTS.md) for the React/TypeScript c
 ## TypeScript, API contract, and React state
 
 - Use generated API types from `web/src/generated-api.d.ts` (regenerated via `npm run api:types --prefix web`) and shared HTTP error handling. Validate external data at the boundary and avoid `any` or assertions that hide contract mismatches.
-- Send API requests through `web/src/shared/http/api.ts`; a test refuses other `fetch` calls. Do not write refs while rendering: use `useLatest` for the latest value and `useEpoch` to number selections ([useLatest.ts](src/shared/hooks/useLatest.ts)); a test refuses such writes.
+- Send API requests through `web/src/shared/http/api.ts`; a test refuses other `fetch` calls. Do not write refs while rendering, and read only refs to DOM elements there: use `useLatest` for the latest value and `useEpoch` to number selections ([useLatest.ts](src/shared/hooks/useLatest.ts)); tests refuse both.
 - Clean up effects and SSE subscriptions explicitly, and prevent delayed or stale responses from overwriting a newer selection.
 
 ## Desktop UI, navigation, and localization

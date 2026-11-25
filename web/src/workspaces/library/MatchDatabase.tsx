@@ -213,7 +213,7 @@ export default function MatchDatabase({
     'desc',
     (value) => (value === 'asc' || value === 'desc' ? value : undefined),
   );
-  const resultNames = useRef<Record<string, string>>({});
+  const [resultNames, setResultNames] = useState<Record<string, string>>({});
   const selected = new Set(selectedRows.map((row) => row.id));
   const [exact, setExact] = useState(''),
     [positionInputError, setPositionInputError] = useState(false);
@@ -334,8 +334,8 @@ export default function MatchDatabase({
   }
   function actionResult(response: ActionResponse) {
     setResult(response);
-    resultNames.current = Object.fromEntries(
-      selectedRows.map((m) => [m.id, m.display_name]),
+    setResultNames(
+      Object.fromEntries(selectedRows.map((m) => [m.id, m.display_name])),
     );
     const deleted = response.results
       .filter((r) => r.status === 'deleted')
@@ -630,7 +630,7 @@ export default function MatchDatabase({
           />
           {hasSelection && <p className="fineprint">{l('batchLimit')}</p>}
           {result && (
-            <LibraryActionResult result={result} names={resultNames.current} />
+            <LibraryActionResult result={result} names={resultNames} />
           )}
           <div className="library-content">
             <div>

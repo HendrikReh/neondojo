@@ -11,6 +11,21 @@ import { usePlayModeText } from './play-mode-messages';
 import GameResultSummary, { type PlayGameResult } from './GameResultSummary';
 import { shortEngineLabel } from '../../shared/engine/engine-version';
 
+const isCheckerDecision = (decision: PlayDecision) =>
+  decision.original_action === 'move' || decision.original_action === 'pass';
+
+/** The decision each history row rates: its checker play, else its first. */
+export function ratedDecisions(decisions: PlayDecision[] = []) {
+  const rated = new Map<number, PlayDecision>();
+  for (const decision of decisions) {
+    if (decision.history_index == null || decision.first_loss == null) continue;
+    const known = rated.get(decision.history_index);
+    if (!known || (isCheckerDecision(decision) && !isCheckerDecision(known)))
+      rated.set(decision.history_index, decision);
+  }
+  return rated;
+}
+
 export default memo(function PlayHistory({
   history,
   white,
@@ -51,6 +66,7 @@ export default memo(function PlayHistory({
       new Map(gameResults?.map((entry) => [entry.history_index, entry.result])),
     [gameResults],
   );
+  const rated = useMemo(() => ratedDecisions(decisions), [decisions]);
   useEffect(() => {
     if (!visible || !list.current) return;
     const row = list.current.querySelector<HTMLElement>(
@@ -71,14 +87,7 @@ export default memo(function PlayHistory({
       </div>
       <ol className="moves-list" ref={list}>
         {history.map((turn, index) => {
-          const relevant = decisions?.filter(
-            (d) => d.history_index === index && d.first_loss != null,
-          );
-          const decision =
-            relevant?.find(
-              (d) =>
-                d.original_action === 'move' || d.original_action === 'pass',
-            ) ?? relevant?.[0];
+          const decision = rated.get(index);
           // The row rates the move that was actually played; the first
           // attempt keeps its own loss in the tooltip.
           const loss = decision?.loss ?? decision?.first_loss;

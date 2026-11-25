@@ -58,6 +58,7 @@ import { useDeckLibraryText } from './deck-library-messages';
 import { useStudyOverviewText } from '../study-messages';
 import type { VersionedDeck } from './deck-management-api';
 import type {
+  AttemptedCard,
   NextCard,
   CardPage,
   RevealedCard,
@@ -310,6 +311,20 @@ export default function LearningWorkspace({
       });
     return () => abort.abort();
   }, [deckId, studying, queueRevision, session]);
+  /** Receives the result of the attempt that starts now, unless it is late. */
+  function beginAttempt() {
+    const version = generation.current;
+    return (result: AttemptedCard) => {
+      if (liveSession.current !== session || version !== generation.current)
+        return;
+      setNext((current) =>
+        current?.card?.id === result.revealed.card_id &&
+        current.card.version === result.revealed.version
+          ? { ...current, active_attempt: result }
+          : current,
+      );
+    };
+  }
   async function reveal() {
     if (!next?.card) return;
     const version = ++generation.current;
@@ -407,7 +422,6 @@ export default function LearningWorkspace({
   }
   const activeNext = questionOwner === session ? next : null;
   const card = activeNext?.card;
-  const cardGeneration = generation.current;
   const name = sourceDeck?.name;
   if (requestedDeck && requestedDeck.token !== appliedDeckToken)
     return (
@@ -680,19 +694,7 @@ export default function LearningWorkspace({
               revealed={revealed}
               busy={busy || attemptBusy}
               visible={visible}
-              onAttempt={(result) => {
-                if (
-                  liveSession.current === session &&
-                  cardGeneration === generation.current
-                ) {
-                  setNext((current) =>
-                    current?.card?.id === result.revealed.card_id &&
-                    current.card.version === result.revealed.version
-                      ? { ...current, active_attempt: result }
-                      : current,
-                  );
-                }
-              }}
+              onAttemptStart={beginAttempt}
               onAttemptBusy={setAttemptBusy}
               onConflict={reloadCard}
               onReveal={() => void reveal()}
