@@ -14,7 +14,7 @@
 [![Vite 7](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](web/package.json)
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](docs/development/api.md)
 [![GNUbg 1.08.003](https://img.shields.io/badge/GNUbg-1.08.003-6F42C1)](#requirements)
-[![NeonGammon 3.1.1 optional](https://img.shields.io/badge/NeonGammon-3.1.1%20optional-8250DF)](docs/open-sage-local.md)
+[![NeonGammon 3.1.2 optional](https://img.shields.io/badge/NeonGammon-3.1.2%20optional-8250DF)](docs/open-sage-local.md)
 [![Languages: 6](https://img.shields.io/badge/languages-EN%20%7C%20DE%20%7C%20ES%20%7C%20FR%20%7C%20IT%20%7C%20PL-0969DA)](docs/reference/settings.md#interface-appearance-and-language)
 
 NeonDojo is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or NeonGammon, playing against an engine, and practicing your own mistakes. It runs on your own computer and is designed for dense desktop use on Apple Silicon Macs. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
@@ -40,7 +40,7 @@ NeonDojo is a local backgammon application for importing matches, finding positi
 - Docker Compose for the bundled PostgreSQL 17 database, or an existing PostgreSQL server
 - Python 3.10 or later for the frontend build and development scripts
 - A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
-- Optional: NeonGammon 3.1.1 as a second engine, running in a locked native ARM64 Python 3.12 environment on macOS 14 or later (3.1.0 also supports named difficulty presets; 3.0.0 remains supported for analysis and ordinary play without presets). See [Local NeonGammon setup](docs/open-sage-local.md).
+- Optional: NeonGammon 3.1.2 as a second engine, running in a locked native ARM64 Python 3.12 environment on macOS 14 or later (3.1.0 and 3.1.1 also support named difficulty presets; 3.0.0 remains supported for analysis and ordinary play without presets). See [Local NeonGammon setup](docs/open-sage-local.md).
 - The BGBlitz theme archives listed in `shared/configuration-options.json`, copied into `themes/`. They are local third-party files and not part of the repository. Without them, `npm run build`, `npm run dev` and `npm test` stop and name the missing ZIP files; set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally building without them. Only `npm run themes:prepare --prefix web -- --update-options` rewrites the tracked theme list. See [Board artwork](docs/reference/settings.md#board-artwork) and [Board theme formats](themes/README.md).
 
 ### Database and engine
@@ -158,7 +158,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 | | [Verification and tests](docs/development/testing.md) | Quality checks, PostgreSQL and GNUbg integration tests, import corpus, browser tests and native play tests |
 | | [Architecture and data](docs/development/architecture.md) | Repository layout, schema baseline, storage of matches and positions, private demo data |
 | | [UI navigation](docs/ui-navigation.md), [typography](docs/typography.md) and [action icons](docs/design/action-icons-proposal.md) | Text navigation, keyboard operation, type scale, tokens and Lucide action icons for interface changes |
-| | [Local NeonGammon setup](docs/open-sage-local.md) | Installing and checking NeonGammon 3.1.1, measurements and limits |
+| | [Local NeonGammon setup](docs/open-sage-local.md) | Installing and checking NeonGammon 3.1.2, measurements and limits |
 | | [Engine duel CPU budget](docs/engine-duel-cpu-budget.md) | Concept for comparing engines with the same computing budget |
 | | [Import corpus results](docs/import-corpus-results.md) | Results of importing the local match corpus |
 | | [Repository guidance](AGENTS.md) | Rules for changes to this repository |
