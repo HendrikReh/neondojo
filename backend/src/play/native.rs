@@ -165,20 +165,7 @@ pub(super) async fn run_native(
     request: &NativeRequest<'_>,
     sgf: Option<&str>,
 ) -> anyhow::Result<(NativeSnapshot, String)> {
-    run_native_with_dice(engine, request, sgf, None).await
-}
-
-pub(super) async fn run_native_with_dice(
-    engine: &Engine,
-    request: &NativeRequest<'_>,
-    sgf: Option<&str>,
-    dice: Option<&[[u8; 2]]>,
-) -> anyhow::Result<(NativeSnapshot, String)> {
     let directory = tempfile::tempdir()?;
-    if let Some(dice) = dice {
-        let bytes: Vec<_> = dice.iter().flatten().map(|die| b'0' + die).collect();
-        tokio::fs::write(directory.path().join("dice.txt"), bytes).await?;
-    }
     if let Some(sgf) = sgf {
         tokio::fs::write(directory.path().join("input.sgf"), sgf).await?;
     }

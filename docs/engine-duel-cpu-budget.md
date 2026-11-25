@@ -18,7 +18,7 @@ As a result, "GNUbg 3-ply vs. NeonGammon 3-ply" says little about which engine i
 | Aspect | GNUbg | NeonGammon |
 |---|---|---|
 | How a decision is made | Inside a GNUbg process via the native adapter: `set player N gnubg; nextturn` ([native.py](../backend/src/play/native.py)) | Persistent Python worker, `BgBotAnalyzer.checker_play` / `cube_decision` ([worker.py](../backend/src/engines/worker.py)) |
-| Process lifetime | New process per native step; with SGF replay. Against Sage: one process per Sage decision | Worker reused while the profile is unchanged. A Sage-vs-Sage duel at different depths restarts it on every switch |
+| Process lifetime | One verified rules process per game. Later games load the preceding SGF checkpoint at startup | One worker per distinct saved NeonGammon profile for the match or money block (up to two). Each game verifies participating profiles at its boundaries |
 | Settings | NeonDojo 1–5-ply (GNUbg-native 0–4), cubeful (`cubeful off` with cube and Jacoby off for `money_cubeless`), deterministic, noise 0, default move filter | `eval_level`, `parallel_threads`, `cubeful` (`False` for `money_cubeless`); `filter_max_moves` and `filter_threshold` are supported by the library but not exposed |
 | Time limit | None. Only the 180 s timeout per call, which aborts | None. Only the 180 s timeout per call, which aborts and terminates the worker |
 | Timing measurement in duels | CPU and wall time around each `nextturn()` of a bot turn (step 1) | CPU and wall time around each evaluation request in the worker (step 1) |

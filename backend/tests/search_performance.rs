@@ -129,6 +129,25 @@ async fn decision_search_stays_index_bound_on_a_large_library(pool: PgPool) {
         }
         // Only matches without a match analysis look for position analyses.
         assert_eq!(index_loops(candidates, "positions_match_id"), unanalyzed);
+        // Choosing a native analysis probes for a checkpointed decision. Only
+        // its checkpoint rows are counted to establish completeness.
+        let scans = nodes(&candidates[0]["Plan"]);
+        assert!(
+            scans.iter().all(|scan| {
+                scan["Relation Name"] != "move_analyses"
+                    || scan["Actual Rows"].as_u64().unwrap() <= 1
+            }),
+            "{candidates:#}"
+        );
+        // One supported imported evaluation is enough, even with 42 per match.
+        assert!(
+            scans.iter().any(|scan| {
+                scan["Index Name"] == "imported_analyses_reviewable_match"
+                    && scan["Actual Loops"].as_u64().unwrap() > 0
+                    && scan["Actual Rows"].as_u64().unwrap() <= 1
+            }),
+            "{candidates:#}"
+        );
         let count = plan("count");
         assert!(uses_index(count, "decision_index_player_loss"), "{count:#}");
         let page = plan("page");

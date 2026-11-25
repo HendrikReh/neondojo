@@ -1,5 +1,5 @@
-//! Retain GNUbg only for one atomic Sage action chain; never pool rule state.
-use super::{NativeRequest, NativeSnapshot};
+//! Retain GNUbg for one atomic play action chain or one seeded duel game.
+use super::{NativeRequest, NativeSnapshot, engine_match::GameDice};
 use crate::{
     engine::{Engine, Installation},
     engine_process::terminate_and_reap,
@@ -25,6 +25,8 @@ pub(super) struct RulesProcess {
     output: BufReader<ChildStdout>,
     diagnostics: Option<JoinHandle<Result<Vec<u8>>>>,
     sequence: u32,
+    action_limit: u32,
+    threads: u32,
 }
 
 async fn read_frame(reader: &mut BufReader<ChildStdout>) -> Result<Vec<u8>> {
@@ -42,20 +44,39 @@ async fn read_frame(reader: &mut BufReader<ChildStdout>) -> Result<Vec<u8>> {
 
 impl RulesProcess {
     pub(super) async fn start(engine: &Engine, sgf: Option<&str>) -> Result<Self> {
+        Self::start_with_dice(engine, sgf, None).await
+    }
+
+    pub(super) async fn start_with_dice(
+        engine: &Engine,
+        sgf: Option<&str>,
+        dice: Option<&GameDice>,
+    ) -> Result<Self> {
         let directory = tempfile::tempdir()?;
+        let command = "load python rules_worker.py\n";
+        let (commands, threads, action_limit) = if let Some(dice) = dice {
+            tokio::fs::write(directory.path().join("dice.txt"), dice.rng_file()?).await?;
+            (
+                engine.thread_commands(command)?,
+                u32::try_from(engine.calculation_threads())?,
+                super::engine_match::ACTION_LIMIT + 1,
+            )
+        } else {
+            (command.to_owned(), 1, 64)
+        };
         if let Some(sgf) = sgf {
             tokio::fs::write(directory.path().join("input.sgf"), sgf).await?;
         }
         for (name, content) in [
             ("adapter.py", include_str!("native.py")),
             ("rules_worker.py", include_str!("rules_worker.py")),
-            ("commands.txt", "load python rules_worker.py\n"),
+            ("commands.txt", commands.as_str()),
         ] {
             tokio::fs::write(directory.path().join(name), content).await?;
         }
         // The startup banner supplies the saved version check.
         let installation = Installation::bind(engine).await?;
-        let _cpu = engine.reserve_cpu(1).await?;
+        let _cpu = engine.reserve_cpu(threads).await?;
         let mut child = Command::new(installation.executable())
             .args(["-t", "-q", "-r", "-c", "commands.txt"])
             .current_dir(directory.path())
@@ -91,14 +112,19 @@ impl RulesProcess {
             output,
             diagnostics: Some(diagnostics),
             sequence: 0,
+            action_limit,
+            threads,
         };
         tokio::time::timeout(TIMEOUT, async {
-            let mut preamble = 0;
+            let mut preamble = Vec::new();
             let mut version = None;
             loop {
                 let line = read_frame(&mut process.output).await?;
-                preamble += line.len();
-                ensure!(preamble <= FRAME_LIMIT, "GNUbg rule startup exceeds limit");
+                preamble.extend_from_slice(&line);
+                ensure!(
+                    preamble.len() <= FRAME_LIMIT,
+                    "GNUbg rule startup exceeds limit"
+                );
                 if line.starts_with(b"GNU Backgammon ") {
                     ensure!(version.is_none(), "Duplicate GNUbg startup version");
                     version = Some(line.clone());
@@ -108,6 +134,9 @@ impl RulesProcess {
                 {
                     break;
                 }
+            }
+            if dice.is_some() {
+                engine.verify_threads(&String::from_utf8_lossy(&preamble))?;
             }
             let version = version.context("GNUbg startup version missing")?;
             process.installation.check_startup_banner(engine, &version)
@@ -124,8 +153,11 @@ impl RulesProcess {
         request: &NativeRequest<'_>,
     ) -> Result<(Self, NativeSnapshot, String)> {
         let (snapshot, sgf) = tokio::time::timeout(TIMEOUT, async {
-            let _cpu = self.engine.reserve_cpu(1).await?;
-            ensure!(self.sequence < 64, "GNUbg rule action chain exceeds limit");
+            let _cpu = self.engine.reserve_cpu(self.threads).await?;
+            ensure!(
+                self.sequence < self.action_limit,
+                "GNUbg rule action chain exceeds limit"
+            );
             self.sequence += 1;
             let mut frame =
                 serde_json::to_vec(&serde_json::json!({"id": self.sequence, "request": request}))?;

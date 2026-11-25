@@ -263,6 +263,28 @@ impl Engine {
         self.threads.unwrap_or(1)
     }
 
+    pub(crate) fn thread_commands(&self, commands: &str) -> Result<String> {
+        if let Some(threads) = self.threads {
+            ensure!(
+                threads >= crate::engines::EngineId::Gnubg.min_threads(),
+                "Unsupported GNUbg thread count: {threads}"
+            );
+            Ok(format!("set threads {threads}\nshow threads\n{commands}"))
+        } else {
+            Ok(commands.to_owned())
+        }
+    }
+
+    pub(crate) fn verify_threads(&self, output: &str) -> Result<()> {
+        if let Some(threads) = self.threads {
+            ensure!(
+                reported_threads(output) == Some(threads),
+                "GNUbg did not accept the requested {threads} calculation threads"
+            );
+        }
+        Ok(())
+    }
+
     pub(crate) fn with_move_filter(mut self, filter: Option<GnubgMoveFilter>) -> Self {
         self.move_filter = filter;
         self
@@ -454,20 +476,11 @@ impl Engine {
         let mut startup = installation
             .as_ref()
             .filter(|installation| installation.reports_version_at_startup());
-        let commands_path = directory.join("commands.txt");
-        if let Some(threads) = self.threads {
-            ensure!(
-                threads >= crate::engines::EngineId::Gnubg.min_threads(),
-                "Unsupported GNUbg thread count: {threads}"
-            );
-            tokio::fs::write(
-                commands_path,
-                format!("set threads {threads}\nshow threads\n{commands}"),
-            )
-            .await?;
-        } else {
-            tokio::fs::write(commands_path, commands).await?;
-        }
+        tokio::fs::write(
+            directory.join("commands.txt"),
+            self.thread_commands(commands)?,
+        )
+        .await?;
         let cpu = self
             .reserve_cpu(u32::try_from(self.calculation_threads())?)
             .await?;
@@ -553,12 +566,7 @@ impl Engine {
             work.await?
         };
         drop(cpu); // Wrapper rechecks start their own one-thread version process.
-        if let Some(threads) = self.threads {
-            ensure!(
-                reported_threads(&output) == Some(threads),
-                "GNUbg did not accept the requested {threads} calculation threads"
-            );
-        }
+        self.verify_threads(&output)?;
         // Discard output if an installation replacement raced the invocation;
         // no checkpoint or completed result may incorporate another version.
         if let Some(installation) = &installation {

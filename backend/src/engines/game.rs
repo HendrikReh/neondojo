@@ -71,7 +71,7 @@ impl SageEngine {
     async fn game(
         &self,
         game: &PreparedGame,
-        mut batch: Option<&mut super::process::VerifiedBatch>,
+        mut batch: Option<&mut super::process::VerifiedBatch<'_>>,
     ) -> Result<AnalyzedGame> {
         use super::{CheckerScope, CubeScope, SageCubeEvaluation, context, cube_request};
         // Record the SGF decision order while collecting independent engine rows.

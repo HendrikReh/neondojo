@@ -575,6 +575,33 @@ async fn explicit_imported_selection_is_bound_to_the_selected_source_revision(po
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn malformed_explicit_keys_leave_the_match_without_a_selected_analysis(pool: PgPool) {
+    let (_app, id, positions) = setup(&pool).await;
+    imported(&pool, id, positions[0]).await;
+    // The table's historical constraint permits 36 hex digits or hyphens.
+    // Resolving either prefix must compare the original key as text.
+    for prefix in ["job", "imported"] {
+        sqlx::query(
+            "INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2)
+                     ON CONFLICT(match_id) DO UPDATE SET analysis_id=excluded.analysis_id",
+        )
+        .bind(id)
+        .bind(format!("{prefix}:{}", "-".repeat(36)))
+        .execute(&pool)
+        .await
+        .unwrap();
+        let selected: Option<String> = sqlx::query_scalar(
+            "SELECT analysis_id FROM effective_analysis_selections WHERE match_id=$1",
+        )
+        .bind(id)
+        .fetch_optional(&pool)
+        .await
+        .unwrap();
+        assert_eq!(selected, None);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn summary_only_source_evaluations_remain_visible_but_legacy_placeholders_do_not(
     pool: PgPool,
 ) {

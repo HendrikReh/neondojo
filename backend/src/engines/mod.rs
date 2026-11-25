@@ -3,6 +3,7 @@ mod context;
 mod game;
 pub(crate) use game::GAME_TIMEOUT;
 mod process;
+pub(crate) use process::{DuelWorkers, VerifiedBatch};
 mod provider;
 pub(crate) mod replay;
 
@@ -386,7 +387,7 @@ impl SageEngine {
         match_id: &str,
     ) -> Result<Vec<SageCheckerCandidate>> {
         Ok(self
-            .checker_boards_scoped(position_id, match_id, None, CheckerScope::AllLegal)
+            .checker_boards_scoped(position_id, match_id, None, CheckerScope::AllLegal, None)
             .await?
             .0)
     }
@@ -400,16 +401,23 @@ impl SageEngine {
         force_board: Option<[i32; 26]>,
     ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
         let scope = force_board.map_or(CheckerScope::Searched, CheckerScope::Played);
-        self.checker_boards_scoped(position_id, match_id, dice, scope)
+        self.checker_boards_scoped(position_id, match_id, dice, scope, None)
             .await
     }
 
-    pub(crate) async fn top_two_checker_boards(
+    pub(crate) async fn play_checker_boards(
         &self,
         position_id: &str,
         match_id: &str,
+        top_two: bool,
+        batch: Option<&mut VerifiedBatch<'_>>,
     ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
-        self.checker_boards_scoped(position_id, match_id, None, CheckerScope::BotTopTwo)
+        let scope = if top_two {
+            CheckerScope::BotTopTwo
+        } else {
+            CheckerScope::Searched
+        };
+        self.checker_boards_scoped(position_id, match_id, None, scope, batch)
             .await
     }
 
@@ -419,9 +427,10 @@ impl SageEngine {
         match_id: &str,
         dice: Option<[i32; 2]>,
         scope: CheckerScope,
+        batch: Option<&mut VerifiedBatch<'_>>,
     ) -> Result<(Vec<SageCheckerCandidate>, Option<EngineCost>)> {
         let (payload, player) = Self::checker_request(position_id, match_id, dice, scope)?;
-        let (result, cost) = self.request_costed(payload).await?;
+        let (result, cost) = self.scoped_request(payload, batch).await?;
         Ok((Self::absolute_candidates(result, player)?, cost))
     }
 
@@ -656,10 +665,19 @@ impl SageEngine {
         position_id: &str,
         match_id: &str,
     ) -> Result<(SageCubeDecision, Option<EngineCost>)> {
+        self.play_cube_decision(position_id, match_id, None).await
+    }
+
+    pub(crate) async fn play_cube_decision(
+        &self,
+        position_id: &str,
+        match_id: &str,
+        batch: Option<&mut VerifiedBatch<'_>>,
+    ) -> Result<(SageCubeDecision, Option<EngineCost>)> {
         let context = context::Context::decode(match_id)?;
         let board = context.board(position_id, match_id)?;
         let (value, cost) = self
-            .request_costed(cube_request(&board, &context, CubeScope::Decision))
+            .scoped_request(cube_request(&board, &context, CubeScope::Decision), batch)
             .await?;
         let result: SageCubeDecision = serde_json::from_value(value)?;
         result.validate()?;
@@ -675,7 +693,7 @@ impl SageEngine {
         &self,
         operation: &str,
         rows: &[Value],
-        batch: Option<&mut process::VerifiedBatch>,
+        batch: Option<&mut VerifiedBatch<'_>>,
     ) -> Result<Vec<Value>> {
         let mut results = Vec::with_capacity(rows.len());
         if let Some(batch) = batch {
@@ -706,6 +724,21 @@ impl SageEngine {
             }
         }
         Ok(results)
+    }
+
+    async fn scoped_request(
+        &self,
+        payload: Value,
+        batch: Option<&mut VerifiedBatch<'_>>,
+    ) -> Result<(Value, Option<EngineCost>)> {
+        match batch {
+            Some(batch) => {
+                batch
+                    .request_costed(payload, Duration::from_secs(180))
+                    .await
+            }
+            None => self.request_costed(payload).await,
+        }
     }
 
     async fn request_costed(&self, payload: Value) -> Result<(Value, Option<EngineCost>)> {

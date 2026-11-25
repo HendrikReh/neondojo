@@ -210,8 +210,28 @@ async fn saved_position_browse_plans_on_a_large_library(pool: PgPool) {
         if filters.database_id.is_some() {
             let rows = relation_rows(&plan[0]["Plan"], "match_analysis_games");
             assert!(rows <= 10.0 * in_small as f64, "{name}: {rows} rows");
+        } else {
+            assert!(
+                plan.to_string().contains("analysis_selections_lookup"),
+                "{name}: {plan:#}"
+            );
         }
     }
+    // This match has both a complete native job and an explicitly selected
+    // import. Looking up the import must not visit its 45 positions for jobs.
+    let explicit: Value = sqlx::query_scalar(
+        "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) SELECT * FROM effective_analysis_selections
+         WHERE match_id=md5('match-5')::uuid",
+    )
+    .fetch_one(&mut *connection)
+    .await
+    .unwrap();
+    assert_eq!(explicit[0]["Plan"]["Actual Rows"], 1);
+    assert_eq!(
+        relation_rows(&explicit[0]["Plan"], "positions"),
+        0.0,
+        "{explicit:#}"
+    );
     let ids: Vec<Uuid> = sqlx::query_scalar(
         "SELECT position_uuid FROM saved_positions ORDER BY position_uuid LIMIT 100",
     )
