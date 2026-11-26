@@ -3,7 +3,8 @@
 //! The list reads the same selected analyses as the mistake groups, so a
 //! decision found here can be practiced through the same references.
 use super::{
-    MistakeKind, MistakePracticeQuestion, kind as mistake_kind, source::SourceDecision, validate,
+    MistakeKind, MistakePracticeQuestion, kind as mistake_kind, source::SourceDecision,
+    validate_loss, validate_player,
 };
 use crate::json_errors::{Json, Query};
 use crate::{
@@ -231,8 +232,9 @@ pub(super) struct Search {
 impl Search {
     /// Validate a request and resolve its player to the profile's names.
     pub(super) async fn new(pool: &PgPool, q: DecisionSearchQuery) -> ApiResult<Self> {
-        let (player, min_loss) = validate(Some(q.player.clone()), q.min_loss.or(Some(0.0)))?;
-        let player = crate::player_scope::names(pool, &player.unwrap_or_default()).await?;
+        let player = validate_player(&q.player)?;
+        let min_loss = validate_loss(q.min_loss.or(Some(0.0)))?;
+        let player = crate::player_scope::names(pool, &player).await?;
         if q.max_loss
             .is_some_and(|max| !max.is_finite() || max < min_loss)
         {

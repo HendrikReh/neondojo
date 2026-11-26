@@ -199,23 +199,23 @@ pub fn routes() -> Router<AppState> {
         .route("/api/study/mistakes/reveal", post(reveal))
         .route("/api/study/mistakes/attempt", post(attempt))
 }
-fn validate(player: Option<String>, loss: Option<f64>) -> ApiResult<(Option<String>, f64)> {
-    let player = player.map(|p| p.trim().to_owned());
-    if player
-        .as_ref()
-        .is_some_and(|p| p.is_empty() || p.chars().count() > 240 || p.chars().any(char::is_control))
-    {
+fn validate_player(player: &str) -> ApiResult<String> {
+    let player = player.trim();
+    if player.is_empty() || player.chars().count() > 240 || player.chars().any(char::is_control) {
         return Err(ApiError::invalid(
             "Choose a nonempty exact player name of at most 240 characters",
         ));
     }
+    Ok(player.to_owned())
+}
+fn validate_loss(loss: Option<f64>) -> ApiResult<f64> {
     let loss = loss.unwrap_or(0.08);
     if !loss.is_finite() || !(0.0..=1000.0).contains(&loss) {
         return Err(ApiError::invalid(
             "min_loss must be finite and between 0 and 1000",
         ));
     }
-    Ok((player, loss))
+    Ok(loss)
 }
 fn opportunity(d: &Decision) -> Option<MistakeKind> {
     match (d.kind.as_str(), d.played.as_str(), d.best.as_str()) {
@@ -281,7 +281,8 @@ async fn list(
     State(s): State<AppState>,
     Query(q): Query<MistakesQuery>,
 ) -> ApiResult<Json<Mistakes>> {
-    let (player, loss) = validate(q.player, q.min_loss)?;
+    let player = q.player.as_deref().map(validate_player).transpose()?;
+    let loss = validate_loss(q.min_loss)?;
     let players = players(&s.pool, q.database_id).await?;
     let mut result = Mistakes {
         players,
@@ -292,7 +293,7 @@ async fn list(
         unanalyzed_matches: 0,
         resolved_player: None,
     };
-    let configured = validate(q.resolve, None)?.0;
+    let configured = q.resolve.as_deref().map(validate_player).transpose()?;
     if let Some(shown) = player_scope::my_choice(&s.pool, configured).await? {
         result.resolved_player = result
             .players
@@ -329,8 +330,8 @@ async fn practice(
     State(s): State<AppState>,
     Json(q): Json<MistakePracticeRequest>,
 ) -> ApiResult<Json<MistakePractice>> {
-    let (player, loss) = validate(Some(q.player), q.min_loss)?;
-    let player = player.unwrap();
+    let player = validate_player(&q.player)?;
+    let loss = validate_loss(q.min_loss)?;
     let names = player_scope::names(&s.pool, &player).await?;
     let mut rows = load(&s.pool, q.database_id, None, Some(&names)).await?;
     if q.independent_only {

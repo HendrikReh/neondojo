@@ -2,7 +2,8 @@
 use super::*;
 use crate::search::literal_pattern;
 
-use sqlx::{Postgres, QueryBuilder, Row};
+use anyhow::Context;
+use sqlx::{Postgres, QueryBuilder};
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
@@ -362,26 +363,33 @@ pub(super) async fn load(
         })
         .collect();
     if !ids.is_empty() {
-        let memberships=sqlx::query("SELECT dc.card_id,d.id,d.name FROM deck_cards dc JOIN decks d ON d.id=dc.deck_id WHERE dc.card_id=ANY($1) ORDER BY lower(d.name),d.id").bind(&ids).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
-        for row in memberships {
+        let memberships: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
+            "SELECT dc.card_id,d.id,d.name FROM deck_cards dc JOIN decks d ON d.id=dc.deck_id WHERE dc.card_id=ANY($1) ORDER BY lower(d.name),d.id",
+        )
+        .bind(&ids)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+        for (card_id, id, name) in memberships {
             contexts
-                .get_mut(&row.get::<Uuid, _>("card_id"))
-                .unwrap()
+                .get_mut(&card_id)
+                .context("Deck membership returned for a card outside the page")?
                 .decks
-                .push(CardDeck {
-                    id: row.get("id"),
-                    name: row.get("name"),
-                });
+                .push(CardDeck { id, name });
         }
-        let notes=sqlx::query(&format!("SELECT c.id,a.tags,a.comment FROM learning_cards c JOIN annotations a ON {NOTE_SCOPE} WHERE c.id=ANY($1) ORDER BY a.target_kind,a.id")).bind(&ids).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
+        let notes: Vec<(Uuid, Vec<String>, String)> = sqlx::query_as(&format!(
+            "SELECT c.id,a.tags,a.comment FROM learning_cards c JOIN annotations a ON {NOTE_SCOPE} WHERE c.id=ANY($1) ORDER BY a.target_kind,a.id"
+        ))
+        .bind(&ids)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
         let mut tags: BTreeMap<Uuid, BTreeSet<String>> = BTreeMap::new();
-        for row in notes {
-            let id: Uuid = row.get("id");
-            tags.entry(id)
-                .or_default()
-                .extend(row.get::<Vec<String>, _>("tags"));
-            let comment: String = row.get("comment");
-            let context = contexts.get_mut(&id).unwrap();
+        for (id, values, comment) in notes {
+            let context = contexts
+                .get_mut(&id)
+                .context("Note returned for a card outside the page")?;
+            tags.entry(id).or_default().extend(values);
             if !comment.trim().is_empty() && context.comment_excerpt.chars().count() < 280 {
                 let separator = if context.comment_excerpt.is_empty() {
                     ""
@@ -395,7 +403,10 @@ pub(super) async fn load(
             }
         }
         for (id, values) in tags {
-            contexts.get_mut(&id).unwrap().tags = values.into_iter().collect();
+            contexts
+                .get_mut(&id)
+                .context("Note tags returned for a card outside the page")?
+                .tags = values.into_iter().collect();
         }
     }
     let items = rows

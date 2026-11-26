@@ -597,7 +597,10 @@ pub(super) async fn feedback(
                 decision.history_index = session.history.len();
                 session.pending_decision = Some(decision);
             }
-            let pending = session.pending_decision.as_mut().unwrap();
+            let pending = session
+                .pending_decision
+                .as_mut()
+                .context("Hint analysis did not create a pending decision")?;
             pending.revealed = true;
             pending.assisted = true;
         }

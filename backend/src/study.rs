@@ -4,6 +4,7 @@ use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     play::PlaySession,
 };
+use anyhow::Context;
 use axum::{Router, extract::State};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
@@ -189,7 +190,7 @@ async fn list_reports(
         rows.retain(|row| row.page_id != extra_group);
     }
     let next_cursor = if has_more {
-        let last = rows.last().expect("positive limit");
+        let last = rows.last().context("Study report page has no cursor row")?;
         Some(
             URL_SAFE_NO_PAD.encode(
                 serde_json::to_vec(&Cursor {

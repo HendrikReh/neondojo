@@ -91,7 +91,7 @@ pub(super) async fn action_one(
     }
     let item = match a.action.as_str() {
         "copy" | "move" => {
-            let target = a.target_database_id.unwrap();
+            let target = a.required_destination()?;
             if source_db == target {
                 return Ok(action_item(id, "same_database", None, Some(id)));
             }

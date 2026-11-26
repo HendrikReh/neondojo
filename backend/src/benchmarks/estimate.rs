@@ -70,21 +70,24 @@ fn same_hardware(a: &Machine, b: &Machine) -> bool {
         && a.logical_cpus == b.logical_cpus
         && a.memory_bytes == b.memory_bytes
 }
-fn compatible(run: &BenchmarkRun, machine: &Machine, move_filter: Option<GnubgMoveFilter>) -> bool {
+fn compatible_estimate(
+    run: BenchmarkRun,
+    machine: &Machine,
+    move_filter: Option<GnubgMoveFilter>,
+) -> Option<EstimateBenchmark> {
     let expected = reference_for(&run.engine_id, run.plies, move_filter);
-    let (Some(saved_reference), Some(protocol_snapshot)) = (&run.reference, &run.protocol) else {
-        return false;
-    };
-    let mut normalized = protocol_snapshot.clone();
+    let saved_reference = run.reference?;
+    let mut normalized = run.protocol?;
+    let finished_at = run.finished_at?;
     if !known_protocol_id(&run.engine_id, run.plies, move_filter, &normalized.id) {
-        return false;
+        return None;
     }
-    normalized.id = expected.protocol.id.clone();
+    let protocol_id = std::mem::replace(&mut normalized.id, expected.protocol.id.clone());
     normalized.game_timeout_seconds = expected.protocol.game_timeout_seconds;
-    let total = run.total_elapsed_ms.unwrap_or(f64::NAN);
-    let average = run.average_move_ms.unwrap_or(f64::NAN);
+    let total = run.total_elapsed_ms?;
+    let average = run.average_move_ms?;
     let expected_average = total / f64::from(expected.total_moves);
-    same_hardware(&run.machine, machine)
+    let matches = same_hardware(&run.machine, machine)
         && normalized == expected.protocol
         && saved_reference.id == expected.id
         && saved_reference.version == expected.version
@@ -94,12 +97,18 @@ fn compatible(run: &BenchmarkRun, machine: &Machine, move_filter: Option<GnubgMo
         && saved_reference.match_length == expected.match_length
         && run.completed_games == expected.total_games
         && run.analyzed_moves == expected.total_moves
-        && run.finished_at.is_some()
         && total.is_finite()
         && total > 0.0
         && average.is_finite()
         && average > 0.0
-        && (average - expected_average).abs() <= expected_average.abs() * 1e-9
+        && (average - expected_average).abs() <= expected_average.abs() * 1e-9;
+    matches.then_some(EstimateBenchmark {
+        id: run.id,
+        finished_at,
+        reference_name: saved_reference.name,
+        average_move_ms: average,
+        protocol_id,
+    })
 }
 
 async fn legacy_game_in_scope(sgf: String, game_no: i32) -> anyhow::Result<bool> {
@@ -278,22 +287,8 @@ pub(crate) async fn matching_benchmark(
     let mut rows=sqlx::query_as::<_,BenchmarkRun>("SELECT * FROM benchmark_runs WHERE status='completed' AND play_reference IS NULL AND engine_id=$1 AND engine_path=$2 AND engine_version=$3 AND plies=$4 AND machine->>'id'=$5 AND reference->>'sha256'=$6 ORDER BY finished_at DESC,created_at DESC,queue_no DESC")
         .bind(engine_id).bind(path).bind(version).bind(plies).bind(machine.id.to_string()).bind(expected.sha256).fetch(pool);
     while let Some(run) = rows.try_next().await? {
-        if compatible(&run, &machine, move_filter) {
-            return Ok(Some(EstimateBenchmark {
-                id: run.id,
-                finished_at: run.finished_at.expect("compatible measurement is finished"),
-                reference_name: run
-                    .reference
-                    .expect("compatible measurement has a reference")
-                    .name,
-                average_move_ms: run
-                    .average_move_ms
-                    .expect("compatible measurement has average"),
-                protocol_id: run
-                    .protocol
-                    .expect("compatible measurement has a protocol")
-                    .id,
-            }));
+        if let Some(estimate) = compatible_estimate(run, &machine, move_filter) {
+            return Ok(Some(estimate));
         }
     }
     Ok(None)

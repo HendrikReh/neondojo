@@ -235,6 +235,13 @@ pub struct LibraryAction {
     #[serde(default)]
     pub remove_tags: Vec<String>,
 }
+impl LibraryAction {
+    fn required_destination(&self) -> ApiResult<Uuid> {
+        self.target_database_id
+            .ok_or_else(|| ApiError::invalid("target_database_id is required"))
+    }
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct ActionItem {
     pub match_id: Uuid,
