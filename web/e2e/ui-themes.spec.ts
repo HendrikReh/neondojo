@@ -1,3 +1,4 @@
+import { mockSettings, settingsFixture } from './api-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { expect, test, type Page } from './test';
 import { readFileSync } from 'node:fs';
@@ -5,6 +6,7 @@ import { readFileSync } from 'node:fs';
 test.use({ viewport: { width: 1800, height: 1169 } });
 
 const initialSettings = {
+  ...settingsFixture(),
   version: 3,
   player_name: 'Appearance Player',
   analysis_engine: 'gnubg',
@@ -19,18 +21,14 @@ async function setup(page: Page, boardTheme = 'walnut') {
     conflict = false,
     loadFailure = false;
   const writes: unknown[] = [];
-  await page.route('**/api/settings', async (route) => {
-    if (route.request().method() === 'GET')
-      return route.fulfill(
-        loadFailure
-          ? { status: 503, json: { error: 'Unavailable' } }
-          : { json: saved },
-      );
-    writes.push(route.request().postDataJSON());
-    if (conflict)
-      return route.fulfill({ status: 409, json: { error: 'Version changed' } });
-    saved = { ...route.request().postDataJSON(), version: saved.version + 1 };
-    return route.fulfill({ json: saved });
+  await mockSettings(page, ({ request, respond, fail }) => {
+    if (request.method() === 'GET')
+      return loadFailure ? fail(503, { error: 'Unavailable' }) : respond(saved);
+    const body = request.postDataJSON();
+    writes.push(body);
+    if (conflict) return fail(409, { error: 'Version changed' });
+    saved = { ...saved, ...body, version: saved.version + 1 };
+    return respond(saved);
   });
   await page.route('**/api/configuration', async (route) => {
     if (route.request().method() !== 'PUT') return route.fallback();

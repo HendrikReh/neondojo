@@ -1,3 +1,4 @@
+import { mockSettings, settingsFixture } from './api-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import {
   openMatchAnalysisOptions,
@@ -62,10 +63,7 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   configuration.general.locale = 'de';
   configuration.analysis.plies = 2;
   const profiles = await profileBackend(page, { configuration });
-  const original = {
-    ...(await (await page.request.get('/api/settings')).json()),
-    analysis_plies: 2,
-  };
+  const original = settingsFixture(configuration);
   let dialogOpening = false,
     release = () => {},
     requested = () => {};
@@ -75,13 +73,13 @@ test('a delayed initial settings response cannot replace a newer saved profile',
   const started = new Promise<void>((resolve) => {
     requested = resolve;
   });
-  await page.route('**/api/settings', async (route) => {
+  await mockSettings(page, async ({ respond }) => {
     if (!dialogOpening) {
       requested();
       await gate;
     }
     // The first startup read can be aborted and replayed by StrictMode.
-    await route.fulfill({ json: original }).catch(() => {});
+    await respond(original).catch(() => {});
   });
   await page.goto('/');
   await started;

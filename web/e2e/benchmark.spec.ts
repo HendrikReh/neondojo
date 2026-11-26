@@ -1,5 +1,6 @@
 import {
   fulfillJson,
+  mockSettings,
   mockEngineCatalog,
   settingsFixture,
 } from './api-fixtures';
@@ -78,10 +79,9 @@ async function backend(page: Page, savedSettings = settings) {
   await page.route('**/api/health', (route) =>
     route.fulfill({ json: { status: 'ok' } }),
   );
-  await page.route('**/api/settings', (route) => {
-    if (route.request().method() !== 'GET')
-      writes.push(route.request().postDataJSON());
-    return fulfillJson<'AppSettings'>(route, savedSettings);
+  await mockSettings(page, ({ request, respond }) => {
+    if (request.method() !== 'GET') writes.push(request.postDataJSON());
+    return respond(savedSettings);
   });
   await mockEngineCatalog(page);
   await page.route('**/api/benchmarks/status', (route) =>

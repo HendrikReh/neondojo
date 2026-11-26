@@ -1,3 +1,4 @@
+import { mockSettings, settingsFixture } from './api-fixtures';
 import type { PlaySession } from '../src/workspaces/play/play-api';
 import { eitherOrder, joinedThirteenToEight } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
@@ -227,19 +228,15 @@ test('a bot response remains owned when switching workspaces while it is thinkin
 test('Settings persists the chosen bear-off direction for new matches', async ({
   page,
 }) => {
-  const settings = {
-    version: 1,
-    player_name: 'Player',
-    analysis_engine: 'gnubg',
-    analysis_plies: 3,
-    play_engine: 'gnubg',
-    play_plies: 2,
-    gnubg_path: '/test/gnubg',
-    bearoff_direction: 'right',
-  };
-  await page.route('**/api/settings', async (route) => {
-    await route.fulfill({ json: settings });
-  });
+  await mockSettings(page, ({ respond }) =>
+    respond({
+      ...settingsFixture(),
+      player_name: 'Player',
+      play_plies: 2,
+      gnubg_path: '/test/gnubg',
+      bearoff_direction: 'right',
+    }),
+  );
   await page.goto('/');
   await page
     .getByRole('button', { name: 'Settings', exact: true })

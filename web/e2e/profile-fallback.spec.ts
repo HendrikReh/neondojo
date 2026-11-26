@@ -1,3 +1,4 @@
+import { mockSettings } from './api-fixtures';
 import { expect, test } from './test';
 import {
   openFullMatchAnalysis,
@@ -29,11 +30,8 @@ for (const confirmed of [false, true]) {
       }),
     );
     if (!confirmed)
-      await page.route('**/api/settings', (route) =>
-        route.fulfill({
-          status: 503,
-          json: { error: 'Settings unavailable' },
-        }),
+      await mockSettings(page, ({ fail }) =>
+        fail(503, { error: 'Settings unavailable' }),
       );
     if (confirmed) await page.reload();
     else await page.goto('/');
