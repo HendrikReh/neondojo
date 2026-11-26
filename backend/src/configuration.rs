@@ -224,7 +224,7 @@ pub struct ConfigurationAppearance {
     /// Checker artwork theme. Omitted or null inherits the board theme.
     #[serde(default)]
     pub checker_theme: Option<String>,
-    /// Dice artwork theme. Omitted or null inherits the checker set.
+    /// Dice artwork theme. The "match-board" default follows the board. Omitted or null follows the checker set.
     #[serde(default)]
     pub dice_theme: Option<String>,
     /// Doubling cube artwork theme. Omitted or null inherits the board theme.

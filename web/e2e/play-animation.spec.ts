@@ -289,10 +289,13 @@ test('human roll starts moving immediately, settles on native dice, and animates
   );
   await rollDice(page).click();
   await expect(page.locator('.play-die-rolling')).toHaveCount(2);
-  const faces = await page.locator('.die-value').allTextContents();
-  await expect
-    .poll(() => page.locator('.die-value').allTextContents())
-    .not.toEqual(faces);
+  const dice = page.locator('.play-die-rolling');
+  const pipCounts = () =>
+    dice.evaluateAll((nodes) =>
+      nodes.map((die) => die.querySelectorAll('circle').length),
+    );
+  const faces = await pipCounts();
+  await expect.poll(pipCounts).not.toEqual(faces);
   release();
   await expect(page.locator('.play-board')).toHaveAttribute(
     'data-play-animation',

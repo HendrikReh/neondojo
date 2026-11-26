@@ -8,6 +8,7 @@
     "score",
     "loss"
   ],
+  "default_dice_theme": "match-board",
   "board_themes": [
     "forest",
     "walnut",

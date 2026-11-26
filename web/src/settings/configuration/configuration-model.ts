@@ -44,6 +44,8 @@ import configurationOptions from '../../../../shared/configuration-options.json'
 
 import type { components } from '../../generated-api';
 
+export const matchBoardDice = configurationOptions.default_dice_theme;
+
 export type ErrorThresholds = components['schemas']['ErrorThresholds'];
 export const defaultErrorThresholds: ErrorThresholds =
   configurationOptions.analysis_error_thresholds;
@@ -174,7 +176,7 @@ export const defaultConfiguration: ProfileConfiguration = {
     mode: 'system',
     board_theme: 'forest',
     checker_theme: null,
-    dice_theme: null,
+    dice_theme: matchBoardDice,
     cube_theme: null,
     bearoff_direction: 'right',
     board_view: 'arrows',
@@ -354,6 +356,7 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     invalid('appearance');
   for (const field of pieceThemeFields) {
     const theme = (c.appearance[field] ??= null);
+    if (field === 'dice_theme' && theme === matchBoardDice) continue;
     if (theme !== null && !configurationOptions.board_themes.includes(theme))
       invalid(`appearance.${field}`);
   }

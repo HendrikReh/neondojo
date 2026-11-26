@@ -24,6 +24,7 @@ import {
 } from './configuration/configuration-settings';
 import {
   defaultConfiguration,
+  matchBoardDice,
   defaultErrorThresholds,
   errorThresholdFields,
   validErrorThresholds,
@@ -180,7 +181,7 @@ export default function SettingsDialog({
   const board: BoardArtworkSelection = {
     theme,
     checkerTheme: null,
-    diceTheme: null,
+    diceTheme: matchBoardDice,
     cubeTheme: null,
   };
   const preferences = useLatest({ board, locale, appearance });
