@@ -60,14 +60,24 @@ backendTest(
       await dialog
         .getByRole('combobox', { name: 'Doubling cube' })
         .selectOption(cube);
-      const dice = moon && checkers !== moon.id ? moon.id : 'forest';
+      const dice =
+        board === 'Terra Rossa'
+          ? 'match-board'
+          : moon && checkers !== moon.id
+            ? moon.id
+            : 'forest';
       await dialog
         .getByRole('combobox', { name: 'Dice', exact: true })
         .selectOption(dice);
       const previewDie = dialog
         .locator('.settings-preview [data-die-owner]')
         .first();
-      if (dice === 'forest')
+      if (dice === 'match-board')
+        await expect(previewDie.locator('svg')).toHaveAttribute(
+          'data-dice-theme',
+          'terra-rossa',
+        );
+      else if (dice === 'forest')
         await expect(previewDie.locator('circle')).toHaveCount(3);
       else
         await expect(previewDie.locator('image')).toHaveAttribute(

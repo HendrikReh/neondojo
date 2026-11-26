@@ -3,7 +3,7 @@ import { createElement } from 'react';
 import { expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import PlayBoardDice from './PlayBoardDice';
-import { type BgBlitzTheme } from './themes';
+import { builtInThemes, type BgBlitzTheme } from './themes';
 import type { DiceInteraction } from './PlayDice';
 const controls: DiceInteraction = {
   canSwap: false,
@@ -22,12 +22,19 @@ const render = (
   interaction = controls,
   player = 0,
   dice: number[] = [],
+  diceId = theme?.id ?? 'forest',
 ) =>
   renderToStaticMarkup(
     createElement(
       'svg',
       {},
-      createElement(PlayBoardDice, { dice, player, interaction, theme }),
+      createElement(PlayBoardDice, {
+        dice,
+        player,
+        interaction,
+        theme,
+        diceSet: { id: diceId, archive: theme },
+      }),
     ),
   );
 it('renders one actual white/black opening die using each archive theme artwork', () => {
@@ -45,12 +52,21 @@ it('uses the ordinary built-in dice faces and opposite board halves for the open
   const html = render(undefined, controls, 1);
   expect(html).toContain('translate(420,219)');
   expect(html).toContain('translate(185,219)');
-  expect(html).toContain('white-checker');
-  expect(html).toContain('black-checker');
-  expect(html).toContain('⚅');
-  expect(html).toContain('⚁');
+  expect(html.match(/<circle /g)).toHaveLength(8);
   expect(html).toContain('White · 6');
   expect(html).toContain('Black · 2');
+});
+it('uses a distinct light and dark pip palette for every built-in board', () => {
+  const palettes = builtInThemes.map(({ id }) => {
+    const html = render(undefined, controls, 0, [], id);
+    const faceColors = [
+      ...html.matchAll(/offset="\.6" stop-color="([^"]+)"/g),
+    ].map((match) => match[1]);
+    expect(faceColors).toHaveLength(2);
+    expect(faceColors[0]).not.toEqual(faceColors[1]);
+    return faceColors.join('/');
+  });
+  expect(new Set(palettes).size).toBe(builtInThemes.length);
 });
 it('labels unrolled dice and reuses rolling animation for both player dice', () => {
   const html = render(undefined, {

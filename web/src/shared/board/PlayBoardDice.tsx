@@ -1,6 +1,6 @@
 import type { PieceSet } from './piece-artwork';
 import PlayDice, { type DiceInteraction } from './PlayDice';
-import ForestDie from './ForestDie';
+import ThemedDie from './ThemedDie';
 import Tooltip from '../ui/Tooltip';
 import type { BgBlitzTheme } from './themes';
 
@@ -17,7 +17,7 @@ export default function PlayBoardDice({
   player: number;
   interaction?: DiceInteraction;
   theme?: BgBlitzTheme;
-  diceSet?: PieceSet;
+  diceSet: PieceSet;
   onError?: () => void;
 }) {
   const opening = interaction?.opening;
@@ -42,7 +42,7 @@ export default function PlayBoardDice({
     const face = value ?? 1;
     const side = owner === 0 ? 'white' : 'black';
     const slot = theme?.dice[side][face - 1];
-    const image = diceSet ? diceSet.archive?.dice[side][face - 1] : slot;
+    const image = diceSet.archive?.dice[side][face - 1];
     const width = slot?.width ?? 33;
     const height = slot?.height ?? 33;
     const x = theme
@@ -103,34 +103,14 @@ export default function PlayBoardDice({
                   height={height}
                   onError={onError}
                 />
-              ) : diceSet?.id === 'forest' ? (
-                <ForestDie
+              ) : (
+                <ThemedDie
+                  theme={diceSet.id}
                   light={owner === 0}
                   value={value}
                   width={width}
                   height={height}
                 />
-              ) : (
-                <g
-                  className={diceSet ? `theme-${diceSet.id}` : undefined}
-                  transform={`scale(${width / 33} ${height / 33})`}
-                >
-                  <rect
-                    width="33"
-                    height="33"
-                    rx="6"
-                    className={owner === 0 ? 'white-checker' : 'black-checker'}
-                  />
-                  <text
-                    x="16.5"
-                    y="23"
-                    className={`die-value ${owner === 0 ? 'on-white' : 'on-black'}`}
-                  >
-                    {value === null
-                      ? '–'
-                      : ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][value]}
-                  </text>
-                </g>
               )}
             </PlayDice>
           </g>

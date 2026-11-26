@@ -322,6 +322,14 @@
       ]
     },
     {
+      "name": "dice can follow the board independently of the checkers",
+      "changes": [
+        { "path": "appearance.checker_theme", "value": "walnut" },
+        { "path": "appearance.dice_theme", "value": "match-board" }
+      ],
+      "expected_paths": ["appearance.checker_theme", "appearance.dice_theme"]
+    },
+    {
       "name": "missing and null artwork overrides use inherited themes",
       "changes": [
         {

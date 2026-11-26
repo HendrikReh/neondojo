@@ -436,9 +436,6 @@
   stroke: none;
   pointer-events: all;
 }
-.play-board .die-value {
-  font-size: 25px;
-}
 .play-opening-die-orientation {
   transform: scale(var(--play-flip-x), var(--play-flip-y));
   transform-box: fill-box;

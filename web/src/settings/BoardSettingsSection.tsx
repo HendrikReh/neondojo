@@ -1,3 +1,4 @@
+import { matchBoardDice } from './configuration/configuration-model';
 import { useRef, useLayoutEffect } from 'react';
 import type { Position } from '../shared/http/api';
 import Board from '../shared/board/Board';
@@ -105,7 +106,7 @@ export default function BoardSettingsSection({
                       theme={entry.id}
                       checkerTheme={null}
                       cubeTheme={null}
-                      diceTheme={null}
+                      diceTheme={matchBoardDice}
                       white=""
                       black=""
                     />
@@ -145,6 +146,9 @@ export default function BoardSettingsSection({
                       })
                     }
                   >
+                    {field === 'diceTheme' && (
+                      <option value={matchBoardDice}>{t('followBoard')}</option>
+                    )}
                     <option value="">
                       {t(
                         field === 'diceTheme'
@@ -152,11 +156,13 @@ export default function BoardSettingsSection({
                           : 'followBoard',
                       )}
                     </option>
-                    {value && !themes.some(({ id }) => id === value) && (
-                      <option value={value} disabled>
-                        {value} ({t('unavailable')})
-                      </option>
-                    )}
+                    {value &&
+                      value !== matchBoardDice &&
+                      !themes.some(({ id }) => id === value) && (
+                        <option value={value} disabled>
+                          {value} ({t('unavailable')})
+                        </option>
+                      )}
                     {themes.map((entry) => (
                       <option key={entry.id} value={entry.id}>
                         {entry.name}

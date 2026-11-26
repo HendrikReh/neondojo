@@ -2,6 +2,7 @@ import { useI18n } from '../../shared/i18n/i18n';
 import { errorThresholdLabels } from '../../shared/review/review-statistics-messages';
 import {
   normalizeConfiguration,
+  matchBoardDice,
   type ProfileConfiguration,
 } from '../configuration/configuration-model';
 import {
@@ -119,6 +120,8 @@ export default function ProfileSummary({
       path === 'appearance.checker_theme' ||
       path === 'appearance.cube_theme' ||
       path === 'appearance.dice_theme';
+    if (path === 'appearance.dice_theme' && value === matchBoardDice)
+      return settingsText('followBoard');
     if (pieceTheme && value == null)
       return settingsText(
         path === 'appearance.dice_theme' ? 'followCheckers' : 'followBoard',

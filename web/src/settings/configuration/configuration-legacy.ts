@@ -1,5 +1,6 @@
 import {
   defaultConfiguration,
+  matchBoardDice,
   normalizeConfiguration,
   type ProfileConfiguration,
 } from './configuration-model';
@@ -34,7 +35,7 @@ export function readLegacyConfiguration(
     board: {
       theme: readTheme(storage),
       checkerTheme: null,
-      diceTheme: null,
+      diceTheme: matchBoardDice,
       cubeTheme: null,
     },
   });

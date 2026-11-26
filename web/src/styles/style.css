@@ -339,11 +339,6 @@ main {
 .on-black {
   fill: #f4f3dc;
 }
-.die-value {
-  text-anchor: middle;
-  font-size: 29px;
-  font-family: Arial, sans-serif;
-}
 .player-bar {
   display: flex;
   justify-content: space-between;

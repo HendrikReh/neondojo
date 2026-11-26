@@ -1,4 +1,4 @@
-import { applyAndCloseSettings, closeSettings } from './settings-actions';
+import { closeSettings } from './settings-actions';
 import {
   openFullMatchAnalysis,
   submitFullMatchAnalysis,
@@ -220,7 +220,7 @@ const views = [
   });
 }
 
-test('comment editors, modal titles and study questions follow their roles while code and board fonts remain distinct', async ({
+test('comment editors, modal titles and study questions follow their roles with monospace code and graphical dice', async ({
   page,
 }) => {
   const { deckName } = await fixture(page);
@@ -268,12 +268,7 @@ test('comment editors, modal titles and study questions follow their roles while
     'font-size',
     '14px',
   );
-  // Walnut uses font-based dice faces.
-  await dialog.getByRole('button', { name: 'Board', exact: true }).click();
-  await dialog
-    .getByRole('combobox', { name: 'Dice', exact: true })
-    .selectOption('walnut');
-  await applyAndCloseSettings(dialog);
+  await closeSettings(dialog);
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page
     .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
@@ -316,12 +311,10 @@ test('comment editors, modal titles and study questions follow their roles while
     'font-size',
     '18px',
   );
-  const boardFont = await study
-    .locator('.board .die-value')
-    .first()
-    .evaluate((el) => getComputedStyle(el).fontFamily);
-  expect(boardFont).not.toBe(family);
-  expect(boardFont).toBe('Arial, sans-serif');
+  // The board draws dice pips independently of the UI font.
+  await expect(
+    study.locator('.board [data-die-owner] circle').first(),
+  ).toBeVisible();
 });
 
 test('analysis statistics and the move history use shared typography', async ({

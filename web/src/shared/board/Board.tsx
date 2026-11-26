@@ -1,3 +1,4 @@
+import { matchBoardDice } from '../../settings/configuration/configuration-model';
 import type { Position } from '../http/api';
 import { checkerCounts, pipCounts, matchContext } from './boardMath';
 
@@ -123,8 +124,14 @@ export default function Board({
   const checkerId =
     (checkerTheme === undefined ? appearance?.checker_theme : checkerTheme) ??
     theme;
+  const diceChoice =
+    diceTheme === undefined
+      ? appearance
+        ? appearance.dice_theme
+        : matchBoardDice
+      : diceTheme;
   const diceId =
-    (diceTheme === undefined ? appearance?.dice_theme : diceTheme) ?? checkerId;
+    diceChoice === matchBoardDice ? theme : (diceChoice ?? checkerId);
   const cubeId =
     (cubeTheme === undefined ? appearance?.cube_theme : cubeTheme) ?? theme;
   const selection = JSON.stringify([theme, checkerId, cubeId, diceId]);

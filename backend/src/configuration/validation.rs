@@ -180,6 +180,8 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         ("appearance.cube_theme", appearance.cube_theme.as_deref()),
     ] {
         if let Some(theme) = theme
+            && !(path == "appearance.dice_theme"
+                && Some(theme) == options["default_dice_theme"].as_str())
             && !board_themes.iter().any(|v| v.as_str() == Some(theme))
         {
             return Err(ConfigurationError::invalid(path, "Unknown board theme"));
