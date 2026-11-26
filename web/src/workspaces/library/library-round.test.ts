@@ -28,10 +28,6 @@ describe('library round filter', () => {
   it.each<[Locale, string]>([
     ['en', 'Round'],
     ['de', 'Runde'],
-    ['es', 'Ronda'],
-    ['fr', 'Ronde'],
-    ['pl', 'Runda'],
-    ['it', 'Turno'],
   ])('renders the round input in %s', (locale, label) => {
     vi.stubGlobal('localStorage', {
       getItem: (key: string) => (key === 'neondojo.locale' ? locale : null),

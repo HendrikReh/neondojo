@@ -32,8 +32,8 @@ it('encodes literal search characters and carries all filters into subsequent pa
     '/cards?limit=50&after=next&without_deck=true',
   );
 });
-it('provides translated card-search labels and localizes result counts in all six languages', () => {
-  for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it'] as const) {
+it('provides translated card-search labels and localizes result counts in both languages', () => {
+  for (const locale of ['en', 'de'] as const) {
     for (const key of [
       'allCards',
       'withoutDeck',

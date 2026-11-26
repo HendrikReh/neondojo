@@ -364,7 +364,7 @@ test('analysis statistics and the move history use shared typography', async ({
     '13px',
   );
   await page.getByRole('tab', { name: 'Statistics', exact: true }).click();
-  for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it'] as const) {
+  for (const locale of ['en', 'de'] as const) {
     if (locale !== 'en') {
       await page.locator('.settings-trigger').click();
       const settings = page.locator('.settings-dialog');
@@ -463,7 +463,7 @@ test('the shared role scale stays stable across desktop widths and every locale'
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
     await expect(page.locator('.analysis-workspace .board')).toBeVisible();
   }
-  for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it']) {
+  for (const locale of ['en', 'de']) {
     await reloadWithLocale(locale);
     for (const [id, , title, table] of views) {
       await page.locator(`#workspace-tab-${id}`).click();

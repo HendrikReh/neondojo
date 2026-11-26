@@ -198,23 +198,23 @@ test('waits for the saved language and artwork before mounting, and keeps the cu
   const board = analysis(page).locator('.bgblitz-board');
   await expect(board).toHaveAttribute('data-theme', theme!.id);
 
-  const polish = await holdModule(page, '**/locales/pl.ts*');
+  const english = await holdModule(page, '**/locales/en.ts*');
   const { dialog, locale } = await openSettings(page);
   await dialog
     .getByLabel(settingsText(locale, 'language'), { exact: true })
-    .selectOption('pl');
+    .selectOption('en');
   await dialog
     .getByRole('button', { name: profileText(locale, 'apply'), exact: true })
     .click();
-  await polish.requested;
+  await english.requested;
   await expect(page.locator('html')).toHaveAttribute('lang', 'de');
   await expect(
     dialog.getByLabel(settingsText('de', 'language'), { exact: true }),
   ).toBeVisible();
-  polish.release();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'pl');
+  english.release();
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await expect(
-    page.getByRole('dialog', { name: settingsText('pl', 'title') }),
+    page.getByRole('dialog', { name: settingsText('en', 'title') }),
   ).toBeVisible();
   await expect(board).toHaveAttribute('data-theme', theme!.id);
 });
@@ -336,13 +336,13 @@ test('bar, borne-off checkers and owned cube retain their position data in archi
   await assertArtwork(board);
 });
 
-test('all six languages switch complete views on save and persist with the theme', async ({
+test('both languages switch complete views on save and persist with the theme', async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await upload(page);
-  for (const locale of ['es', 'fr', 'pl', 'it', 'en', 'de'] as const) {
+  for (const locale of ['en', 'de'] as const) {
     await applyLanguage(page, locale);
     const navigation = page.locator('.app-tabs');
     await expect(
@@ -414,22 +414,25 @@ test('all six languages switch complete views on save and persist with the theme
   );
   await expect(bestMarker).toBeVisible({ timeout: 30_000 });
   await expect(bestMarker).toHaveText(candidateMessages.en.best);
-  await applyLanguage(page, 'fr');
-  await expect(bestMarker).toHaveText(candidateMessages.fr.best);
-  await page.screenshot({ path: 'test-results/french-ui.png', fullPage: true });
+  await applyLanguage(page, 'de');
+  await expect(bestMarker).toHaveText(candidateMessages.de.best);
+  await page.screenshot({
+    path: test.info().outputPath('german-ui.png'),
+    fullPage: true,
+  });
   await page.reload();
-  await expect(page.locator('html')).toHaveAttribute('lang', 'fr');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de');
   const { dialog, locale } = await openSettings(page);
   await expect(
     dialog.getByLabel(settingsText(locale, 'language'), { exact: true }),
-  ).toHaveValue('fr');
+  ).toHaveValue('de');
   await dialog
     .getByRole('button', { name: settingsText(locale, 'done'), exact: true })
     .click();
   await expect(dialog).not.toBeVisible();
   await reopenTutor(page);
   await expect(bestMarker).toBeVisible();
-  await expect(bestMarker).toHaveText(candidateMessages.fr.best);
+  await expect(bestMarker).toHaveText(candidateMessages.de.best);
   expect(errors).toEqual([]);
 });
 
@@ -459,9 +462,9 @@ test('a missing theme image shows a localized preview error and a working fallba
     catalogs.de['board.assetError'],
   );
   await expect(analysis(page).locator('.theme-forest .board')).toBeVisible();
-  await applyLanguage(page, 'es');
+  await applyLanguage(page, 'en');
   await expect(analysis(page).locator('.theme-load-error')).toHaveText(
-    catalogs.es['board.assetError'],
+    catalogs.en['board.assetError'],
   );
   await expect(analysis(page).locator('.theme-forest .board')).toBeVisible();
 });

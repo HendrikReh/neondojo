@@ -138,10 +138,6 @@ test('notes tabs support keyboard navigation and localized scope labels', async 
   await expect(matchTab).toBeFocused();
   const labels = [
     ['en', 'Match', 'Position'],
-    ['es', 'Encuentro', 'Posición'],
-    ['fr', 'Match', 'Position'],
-    ['pl', 'Mecz', 'Pozycja'],
-    ['it', 'Match', 'Posizione'],
     ['de', 'Match', 'Position'],
   ];
   for (const [locale, match, position] of labels) {

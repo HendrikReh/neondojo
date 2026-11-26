@@ -22,10 +22,6 @@ export default function LibraryColumnPicker<Column extends string>({
   const labels = {
     de: ['Nach oben', 'Nach unten'],
     en: ['Move up', 'Move down'],
-    es: ['Mover arriba', 'Mover abajo'],
-    fr: ['Monter', 'Descendre'],
-    it: ['Sposta su', 'Sposta giù'],
-    pl: ['Przenieś w górę', 'Przenieś w dół'],
   }[locale];
   const l = useLibraryText();
   const dismiss = useDetailsDismiss();

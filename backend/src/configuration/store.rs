@@ -32,7 +32,12 @@ pub(crate) async fn begin(state: &AppState) -> Result<Transaction<'_, Postgres>>
     lock(&mut tx).await?;
     Ok(tx)
 }
-fn configuration(value: Value) -> Result<ProfileConfiguration> {
+fn configuration(mut value: Value) -> Result<ProfileConfiguration> {
+    if let Some(locale) = value.pointer_mut("/general/locale")
+        && matches!(locale.as_str(), Some("es" | "fr" | "it" | "pl"))
+    {
+        *locale = Value::String("en".into());
+    }
     let mut config = serde_json::from_value(value)
         .map_err(|e| ConfigurationError::invalid("configuration", e.to_string()))?;
     upgrade_columns(&mut config);
@@ -440,6 +445,16 @@ mod tests {
         ))
         .unwrap();
         normalize(serde_json::from_value(fixture["base"].clone()).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn retired_locales_preserve_the_rest_of_a_saved_configuration() {
+        let expected = value(&changed());
+        for locale in ["es", "fr", "it", "pl"] {
+            let mut legacy = expected.clone();
+            legacy["general"]["locale"] = Value::String(locale.into());
+            assert_eq!(value(&configuration(legacy).unwrap()), expected);
+        }
     }
 
     /// Every profile setting differs from `base` and from the table defaults.

@@ -298,7 +298,7 @@ async fn send_to_anki_validates_the_selected_deck_before_connecting(pool: PgPool
     let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));
     let path = format!("/api/decks/{}/send-to-anki", Uuid::new_v4());
     assert_eq!(
-        call(app.clone(), "POST", &path, json!({"locale":"unsupported"}))
+        call(app.clone(), "POST", &path, json!({"locale":"fr"}))
             .await
             .0,
         422
@@ -1246,7 +1246,7 @@ async fn match_cards_include_cube_offers_responses_and_recover_original_boards(p
             app.clone(),
             "GET",
             &format!(
-                "/api/decks/{}/export.apkg?locale=xx",
+                "/api/decks/{}/export.apkg?locale=pl",
                 deck["id"].as_str().unwrap()
             ),
             Value::Null

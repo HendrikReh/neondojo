@@ -106,8 +106,8 @@ it('leaves missing analysis neutral rather than inventing zero loss', () => {
   expect(html).not.toContain('aria-current');
 });
 
-it('formats loss in all six supported interface languages', () => {
-  for (const locale of ['en', 'de', 'es', 'fr', 'pl', 'it'] as const) {
+it('formats loss in both interface languages', () => {
+  for (const locale of ['en', 'de'] as const) {
     const html = render(locale);
     expect(html).toContain(locale === 'en' ? '0.092' : '0,092');
     expect(html).not.toContain('undefined');

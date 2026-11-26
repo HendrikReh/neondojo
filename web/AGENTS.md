@@ -13,7 +13,7 @@ These rules extend the root [AGENTS.md](../AGENTS.md) for the React/TypeScript c
 - Prioritize desktop information density and mouse and keyboard operation. Keep additional mobile product work within explicit scope.
 - Follow [typography](../docs/typography.md) and [UI navigation](../docs/ui-navigation.md). Reuse tokens and components for color, spacing, and typography.
 - Keep header rendering and keyboard navigation driven by the same workspace order in `web/src/app/App.tsx`. When changing that order, update the [analysis reference](../docs/reference/analysis.md#analysis-workspace), [UI navigation](../docs/ui-navigation.md), and [text-navigation.spec.ts](e2e/text-navigation.spec.ts).
-- Localize visible text and format numbers consistently across all six languages: English, German, Spanish, French, Italian, and Polish.
+- Localize visible text and format numbers consistently in German and English.
 - Preserve focus, accessible labels, table controls, and unsaved drafts across loading, empty, error, conflict, and disabled states.
 - Visually verify affected desktop layouts at relevant logical viewports such as `1800 × 1169`, `2560 × 1440`, and `3840 × 2160`.
 

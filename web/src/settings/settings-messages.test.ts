@@ -1,15 +1,8 @@
 import { expect, it } from 'vitest';
 import { settingsMessages, settingsText } from './settings-messages';
 
-it('provides every settings label and dynamic argument in all six languages', () => {
-  expect(Object.keys(settingsMessages).sort()).toEqual([
-    'de',
-    'en',
-    'es',
-    'fr',
-    'it',
-    'pl',
-  ]);
+it('provides every settings label and dynamic argument in both languages', () => {
+  expect(Object.keys(settingsMessages).sort()).toEqual(['de', 'en']);
   const source = settingsMessages.en as Record<string, string>;
   const placeholders = (value: string) =>
     [...value.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
@@ -23,5 +16,5 @@ it('provides every settings label and dynamic argument in all six languages', ()
   expect(
     settingsText('de', 'checkSuccess', { version: 'GNUbg 1.08' }),
   ).toContain('GNUbg 1.08');
-  expect(settingsText('fr', 'preview', { theme: 'Rain' })).toContain('Rain');
+  expect(settingsText('en', 'preview', { theme: 'Rain' })).toContain('Rain');
 });

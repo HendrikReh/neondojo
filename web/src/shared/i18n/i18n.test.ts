@@ -25,7 +25,8 @@ describe('language selection and translation', () => {
   it('starts in English and preserves explicit saved preferences', () => {
     expect(readLocale({ getItem: () => null })).toBe('en');
     expect(readLocale({ getItem: () => 'de' })).toBe('de');
-    expect(readLocale({ getItem: () => 'fr' })).toBe('fr');
+    for (const locale of ['es', 'fr', 'it', 'pl'])
+      expect(readLocale({ getItem: () => locale })).toBe('en');
     expect(readLocale({ getItem: () => 'pt-BR' })).toBe('en');
     expect(
       readLocale({
@@ -36,26 +37,19 @@ describe('language selection and translation', () => {
     ).toBe('en');
   });
 
-  it('lists all six languages alphabetically by their visible names', () => {
-    expect(languages.map(({ name }) => name)).toEqual([
-      'Deutsch',
-      'English',
-      'Español',
-      'Français',
-      'Italiano',
-      'Polski',
-    ]);
+  it('lists both languages alphabetically by their visible names', () => {
+    expect(languages.map(({ name }) => name)).toEqual(['Deutsch', 'English']);
   });
 
   it('persists a supported language and tolerates disabled browser storage', () => {
     const values = new Map<string, string>();
-    saveLocale('pl', { setItem: (key, value) => values.set(key, value) });
+    saveLocale('de', { setItem: (key, value) => values.set(key, value) });
     expect(readLocale({ getItem: (key) => values.get(key) ?? null })).toBe(
-      'pl',
+      'de',
     );
-    expect(values.get('neondojo.locale')).toBe('pl');
+    expect(values.get('neondojo.locale')).toBe('de');
     expect(() =>
-      saveLocale('es', {
+      saveLocale('en', {
         setItem: () => {
           throw new Error('blocked');
         },
@@ -65,14 +59,14 @@ describe('language selection and translation', () => {
 
   it('renders every board description in the selected language without changing names', () => {
     expect(translate('en', 'board.points', { count: 7 })).toBe('7 points');
-    expect(translate('pl', 'board.pipsOff', { pips: 123, off: 2 })).toBe(
-      '123 pipsy · 2 zdjęte',
+    expect(translate('de', 'board.pipsOff', { pips: 123, off: 2 })).toBe(
+      '123 Pips · 2 aus',
     );
-    expect(translate('fr', 'board.cube', { value: 4, owner: 'Élodie' })).toBe(
-      'Videau 4, Élodie',
+    expect(translate('de', 'board.cube', { value: 4, owner: 'Élodie' })).toBe(
+      'Doppler 4, Élodie',
     );
     expect(
-      translate('it', 'board.label', {
+      translate('de', 'board.label', {
         player: 'Zoë',
         first: 3,
         second: 2,
@@ -99,21 +93,14 @@ describe('language selection and translation', () => {
     expect(translate('en', 'board.points', { count: 12345 })).toBe(
       '12,345 points',
     );
-    expect(localizeDecision('es', 'No double')).toBe('No doblar');
-    expect(localizeDecision('fr', 'Take')).toBe('Accepter');
-    expect(localizeDecision('it', 'Cannot move')).toBe('Nessuna mossa');
-    expect(localizeDecision('pl', '24/18(2) 13/7*')).toBe('24/18(2) 13/7*');
+    expect(localizeDecision('de', 'No double')).toBe('Nicht doppeln');
+    expect(localizeDecision('de', 'Take')).toBe('Annehmen');
+    expect(localizeDecision('de', 'Cannot move')).toBe('Aussetzen');
+    expect(localizeDecision('de', '24/18(2) 13/7*')).toBe('24/18(2) 13/7*');
   });
 
-  it('checks key and placeholder coverage for all six complete catalogs', () => {
-    expect(Object.keys(catalogs).sort()).toEqual([
-      'de',
-      'en',
-      'es',
-      'fr',
-      'it',
-      'pl',
-    ]);
+  it('checks key and placeholder coverage for both complete catalogs', () => {
+    expect(Object.keys(catalogs).sort()).toEqual(['de', 'en']);
     expect(() => validateCatalogs(catalogs)).not.toThrow();
     const broken = {
       ...catalogs,
@@ -175,10 +162,10 @@ describe('language selection and translation', () => {
     expect(formatLocalizedError('de', error)).toContain(
       'Anfrage fehlgeschlagen (HTTP 503)',
     );
-    expect(formatLocalizedError('es', error)).toContain(
-      'La solicitud ha fallado (HTTP 503)',
+    expect(formatLocalizedError('en', error)).toContain(
+      'Request failed (HTTP 503)',
     );
-    expect(formatLocalizedError('fr', error)).toContain('GNUbg unavailable');
+    expect(formatLocalizedError('de', error)).toContain('GNUbg unavailable');
     expect(translate('de', 'error.fileSize')).toBe(
       'Die Datei darf höchstens 16 MiB groß sein.',
     );
@@ -190,19 +177,10 @@ describe('plural forms for counted nouns', () => {
   const cards: Record<Locale, string> = {
     en: twoForms,
     de: '{count, plural, one {# Karte} other {# Karten}}',
-    es: '{count, plural, one {# tarjeta} other {# tarjetas}}',
-    fr: '{count, plural, one {# carte} other {# cartes}}',
-    it: '{count, plural, one {# scheda} other {# schede}}',
-    pl: '{count, plural, one {# karta} few {# karty} many {# kart}}',
   };
   const expected: Record<Locale, string[]> = {
     en: ['0 cards', '1 card', '2 cards', '5 cards', '22 cards'],
     de: ['0 Karten', '1 Karte', '2 Karten', '5 Karten', '22 Karten'],
-    es: ['0 tarjetas', '1 tarjeta', '2 tarjetas', '5 tarjetas', '22 tarjetas'],
-    // French counts zero as singular.
-    fr: ['0 carte', '1 carte', '2 cartes', '5 cartes', '22 cartes'],
-    it: ['0 schede', '1 scheda', '2 schede', '5 schede', '22 schede'],
-    pl: ['0 kart', '1 karta', '2 karty', '5 kart', '22 karty'],
   };
   const counts = [0, 1, 2, 5, 22];
 
@@ -216,13 +194,6 @@ describe('plural forms for counted nouns', () => {
   );
 
   it('uses the plural categories of each language', () => {
-    expect(counts.map((count) => pluralCategory('pl', count))).toEqual([
-      'many',
-      'one',
-      'few',
-      'many',
-      'few',
-    ]);
     expect(counts.map((count) => pluralCategory('de', count))).toEqual([
       'other',
       'one',
@@ -230,7 +201,6 @@ describe('plural forms for counted nouns', () => {
       'other',
       'other',
     ]);
-    expect(pluralCategory('fr', 0)).toBe('one');
   });
 
   it('writes the count in the language and keeps other parameters', () => {
@@ -249,21 +219,7 @@ describe('plural forms for counted nouns', () => {
         { matches: 1, total: 2000 },
       ),
     ).toBe('1 match of 2,000');
-    expect(
-      selectPluralForms(
-        'pl',
-        'Usuń {count, plural, one {# fiszkę} few {# fiszki} many {# fiszek}} z „{name}”',
-        { count: 3 },
-      ),
-    ).toBe('Usuń 3 fiszki z „{name}”');
     expect(placeholders(moved)).toEqual(['count', 'name']);
-  });
-
-  it('falls back to other, then many, for categories without their own form', () => {
-    expect(interpolate(twoForms, { count: 1_000_000 }, 'es')).toBe(
-      '1.000.000 cards',
-    );
-    expect(interpolate(cards.pl, { count: 1.5 }, 'pl')).toBe('1,5 kart');
   });
 
   it('rejects incomplete or misused plural messages', () => {
@@ -271,7 +227,6 @@ describe('plural forms for counted nouns', () => {
     expect(() => interpolate(twoForms, { count: '1' }, 'en')).toThrow(
       'must be a number',
     );
-    expect(() => validatePluralForms('pl', twoForms)).toThrow('few');
     expect(() =>
       validatePluralForms('de', '{count, plural, other {# Karten}}'),
     ).toThrow('one');
@@ -283,9 +238,9 @@ describe('plural forms for counted nouns', () => {
     expect(() => validateCatalogs(catalogs)).not.toThrow();
     const broken = {
       ...catalogs,
-      pl: { ...catalogs.pl, 'board.points': twoForms },
+      en: { ...catalogs.en, 'board.points': '{count, plural, one {# point}}' },
     };
-    expect(() => validateCatalogs(broken)).toThrow('few');
+    expect(() => validateCatalogs(broken)).toThrow('other');
   });
 });
 
@@ -309,7 +264,7 @@ describe('dateTimeFormat', () => {
       dateTimeFormat('de', { ...options }),
     );
     expect(dateTimeFormat('de', options)).not.toBe(
-      dateTimeFormat('fr', options),
+      dateTimeFormat('en', options),
     );
     expect(dateTimeFormat('de')).not.toBe(dateTimeFormat('de', options));
     expect(dateTimeFormat('de', { dateStyle: 'short' })).not.toBe(

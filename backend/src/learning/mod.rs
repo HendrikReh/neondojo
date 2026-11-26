@@ -30,6 +30,7 @@ pub use search::{
     CardBrowseContext, CardBrowseItem, CardDeck, CardKind, CardQuery, CardReviewState,
 };
 
+use crate::configuration::ConfigurationLocale;
 use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
@@ -378,7 +379,7 @@ pub struct ReviewResult {
 }
 #[derive(Debug, Deserialize, IntoParams, ToSchema)]
 pub struct ExportQuery {
-    pub locale: Option<String>,
+    pub locale: Option<ConfigurationLocale>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

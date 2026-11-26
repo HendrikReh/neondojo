@@ -11,7 +11,7 @@ describe.each([
 ])('%s', (_, catalogs) => {
   const { en, ...others } = catalogs as Record<string, Record<string, string>>;
   it('translates every English text into every language', () => {
-    expect(Object.keys(others).sort()).toEqual(['de', 'es', 'fr', 'it', 'pl']);
+    expect(Object.keys(others).sort()).toEqual(['de']);
     const missing = Object.entries(others).flatMap(([locale, texts]) =>
       Object.keys(en)
         .filter((key) => !texts[key]?.trim())

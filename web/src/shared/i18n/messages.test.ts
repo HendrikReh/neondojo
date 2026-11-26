@@ -2,14 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   formatMessage,
   placeholders,
-  requiredPluralCategories,
+  languages,
   validatePluralForms,
-  type Locale,
 } from './i18n-core';
 import { defineMessages } from './messages';
 import { localeMessages, type LocaleMessages } from './i18n-catalogs';
 
-const locales = Object.keys(requiredPluralCategories) as Locale[];
+const locales = languages.map(({ id }) => id);
 const pluralName = /\{([A-Za-z][A-Za-z0-9]*), plural,/g;
 
 /** Sample arguments: a number for each plural count, text otherwise. */

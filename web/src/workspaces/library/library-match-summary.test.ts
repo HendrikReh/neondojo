@@ -77,10 +77,6 @@ it('uses readable moneygame context and n/a without fabricating scores or PR', (
 it.each([
   ['en', 'Positions', 'Imported'],
   ['de', 'Positionen', 'Importiert'],
-  ['es', 'Posiciones', 'Importado'],
-  ['fr', 'Positions', 'Importée'],
-  ['pl', 'Pozycje', 'Zaimportowano'],
-  ['it', 'Posizioni', 'Importata'],
 ] as const)(
   'uses %s labels and analysis status',
   (locale, positions, status) => {

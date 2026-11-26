@@ -18,7 +18,7 @@ import {
 import { useResizableColumns } from '../../shared/hooks/useResizableColumns';
 
 // Without saved widths, these columns keep a width that fits their values and
-// headers in all six languages, and the flexible text columns share the rest.
+// headers in both languages, and the flexible text columns share the rest.
 // The numbers of flexible columns only count towards the table's minimum
 // width; library.css keeps Tags narrow until the window is wide.
 const automaticWidths: Partial<Record<LibraryColumn, number>> = {

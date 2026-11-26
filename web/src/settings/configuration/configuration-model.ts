@@ -30,7 +30,11 @@ import {
   type PositionFilterDefinition,
 } from '../../workspaces/positions/position-browser-api';
 import type { AnnotationFilters } from '../../workspaces/analysis/notes/annotation-api';
-import { isLocale, type Locale } from '../../shared/i18n/i18n-core';
+import {
+  defaultLocale,
+  isLocale,
+  type Locale,
+} from '../../shared/i18n/i18n-core';
 import {
   isPlayMode,
   type PlayMode,
@@ -151,7 +155,7 @@ export function openingBookConfigurationKey(
 
 export const defaultConfiguration: ProfileConfiguration = {
   schema_version: 1,
-  general: { player_name: '', locale: 'en', play_sounds: true },
+  general: { player_name: '', locale: defaultLocale, play_sounds: true },
   analysis: {
     engine: 'gnubg',
     plies: 3,
@@ -302,6 +306,8 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     );
   }
   const c = structuredClone(value) as unknown as ProfileConfiguration;
+  if (['es', 'fr', 'it', 'pl'].includes(c.general.locale))
+    c.general.locale = defaultLocale;
   if (c.schema_version !== 1) invalid('schema_version');
   if (
     typeof c.general.player_name !== 'string' ||

@@ -16,10 +16,6 @@ export const localeStorageKey = 'neondojo.locale';
 export const languages: ReadonlyArray<{ id: Locale; name: string }> = [
   { id: 'de', name: 'Deutsch' },
   { id: 'en', name: 'English' },
-  { id: 'es', name: 'Español' },
-  { id: 'fr', name: 'Français' },
-  { id: 'it', name: 'Italiano' },
-  { id: 'pl', name: 'Polski' },
 ];
 
 export function isLocale(value: unknown): value is Locale {
@@ -54,23 +50,6 @@ export const placeholders = (text: string) =>
         .filter((name): name is string => name !== undefined),
     ),
   ].sort();
-
-/**
- * Plural forms a counted message must supply. Polish distinguishes
- * 1 karta / 2 karty / 5 kart; the other languages only one and other.
- * A category without its own form uses `other`, then `many`.
- */
-export const requiredPluralCategories: Record<
-  Locale,
-  readonly Intl.LDMLPluralRule[]
-> = {
-  en: ['one', 'other'],
-  de: ['one', 'other'],
-  es: ['one', 'other'],
-  fr: ['one', 'other'],
-  it: ['one', 'other'],
-  pl: ['one', 'few', 'many'],
-};
 
 type PluralBlock = {
   start: number;
@@ -205,8 +184,7 @@ export function selectPluralForms(
     const count = params[name];
     if (typeof count !== 'number')
       throw new Error(`Plural parameter must be a number: ${name}`);
-    const form =
-      forms[pluralCategory(locale, count)] ?? forms.other ?? forms.many;
+    const form = forms[pluralCategory(locale, count)] ?? forms.other;
     if (form === undefined)
       throw new Error(`Missing plural form: ${locale} ${template}`);
     result +=
@@ -220,7 +198,7 @@ export function selectPluralForms(
 /** Throws if a plural block lacks a form this language needs. */
 export function validatePluralForms(locale: Locale, template: string) {
   for (const { forms } of pluralBlocks(template)) {
-    for (const category of requiredPluralCategories[locale]) {
+    for (const category of ['one', 'other'] as const) {
       if (forms[category] === undefined)
         throw new Error(
           `Missing plural form "${category}": ${locale} ${template}`,
