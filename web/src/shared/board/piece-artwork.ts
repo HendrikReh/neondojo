@@ -6,12 +6,6 @@ const artwork = import.meta.glob<string>('./checkers/*.webp', {
   query: '?url&no-inline',
 });
 
-function checkerArtwork(theme: string, white: boolean, variant = 0) {
-  return artwork[
-    `./checkers/${theme}-${white ? 'white' : 'black'}-${variant % 2}.webp`
-  ];
-}
-
 export interface PieceSet {
   id: string;
   archive?: BgBlitzTheme;
@@ -23,10 +17,11 @@ export function pieceSet(id: string, archives: BgBlitzTheme[]): PieceSet {
 }
 
 export function checkerSource(set: PieceSet, white: boolean, variant = 0) {
-  const images = set.archive?.checkers[white ? 'white' : 'black'];
+  const side = white ? 'white' : 'black';
+  const images = set.archive?.checkers[side];
   return images
     ? images[variant % images.length].src
-    : checkerArtwork(set.id, white, variant);
+    : artwork[`./checkers/${set.id}-${side}-${variant % 2}.webp`];
 }
 
 export function cubeImage(
