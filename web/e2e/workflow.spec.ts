@@ -54,7 +54,9 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
   await settings.getByRole('button', { name: 'Brett', exact: true }).click();
   await settings.getByRole('button', { name: 'Walnut', exact: true }).click();
   await applyAndCloseSettings(settings, 'de');
-  await expect(page.locator('.analysis-workspace .theme-walnut')).toBeVisible();
+  await expect(
+    page.locator('.analysis-workspace .board-shell.theme-walnut'),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Nächster Zug' }).click();
   await expect(page.locator('.board-navigation')).toContainText('8/4 6/4');
   await expect(
@@ -86,7 +88,9 @@ test('real import, search, GNUbg analysis, distribution, themes and mobile layou
     fullPage: true,
   });
   await page.reload();
-  await expect(page.locator('.analysis-workspace .theme-walnut')).toBeVisible();
+  await expect(
+    page.locator('.analysis-workspace .board-shell.theme-walnut'),
+  ).toBeVisible();
   await page.getByRole('tab', { name: 'Matchdatenbank', exact: true }).click();
   await page.getByLabel('Matches durchsuchen').fill('Tutor Demo');
   await page

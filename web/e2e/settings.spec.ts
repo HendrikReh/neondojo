@@ -668,7 +668,9 @@ test('English default, alphabetical languages, draft cancellation, focus trap an
     themes.length,
   );
   await dialog.getByRole('button', { name: 'Walnut', exact: true }).click();
-  await expect(dialog.locator('.settings-preview .theme-walnut')).toBeVisible();
+  await expect(
+    dialog.locator('.settings-preview .board-shell.theme-walnut'),
+  ).toBeVisible();
   await dialog.getByRole('button', { name: 'Apply', exact: true }).focus();
   await page.keyboard.press('Tab');
   await expect(
@@ -679,7 +681,9 @@ test('English default, alphabetical languages, draft cancellation, focus trap an
   await expect(guard).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(guard).toBeHidden();
-  await expect(dialog.locator('.settings-preview .theme-walnut')).toBeVisible();
+  await expect(
+    dialog.locator('.settings-preview .board-shell.theme-walnut'),
+  ).toBeVisible();
   await dialog
     .getByRole('button', { name: 'Close settings', exact: true })
     .click();

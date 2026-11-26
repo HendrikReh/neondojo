@@ -274,7 +274,7 @@ for (const theme of ['graphite', 'club', 'paper'] as const) {
       );
       await dialog.getByRole('button', { name: 'Board', exact: true }).click();
       await expect(
-        dialog.locator('.settings-preview .theme-walnut'),
+        dialog.locator('.settings-preview .board-shell.theme-walnut'),
       ).toBeVisible();
       await applyAndCloseSettings(dialog);
       await expect(page.locator('html')).toHaveAttribute(
