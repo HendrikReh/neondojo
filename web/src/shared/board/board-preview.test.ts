@@ -5,7 +5,7 @@ import Board from './Board';
 import { I18nProvider } from '../i18n/i18n';
 import { moveArrowGeometry } from './MoveArrows';
 import { projectMove, type BoardView } from './move-preview';
-import { loadArchiveThemes, stackGeometry } from './themes';
+import { builtInThemes, loadArchiveThemes, stackGeometry } from './themes';
 import type { Position } from '../http/api';
 
 const archiveThemes = await loadArchiveThemes();
@@ -57,7 +57,7 @@ test('retains the existing board when no preview props are supplied', () => {
 });
 
 test('before, arrows and after distinguish original checker placement and dice', () => {
-  for (const theme of ['forest', 'walnut', 'slate']) {
+  for (const { id: theme } of builtInThemes) {
     const source = position();
     const before = render(source, theme, 'before');
     const arrows = render(source, theme, 'arrows');

@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 648 396">
+  <defs>
+    <linearGradient id="lacquer" x2=".85" y2=".6">
+      <stop stop-color="#24214b"/><stop offset=".56" stop-color="#30325f"/><stop offset="1" stop-color="#172d49"/>
+    </linearGradient>
+    <pattern id="lattice" width="16" height="16" patternUnits="userSpaceOnUse">
+      <circle cx="8" cy="8" r=".85" fill="#acdced" opacity=".26"/>
+    </pattern>
+    <g id="trace" fill="none" stroke-linejoin="round">
+      <path d="M0 121h42l33 33h53m-128-22h38l34 34h28l13 13h43M0 146h33l35 35h17"/>
+      <g fill="#292c55"><circle cx="131" cy="154" r="3"/><circle cx="159" cy="179" r="3"/><circle cx="88" cy="181" r="3"/></g>
+    </g>
+  </defs>
+  <rect width="648" height="396" fill="url(#lacquer)"/>
+  <rect width="648" height="396" fill="url(#lattice)"/>
+  <g stroke-width="1.4" opacity=".52">
+    <use href="#trace" stroke="#70d5e1"/><use href="#trace" transform="rotate(180 324 198)" stroke="#b799e6"/>
+  </g>
+</svg>

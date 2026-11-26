@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import BuiltInChecker from './BuiltInChecker';
 import { checkerCounts } from './boardMath';
 import type { CheckerFrame } from './play-animation';
 import { pointColumns, stackGeometry, type BgBlitzTheme } from './themes';
@@ -52,8 +53,10 @@ export function checkerCenter(
 export default function PlayCheckerMotion({
   frame,
   theme,
+  builtInTheme,
 }: {
   frame: CheckerFrame;
+  builtInTheme?: string;
   theme?: BgBlitzTheme;
 }) {
   return (
@@ -71,6 +74,8 @@ export default function PlayCheckerMotion({
               ? theme.checkers.white
               : theme.checkers.black)[0]
           : undefined;
+        const sourceCount = Math.abs(frame.before[motion.from] ?? 0);
+        const topIndex = Math.max(0, Math.min(5, sourceCount) - 1);
         return (
           <g
             key={index}
@@ -96,15 +101,11 @@ export default function PlayCheckerMotion({
                 height={image.height}
               />
             ) : (
-              <>
-                <circle
-                  r="18.7"
-                  className={
-                    motion.player === 0 ? 'white-checker' : 'black-checker'
-                  }
-                />
-                <circle r="13.5" className="checker-ring" />
-              </>
+              <BuiltInChecker
+                white={motion.player === 0}
+                theme={builtInTheme}
+                variant={Math.abs(motion.from) + topIndex}
+              />
             )}
           </g>
         );

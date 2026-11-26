@@ -50,6 +50,7 @@ import '../app/workspace.css';
 import '../app/home.css';
 import '../workspaces/positions/decision-search.css';
 import './style.css';
+import '../shared/board/board-finishes.css';
 import './desktop-analysis.css';
 import './typography.css';
 import './text-navigation.css';
