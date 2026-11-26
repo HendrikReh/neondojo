@@ -306,6 +306,9 @@
 .settings-preview h3 {
   margin-bottom: 10px;
 }
+.settings-preview .settings-field-pair {
+  margin-bottom: 8px;
+}
 .settings-preview .player-bar {
   font-size: var(--font-size-meta);
 }
