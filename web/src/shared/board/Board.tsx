@@ -4,7 +4,9 @@ import { checkerCounts, pipCounts, matchContext } from './boardMath';
 import { useEffect, useId, useState } from 'react';
 import { useI18n } from '../i18n/i18n';
 import { useBoardReviewText } from './board-review-messages';
-import BuiltInChecker, { checkerArtwork } from './BuiltInChecker';
+import { useConfirmedConfiguration } from '../../settings/configuration/ConfigurationProvider';
+import { checkerSource, pieceSet } from './piece-artwork';
+import BuiltInChecker from './BuiltInChecker';
 import BoardFinish, { boardSurface, finishPaint } from './BoardFinish';
 import BgBlitzBoard from './BgBlitzBoard';
 import PlayBoardDice from './PlayBoardDice';
@@ -67,6 +69,8 @@ export default function Board({
   white,
   black,
   theme,
+  checkerTheme,
+  cubeTheme,
   preview,
   previewMode,
   previewLabel,
@@ -79,6 +83,8 @@ export default function Board({
   white: string;
   black: string;
   theme: Theme;
+  checkerTheme?: string | null;
+  cubeTheme?: string | null;
   preview?: MovePreview;
   previewMode?: BoardView;
   previewLabel?: string;
@@ -90,18 +96,23 @@ export default function Board({
 }) {
   const { t, formatNumber, formatPoints } = useI18n();
   const review = useBoardReviewText();
+  const appearance = useConfirmedConfiguration()?.appearance;
+  const checkerId = (checkerTheme === undefined ? appearance?.checker_theme : checkerTheme) ?? theme;
+  const cubeId = (cubeTheme === undefined ? appearance?.cube_theme : cubeTheme) ?? theme;
+  const selection = JSON.stringify([theme, checkerId, cubeId]);
   const [failedTheme, setFailedTheme] = useState('');
-  useEffect(() => setFailedTheme(''), [theme]);
+  useEffect(() => setFailedTheme(''), [selection]);
+  const failed = failedTheme === selection;
   const finishId = useId();
-  const surface = boardSurface(theme);
-  const archiveSelected = theme.startsWith('bgblitz:');
-  const archiveThemes = useArchiveThemes(archiveSelected);
-  const archive = archiveThemes.find((entry) => entry.id === theme);
-  const custom = failedTheme === theme ? undefined : archive;
-  const blackMarker =
-    custom?.checkers.black[0].src ?? checkerArtwork(theme, false);
-  const whiteMarker =
-    custom?.checkers.white[0].src ?? checkerArtwork(theme, true);
+  const surface = failed ? undefined : boardSurface(theme);
+  const archiveThemes = useArchiveThemes([theme, checkerId, cubeId].some(id => id.startsWith('bgblitz:')));
+  const boardSet = pieceSet(failed ? 'forest' : theme, archiveThemes);
+  const custom = boardSet.archive;
+  const checkerSet = pieceSet(failed ? 'forest' : checkerId, archiveThemes);
+  const cubeSet = pieceSet(failed ? 'forest' : cubeId, archiveThemes);
+  const blackMarker = checkerSource(checkerSet, false);
+  const whiteMarker = checkerSource(checkerSet, true);
+  const assetFailed = () => setFailedTheme(selection);
   const effectiveMode = preview?.ok ? (previewMode ?? 'before') : 'before';
   const displayedPosition = displayedBoardPosition(
     position,
@@ -154,7 +165,8 @@ export default function Board({
   const label = previewLabel ? `${previewLabel}. ${stateLabel}` : stateLabel;
   return (
     <div
-      className={`board-shell theme-${custom ? 'bgblitz' : archiveSelected ? 'forest' : theme}`}
+      className={`board-shell theme-${custom ? 'bgblitz' : boardSet.id}`}
+      data-checker-theme={checkerSet.id}
       data-board-finish={surface ? theme : undefined}
       data-preview-mode={effectiveMode}
     >
@@ -165,10 +177,10 @@ export default function Board({
               className="theme-player-checker"
               src={blackMarker}
               alt=""
-              onError={custom ? () => setFailedTheme(theme) : undefined}
+              onError={assetFailed}
             />
           ) : (
-            <i className="player-dot black" />
+            <i className={`theme-${checkerSet.id} player-dot black piece-marker`} />
           )}
           {black} <small>· {formatPoints(context.scores[1])}</small>
         </span>
@@ -181,7 +193,7 @@ export default function Board({
           </span>
         )}
       </div>
-      {failedTheme === theme && (
+      {failed && (
         <p className="theme-load-error" role="alert">
           {t('board.assetError')}
         </p>
@@ -190,6 +202,8 @@ export default function Board({
         <BgBlitzBoard
           position={displayedPosition}
           theme={custom}
+          checkerSet={checkerSet}
+          cubeSet={cubeSet}
           label={label}
           cubeLabel={cubeLabel}
           cube={{
@@ -197,7 +211,7 @@ export default function Board({
             owner: cubeOwner,
             pending: cubePending,
           }}
-          onError={() => setFailedTheme(theme)}
+          onError={assetFailed}
           interaction={interaction}
           animation={animation}
           previewSteps={
@@ -287,26 +301,12 @@ export default function Board({
             value={displayedCube}
             owner={cubeOwner}
             pending={cubePending}
-          >
-            <rect
-              width="24"
-              height="24"
-              rx="3"
-              fill="#fff8e8"
-              stroke="#a2ac92"
-            />
-            <text
-              x="12"
-              y="17"
-              textAnchor="middle"
-              fontSize="13"
-              fill="#3b5944"
-              fontWeight="600"
-            >
-              {displayedCube === 1 ? '64' : displayedCube}
-            </text>
-          </PlayCube>
+            artwork={cubeSet}
+            onError={assetFailed}
+          />
           <PlayBoardDice
+            checkerSet={checkerSet}
+            onError={assetFailed}
             dice={displayedPosition.dice}
             player={position.player}
             interaction={interaction?.dice}
@@ -334,10 +334,10 @@ export default function Board({
               className="theme-player-checker"
               src={whiteMarker}
               alt=""
-              onError={custom ? () => setFailedTheme(theme) : undefined}
+              onError={assetFailed}
             />
           ) : (
-            <i className="player-dot white" />
+            <i className={`theme-${checkerSet.id} player-dot white piece-marker`} />
           )}
           {white}{' '}
           <small>

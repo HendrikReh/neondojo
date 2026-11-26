@@ -1,3 +1,4 @@
+import { cubeImage, type PieceSet } from './piece-artwork';
 import type { Position } from '../http/api';
 import { checkerCounts } from './boardMath';
 import {
@@ -18,6 +19,8 @@ import type { MovePreviewStep } from './move-preview';
 export default function BgBlitzBoard({
   position,
   theme,
+  checkerSet,
+  cubeSet,
   label,
   cubeLabel,
   cube,
@@ -28,6 +31,8 @@ export default function BgBlitzBoard({
 }: {
   position: Position;
   theme: BgBlitzTheme;
+  checkerSet: PieceSet;
+  cubeSet: PieceSet;
   label: string;
   cubeLabel: string;
   cube: { value: number; owner: number | null; pending: boolean };
@@ -114,15 +119,9 @@ export default function BgBlitzBoard({
   }
   const numbers = theme.numbers[position.player === 0 ? 'RLD' : 'RLU'];
   const { value: displayedCube, owner: cubeOwner, pending: cubePending } = cube;
-  const cubeValue = displayedCube === 1 ? 64 : displayedCube;
-  const cubeImage =
-    theme.cubes[
-      !cubePending && cubeOwner === null && displayedCube === 1
-        ? '64_r'
-        : String(cubeValue)
-    ] || theme.cubes[String(cubeValue)];
-  const cubeWidth = cubeImage?.width ?? 64;
-  const cubeHeight = cubeImage?.height ?? 64;
+  const cubeSlot = cubeImage(theme, displayedCube, cubeOwner, cubePending);
+  const cubeWidth = cubeSlot?.width ?? 64;
+  const cubeHeight = cubeSlot?.height ?? 64;
   const barX = theme.columns[7] + theme.checkers.white[0].width / 2;
   const configuredCubeX = cubeOwner === 0 ? theme.cubeRightX : theme.cubeLeftX;
   // XML positions are image origins; only the centered/default cube is centered on the bar.
@@ -172,32 +171,11 @@ export default function BgBlitzBoard({
         value={displayedCube}
         pending={cubePending}
         owner={cubeOwner}
-      >
-        {cubeImage ? (
-          artwork(cubeImage, cubeX, cubeTop)
-        ) : (
-          <g transform={`translate(${cubeX},${cubeTop})`}>
-            <rect
-              width={cubeWidth}
-              height={cubeHeight}
-              rx="8"
-              fill="#fffbed"
-              stroke="#172b22"
-              strokeWidth="2"
-            />
-            <text
-              x="32"
-              y="42"
-              textAnchor="middle"
-              fontSize="23"
-              fill="#172b22"
-            >
-              {cubeValue}
-            </text>
-          </g>
-        )}
-      </PlayCube>
+        artwork={cubeSet}
+        onError={onError}
+      />
       <PlayBoardDice
+        checkerSet={checkerSet}
         dice={position.dice}
         player={position.player}
         interaction={interaction?.dice}

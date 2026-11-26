@@ -112,3 +112,12 @@
 [data-board-finish] .on-black {
   fill: var(--white);
 }
+
+.player-dot.piece-marker.black {
+  background: var(--black);
+  border-color: var(--black);
+}
+
+.player-dot.piece-marker.white {
+  background: var(--white);
+}
