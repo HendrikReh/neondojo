@@ -561,6 +561,14 @@ export default function App() {
           >
             {t('app.documentation')}
           </a>
+          <a
+            className="documentation-link"
+            href="https://hendrikreh.github.io/neongammon/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('app.neongammonManual')}
+          </a>
         </div>
         <MatchImportInputs importer={importer} />
       </header>

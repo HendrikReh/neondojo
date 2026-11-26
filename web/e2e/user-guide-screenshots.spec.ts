@@ -507,6 +507,7 @@ test('recapture the user guide screenshots', async ({ page }) => {
       { n: 8, loc: header.getByRole('button', { name: /^Profile/ }).first(), at: 'lm', dx: -14 },
       { n: 9, loc: header.getByRole('button', { name: 'Settings' }), at: 'ct', dy: 2 },
       { n: 10, loc: header.getByRole('link', { name: 'Documentation' }), at: 'ct', dy: -5 },
+      { n: 11, loc: header.getByRole('link', { name: 'NeonGammon manual' }), at: 'ct', dy: -5 },
     ]);
     const headerBox = await header.boundingBox();
     await save(page, 'header', {

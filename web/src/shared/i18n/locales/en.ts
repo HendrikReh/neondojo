@@ -257,6 +257,7 @@ export default {
     'board.centered': 'centered',
     'board.themeSource': 'BGBlitz · {name}',
     'app.documentation': 'Documentation',
+    'app.neongammonManual': 'NeonGammon manual',
     'app.home': 'NeonDojo home',
     'app.tagline': 'EVERY MOVE, UNDERSTOOD.',
     'app.libraryEyebrow': 'YOUR LIBRARY',
