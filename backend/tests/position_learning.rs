@@ -938,6 +938,7 @@ async fn catalog_consumers_keep_open_sage_checkpoint_provenance_without_job_summ
                 .unwrap();
         assert_eq!(engine, "NeonGammon");
     }
+    super::recurring_mistakes::prepare_decision_index(&pool).await;
     let (_, groups) = call(
         app.clone(),
         "GET",

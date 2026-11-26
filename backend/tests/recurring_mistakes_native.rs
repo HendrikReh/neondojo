@@ -61,6 +61,7 @@ async fn real_native_analysis_flows_into_answer_hidden_checker_and_cube_practice
     let completed = store::get_job(&pool, job.id).await.unwrap().unwrap();
     assert_eq!(completed.status, "completed", "{:?}", completed.error);
 
+    super::recurring_mistakes::prepare_decision_index(&pool).await;
     let mut checker_seen = false;
     let mut response_seen = false;
     for (name, color) in [("Alice", 0), ("Bob", 1)] {

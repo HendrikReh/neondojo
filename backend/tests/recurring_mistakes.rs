@@ -9,6 +9,14 @@ fn app(pool: &PgPool) -> axum::Router {
 }
 
 const SOURCE: &str = "(;GM[6]PW[Alice]PB[Bob]MI[length:7];W[31hefe];B[double];W[take];B[42qusu])(;GM[6]MI[length:7][ws:2][bs:3]AE[a:y]AW[e]AB[s]PL[B]CV[2]CO[b];B[double];W[drop])";
+pub(super) async fn prepare_decision_index(pool: &PgPool) {
+    let mut cursor = None;
+    while neondojo::recurring_mistakes::backfill_batch(pool, &mut cursor)
+        .await
+        .unwrap_or_else(|_| panic!("decision index backfill failed"))
+    {}
+}
+
 async fn source(pool: &PgPool) -> Uuid {
     store::import_match(
         pool,
@@ -220,6 +228,7 @@ async fn database_player_choices_include_matches_without_analysis(pool: PgPool) 
     .await
     .unwrap();
 
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let url = format!("/api/study/mistakes?database_id={database}");
     let (status, choices) = call(&router, "GET", &url, Value::Null).await;
@@ -273,6 +282,7 @@ async fn mistake_rates_count_correct_and_subthreshold_decisions_with_the_same_be
     .r#match
     .id;
     job(&pool, id, 1, None, &decisions).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     for (query, errors, rate, loss_per_100) in [
         ("", 1, 1.0 / 3.0, 4.0),
@@ -380,6 +390,7 @@ async fn selects_persisted_game_before_filters_without_mixing_other_game_sources
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (status, all) = call(&router, "GET", "/api/study/mistakes", Value::Null).await;
     assert_eq!(status, 200, "{all}");
@@ -478,6 +489,7 @@ async fn excludes_uncheckpointed_stale_incomplete_and_competition_sources(pool: 
         "UPDATE jobs SET status='completed',source_revision=10 WHERE id=$1",
     ] {
         sqlx::query(condition).bind(j).execute(&pool).await.unwrap();
+        prepare_decision_index(&pool).await;
         let (status, v) = call(
             &router,
             "GET",
@@ -499,6 +511,7 @@ async fn excludes_uncheckpointed_stale_incomplete_and_competition_sources(pool: 
         .await
         .unwrap();
     sqlx::query("INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id,library_match_id) VALUES($1,$2,'/unavailable','','saved',$3)").bind(Uuid::new_v4()).bind(json!({"phase":"move","play_mode":"competition"})).bind(id).execute(&pool).await.unwrap();
+    prepare_decision_index(&pool).await;
     assert_eq!(
         call(
             &router,
@@ -572,6 +585,7 @@ async fn no_double_is_preroll_and_malformed_or_forced_evaluations_are_excluded(p
         ],
     )
     .await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (_, v) = call(
         &router,
@@ -595,6 +609,7 @@ async fn no_double_is_preroll_and_malformed_or_forced_evaluations_are_excluded(p
         "the subsequent checker roll must not leak in Match ID"
     );
     sqlx::query("UPDATE move_analyses SET data=jsonb_set(data,'{evaluation_status}','\"forced\"') WHERE job_id=$1 AND decision_no=1").bind(j).execute(&pool).await.unwrap();
+    prepare_decision_index(&pool).await;
     assert_eq!(
         call(
             &router,
@@ -647,6 +662,7 @@ async fn missed_double_practice_mixes_correct_rolls_and_keeps_answers_hidden(poo
         ],
     )
     .await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (_, stats) = call(
         &router,
@@ -759,6 +775,7 @@ async fn take_and_pass_rounds_mix_both_best_actions_and_score_the_responder(pool
     .unwrap()
     .r#match;
     job(&pool, imported.id, 1, None, &decisions).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (_, stats) = call(
         &router,
@@ -872,6 +889,7 @@ async fn occurrence_counts_are_complete_but_practice_is_distinct_and_limited_to_
     .r#match
     .id;
     job(&pool, id, 1, None, &rows).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (_, v) = call(
         &router,
@@ -934,6 +952,7 @@ async fn player_choices_and_selected_player_do_not_scan_unrelated_large_sources(
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (status, choices) = call(&router, "GET", "/api/study/mistakes", Value::Null).await;
     assert_eq!(status, 200, "{choices}");
@@ -956,8 +975,8 @@ async fn player_choices_and_selected_player_do_not_scan_unrelated_large_sources(
         Value::Null,
     )
     .await;
-    assert_eq!(status, 422);
-    assert!(error["error"].as_str().unwrap().contains("narrow"));
+    assert_eq!(status, 503);
+    assert!(error["error"].as_str().unwrap().contains("retry"));
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -968,6 +987,7 @@ async fn equal_depth_ties_use_timestamp_then_uuid_and_invalid_winner_never_falls
     let first = job(&pool, id, 3, None, &game1(0.1)).await;
     let second = job(&pool, id, 3, None, &game1(0.2)).await;
     sqlx::query("UPDATE jobs SET created_at=CASE WHEN id=$1 THEN '2026-01-01'::timestamptz ELSE '2026-01-02'::timestamptz END WHERE id=ANY($2)").bind(first).bind(vec![first,second]).execute(&pool).await.unwrap();
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (_, newest) = call(
         &router,
@@ -990,6 +1010,7 @@ async fn equal_depth_ties_use_timestamp_then_uuid_and_invalid_winner_never_falls
         .unwrap();
     let winner = first.max(second);
     let expected = if winner == first { 0.1 } else { 0.2 };
+    prepare_decision_index(&pool).await;
     let (_, tied) = call(
         &router,
         "GET",
@@ -1011,6 +1032,7 @@ async fn equal_depth_ties_use_timestamp_then_uuid_and_invalid_winner_never_falls
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     assert_eq!(
         call(
             &router,
@@ -1054,6 +1076,7 @@ async fn database_and_exact_names_scope_native_sources_without_opponent_leaks(po
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (_, a) = call(
         &router,
@@ -1149,6 +1172,7 @@ async fn native_source_bytes_are_counted_once_per_match_and_keep_every_game(pool
         .map(|game| (game, decision(1, 0, "8/5 6/5", "6/3 6/5", 0.2)))
         .collect::<Vec<_>>();
     job(&pool, id, 1, None, &decisions).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (status, groups) = call(
         &router,
@@ -1308,6 +1332,7 @@ async fn decision_search_filters_by_type_score_cube_and_loss_with_stable_pages(p
         ],
     )
     .await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let search = |query: &str| {
         let router = router.clone();
@@ -1419,6 +1444,7 @@ async fn decision_index_follows_saved_decisions(pool: PgPool) {
     .r#match
     .id;
     let saved = job(&pool, analyzed, 3, Some(1), &game1(0.1)).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let search_player = |player: &'static str| {
         let router = router.clone();
@@ -1449,6 +1475,7 @@ async fn decision_index_follows_saved_decisions(pool: PgPool) {
     .fetch_one(&pool)
     .await
     .unwrap();
+    prepare_decision_index(&pool).await;
     assert_eq!(search_player("bob").await["total"], 1);
     sqlx::query("INSERT INTO move_analyses(job_id,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,1,4,1,'checker',0.1,$2)")
         .bind(saved)
@@ -1457,6 +1484,7 @@ async fn decision_index_follows_saved_decisions(pool: PgPool) {
         .await
         .unwrap();
     let before = index_entries(&pool, &matches).await;
+    prepare_decision_index(&pool).await;
     assert_eq!(search_player("bob").await["total"], 2);
     let after = index_entries(&pool, &matches).await;
     assert_ne!(after[0], before[0]);
@@ -1468,6 +1496,7 @@ async fn decision_index_follows_saved_decisions(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     let page = search().await;
     assert_eq!(page["total"], 2);
     assert_eq!(page["items"][0]["equity_loss"], 0.5);
@@ -1480,6 +1509,7 @@ async fn decision_index_follows_saved_decisions(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     assert_eq!(search().await, page);
     assert_ne!(index_entries(&pool, &matches).await[0].0, "old:classifier");
 
@@ -1489,6 +1519,7 @@ async fn decision_index_follows_saved_decisions(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(search().await["total"], 0);
+    prepare_decision_index(&pool).await;
     assert_eq!(search_player("alicia").await["total"], 2);
 
     // Removing the parent job cascades through its decisions and revision.
@@ -1497,6 +1528,7 @@ async fn decision_index_follows_saved_decisions(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     assert_eq!(search_player("alicia").await["total"], 0);
 }
 
@@ -1519,6 +1551,7 @@ async fn aliases_of_one_profile_count_as_one_player(pool: PgPool) {
         .id;
         jobs.push(job(&pool, id, 1, None, &game1(loss)[..1]).await);
     }
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let mistakes = |player: &'static str| {
         let router = router.clone();
@@ -1620,6 +1653,7 @@ async fn independent_only_leaves_out_matches_played_with_learning_aids(pool: PgP
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     for (query, matches, errors) in [("", 2, 2), ("&independent_only=true", 1, 1)] {
         let (status, data) = call(
@@ -1656,6 +1690,7 @@ async fn decision_search_follows_new_imports_reanalyses_legacy_catalogs_and_data
 ) {
     let first = source(&pool).await;
     job(&pool, first, 3, Some(1), &game1(0.1)).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let search = |query: String| {
         let router = router.clone();
@@ -1684,14 +1719,17 @@ async fn decision_search_follows_new_imports_reanalyses_legacy_catalogs_and_data
     .unwrap()
     .r#match
     .id;
+    prepare_decision_index(&pool).await;
     assert_eq!(search(String::new()).await["total"], 2);
     job(&pool, second, 2, None, &game1(0.2)[..1]).await;
+    prepare_decision_index(&pool).await;
     let added = search(String::new()).await;
     assert_eq!(added["total"], 3);
     assert_eq!(added["items"][0]["equity_loss"], 0.2);
 
     // A complete analysis of the whole match replaces the game analysis.
     let reanalysis = job(&pool, first, 2, None, &game1(0.3)).await;
+    prepare_decision_index(&pool).await;
     let page = search(String::new()).await;
     assert_eq!(page["total"], 3);
     assert_eq!(page["items"][0]["equity_loss"], 0.3);
@@ -1703,6 +1741,7 @@ async fn decision_search_follows_new_imports_reanalyses_legacy_catalogs_and_data
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     assert_eq!(search(String::new()).await, page);
     let cataloged: bool = sqlx::query_scalar("SELECT moves_cataloged FROM matches WHERE id=$1")
         .bind(first)
@@ -1745,6 +1784,7 @@ async fn decision_search_pages_cover_the_total_once_and_bound_the_offset(pool: P
     let id = source(&pool).await;
     // Equal losses leave only the decision position to order the results.
     job(&pool, id, 3, Some(1), &game1(0.1)).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let search = |query: String| {
         let router = router.clone();
@@ -1802,6 +1842,7 @@ async fn decision_search_hits_become_cards_in_one_request(pool: PgPool) {
         (2, decision(2, 0, "drop", "take", 0.35)),
     ]);
     let job_id = job(&pool, match_id, 2, None, &decisions).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (status, page) = call(
         &router,

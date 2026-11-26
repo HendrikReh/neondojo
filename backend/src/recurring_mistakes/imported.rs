@@ -22,24 +22,34 @@ const FOREIGN: &str = concat!(
     supplies_decisions_sql!("m"),
     " AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported')"
 );
+/// Eligibility for legacy catalog backfill, within the caller's visible matches.
+macro_rules! pending_catalog {
+    () => {
+        concat!(
+            crate::import::supplies_decisions_sql!("m"),
+            " AND (NOT m.imported_analysis_loaded OR NOT m.moves_cataloged)"
+        )
+    };
+}
+pub(super) use pending_catalog;
+
 /// Older foreign imports whose catalogs are still missing. The pending filter
 /// matches the partial index `matches_pending_imported_catalog`, so a library
 /// without such imports answers from an empty index.
 const LEGACY_PENDING: &str = concat!(
     "FROM eligible m LEFT JOIN match_games g ON g.match_uuid=m.id WHERE ",
-    supplies_decisions_sql!("m"),
-    " AND (NOT m.imported_analysis_loaded OR NOT m.moves_cataloged)"
+    pending_catalog!()
 );
 
 /// Pending games and the largest pending source; `$1` database, `$2` match, `$3` players.
-pub(super) fn legacy_size_sql() -> String {
+fn legacy_size_sql() -> String {
     format!(
         "{ELIGIBLE} SELECT count(*),coalesce(max(octet_length(m.original)::bigint+octet_length(m.sgf)::bigint),0)::bigint {LEGACY_PENDING}"
     )
 }
 
 /// The first pending matches, one more than a request catalogs.
-pub(super) fn legacy_ids_sql() -> String {
+fn legacy_ids_sql() -> String {
     format!(
         "{ELIGIBLE} SELECT DISTINCT m.id {LEGACY_PENDING} ORDER BY m.id LIMIT {}",
         MAX_LEGACY_SOURCES + 1
