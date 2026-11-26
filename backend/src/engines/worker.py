@@ -136,7 +136,7 @@ class Runtime:
         self.guard = paths, snapshot
 
     def verify_unchanged(self):
-        """Steady-state check around a single request.
+        """Check installation metadata at request and batch boundaries.
 
         Unchanged metadata of every locked path, recorded at the last complete
         check, stands for that check; any difference runs the complete check
@@ -272,13 +272,13 @@ class Runtime:
         if operation == 'begin_batch':
             if self.batch_active:
                 raise ValueError('Integrity batch already active')
-            self.verify()
+            self.verify_unchanged()
             self.batch_active = True
             return self.identity, None
         if operation == 'end_batch':
             if not self.batch_active:
                 raise ValueError('No active integrity batch')
-            self.verify()
+            self.verify_unchanged()
             self.batch_active = False
             return self.identity, None
         if self.batch_active and operation not in ('checker', 'cube', 'checker_batch', 'cube_batch_nply'):

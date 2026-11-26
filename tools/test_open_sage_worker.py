@@ -347,15 +347,15 @@ class BatchTests(unittest.TestCase):
         self.assertEqual(self.runtime.dispatch(self.cube)[0], first)
         self.assertEqual(self.runtime.check_identity.call_count, 1)
         self.assertEqual(self.runtime.dispatch({'operation': 'end_batch'}), (self.runtime.identity, None))
-        self.assertEqual(self.runtime.check_identity.call_count, 2)
+        self.assertEqual(self.runtime.check_identity.call_count, 1)
         # Unchanged metadata of the locked files stands for the complete check.
         self.assertEqual(self.runtime.dispatch(self.cube)[0], first)
-        self.assertEqual(self.runtime.check_identity.call_count, 2)
+        self.assertEqual(self.runtime.check_identity.call_count, 1)
         self.metadata = ('changed',)
         self.current_identity['artifact_fingerprint'] = 'changed'
         with self.assertRaisesRegex(ValueError, 'changed'):
             self.runtime.dispatch(self.cube)
-        self.assertEqual(self.runtime.check_identity.call_count, 3)
+        self.assertEqual(self.runtime.check_identity.call_count, 2)
         self.assertEqual(set(cost), {'cpu_us', 'wall_us'})
         self.assertTrue(all(type(value) is int and value >= 0 for value in cost.values()))
 
@@ -395,6 +395,7 @@ class BatchTests(unittest.TestCase):
                 if boundary == 'end_batch':
                     self.runtime.dispatch({'operation': 'begin_batch'})
                     self.runtime.dispatch(self.cube)
+                self.metadata = ('modified files',)
                 self.current_identity['artifact_fingerprint'] = 'changed'
                 with self.assertRaisesRegex(ValueError, 'changed'):
                     self.runtime.dispatch({'operation': boundary})
@@ -414,6 +415,7 @@ class BatchTests(unittest.TestCase):
     def test_next_batch_rechecks_identity(self):
         self.runtime.dispatch({'operation': 'begin_batch'})
         self.runtime.dispatch({'operation': 'end_batch'})
+        self.metadata = ('modified version',)
         self.current_identity['package_version'] = 'changed'
         with self.assertRaisesRegex(ValueError, 'changed'):
             self.runtime.dispatch({'operation': 'begin_batch'})
@@ -438,6 +440,7 @@ class BatchTests(unittest.TestCase):
                         if boundary == 'end_batch':
                             self.runtime.dispatch({'operation': 'begin_batch'})
                             self.runtime.dispatch(self.cube)
+                        self.metadata = ('modified files',)
                         if field == 'RECORD':
                             distribution.read_text.return_value = 'modified RECORD'
                         else:
@@ -561,6 +564,30 @@ class InstalledFilesGuardTests(unittest.TestCase):
 
     def test_untracked_file_in_a_nested_package_directory_is_detected(self):
         self.assert_detected(lambda: (self.root / 'neongammon/_assets/models/extra.py').write_text('pass\n'))
+
+    def test_warm_batch_does_not_rehash(self):
+        hashed = self.hashes.call_count
+        self.runtime.dispatch({'operation': 'begin_batch'})
+        self.runtime.dispatch(self.cube)
+        self.runtime.dispatch({'operation': 'end_batch'})
+        self.assertEqual(self.hashes.call_count, hashed)
+
+    def test_batch_end_rejects_installed_file_changes(self):
+        for path in [self.root / 'neongammon/_assets/models/contact.weights',
+                     self.record, self.root / 'neongammon/added.py']:
+            with self.subTest(path=path):
+                original = path.read_bytes() if path.exists() else None
+                self.runtime.batch_active = False
+                self.runtime.dispatch({'operation': 'begin_batch'})
+                hashed = self.hashes.call_count
+                path.write_bytes(b'changed')
+                with self.assertRaises(Exception):
+                    self.runtime.dispatch({'operation': 'end_batch'})
+                self.assertEqual(self.hashes.call_count, hashed + 1)
+                if original is None:
+                    path.unlink()
+                else:
+                    path.write_bytes(original)
 
     def test_identical_rewrite_passes_one_complete_check(self):
         path = self.root / 'neongammon/weights.py'
