@@ -14,6 +14,7 @@ theme:
 nav:
   - Documentation: index.md
   - User guide: user-guide/README.md
+  - NeonGammon manual: https://hendrikreh.github.io/neongammon/
   - Feature reference:
       - Playing: reference/playing.md
       - Analysis: reference/analysis.md
