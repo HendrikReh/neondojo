@@ -331,7 +331,6 @@ async fn active_competition_source_cannot_be_used_for_an_estimate(pool: PgPool) 
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL and GNUbg"]
 async fn legacy_scope_validation_does_not_backfill_game_metadata(pool: PgPool) {
     let (app, id) = setup(&pool).await;
     sqlx::query("DELETE FROM match_games WHERE match_uuid=$1")
@@ -339,10 +338,23 @@ async fn legacy_scope_validation_does_not_backfill_game_metadata(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
-    let (status, estimate) =
-        call(&app, "GET", &endpoint(id, "plies=3&game_no=1"), Value::Null).await;
+    let (status, estimate) = call(
+        &app,
+        "GET",
+        &endpoint(id, "engine_id=bgsage&plies=3&game_no=1"),
+        Value::Null,
+    )
+    .await;
     assert_eq!(status, 200, "{estimate}");
     assert_eq!(estimate["position_count"], 8);
+    let (status, _) = call(
+        &app,
+        "GET",
+        &endpoint(id, "engine_id=bgsage&plies=3&game_no=11"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 422);
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM match_games WHERE match_uuid=$1")
             .bind(id)

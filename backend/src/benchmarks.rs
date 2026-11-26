@@ -1,7 +1,7 @@
 //! Reproducible engine timing; independent of the match library. Saved runs
 //! are immutable snapshots that the user may delete once they are finished.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
-use crate::engine::{GnubgMoveFilter, resolve_binary};
+use crate::engine::{GnubgMoveFilter, resolve_binary_async};
 use crate::engines::EngineId;
 use crate::json_errors::{Json, Path};
 use anyhow::Context;
@@ -236,22 +236,38 @@ pub(crate) async fn running_engine_version(
     )
     .fetch_optional(pool)
     .await?;
-    Ok(run.and_then(|(saved, version, snapshot)| {
-        let same_path =
-            |saved: &str| path == saved || resolve_binary(path).ok().as_deref() == Some(saved);
-        if same_path(&saved) {
-            return Some(version);
-        }
-        let snapshot = snapshot?;
-        let rules_path = snapshot["engine"]["gnubg_path"].as_str()?;
-        if same_path(rules_path)
-            || resolve_binary(rules_path).ok().as_deref() == resolve_binary(path).ok().as_deref()
-        {
-            snapshot["rules_version"].as_str().map(str::to_owned)
-        } else {
-            None
-        }
-    }))
+    let Some((saved, version, snapshot)) = run else {
+        return Ok(None);
+    };
+    if path == saved {
+        return Ok(Some(version));
+    }
+    let rules = snapshot.as_ref().and_then(|snapshot| {
+        Some((
+            snapshot["engine"]["gnubg_path"].as_str()?,
+            snapshot["rules_version"].as_str()?,
+        ))
+    });
+    if let Some((rules_path, version)) = rules
+        && path == rules_path
+    {
+        return Ok(Some(version.to_owned()));
+    }
+    let Ok(resolved) = resolve_binary_async(path).await else {
+        return Ok(None);
+    };
+    if resolved == saved {
+        return Ok(Some(version));
+    }
+    if let Some((rules_path, version)) = rules
+        && (resolved == rules_path
+            || resolve_binary_async(rules_path)
+                .await
+                .is_ok_and(|rules| rules == resolved))
+    {
+        return Ok(Some(version.to_owned()));
+    }
+    Ok(None)
 }
 
 #[utoipa::path(post, path="/api/benchmarks",request_body=BenchmarkRequest,responses((status=202,body=Vec<BenchmarkRun>),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
@@ -475,6 +491,57 @@ pub struct BenchmarkDoc;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn running_version_recognizes_rules_aliases_and_rejects_unrelated_missing_paths(
+        pool: PgPool,
+    ) {
+        let dir = tempfile::tempdir().unwrap();
+        let rules = dir.path().join("rules");
+        let alias = dir.path().join("rules-link");
+        std::fs::write(&rules, b"").unwrap();
+        std::os::unix::fs::symlink(&rules, &alias).unwrap();
+        sqlx::query(
+            "INSERT INTO benchmark_runs(id,status,lease_until,machine,engine_id,engine_name,
+                engine_version,engine_path,plies,reference,protocol,reference_sgf,engine_snapshot)
+             VALUES($1,'running',now()+interval '1 hour','{}','bgsage','NeonGammon',
+                'saved engine','/saved/python',1,'{}','{}','',$2)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(serde_json::json!({"engine":{"gnubg_path":rules},"rules_version":"saved rules"}))
+        .execute(&pool)
+        .await
+        .unwrap();
+        assert_eq!(
+            running_engine_version(&pool, alias.to_str().unwrap())
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("saved rules")
+        );
+
+        std::fs::remove_file(&rules).unwrap();
+        assert_eq!(
+            running_engine_version(&pool, "/saved/python")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("saved engine")
+        );
+        assert_eq!(
+            running_engine_version(&pool, rules.to_str().unwrap())
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("saved rules")
+        );
+        assert_eq!(
+            running_engine_version(&pool, alias.to_str().unwrap())
+                .await
+                .unwrap(),
+            None
+        );
+    }
 
     #[test]
     fn versioned_workload_matches_the_reference_sgf() {
