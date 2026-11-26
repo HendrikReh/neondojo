@@ -40,7 +40,7 @@ Tips for a particular level are marked with these labels:
 
 Open NeonDojo in your browser at <http://127.0.0.1:8787>. The header is the same in every workspace.
 
-![The NeonDojo header with its seven workspaces, the profile selector, Settings and both manual links](images/header.webp)
+![The NeonDojo header with its seven workspaces, Help, the profile selector and Settings](images/header.webp)
 
 | # | Header item | What you do there |
 | --- | --- | --- |
@@ -51,10 +51,9 @@ Open NeonDojo in your browser at <http://127.0.0.1:8787>. The header is the same
 | 5 | **Match database** | Import matches, organize them into databases, search, filter, export, and start bulk analyses. |
 | 6 | **Player database** | Look up players, their aliases, PR and match history. |
 | 7 | **Extras** | Run engine benchmarks and engine duels, back up the database, and check versions. |
-| 8 | **Profile** | Switch configuration profiles and see whether the current settings differ from the saved profile. |
-| 9 | **Settings** (gear) | Set the language, appearance, engines, error thresholds, playing defaults and board artwork. |
-| 10 | **NeonDojo manual** | Open this user guide in a new browser tab. |
-| 11 | **NeonGammon manual** | Open the [NeonGammon engine manual](https://hendrikreh.github.io/neongammon/) in a new browser tab. |
+| 8 | **Help** | Choose **NeonDojo manual** or **NeonGammon manual** to open the corresponding guide in a new browser tab. |
+| 9 | **Profile** | Switch configuration profiles and see whether the current settings differ from the saved profile. |
+| 10 | **Settings** (gear) | Set the language, appearance, engines, error thresholds, playing defaults and board artwork. |
 
 Each workspace contains further tabs, as the map below shows.
 
@@ -67,6 +66,7 @@ flowchart LR
   H --> M["Match database"]
   H --> PL["Player database"]
   H --> E["Extras"]
+  H --> HELP["Help"]
   H --> SET["Settings"]
 
   A --> A1["Checker"]
@@ -96,7 +96,7 @@ flowchart LR
   SET --> SET1["General · Appearance · Analysis · Playing · Board · Engines · Profiles"]
 ```
 
-**Keyboard:** Focus a header tab and use **Left**/**Right** to move between workspaces. **Home** selects Playing and **End** selects Extras. The same keys work in the tab rows inside each workspace.
+**Keyboard:** Focus a header tab and use **Left**/**Right** to move between workspaces. **Home** selects Playing and **End** selects Extras. The same keys work in the tab rows inside each workspace. Press **Tab** from the selected workspace tab to reach **Help**, then **Enter** to open it or **Escape** to close it.
 
 **Navigation style:** The current tab is shown with the accent color and an underline. Buttons with an icon show a tooltip when you hover over them or focus them with **Tab**. If a button has a keyboard shortcut, the tooltip names it.
 

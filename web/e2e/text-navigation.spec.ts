@@ -235,6 +235,36 @@ test('header tabs follow the workspace order with mouse and keyboard', async ({
   await expect(tabs.nth(5)).toBeFocused();
   await page.keyboard.press('End');
   await expect(tabs.last()).toBeFocused();
+  const help = page.getByRole('banner').getByText('Hilfe', { exact: true });
+  const manuals = [
+    ['NeonDojo-Handbuch', 'https://hendrikreh.github.io/neondojo/user-guide/'],
+    ['NeonGammon-Handbuch', 'https://hendrikreh.github.io/neongammon/'],
+  ] as const;
+  for (const [name] of manuals) {
+    await expect(page.getByRole('link', { name, exact: true })).toBeHidden();
+  }
+  await page.keyboard.press('Tab');
+  await expect(help).toBeFocused();
+  const extrasBox = (await tabs.last().boundingBox())!;
+  const helpBox = (await help.boundingBox())!;
+  expect(helpBox.x).toBe(extrasBox.x + extrasBox.width + 20);
+  expect(helpBox.y).toBe(extrasBox.y);
+  await page.keyboard.press('Enter');
+  for (const [name, href] of manuals) {
+    const link = page.getByRole('link', { name, exact: true });
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('href', href);
+    await expect(link).toHaveAttribute('target', '_blank');
+    await page.keyboard.press('Tab');
+    await expect(link).toBeFocused();
+  }
+  await page.keyboard.press('Escape');
+  await expect(help).toBeFocused();
+  await expect(page.getByRole('link', { name: manuals[0][0] })).toBeHidden();
+  await help.click();
+  await expect(page.getByRole('link', { name: manuals[0][0] })).toBeVisible();
+  await tabs.last().click();
+  await expect(page.getByRole('link', { name: manuals[0][0] })).toBeHidden();
   await page.keyboard.press('Home');
   await expect(tabs.first()).toBeFocused();
   await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
