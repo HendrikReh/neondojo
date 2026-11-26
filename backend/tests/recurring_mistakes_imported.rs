@@ -422,7 +422,7 @@ async fn legacy_catalog_batches_make_progress_without_returning_partial_counts(p
     )
     .await;
     assert_eq!(status, 503, "{error}");
-    assert!(error["error"].as_str().unwrap().contains("retry"));
+    assert_eq!(error["code"], "index_preparing");
     let mut cursor = None;
     assert!(
         neondojo::recurring_mistakes::backfill_batch(&pool, &mut cursor)
@@ -667,7 +667,7 @@ async fn decision_gets_report_a_stale_index_on_read_only_connections(pool: PgPoo
     for path in paths {
         let (status, body) = call(&router, "GET", path, Value::Null).await;
         assert_eq!(status, 503, "{path} {body}");
-        assert!(body["error"].as_str().unwrap().contains("retry"));
+        assert_eq!(body["code"], "index_preparing");
     }
     prepare_decision_index(&pool).await;
     for path in paths {

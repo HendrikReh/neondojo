@@ -447,6 +447,7 @@ export default {
     'error.fileSize': 'El archivo no puede superar los 16 MiB.',
     'error.positionMissing': 'No se ha encontrado la posición analizada.',
     'error.invalidResponse': 'El servidor ha devuelto una respuesta no válida.',
+    'error.indexPreparing': 'Se están preparando los resultados. Vuelve a intentarlo en breve.',
     'error.request': 'La solicitud ha fallado (HTTP {status}).',
     'error.network': 'No se ha podido conectar con el servidor.',
     'error.conflict': 'Los datos han cambiado entretanto.',

@@ -52,7 +52,7 @@ SELECT md5('imported-'||p.id)::uuid,p.match_uuid,p.id,p.ordinal,p.game_no,p.ply,
     '{"engine":"eXtreme Gammon","engine_version":"2.19","depth":"3-ply","candidates":[{"move":"8/5 6/5","equity":-0.1}]}'::jsonb
 FROM positions p JOIN matches m ON m.id=p.match_uuid WHERE split_part(split_part(m.filename,'-',2),'.',1)::int%10 BETWEEN 5 AND 8;
 INSERT INTO imported_analysis_projections(imported_analysis_id,revision,source_revision,projection)
-SELECT ia.id,1,0,jsonb_build_object('plies',3,'depth','3-ply','decision',jsonb_build_object('equity_loss',((abs(hashtext(ia.id::text))%200)/1000.0)))
+SELECT ia.id,$projection_revision,0,jsonb_build_object('plies',3,'depth','3-ply','decision',jsonb_build_object('equity_loss',((abs(hashtext(ia.id::text))%200)/1000.0)))
 FROM imported_analyses ia;
 INSERT INTO analysis_selections(match_id,analysis_id)
 SELECT md5('match-'||n)::uuid,'imported:'||md5('match-'||n)::uuid FROM generate_series(1,10000) n WHERE n%50=5;
@@ -129,7 +129,11 @@ fn report(name: &str, plan: &Value) -> String {
 #[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires a large synthetic dataset"]
 async fn saved_position_browse_plans_on_a_large_library(pool: PgPool) {
-    sqlx::raw_sql(DATASET).execute(&pool).await.unwrap();
+    let dataset = DATASET.replace(
+        "$projection_revision",
+        &crate::imported_analysis::projections::REVISION.to_string(),
+    );
+    sqlx::raw_sql(&dataset).execute(&pool).await.unwrap();
     sqlx::query("VACUUM ANALYZE").execute(&pool).await.unwrap();
     let mut connection = pool.acquire().await.unwrap();
     // Like every connection of the application pool (database_pool.rs).
@@ -151,6 +155,22 @@ async fn saved_position_browse_plans_on_a_large_library(pool: PgPool) {
     println!(
         "dataset: 10000 matches, 450000 positions, {saved} saved, {in_small} saved in database 1"
     );
+    for database in [Some(small), None] {
+        let sql = crate::imported_analysis::projections::pending_sql();
+        assert!(
+            !crate::imported_analysis::projections::pending(&mut connection, database)
+                .await
+                .unwrap()
+        );
+        let plan: Value =
+            sqlx::query_scalar(&format!("EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) {sql}"))
+                .bind(crate::imported_analysis::projections::REVISION)
+                .bind(database)
+                .fetch_one(&mut *connection)
+                .await
+                .unwrap();
+        println!("projection readiness for {database:?}: {}", summary(&plan));
+    }
     let default = PositionFilterDefinition::default();
     let scoped = PositionFilterDefinition {
         database_id: Some(small),

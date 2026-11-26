@@ -439,6 +439,7 @@ export default {
     'error.fileSize': 'Plik nie może przekraczać 16 MiB.',
     'error.positionMissing': 'Nie znaleziono analizowanej pozycji.',
     'error.invalidResponse': 'Serwer zwrócił nieprawidłową odpowiedź.',
+    'error.indexPreparing': 'Trwa przygotowywanie wyników wyszukiwania. Spróbuj ponownie za chwilę.',
     'error.request': 'Żądanie nie powiodło się (HTTP {status}).',
     'error.network': 'Nie udało się połączyć z serwerem.',
     'error.conflict': 'Dane zmieniły się w międzyczasie.',

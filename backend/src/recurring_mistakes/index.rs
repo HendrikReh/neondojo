@@ -111,10 +111,7 @@ pub(super) async fn require_current(
         .await
         .map_err(anyhow::Error::from)?;
     if pending {
-        return Err(ApiError(
-            axum::http::StatusCode::SERVICE_UNAVAILABLE,
-            "Preparing the decision index in the background; retry shortly".into(),
-        ));
+        return Err(crate::browse_indexes::preparing("The decision index"));
     }
     Ok(())
 }

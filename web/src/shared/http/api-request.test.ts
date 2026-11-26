@@ -87,3 +87,20 @@ test('only the shared helper calls fetch', () => {
     // The board loads its sounds, which are not part of the API.
   ).toEqual(['../board/play-audio.ts', './api.ts']);
 });
+
+test('distinguishes background indexing from a generic service failure', async () => {
+  const error = await failure(
+    Response.json(
+      {
+        code: 'index_preparing',
+        error: 'The decision index is being prepared.',
+      },
+      { status: 503 },
+    ),
+  );
+  expect(error).toMatchObject({
+    key: 'error.indexPreparing',
+    code: 'index_preparing',
+    status: 503,
+  });
+});

@@ -308,6 +308,7 @@ async fn delete_analysis(
         .await
         .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
+    state.browse_wake.notify_one();
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -343,6 +344,7 @@ async fn update_selection(
             .map_err(anyhow::Error::from)?;
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
+    state.browse_wake.notify_one();
     Ok(Json(AnalysisSelection {
         match_id: id,
         analysis_id: request.analysis_id,

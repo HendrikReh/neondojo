@@ -801,6 +801,9 @@ async fn catalog_imported_readiness_filters_match_card_creation(pool: PgPool) {
         .bytes()
         .map(|b| format!("%{b:02X}"))
         .collect();
+    neondojo::browse_indexes::backfill_batch(&pool, &mut Default::default())
+        .await
+        .unwrap();
     let (status, page) = call(
         app.clone(),
         "GET",
@@ -848,6 +851,18 @@ async fn catalog_imported_readiness_filters_match_card_creation(pool: PgPool) {
     sqlx::query("UPDATE match_moves SET notation='invalid play' WHERE position_uuid=$1")
         .bind(position.id)
         .execute(&pool)
+        .await
+        .unwrap();
+    let (status, pending) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/position-browser?filters={encoded}"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 503, "{pending}");
+    assert_eq!(pending["code"], "index_preparing");
+    neondojo::browse_indexes::backfill_batch(&pool, &mut Default::default())
         .await
         .unwrap();
     let (status, page) = call(
@@ -916,6 +931,9 @@ async fn catalog_consumers_keep_open_sage_checkpoint_provenance_without_job_summ
     sqlx::query("INSERT INTO move_analyses(job_id,position_uuid,game_no,decision_no,player,kind,equity_loss,data) VALUES($1,$2,1,1,$3,'checker',0.2,$4)").bind(job).bind(position.id).bind(position.player).bind(decision).execute(&pool).await.unwrap();
     let app = app(&pool);
     let deck = create_deck(&app).await;
+    neondojo::browse_indexes::backfill_batch(&pool, &mut Default::default())
+        .await
+        .unwrap();
     let (status, page) = call(app.clone(), "GET", "/api/position-browser", Value::Null).await;
     assert_eq!(status, 200, "{page}");
     assert_eq!(page["items"][0]["native_error"]["engine"], "NeonGammon");

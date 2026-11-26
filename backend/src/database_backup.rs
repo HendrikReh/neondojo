@@ -122,6 +122,7 @@ pub(crate) enum BackgroundWork {
     EngineDuel,
     AiAssessment,
     AnkiSync,
+    BrowseIndexes,
 }
 
 impl BackgroundWork {
@@ -131,6 +132,7 @@ impl BackgroundWork {
             Self::EngineDuel => "engine duel",
             Self::AiAssessment => "AI assessment",
             Self::AnkiSync => "Anki sync",
+            Self::BrowseIndexes => "browse index maintenance",
         }
     }
 }
@@ -658,6 +660,7 @@ async fn import(
             )
         })?;
     restore::replace(&state, input).await?;
+    state.browse_wake.notify_one();
     drop(drain);
     Ok(StatusCode::NO_CONTENT)
 }

@@ -976,7 +976,7 @@ async fn player_choices_and_selected_player_do_not_scan_unrelated_large_sources(
     )
     .await;
     assert_eq!(status, 503);
-    assert!(error["error"].as_str().unwrap().contains("retry"));
+    assert_eq!(error["code"], "index_preparing");
 }
 
 #[sqlx::test(migrations = "./migrations")]

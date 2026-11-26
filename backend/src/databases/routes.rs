@@ -184,6 +184,7 @@ pub(super) async fn update_metadata(
             ApiError::missing()
         });
     }
+    s.browse_wake.notify_one();
     Ok(Json(database_match(&s.pool, id).await?))
 }
 
@@ -226,6 +227,7 @@ pub(super) async fn actions(
         }
         results.push(action_one(&s.pool, &a, id).await?)
     }
+    s.browse_wake.notify_one();
     Ok(Json(ActionResponse { results }))
 }
 
