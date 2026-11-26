@@ -255,6 +255,7 @@ main {
   color: var(--ui-text);
   font-weight: 500;
 }
+.theme-forest,
 .board-shell {
   /* Point numbers sit on the dark board frame in light and dark mode alike. */
   --board-point-number: #d6ddca;

@@ -1,4 +1,11 @@
-import type { ReactNode } from 'react';
+import { cubeImage, type PieceSet } from './piece-artwork';
+
+// The recessed faces share one material image per set, at every cube value.
+const cubeBodies = import.meta.glob<string>('./cubes/*.webp', {
+  eager: true,
+  import: 'default',
+  query: '?url&no-inline',
+});
 
 export interface CubeInteraction {
   activate?: () => void;
@@ -14,7 +21,8 @@ export default function PlayCube({
   transform,
   bounds,
   interaction,
-  children,
+  artwork,
+  onError,
 }: {
   label: string;
   value: number;
@@ -23,8 +31,14 @@ export default function PlayCube({
   transform?: string;
   bounds: { x: number; y: number; width: number; height: number };
   interaction?: CubeInteraction;
-  children: ReactNode;
+  artwork: PieceSet;
+  onError?: () => void;
 }) {
+  const face = cubeImage(artwork.archive, value, owner, pending);
+  const number = String(value === 1 ? 64 : value);
+  const body =
+    cubeBodies[`./cubes/${artwork.id}.webp`] ??
+    cubeBodies['./cubes/slate.webp'];
   return (
     <g
       transform={transform}
@@ -50,7 +64,29 @@ export default function PlayCube({
       {interaction?.activate && (
         <rect {...bounds} fill="transparent" aria-hidden="true" />
       )}
-      <g className="play-cube-artwork">{children}</g>
+      <g className="play-cube-artwork" data-cube-theme={artwork.id}>
+        {face ? (
+          <image href={face.src} {...bounds} onError={onError} />
+        ) : (
+          <svg
+            {...bounds}
+            viewBox="0 0 100 100"
+            className={`theme-${artwork.id}`}
+          >
+            <image href={body} width="100" height="100" onError={onError} />
+            <text
+              className="cube-numeral"
+              x="50"
+              y="49"
+              dominantBaseline="central"
+              textAnchor="middle"
+              fontSize={Math.min(62, 144 / number.length)}
+            >
+              {number}
+            </text>
+          </svg>
+        )}
+      </g>
     </g>
   );
 }

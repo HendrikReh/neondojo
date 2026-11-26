@@ -163,15 +163,27 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         ));
     }
     let options = &*super::OPTIONS;
-    if !options["board_themes"].as_array().is_some_and(|values| {
-        values
-            .iter()
-            .any(|v| v.as_str() == Some(&config.appearance.board_theme))
-    }) {
-        return Err(ConfigurationError::invalid(
+    let appearance = &config.appearance;
+    let board_themes = options["board_themes"]
+        .as_array()
+        .expect("embedded board themes");
+    for (path, theme) in [
+        (
             "appearance.board_theme",
-            "Unknown board theme",
-        ));
+            Some(appearance.board_theme.as_str()),
+        ),
+        (
+            "appearance.checker_theme",
+            appearance.checker_theme.as_deref(),
+        ),
+        ("appearance.dice_theme", appearance.dice_theme.as_deref()),
+        ("appearance.cube_theme", appearance.cube_theme.as_deref()),
+    ] {
+        if let Some(theme) = theme
+            && !board_themes.iter().any(|v| v.as_str() == Some(theme))
+        {
+            return Err(ConfigurationError::invalid(path, "Unknown board theme"));
+        }
     }
     let bounds = &options["analysis_board_width"];
     let min = bounds["min"]

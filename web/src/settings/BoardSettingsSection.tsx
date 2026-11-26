@@ -1,11 +1,9 @@
 import { useRef, useLayoutEffect } from 'react';
 import type { Position } from '../shared/http/api';
 import Board from '../shared/board/Board';
-import {
-  useArchiveThemes,
-  builtInThemes,
-  type Theme,
-} from '../shared/board/themes';
+import { useArchiveThemes, builtInThemes } from '../shared/board/themes';
+import type { BoardArtworkSelection } from './configuration/configuration-settings';
+import { useProfileText } from './profiles/profile-messages';
 import { useSettingsText } from './settings-messages';
 
 // A fixed, legal GNUbg position with checkers on the bar and borne off on both
@@ -27,17 +25,18 @@ const previewPosition: Position = {
   notation: '',
 };
 
-/** The Board category: the theme gallery and a preview of the chosen theme. */
 export default function BoardSettingsSection({
   disabled,
-  theme,
-  onTheme,
+  artwork,
+  onChange,
 }: {
   disabled: boolean;
-  theme: Theme;
-  onTheme: (theme: Theme) => void;
+  artwork: BoardArtworkSelection;
+  onChange: (artwork: BoardArtworkSelection) => void;
 }) {
   const t = useSettingsText();
+  const profileT = useProfileText();
+  const { theme, checkerTheme, cubeTheme, diceTheme } = artwork;
   const archiveThemes = useArchiveThemes(true);
   const themes = [...builtInThemes, ...archiveThemes];
   const boardGallery = useRef<HTMLDivElement>(null);
@@ -56,7 +55,7 @@ export default function BoardSettingsSection({
     else if (item.bottom > bottom)
       gallery.scrollTop += Math.ceil(item.bottom - bottom);
   }, []);
-  const selectedTheme = themes.find(({ id }) => id === theme) ?? themes[0];
+  const selectedName = themes.find(({ id }) => id === theme)?.name ?? theme;
   return (
     <fieldset
       className="settings-section settings-board-section"
@@ -81,7 +80,7 @@ export default function BoardSettingsSection({
                 className="settings-theme-choice"
                 aria-label={entry.name}
                 aria-pressed={theme === entry.id}
-                onClick={() => onTheme(entry.id)}
+                onClick={() => onChange({ ...artwork, theme: entry.id })}
               >
                 <span className="settings-theme-thumbnail" aria-hidden="true">
                   {archive ? (
@@ -104,6 +103,9 @@ export default function BoardSettingsSection({
                     <Board
                       position={previewPosition}
                       theme={entry.id}
+                      checkerTheme={null}
+                      cubeTheme={null}
+                      diceTheme={null}
                       white=""
                       black=""
                     />
@@ -119,12 +121,58 @@ export default function BoardSettingsSection({
         </div>
         <section
           className="settings-preview"
-          aria-label={t('preview', { theme: selectedTheme.name })}
+          aria-label={t('preview', { theme: selectedName })}
         >
-          <h3>{t('preview', { theme: selectedTheme.name })}</h3>
+          <h3>{t('preview', { theme: selectedName })}</h3>
+          <div className="settings-field-pair">
+            {(
+              [
+                ['checkerTheme', profileT('checker_theme')],
+                ['cubeTheme', profileT('cube_theme')],
+                ['diceTheme', profileT('dice_theme')],
+              ] as const
+            ).map(([field, label]) => {
+              const value = artwork[field];
+              return (
+                <label key={field} className="settings-field">
+                  {label}
+                  <select
+                    value={value ?? ''}
+                    onChange={(event) =>
+                      onChange({
+                        ...artwork,
+                        [field]: event.target.value || null,
+                      })
+                    }
+                  >
+                    <option value="">
+                      {t(
+                        field === 'diceTheme'
+                          ? 'followCheckers'
+                          : 'followBoard',
+                      )}
+                    </option>
+                    {value && !themes.some(({ id }) => id === value) && (
+                      <option value={value} disabled>
+                        {value} ({t('unavailable')})
+                      </option>
+                    )}
+                    {themes.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {entry.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              );
+            })}
+          </div>
           <Board
             position={previewPosition}
             theme={theme}
+            checkerTheme={checkerTheme}
+            cubeTheme={cubeTheme}
+            diceTheme={diceTheme}
             white={t('light')}
             black={t('dark')}
           />

@@ -1,4 +1,6 @@
+import type { PieceSet } from './piece-artwork';
 import PlayDice, { type DiceInteraction } from './PlayDice';
+import ForestDie from './ForestDie';
 import Tooltip from '../ui/Tooltip';
 import type { BgBlitzTheme } from './themes';
 
@@ -8,12 +10,14 @@ export default function PlayBoardDice({
   player,
   interaction,
   theme,
+  diceSet,
   onError,
 }: {
   dice: number[];
   player: number;
   interaction?: DiceInteraction;
   theme?: BgBlitzTheme;
+  diceSet?: PieceSet;
   onError?: () => void;
 }) {
   const opening = interaction?.opening;
@@ -36,11 +40,11 @@ export default function PlayBoardDice({
         .map((value) => ({ owner: diceOwner, value }));
   const faces = entries.map(({ owner, value }, index) => {
     const face = value ?? 1;
-    const image = theme
-      ? (owner === 0 ? theme.dice.white : theme.dice.black)[face - 1]
-      : undefined;
-    const width = image?.width ?? 33;
-    const height = image?.height ?? 33;
+    const side = owner === 0 ? 'white' : 'black';
+    const slot = theme?.dice[side][face - 1];
+    const image = diceSet ? diceSet.archive?.dice[side][face - 1] : slot;
+    const width = slot?.width ?? 33;
+    const height = slot?.height ?? 33;
     const x = theme
       ? (owner === 0 ? theme.diceRightX : theme.diceLeftX) +
         (opening ? 0 : index * width * 1.25)
@@ -99,8 +103,18 @@ export default function PlayBoardDice({
                   height={height}
                   onError={onError}
                 />
+              ) : diceSet?.id === 'forest' ? (
+                <ForestDie
+                  light={owner === 0}
+                  value={value}
+                  width={width}
+                  height={height}
+                />
               ) : (
-                <>
+                <g
+                  className={diceSet ? `theme-${diceSet.id}` : undefined}
+                  transform={`scale(${width / 33} ${height / 33})`}
+                >
                   <rect
                     width="33"
                     height="33"
@@ -116,7 +130,7 @@ export default function PlayBoardDice({
                       ? '–'
                       : ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'][value]}
                   </text>
-                </>
+                </g>
               )}
             </PlayDice>
           </g>

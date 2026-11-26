@@ -221,6 +221,15 @@ pub struct ConfigurationAppearance {
     pub ui_theme: ConfigurationUiTheme,
     pub mode: ConfigurationMode,
     pub board_theme: String,
+    /// Checker artwork theme. Omitted or null inherits the board theme.
+    #[serde(default)]
+    pub checker_theme: Option<String>,
+    /// Dice artwork theme. Omitted or null inherits the checker set.
+    #[serde(default)]
+    pub dice_theme: Option<String>,
+    /// Doubling cube artwork theme. Omitted or null inherits the board theme.
+    #[serde(default)]
+    pub cube_theme: Option<String>,
     pub bearoff_direction: ConfigurationDirection,
     pub board_view: ConfigurationBoardView,
     /// Preferred board pane width in Study cards; null uses the responsive default.
@@ -672,6 +681,22 @@ mod tests {
             serde_json::to_value(ApiError::missing().1).unwrap(),
             serde_json::json!({"error": "Not found"})
         );
+    }
+    #[test]
+    fn unknown_piece_themes_report_the_affected_setting() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/configuration-normalization.json"
+        ))
+        .unwrap();
+        for field in ["checker_theme", "cube_theme", "dice_theme"] {
+            let mut config = fixture["base"].clone();
+            config["appearance"][field] = serde_json::json!("unknown");
+            let error = validation::normalize(serde_json::from_value(config).unwrap()).unwrap_err();
+            assert_eq!(
+                error.1.issues.unwrap()[0].path,
+                format!("appearance.{field}")
+            );
+        }
     }
     #[test]
     fn analysis_board_widths_are_optional_and_bounded() {

@@ -16,6 +16,7 @@ import ProfileSettingsPanel from './profiles/ProfileSettingsPanel';
 import LibraryDialog from '../shared/ui/LibraryDialog';
 import { useProfileText } from './profiles/profile-messages';
 import {
+  type BoardArtworkSelection,
   applySettingsDraft,
   changedInstallationFields,
   settingsFromConfiguration,
@@ -113,7 +114,12 @@ type GuardedDestination = 'close' | 'profiles' | 'book' | 'benchmark';
 
 function profilePreferences(current: ProfileConfiguration) {
   return {
-    theme: current.appearance.board_theme,
+    board: {
+      theme: current.appearance.board_theme,
+      checkerTheme: current.appearance.checker_theme ?? null,
+      diceTheme: current.appearance.dice_theme ?? null,
+      cubeTheme: current.appearance.cube_theme ?? null,
+    },
     locale: current.general.locale,
     appearance: {
       theme: current.appearance.ui_theme,
@@ -171,16 +177,22 @@ export default function SettingsDialog({
   const virtualT = useVirtualPlayerText();
   const id = useId();
   const dialog = useRef<HTMLDialogElement>(null);
-  const preferences = useLatest({ theme, locale, appearance });
-  const [initialPreferences, setInitialPreferences] = useState({
+  const board: BoardArtworkSelection = {
     theme,
+    checkerTheme: null,
+    diceTheme: null,
+    cubeTheme: null,
+  };
+  const preferences = useLatest({ board, locale, appearance });
+  const [initialPreferences, setInitialPreferences] = useState({
+    board,
     locale,
     appearance,
   });
   const [category, setCategory] = useState<Category>('general');
   const [draftSounds, setDraftSounds] = useState(readPlaySounds);
   const [initialSounds, setInitialSounds] = useState(readPlaySounds);
-  const [draftTheme, setDraftTheme] = useState(theme);
+  const [draftBoard, setDraftBoard] = useState(board);
   const [draftLocale, setDraftLocale] = useState(locale);
   const [draftAppearance, setDraftAppearance] = useState(appearance);
   const [initialThresholds, setInitialThresholds] = useState(
@@ -288,7 +300,7 @@ export default function SettingsDialog({
   }, [open, reload]);
 
   const draftPreferences = {
-    theme: draftTheme,
+    board: draftBoard,
     locale: draftLocale,
     appearance: draftAppearance,
     sounds: draftSounds,
@@ -387,7 +399,7 @@ export default function SettingsDialog({
       ? profilePreferences(current)
       : { ...preferences.current, sounds: readPlaySounds() };
     setInitialPreferences(values);
-    setDraftTheme(values.theme);
+    setDraftBoard(values.board);
     setDraftLocale(values.locale);
     setDraftAppearance(values.appearance);
     setDraftSounds(sounds);
@@ -552,11 +564,12 @@ export default function SettingsDialog({
     }
     if (abort.signal.aborted || session.current !== currentSession)
       return false;
-    const { theme, locale, appearance, sounds } = savedPreferences;
+    const { board, locale, appearance, sounds } = savedPreferences;
+    const { theme } = board;
     saveTheme(theme);
     savePlaySounds(sounds);
     saveLocale(locale);
-    setDraftTheme(theme);
+    setDraftBoard(board);
     setDraftLocale(locale);
     setDraftAppearance(appearance);
     setDraftSounds(sounds);
@@ -644,7 +657,7 @@ export default function SettingsDialog({
   function discardDraft(next: GuardedDestination) {
     setDraft(initial);
     setDraftLocale(initialPreferences.locale);
-    setDraftTheme(initialPreferences.theme);
+    setDraftBoard(initialPreferences.board);
     setDraftAppearance(initialPreferences.appearance);
     setDraftSounds(initialSounds);
     setSaveError(null);
@@ -1078,8 +1091,8 @@ export default function SettingsDialog({
                   <LazyPanel>
                     <BoardSettingsSection
                       disabled={saving}
-                      theme={draftTheme}
-                      onTheme={setDraftTheme}
+                      artwork={draftBoard}
+                      onChange={setDraftBoard}
                     />
                   </LazyPanel>
                 )}

@@ -1,6 +1,11 @@
 import archiveThemes from './archive-themes';
 import { expect, it, vi } from 'vitest';
-import { loadArchiveThemes, pointColumns, stackGeometry } from './themes';
+import {
+  loadArchiveThemes,
+  pointColumns,
+  pointStackGeometry,
+  stackGeometry,
+} from './themes';
 
 it('uses XML column positions for both player directions, the bar and bear-off trays', () => {
   expect(pointColumns.map((p) => p.point)).toEqual([
@@ -21,14 +26,61 @@ it('uses XML column positions for both player directions, the bar and bear-off t
       );
       expect(geometry.visible).toBe(5);
       expect(geometry.total).toBe(15);
-      expect(geometry.x).toBe(theme.columns[13] + theme.checkerOffsetX);
+      expect(geometry.x + geometry.width / 2).toBeCloseTo(
+        theme.columns[13] +
+          theme.checkerOffsetX +
+          theme.checkers.white[0].width / 2,
+      );
       const end = geometry.y + (bottom ? -1 : 1) * geometry.step * 4;
       expect(Math.min(geometry.y, end)).toBeGreaterThanOrEqual(0);
-      expect(
-        Math.max(geometry.y, end) + theme.checkers.white[0].height,
-      ).toBeLessThan(theme.background.height);
+      expect(Math.max(geometry.y, end) + geometry.height).toBeLessThan(
+        theme.background.height,
+      );
     }
   }
+});
+
+it('uses the original checker height as stack pitch on points, bars and off trays', () => {
+  for (const theme of [undefined, ...archiveThemes]) {
+    const height = theme?.background.height ?? 470;
+    for (const total of [5, 8]) {
+      for (const player of [0, 1]) {
+        const count = total * (player === 0 ? 1 : -1);
+        for (const point of [
+          ...pointColumns.map(({ point }) => point),
+          player === 0 ? 25 : 0,
+          player === 0 ? -1 : 26,
+        ]) {
+          const stack = pointStackGeometry(point, count, theme);
+          expect(stack.visible).toBe(5);
+          expect(stack.total).toBe(total);
+          const bottom =
+            point === -1 || point === 25 || (point >= 1 && point <= 12);
+          const top = stack.y - (bottom ? 4 * stack.step : 0);
+          const end = top + stack.height + 4 * stack.step;
+          expect(stack.step).toBe(stack.height);
+          if (theme) {
+            const image = theme.checkers[player === 0 ? 'white' : 'black'][0];
+            expect([stack.width, stack.height]).toEqual([
+              image.width,
+              image.height,
+            ]);
+          }
+          expect(top).toBeGreaterThan(0);
+          expect(end).toBeLessThan(height);
+          if (bottom) expect(top).toBeGreaterThan(height / 2);
+          else expect(end).toBeLessThan(height / 2);
+        }
+      }
+    }
+  }
+});
+
+it('matches the X22 checker-to-point proportions on built-in boards', () => {
+  const first = pointStackGeometry(13, 5);
+  const next = pointStackGeometry(14, 1);
+  expect(first.width / (next.x - first.x)).toBeCloseTo(84 / 90, 8);
+  expect(first.step / first.height).toBe(1);
 });
 
 it('shares one archive request and retries after a transient chunk failure', async () => {

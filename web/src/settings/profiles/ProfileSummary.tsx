@@ -51,8 +51,13 @@ export default function ProfileSummary({
   const t = useProfileText(),
     { locale, t: appT } = useI18n();
   const archiveThemes = useArchiveThemes(
-    [configuration, compareTo].some((profile) =>
-      profile?.appearance.board_theme.startsWith('bgblitz:'),
+    [configuration.appearance, compareTo?.appearance].some((appearance) =>
+      [
+        appearance?.board_theme,
+        appearance?.checker_theme,
+        appearance?.cube_theme,
+        appearance?.dice_theme,
+      ].some((theme) => theme?.startsWith('bgblitz:')),
     ),
   );
   const differencesHeading = useId();
@@ -110,6 +115,14 @@ export default function ProfileSummary({
       .join(' · ');
   };
   const format = (value: unknown, path: string): string => {
+    const pieceTheme =
+      path === 'appearance.checker_theme' ||
+      path === 'appearance.cube_theme' ||
+      path === 'appearance.dice_theme';
+    if (pieceTheme && value == null)
+      return settingsText(
+        path === 'appearance.dice_theme' ? 'followCheckers' : 'followBoard',
+      );
     if (value === null || value === undefined || value === '')
       return path.includes('column_widths') ? t('automatic') : t('empty');
     if (typeof value === 'boolean') return t(value ? 'yes' : 'no');
@@ -163,7 +176,7 @@ export default function ProfileSummary({
     if (s === CARDS_WITHOUT_DECK) return searchText('withoutDeck');
     if (path.endsWith('.locale'))
       return languages.find((l) => l.id === s)?.name ?? s;
-    if (path.endsWith('board_theme'))
+    if (path === 'appearance.board_theme' || pieceTheme)
       return (
         [...builtInThemes, ...archiveThemes].find((theme) => theme.id === s)
           ?.name ?? s

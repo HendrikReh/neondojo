@@ -108,7 +108,12 @@ describe('settings/profile boundary', () => {
         gnubg_path: '/different/path',
       },
       locale: 'de',
-      theme: 'walnut',
+      board: {
+        theme: 'walnut',
+        checkerTheme: 'moonstone',
+        diceTheme: 'bgblitz:bg-earth',
+        cubeTheme: 'bgblitz:bg-moon',
+      },
       appearance: { theme: 'paper', mode: 'dark' },
       sounds: false,
     });
@@ -119,6 +124,9 @@ describe('settings/profile boundary', () => {
     });
     expect(updated.appearance).toMatchObject({
       board_theme: 'walnut',
+      checker_theme: 'moonstone',
+      dice_theme: 'bgblitz:bg-earth',
+      cube_theme: 'bgblitz:bg-moon',
       ui_theme: 'paper',
       mode: 'dark',
     });
@@ -127,11 +135,45 @@ describe('settings/profile boundary', () => {
     expect(current.general.player_name).not.toBe('After');
   });
 
+  it('merges each artwork choice independently and can restore inheritance', () => {
+    const current = structuredClone(defaultConfiguration);
+    current.appearance.board_theme = 'slate';
+    current.appearance.checker_theme = 'ion';
+    current.appearance.cube_theme = 'carbon';
+    const initial = {
+      settings: installed,
+      locale: 'en' as const,
+      board: {
+        theme: 'forest',
+        checkerTheme: 'moonstone',
+        diceTheme: 'bgblitz:bg-earth',
+        cubeTheme: 'carbon',
+      },
+      appearance: { theme: 'paper' as const, mode: 'dark' as const },
+      sounds: true,
+    };
+    const updated = applySettingsDraft(
+      current,
+      { ...initial, board: { ...initial.board, cubeTheme: null } },
+      initial,
+    );
+    expect(updated.appearance).toMatchObject({
+      board_theme: 'slate',
+      checker_theme: 'ion',
+      cube_theme: null,
+    });
+  });
+
   it('keeps the Top-2 profile valid when the current engine changed in another tab', () => {
     const initial = {
       settings: { ...installed, play_engine: 'bgsage' as const, play_plies: 2 },
       locale: 'en' as const,
-      theme: 'walnut',
+      board: {
+        theme: 'walnut',
+        checkerTheme: 'moonstone',
+        diceTheme: 'bgblitz:bg-earth',
+        cubeTheme: 'bgblitz:bg-moon',
+      },
       appearance: { theme: 'paper' as const, mode: 'dark' as const },
       sounds: false,
     };

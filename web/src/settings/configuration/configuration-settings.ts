@@ -76,11 +76,18 @@ export function settingsFromConfiguration(
   };
 }
 
+export interface BoardArtworkSelection {
+  theme: string;
+  checkerTheme: string | null;
+  diceTheme: string | null;
+  cubeTheme: string | null;
+}
+
 interface SettingsDraft {
   settings: AppSettings;
   errorThresholds?: ErrorThresholds;
   locale: Locale;
-  theme: string;
+  board: BoardArtworkSelection;
   appearance: UiAppearance;
   sounds: boolean;
 }
@@ -112,7 +119,10 @@ function profileSettings(draft: SettingsDraft) {
     appearance: {
       ui_theme: draft.appearance.theme,
       mode: draft.appearance.mode,
-      board_theme: draft.theme,
+      board_theme: draft.board.theme,
+      checker_theme: draft.board.checkerTheme,
+      dice_theme: draft.board.diceTheme,
+      cube_theme: draft.board.cubeTheme,
       bearoff_direction:
         settings.bearoff_direction ??
         defaultConfiguration.appearance.bearoff_direction,

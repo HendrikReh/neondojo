@@ -120,11 +120,11 @@ for (const config of [
       ).toHaveAttribute('href', theme.dice.black[1].src);
     } else {
       await expect(
-        board.locator('[data-opening-player="0"] .white-checker'),
-      ).toHaveCount(1);
+        board.locator('[data-opening-player="0"] circle'),
+      ).toHaveCount(6);
       await expect(
-        board.locator('[data-opening-player="1"] .black-checker'),
-      ).toHaveCount(1);
+        board.locator('[data-opening-player="1"] circle'),
+      ).toHaveCount(2);
     }
     const bounds = await board.boundingBox(),
       white = await board.locator('[data-opening-player="0"]').boundingBox(),

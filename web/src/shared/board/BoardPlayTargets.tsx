@@ -1,7 +1,14 @@
 import type { DiceInteraction } from './PlayDice';
 import type { CubeInteraction } from './PlayCube';
 import type { BgBlitzTheme } from './themes';
-import { pointColumns, stackGeometry } from './themes';
+import {
+  nativeField,
+  nativePointPitch,
+  nativePointX,
+  pointColumns,
+  pointStackGeometry,
+  stackGeometry,
+} from './themes';
 import { relativePoint } from './play-state';
 export interface BoardInteraction {
   enabled: number[];
@@ -26,7 +33,7 @@ export default function BoardPlayTargets({
     height = theme?.background.height ?? 470;
   const inset = theme
     ? stackGeometry(theme, theme.checkers.white[0], 1, 1, false).y
-    : height * 0.08;
+    : nativeField.y;
   const topY = Math.max(0, inset - 4),
     bottomY = height / 2 + 6,
     targetHeight = height / 2 - inset - 6;
@@ -34,16 +41,15 @@ export default function BoardPlayTargets({
     point,
     x: theme
       ? theme.columns[column] + theme.checkerOffsetX - 2
-      : 40 +
-        (column - 1 - (column > 7 ? 1 : 0)) * 51 +
-        (column > 7 ? 28 : 0) -
-        24,
+      : nativePointX(column - 1 - (column > 7 ? 1 : 0)) - nativePointPitch / 2,
     y: bottom ? bottomY : topY,
-    width: theme ? theme.checkers.white[0].width + 4 : 48,
+    width: theme ? theme.checkers.white[0].width + 4 : nativePointPitch,
     height: targetHeight,
   }));
-  const barX = theme ? theme.columns[7] + theme.checkerOffsetX - 2 : 325;
-  const barWidth = theme ? theme.checkers.white[0].width + 4 : 30;
+  const barX = theme
+    ? theme.columns[7] + theme.checkerOffsetX - 2
+    : 340 - nativePointPitch / 2;
+  const barWidth = theme ? theme.checkers.white[0].width + 4 : nativePointPitch;
   for (const point of [0, 25])
     rectangles.push({
       point,
@@ -65,40 +71,9 @@ export default function BoardPlayTargets({
     <g className="board-play-targets">
       {rectangles.map(({ point, x, y, width: w, height: h }) => {
         const count = point >= 0 && point <= 25 ? interaction.board[point] : 0;
-        const total = Math.min(5, Math.abs(count));
-        const bottom =
-          point === 25 || point === -1 || (point >= 1 && point <= 12);
-        let checkerX = x,
-          checkerY = y,
-          checkerW = w,
-          checkerH = 0;
-        if (total && point >= 0 && point <= 25) {
-          if (theme) {
-            const column =
-              point === 0 || point === 25
-                ? 7
-                : pointColumns.find((p) => p.point === point)!.column;
-            const image =
-              count > 0 ? theme.checkers.white[0] : theme.checkers.black[0];
-            const geo = stackGeometry(theme, image, column, count, bottom);
-            checkerX = geo.x;
-            checkerY = geo.y - (bottom ? (geo.visible - 1) * geo.step : 0);
-            checkerW = image.width;
-            checkerH = image.height + (geo.visible - 1) * geo.step;
-          } else {
-            checkerW = 37.4;
-            checkerX = x + (w - checkerW) / 2;
-            const first = bottom
-              ? point === 25
-                ? 406
-                : 409
-              : point === 0
-                ? 64
-                : 61;
-            checkerY = first - (bottom ? (total - 1) * 29 : 0) - 18.7;
-            checkerH = 37.4 + (total - 1) * 29;
-          }
-        }
+        const stack = pointStackGeometry(point, count, theme);
+        const { bottom } = stack;
+        const span = Math.max(0, stack.visible - 1) * stack.step;
         return (
           <g
             key={point}
@@ -144,15 +119,15 @@ export default function BoardPlayTargets({
                 r={height * 0.009}
               />
             )}
-            {interaction.sources.includes(point) && total > 0 && (
+            {interaction.sources.includes(point) && stack.visible > 0 && (
               <rect
                 className="play-checker-hover"
                 data-checker-hover-point={point}
-                x={checkerX}
-                y={checkerY}
-                width={checkerW}
-                height={checkerH}
-                rx={checkerW / 2}
+                x={stack.x}
+                y={stack.y - (bottom ? span : 0)}
+                width={stack.width}
+                height={stack.height + span}
+                rx={stack.width / 2}
                 aria-hidden="true"
                 onPointerEnter={() => interaction.onHover(point)}
                 onPointerLeave={() => interaction.onHover(null)}
