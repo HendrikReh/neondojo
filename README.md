@@ -166,3 +166,7 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 | | [Repository guidance](AGENTS.md) | Rules for changes to this repository |
 
 Dated plans and design specifications under [`docs/superpowers/`](docs/superpowers/) and product research under [`docs/research/`](docs/research/) record how features were planned. They are historical; the reference documents above describe the current behavior.
+
+## License
+
+You may use, modify, and share NeonDojo for noncommercial purposes, including personal study and free, unpaid instruction. Commercial use and the use of NeonDojo to prepare or deliver paid courses or coaching are prohibited. See the [NeonDojo Noncommercial License](LICENSE) for the full terms.
