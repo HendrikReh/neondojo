@@ -30,16 +30,8 @@ export function moveArrowGeometry(
       }
       board[step.to] += sign;
     }
-    // The native preview omits the play-only off tray from its viewBox.
-    const end =
-      step.to === 'off' && !theme
-        ? { x: 660, y: player === 0 ? 376 : 94 }
-        : checkerCenter(
-            board,
-            step.to === 'off' ? (player === 0 ? -1 : 26) : step.to,
-            player,
-            theme,
-          );
+    const target = step.to === 'off' ? (player === 0 ? -1 : 26) : step.to;
+    const end = checkerCenter(board, target, player, theme);
     return { start, end };
   });
 }

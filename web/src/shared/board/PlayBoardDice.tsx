@@ -11,6 +11,8 @@ export default function PlayBoardDice({
   interaction,
   theme,
   diceSet,
+  sideByOwner,
+  showBothDiceColors,
   onError,
 }: {
   dice: number[];
@@ -18,9 +20,12 @@ export default function PlayBoardDice({
   interaction?: DiceInteraction;
   theme?: BgBlitzTheme;
   diceSet: PieceSet;
+  sideByOwner?: boolean;
+  showBothDiceColors?: boolean;
   onError?: () => void;
 }) {
   const opening = interaction?.opening;
+  const split = opening || showBothDiceColors;
   const action = interaction?.roll
     ? 'roll'
     : interaction?.pass
@@ -30,14 +35,17 @@ export default function PlayBoardDice({
         : interaction?.canSwap
           ? 'swap'
           : undefined;
-  const pairAction = !opening && action && interaction?.[action];
+  const pairAction = !split && action && interaction?.[action];
   const visibleDice = interaction?.previousRoll?.dice ?? dice;
   const diceOwner = interaction?.previousRoll?.player ?? player;
   const entries = opening
     ? [0, 1].map((owner) => ({ owner, value: opening.values[owner] ?? null }))
     : visibleDice
         .filter((value) => value >= 1 && value <= 6)
-        .map((value) => ({ owner: diceOwner, value }));
+        .map((value, index) => ({
+          owner: showBothDiceColors ? index : diceOwner,
+          value,
+        }));
   const faces = entries.map(({ owner, value }, index) => {
     const face = value ?? 1;
     const side = owner === 0 ? 'white' : 'black';
@@ -45,14 +53,11 @@ export default function PlayBoardDice({
     const image = diceSet.archive?.dice[side][face - 1];
     const width = slot?.width ?? 33;
     const height = slot?.height ?? 33;
-    const x = theme
-      ? (owner === 0 ? theme.diceRightX : theme.diceLeftX) +
-        (opening ? 0 : index * width * 1.25)
-      : opening
-        ? owner === 0
-          ? 420
-          : 185
-        : 420 + index * 45;
+    const left = owner === 1 && (theme || sideByOwner || split);
+    const startX = left
+      ? (theme?.diceLeftX ?? 185)
+      : (theme?.diceRightX ?? 420);
+    const x = startX + (split ? 0 : index * (theme ? width * 1.25 : 45));
     const y = theme ? (theme.background.height - height) / 2 : 219;
     return { owner, value, image, width, height, x, y };
   });

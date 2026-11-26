@@ -1,5 +1,5 @@
-import { use } from 'react';
-import { checkerCounts } from './boardMath';
+import { use, type ReactPromise } from 'react';
+import { borneOffCounts } from './boardMath';
 import { isChunkLoadError, RetryableChunkError } from '../chunk-load';
 
 export interface ThemeImage {
@@ -29,35 +29,44 @@ export interface BgBlitzTheme {
   numbersY: number[];
 }
 
-let archiveRequest: Promise<BgBlitzTheme[]> | undefined;
-let archiveFailure: unknown;
-let installed: BgBlitzTheme[] | undefined;
+type ArchiveRequest = Promise<BgBlitzTheme[]> & ReactPromise<BgBlitzTheme[]>;
+
+let archiveRequest: ArchiveRequest | undefined;
 
 export function loadArchiveThemes() {
-  archiveFailure = undefined;
-  return (archiveRequest ??= import('./archive-themes').then(
-    ({ default: themes }) => {
-      installed = themes;
-      return themes;
+  if (archiveRequest && archiveRequest.status !== 'rejected')
+    return archiveRequest;
+
+  const request: ArchiveRequest = Object.assign(
+    import('./archive-themes').then(
+      ({ default: themes }) => themes,
+      (error: unknown) => {
+        if (isChunkLoadError(error))
+          throw new RetryableChunkError(error, () => {
+            if (archiveRequest === request) archiveRequest = undefined;
+          });
+        throw error;
+      },
+    ),
+    { status: 'pending' } as const,
+  );
+  // React can read an already preloaded catalog synchronously through use().
+  void request.then(
+    (value) => {
+      Object.assign(request, { status: 'fulfilled', value });
     },
-    (error: unknown) => {
-      archiveRequest = undefined;
-      // React replays a suspended render. Keep the failure visible until a retry.
-      archiveFailure = isChunkLoadError(error)
-        ? new RetryableChunkError(error, () => {
-            archiveFailure = undefined;
-          })
-        : error;
-      throw archiveFailure;
+    (reason: unknown) => {
+      Object.assign(request, { status: 'rejected', reason });
     },
-  ));
+  );
+  return (archiveRequest = request);
 }
 
 const empty: BgBlitzTheme[] = [];
 export function useArchiveThemes(required: boolean) {
-  if (!required) return empty;
-  if (archiveFailure !== undefined) throw archiveFailure;
-  return installed ?? use(loadArchiveThemes());
+  // Keep the same request during Suspense replay, including a rejection
+  // until the error boundary's Retry action clears it.
+  return required ? use(archiveRequest ?? loadArchiveThemes()) : empty;
 }
 
 export { default as builtInThemes } from '../../../../shared/builtin-board-themes.json' with { type: 'json' };
@@ -109,6 +118,13 @@ export const nativeField = {
   height: 414,
 };
 
+export const nativeOffTray = {
+  x: nativeField.x + nativeField.width + (nativeField.x - nativePointPitch) / 2,
+  y: nativeField.y,
+  width: nativePointPitch,
+  height: nativeField.height,
+};
+
 export function nativePointX(index: number) {
   return (
     nativeField.x + (index + 0.5 + (index >= 6 ? 1 : 0)) * nativePointPitch
@@ -133,7 +149,11 @@ export function pointStackGeometry(
     };
   }
   const index = column - 1 - (column > 7 ? 1 : 0);
-  const centerX = off ? 706 : column === 7 ? 340 : nativePointX(index);
+  const centerX = off
+    ? nativeOffTray.x + nativeOffTray.width / 2
+    : column === 7
+      ? 340
+      : nativePointX(index);
   return {
     x: centerX - nativeCheckerSize / 2,
     y: bottom
@@ -156,9 +176,7 @@ export function checkerCenter(
   theme?: BgBlitzTheme,
 ) {
   const off = point === -1 || point === 26;
-  const count = off
-    ? 15 - checkerCounts(board)[player]
-    : Math.abs(board[point]);
+  const count = off ? borneOffCounts(board)[player] : Math.abs(board[point]);
   const stack = pointStackGeometry(
     point,
     (player === 0 ? 1 : -1) * Math.max(1, count),

@@ -179,6 +179,7 @@ export default function BoardSettingsSection({
             checkerTheme={checkerTheme}
             cubeTheme={cubeTheme}
             diceTheme={diceTheme}
+            showBothDiceColors
             white={t('light')}
             black={t('dark')}
           />
