@@ -700,6 +700,18 @@ async fn exports_preserve_bytes_and_reject_missing_or_oversized_selection(pool: 
             }
         }
     }
+    let (status, error) = request(
+        &pool,
+        "POST",
+        "/api/library/export",
+        Some(json!({"match_ids":[a],"format":"csv"})),
+    )
+    .await;
+    assert_eq!(status, 422, "{error}");
+    let message = error["error"].as_str().unwrap();
+    for word in ["format", "csv", "original", "sgf", "xg"] {
+        assert!(message.contains(word), "{message}");
+    }
     assert_eq!(
         request(
             &pool,
