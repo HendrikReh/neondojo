@@ -1,7 +1,8 @@
 //! Retain GNUbg for one atomic play action chain or one seeded duel game.
 use super::{NativeRequest, NativeSnapshot, engine_match::GameDice};
 use crate::{
-    engine::{Engine, EngineWorkspace, Installation},
+    async_temp_dir::AsyncTempDir,
+    engine::{Engine, Installation},
     engine_process::terminate_and_reap,
 };
 use anyhow::{Context, Result, ensure};
@@ -16,7 +17,7 @@ const FRAME_LIMIT: usize = 65536;
 const TIMEOUT: Duration = Duration::from_secs(180);
 
 pub(super) struct RulesProcess {
-    directory: EngineWorkspace,
+    directory: AsyncTempDir,
     engine: Engine,
     /// Checked before startup and again before commit.
     installation: Installation,
@@ -52,7 +53,7 @@ impl RulesProcess {
         sgf: Option<&str>,
         dice: Option<&GameDice>,
     ) -> Result<Self> {
-        let directory = EngineWorkspace::new().await?;
+        let directory = AsyncTempDir::new().await?;
         let command = "load python rules_worker.py\n";
         let (commands, threads, action_limit) = if let Some(dice) = dice {
             tokio::fs::write(directory.path().join("dice.txt"), dice.rng_file()?).await?;

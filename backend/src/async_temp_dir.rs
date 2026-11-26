@@ -1,15 +1,15 @@
-//! Temporary working directories for native engine processes.
+//! Temporary directories whose creation and recursive removal can block.
 use anyhow::Result;
 use std::path::Path;
 use tempfile::TempDir;
 use tokio::runtime::Handle;
 
-pub(crate) struct EngineWorkspace {
+pub(crate) struct AsyncTempDir {
     directory: Option<TempDir>,
     runtime: Handle,
 }
 
-impl EngineWorkspace {
+impl AsyncTempDir {
     pub(crate) async fn new() -> Result<Self> {
         // Return the guard itself so cancellation after creation also schedules cleanup.
         tokio::task::spawn_blocking(|| {
@@ -26,7 +26,7 @@ impl EngineWorkspace {
     }
 }
 
-impl Drop for EngineWorkspace {
+impl Drop for AsyncTempDir {
     fn drop(&mut self) {
         if let Some(directory) = self.directory.take() {
             self.runtime.spawn_blocking(move || drop(directory));

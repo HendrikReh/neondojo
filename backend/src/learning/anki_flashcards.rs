@@ -79,7 +79,7 @@ pub(super) async fn upload(
         .map_err(|error| ApiError(error.status(), error.body_text().into()))?
         .filter(|field| field.name() == Some("file"))
         .ok_or_else(|| ApiError::invalid("Select an Anki package"))?;
-    let directory = tempfile::tempdir().map_err(anyhow::Error::from)?;
+    let directory = crate::async_temp_dir::AsyncTempDir::new().await?;
     let package = directory.path().join("upload.apkg");
     let mut file = tokio::fs::File::create(&package)
         .await
@@ -102,10 +102,13 @@ pub(super) async fn upload(
     file.flush().await.map_err(anyhow::Error::from)?;
     drop(file);
     let inspected = package.clone();
-    tokio::task::spawn_blocking(move || inspect_archive(&inspected))
-        .await
-        .map_err(anyhow::Error::from)?
-        .map_err(|error| ApiError::invalid(format!("Invalid Anki package: {error}")))?;
+    let (directory, inspection) = tokio::task::spawn_blocking(move || {
+        let result = inspect_archive(&inspected);
+        (directory, result)
+    })
+    .await
+    .map_err(anyhow::Error::from)?;
+    inspection.map_err(|error| ApiError::invalid(format!("Invalid Anki package: {error}")))?;
     let output = directory.path().join("rendered");
     tokio::fs::create_dir(&output)
         .await

@@ -172,7 +172,11 @@ pub(super) async fn receive(headers: &HeaderMap, body: Body) -> ApiResult<File> 
     {
         return Err(too_large());
     }
-    let mut file = File::from_std(tempfile::tempfile().context("Creating backup upload file")?);
+    let file = tokio::task::spawn_blocking(tempfile::tempfile)
+        .await
+        .context("Preparing backup upload")?
+        .context("Creating backup upload file")?;
+    let mut file = File::from_std(file);
     let mut stream = body.into_data_stream();
     let mut length = 0_u64;
     while let Some(chunk) = timeout(Duration::from_secs(60), stream.next())
