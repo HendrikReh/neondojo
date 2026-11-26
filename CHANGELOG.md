@@ -8,6 +8,7 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [1.4.2] - 2026-11-26
 
+- Adds six original board finishes with matching marbled checker sets.
 - Supports NeonGammon 3.2.1 cooperative 3- and 4-ply checker batches. Existing engine snapshots retain their interpreter, identity, and supported evaluation paths.
 - Verified batches check file metadata at both boundaries and repeat SHA-256 verification when the installation changes.
 - Expired benchmarks are cleaned up while idle. Engine Duels retry temporary database connection errors within their lease.
