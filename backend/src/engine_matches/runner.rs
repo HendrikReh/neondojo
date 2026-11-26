@@ -27,7 +27,7 @@ pub async fn worker(state: AppState) {
                 };
                 run_one(&state.pool).await
             } => match result {
-                Ok(true) => continue,
+                Ok(true) => { state.browse_wake.notify_one(); continue; },
                 Ok(false) => {}
                 Err(error) => tracing::error!(%error, "Engine match worker error"),
             },

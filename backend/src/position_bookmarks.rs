@@ -78,6 +78,9 @@ async fn save_bookmark(
     path: Result<Path<Uuid>, ApiError>,
 ) -> ApiResult<Json<PositionBookmark>> {
     let id = position_id(path)?;
+    crate::imported_analysis::projections::prepare_bookmark_source(&state.pool, id)
+        .await
+        .map_err(anyhow::Error::from)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     lock_position(&mut tx, id).await?;
     sqlx::query("INSERT INTO saved_positions(position_uuid) VALUES($1) ON CONFLICT(position_uuid) DO NOTHING")
@@ -85,8 +88,13 @@ async fn save_bookmark(
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
+    crate::position_game_plans::refresh(&mut tx, Some(id))
+        .await
+        .map_err(anyhow::Error::from)?;
+    crate::imported_analysis::projections::refresh(&mut tx, Some(id)).await?;
     let bookmark = load_bookmark(&mut tx, id).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
+    state.browse_wake.notify_one();
     Ok(Json(bookmark))
 }
 

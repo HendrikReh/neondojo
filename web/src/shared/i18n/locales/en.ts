@@ -433,6 +433,7 @@ export default {
     'error.fileSize': 'The file must be no larger than 16 MiB.',
     'error.positionMissing': 'The analyzed position was not found.',
     'error.invalidResponse': 'The backend returned an invalid response.',
+    'error.indexPreparing': 'Search results are being prepared. Try again shortly.',
     'error.request': 'Request failed (HTTP {status}).',
     'error.network': 'Could not connect to the backend.',
     'error.conflict': 'The data has changed in the meantime.',

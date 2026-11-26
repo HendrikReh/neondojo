@@ -452,6 +452,7 @@ export default {
     'error.fileSize': 'Le fichier ne doit pas dépasser 16 Mio.',
     'error.positionMissing': 'La position analysée est introuvable.',
     'error.invalidResponse': 'Le serveur a renvoyé une réponse non valide.',
+    'error.indexPreparing': 'Les résultats de recherche sont en cours de préparation. Réessayez dans un instant.',
     'error.request': 'La requête a échoué (HTTP {status}).',
     'error.network': 'Connexion au serveur impossible.',
     'error.conflict': 'Les données ont changé entre-temps.',

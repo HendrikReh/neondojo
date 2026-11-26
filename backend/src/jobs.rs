@@ -337,6 +337,9 @@ async fn run_claimed(state: &AppState, claimed: Claimed) -> Result<bool> {
             .bind(job.id).execute(&mut *tx).await?;
     }
     tx.commit().await?;
+    if job.kind == "match" && changed.rows_affected() == 1 {
+        state.browse_wake.notify_one();
+    }
     Ok(true)
 }
 

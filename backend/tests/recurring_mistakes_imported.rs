@@ -1,3 +1,4 @@
+use super::recurring_mistakes::prepare_decision_index;
 use crate::support;
 use neondojo::{import, store};
 use serde_json::{Value, json};
@@ -20,6 +21,7 @@ async fn decision_index_tracks_in_place_imported_changes(pool: PgPool) {
             Value::Null,
         )
     };
+    prepare_decision_index(&pool).await;
     let (status, before) = search().await;
     assert_eq!(status, 200, "{before}");
     assert_eq!(before["total"], 2);
@@ -32,6 +34,7 @@ async fn decision_index_tracks_in_place_imported_changes(pool: PgPool) {
     .execute(&pool)
     .await
     .unwrap();
+    prepare_decision_index(&pool).await;
     let (status, after) = search().await;
     assert_eq!(status, 200, "{after}");
     assert_eq!(after["total"], 2);
@@ -51,6 +54,7 @@ async fn decision_index_tracks_in_place_imported_changes(pool: PgPool) {
         .execute(&pool)
         .await
         .unwrap();
+    prepare_decision_index(&pool).await;
     let (status, after_delete) = search().await;
     assert_eq!(status, 200, "{after_delete}");
     assert_eq!(after_delete["total"], 1);
@@ -80,6 +84,7 @@ async fn imports_are_eligible_private_and_reveal_preserves_metadata(pool: PgPool
     let (status, choices) = call(&router, "GET", "/api/study/mistakes", Value::Null).await;
     assert_eq!(status, 200, "{choices}");
     assert_eq!(choices["players"], json!(["Alice", "Bob"]));
+    prepare_decision_index(&pool).await;
     let (status, groups) = call(
         &router,
         "GET",
@@ -148,6 +153,7 @@ async fn selected_native_checkpoint_stales_all_imported_references_without_cross
     let (id, ids) = imported(&pool).await;
     let router = app(&pool);
     checkpoint(&pool, id, 1).await;
+    prepare_decision_index(&pool).await;
     let (_, groups) = call(
         &router,
         "GET",
@@ -180,6 +186,7 @@ async fn selected_native_checkpoint_stales_all_imported_references_without_cross
         404
     );
     checkpoint(&pool, id, 2).await;
+    prepare_decision_index(&pool).await;
     assert_eq!(
         call(
             &router,
@@ -295,6 +302,7 @@ async fn real_binary_xg_legacy_catalog_is_loaded_without_engine_jobs(pool: PgPoo
             .unwrap();
     assert!(!loaded, "choices must not parse legacy originals");
     let player = choices["players"][0].as_str().unwrap().replace(' ', "%20");
+    prepare_decision_index(&pool).await;
     let (status, groups) = call(
         &router,
         "GET",
@@ -326,6 +334,7 @@ async fn cataloged_imports_use_source_events_without_fetching_large_analysis_art
     pool: PgPool,
 ) {
     let (id, _) = imported(&pool).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     assert_eq!(
         call(
@@ -365,6 +374,7 @@ async fn unknown_units_and_source_identity_mismatches_are_not_counted(pool: PgPo
     .execute(&pool)
     .await
     .unwrap();
+    prepare_decision_index(&pool).await;
     let (status, groups) = call(
         &router,
         "GET",
@@ -395,6 +405,14 @@ async fn legacy_catalog_batches_make_progress_without_returning_partial_counts(p
         .id;
         sqlx::query("UPDATE matches SET format='xg',imported_analysis_loaded=true,moves_cataloged=false WHERE id=$1").bind(id).execute(&pool).await.unwrap();
     }
+    // Put an unreadable source at the start of the worker's UUID ordering.
+    let damaged: Uuid = sqlx::query_scalar(
+        "UPDATE matches SET sgf='invalid' WHERE id=(SELECT id FROM matches ORDER BY id LIMIT 1)
+         RETURNING id",
+    )
+    .fetch_one(&pool)
+    .await
+    .unwrap();
     let router = app(&pool);
     let (status, error) = call(
         &router,
@@ -403,13 +421,48 @@ async fn legacy_catalog_batches_make_progress_without_returning_partial_counts(p
         Value::Null,
     )
     .await;
-    assert_eq!(status, 422, "{error}");
-    assert!(error["error"].as_str().unwrap().contains("retry"));
+    assert_eq!(status, 503, "{error}");
+    assert_eq!(error["code"], "index_preparing");
+    let mut cursor = None;
+    assert!(
+        neondojo::recurring_mistakes::backfill_batch(&pool, &mut cursor)
+            .await
+            .unwrap_or_else(|_| panic!("decision index backfill failed"))
+    );
     let done: i64 = sqlx::query_scalar("SELECT count(*) FROM matches WHERE moves_cataloged")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(done, 16);
+    assert_eq!(done, 15);
+    let (status, _) = call(
+        &router,
+        "GET",
+        "/api/study/mistakes?player=Alice",
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 503);
+    assert!(
+        !neondojo::recurring_mistakes::backfill_batch(&pool, &mut cursor)
+            .await
+            .unwrap_or_else(|_| panic!("decision index backfill failed"))
+    );
+    assert!(cursor.is_none());
+    let pending: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM matches WHERE NOT moves_cataloged")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        pending,
+        [damaged],
+        "the failing source must not block later batches"
+    );
+    sqlx::query("UPDATE matches SET sgf=convert_from(original,'UTF8') WHERE id=$1")
+        .bind(damaged)
+        .execute(&pool)
+        .await
+        .unwrap();
+    prepare_decision_index(&pool).await;
     let (status, result) = call(
         &router,
         "GET",
@@ -431,6 +484,7 @@ async fn foreign_position_ownership_and_best_candidate_method_are_preserved(pool
     let router = app(&pool);
     sqlx::query("UPDATE imported_analyses SET position_uuid=(SELECT position_uuid FROM imported_analyses WHERE id=$2) WHERE id=$1").bind(ids[0]).bind(ids[1]).execute(&pool).await.unwrap();
     sqlx::query("UPDATE imported_analyses SET data=jsonb_set(data,'{candidates,0,method}','\"rollout\"') WHERE id=$1").bind(ids[1]).execute(&pool).await.unwrap();
+    prepare_decision_index(&pool).await;
     let (status, groups) = call(
         &router,
         "GET",
@@ -465,6 +519,7 @@ async fn foreign_position_ownership_and_best_candidate_method_are_preserved(pool
 #[sqlx::test(migrations = "./migrations")]
 async fn imported_decision_hits_become_cards_with_their_imported_solution(pool: PgPool) {
     let (_, ids) = imported(&pool).await;
+    prepare_decision_index(&pool).await;
     let router = app(&pool);
     let (status, page) = call(
         &router,
@@ -581,5 +636,42 @@ async fn decision_batch_reads_only_requested_primary_imports(pool: PgPool) {
     ]) {
         assert_eq!(item["reference"], reference);
         assert_eq!(item["status"], expected, "{result}");
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn decision_gets_report_a_stale_index_on_read_only_connections(pool: PgPool) {
+    imported(&pool).await;
+    let reader = sqlx::postgres::PgPoolOptions::new()
+        .after_connect(|conn, _| {
+            Box::pin(async move {
+                sqlx::query("SET default_transaction_read_only = on")
+                    .execute(conn)
+                    .await?;
+                Ok(())
+            })
+        })
+        .connect_with(pool.connect_options().as_ref().clone())
+        .await
+        .unwrap();
+    let router = app(&reader);
+    let paths = [
+        "/api/study/mistakes?player=Alice",
+        "/api/study/decisions?player=Alice",
+    ];
+    prepare_decision_index(&pool).await;
+    sqlx::query("UPDATE decision_index_matches SET fingerprint='old-version'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    for path in paths {
+        let (status, body) = call(&router, "GET", path, Value::Null).await;
+        assert_eq!(status, 503, "{path} {body}");
+        assert_eq!(body["code"], "index_preparing");
+    }
+    prepare_decision_index(&pool).await;
+    for path in paths {
+        let (status, body) = call(&router, "GET", path, Value::Null).await;
+        assert_eq!(status, 200, "{path} {body}");
     }
 }

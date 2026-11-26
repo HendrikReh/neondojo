@@ -480,6 +480,9 @@ async fn retained_notes_analyses_and_existing_cards_remain_usable_without_resett
         "learning payload and FSRS state remain unchanged"
     );
     assert!(store::get_job(&pool, job).await.unwrap().is_some());
+    neondojo::browse_indexes::backfill_batch(&pool, &mut Default::default())
+        .await
+        .unwrap();
     let browser = get(&pool, "/api/position-browser").await;
     let notes = browser["items"][0]["notes"].as_array().unwrap();
     for scope in ["match", "game", "move", "position"] {

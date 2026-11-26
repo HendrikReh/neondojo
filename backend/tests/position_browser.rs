@@ -95,13 +95,92 @@ async fn setup(pool: &PgPool) -> (axum::Router, Uuid, Vec<Position>) {
 // Browser behavior fixtures deliberately join the saved collection; import
 // alone remains unbookmarked and is covered in position_bookmarks.rs.
 async fn save_match(pool: &PgPool, id: Uuid) {
-    sqlx::query(
-        "INSERT INTO saved_positions(position_uuid) SELECT id FROM positions WHERE match_uuid=$1",
+    let app = api::router(AppState::new(pool.clone(), Engine::new("unused".into())));
+    let ids: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1")
+        .bind(id)
+        .fetch_all(pool)
+        .await
+        .unwrap();
+    for position in ids {
+        let (status, response) = call(
+            app.clone(),
+            "PUT",
+            &format!("/api/positions/{position}/bookmark"),
+            None,
+        )
+        .await;
+        assert_eq!(status, 200, "{response}");
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn stale_game_plan_filter_reports_preparation_without_writing(pool: PgPool) {
+    let (_, _, positions) = setup(&pool).await;
+    sqlx::query("DELETE FROM position_game_plans")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let options = (*pool.connect_options())
+        .clone()
+        .options([("default_transaction_read_only", "on")]);
+    let reader = sqlx::postgres::PgPoolOptions::new()
+        .connect_with(options)
+        .await
+        .unwrap();
+    let app = api::router(AppState::new(reader.clone(), Engine::new("unused".into())));
+    let path = format!(
+        "/api/position-browser?filters={}",
+        encoded(&definition(json!({"game_plan":"opening"})))
+    );
+    let (status, body) = call(app.clone(), "GET", &path, None).await;
+    assert_eq!(status, 503, "{body}");
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM position_game_plans")
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(body["code"], "index_preparing");
+    let state = AppState::new(pool.clone(), Engine::new("unused".into()));
+    let worker = tokio::spawn(neondojo::browse_indexes::worker(state.clone()));
+    let wait_for_page = || async {
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let (status, body) = call(app.clone(), "GET", &path, None).await;
+                if status == 200 {
+                    break;
+                }
+                assert_eq!(status, 503, "{body}");
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("background worker did not prepare the read-only page");
+    };
+    wait_for_page().await;
+
+    // Invalidate one occurrence, then save a different one. A write notification
+    // must wake the worker before its 60-second recovery poll.
+    sqlx::query("DELETE FROM position_game_plans WHERE position_uuid=$1")
+        .bind(positions[0].id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(call(app.clone(), "GET", &path, None).await.0, 503);
+    let writer = api::router(state.clone());
+    let (status, saved) = call(
+        writer,
+        "PUT",
+        &format!("/api/positions/{}/bookmark", positions[1].id),
+        None,
     )
-    .bind(id)
-    .execute(pool)
-    .await
-    .unwrap();
+    .await;
+    assert_eq!(status, 200, "{saved}");
+    wait_for_page().await;
+    state.shutdown.cancel();
+    worker.await.unwrap();
+    reader.close().await;
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -2019,6 +2098,15 @@ async fn game_plan_cache_is_versioned_and_retained_positions_remain_searchable(p
             .unwrap();
         sqlx::query("INSERT INTO position_game_plans(position_uuid,classifier,game_plan) VALUES($1,'old_rules','pure_race')").bind(position.id).execute(&pool).await.unwrap();
     }
+    // Simulate a classifier version change on the edited fixture boards.
+    sqlx::query("DELETE FROM position_game_plans WHERE classifier=$1")
+        .bind(neondojo::game_plan::CLASSIFIER)
+        .execute(&pool)
+        .await
+        .unwrap();
+    neondojo::browse_indexes::backfill_batch(&pool, &mut Default::default())
+        .await
+        .unwrap();
     let white = search(app.clone(), json!({"game_plan":"attacking"})).await;
     assert!(
         white["items"]
@@ -2066,7 +2154,7 @@ async fn game_plan_cache_is_versioned_and_retained_positions_remain_searchable(p
 }
 
 #[sqlx::test(migrations = "./migrations")]
-async fn large_game_plan_backfill_is_bounded_and_requires_retry_before_searching(pool: PgPool) {
+async fn large_game_plan_backfill_advances_in_background_without_browsing(pool: PgPool) {
     let (app, _, positions) = setup(&pool).await;
     sqlx::query("INSERT INTO positions(id,match_uuid,ordinal,game_no,ply,player,dice,board,position_id,gnubg_match_id,notation) SELECT gen_random_uuid(),p.match_uuid,100+n,p.game_no,p.ply,p.player,p.dice,p.board,p.position_id,p.gnubg_match_id,p.notation FROM positions p CROSS JOIN generate_series(1,4100) n WHERE p.id=$1").bind(positions[0].id).execute(&pool).await.unwrap();
     sqlx::query("INSERT INTO saved_positions(position_uuid) SELECT id FROM positions ON CONFLICT DO NOTHING").execute(&pool).await.unwrap();
@@ -2075,13 +2163,23 @@ async fn large_game_plan_backfill_is_bounded_and_requires_retry_before_searching
         encoded(&json!({"schema_version":1,"game_plan":"priming"}))
     );
     let (status, error) = call(app.clone(), "GET", &path, None).await;
-    assert_eq!(status, 422, "{error}");
-    assert!(error["error"].as_str().unwrap().contains("retry"));
+    assert_eq!(status, 503, "{error}");
+    assert_eq!(error["code"], "index_preparing");
+    let mut cursor = Default::default();
+    assert!(
+        neondojo::browse_indexes::backfill_batch(&pool, &mut cursor)
+            .await
+            .unwrap()
+    );
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM position_game_plans")
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(count, 4096);
+    assert_eq!(count, positions.len() as i64 + 512);
+    while neondojo::browse_indexes::backfill_batch(&pool, &mut cursor)
+        .await
+        .unwrap()
+    {}
     assert_eq!(call(app, "GET", &path, None).await.0, 200);
 }
 

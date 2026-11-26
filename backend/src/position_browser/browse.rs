@@ -77,13 +77,16 @@ pub(super) fn push_native_analysis(sql: &mut QueryBuilder<'_, Postgres>) {
         .push(" ORDER BY ia.source_ordinal LIMIT 1) imported ON true");
 }
 
-pub(super) async fn database_exists(pool: &PgPool, id: Option<Uuid>) -> ApiResult<()> {
+pub(super) async fn database_exists<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    id: Option<Uuid>,
+) -> ApiResult<()> {
     if let Some(id) = id {
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
         )
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(db)
         .await
         .map_err(anyhow::Error::from)?;
         if !exists {
@@ -95,7 +98,7 @@ pub(super) async fn database_exists(pool: &PgPool, id: Option<Uuid>) -> ApiResul
     Ok(())
 }
 
-#[utoipa::path(get,path="/api/position-browser",params(PositionBrowserQuery),responses((status=200,body=PositionBrowserPage),(status=422,body=ErrorBody)),tag="Positions")]
+#[utoipa::path(get,path="/api/position-browser",params(PositionBrowserQuery),responses((status=200,body=PositionBrowserPage),(status=422,body=ErrorBody),(status=503,body=ErrorBody,description="The saved-position index is being prepared")),tag="Positions")]
 pub(super) async fn search(
     State(s): State<AppState>,
     Query(query): Query<PositionBrowserQuery>,
@@ -114,10 +117,8 @@ pub(super) async fn search(
         return Err(ApiError::invalid("limit must be 1–100"));
     }
     let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
-    database_exists(&s.pool, filters.database_id).await?;
-    if filters.game_plan.is_some() {
-        crate::position_game_plans::ensure_saved(&s.pool, filters.database_id).await?;
-    }
+    let mut tx = crate::browse_indexes::read_snapshot(&s.pool).await?;
+    database_exists(&mut *tx, filters.database_id).await?;
     let scope = format!(
         "{CURSOR_SCOPE}{:x}",
         Sha256::digest(serde_json::to_vec(&filters).map_err(anyhow::Error::from)?)
@@ -159,12 +160,26 @@ pub(super) async fn search(
         Some(BrowserCursor::Table(cursor)) => Some(cursor.anchor),
         None => None,
     };
-    crate::imported_analysis::projections::ensure_saved(&s.pool, filters.database_id).await?;
+    if filters.game_plan.is_some()
+        && crate::position_game_plans::pending(&mut tx, filters.database_id)
+            .await
+            .map_err(anyhow::Error::from)?
+    {
+        return Err(crate::browse_indexes::preparing(
+            "The saved game-plan index",
+        ));
+    }
+    if crate::imported_analysis::projections::pending(&mut tx, filters.database_id)
+        .await
+        .map_err(anyhow::Error::from)?
+    {
+        return Err(crate::browse_indexes::preparing("The saved analysis index"));
+    }
     let mut sql = QueryBuilder::<Postgres>::new("");
     push_browse_query(&mut sql, &filters, direction, limit, offset, anchor);
     let mut rows = sql
         .build()
-        .fetch_all(&s.pool)
+        .fetch_all(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
     if anchor.is_some() {
@@ -192,7 +207,8 @@ pub(super) async fn search(
     rows.truncate(limit as usize);
     let mut items = Vec::with_capacity(rows.len());
     let mut next_cursor = None;
-    let thresholds = crate::configuration::store::error_thresholds(&s.pool).await?;
+    let thresholds = crate::configuration::store::error_thresholds(&mut *tx).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
     for row in rows {
         let position: Position =
             serde_json::from_value(row.get("position")).map_err(anyhow::Error::from)?;

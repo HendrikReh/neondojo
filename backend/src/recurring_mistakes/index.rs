@@ -16,12 +16,13 @@ use uuid::Uuid;
 
 /// Bump when the stored columns or the hit format change.
 const INDEX_VERSION: &str = "2";
-/// Matches re-indexed by one request; a larger backlog asks for a retry.
-const MAX_REBUILDS: usize = 400;
-/// Loads of one match per request while its saved decisions keep changing.
+/// Bound both fingerprint checks on a warm library and costly projections
+/// when a new classifier or restored backup leaves the whole index stale.
+const SCAN_SIZE: usize = 128;
+const BATCH_SIZE: usize = 16;
+/// Loads of one match per worker pass while its saved decisions keep changing.
 const MAX_PUBLISH_ATTEMPTS: usize = 3;
-const CHANGED: &str =
-    "Saved analyses changed while the decision index was updated; retry this request";
+const CHANGED: &str = "Saved analyses changed repeatedly during decision index preparation";
 
 #[derive(Clone, FromRow)]
 struct Candidate {
@@ -54,7 +55,10 @@ const CANDIDATES: &str = concat!(
                 coalesce(m.played_on, m.created_at::date) AS played,
                 m.white, m.black,
                 n.job_id AS native_revision_job, i.match_id AS imported_revision_match,
-                x.fingerprint AS stored
+                x.fingerprint AS stored,
+                (NOT live.blocked AND ",
+    super::imported::pending_catalog!(),
+    ") AS pending_catalog
          FROM matches m
          -- OFFSET 0 keeps the catalog lookup scoped to this match.
          LEFT JOIN LATERAL (
@@ -72,13 +76,18 @@ const CANDIDATES: &str = concat!(
          WHERE NOT m.collection_only"
 );
 
-/// The candidates of one player's scope: `$2` database or NULL, `$3` the
-/// player's lowercase names. The name filter matches the expression indexes
-/// `matches_library_white_player` and `matches_library_black_player`.
-pub(super) fn scope_candidates_sql() -> String {
+const STALE: &str = "pending_catalog OR stored IS DISTINCT FROM fingerprint";
+
+/// Plan the player scope independently so PostgreSQL uses its participant
+/// indexes even under EXISTS. Only a boolean per visited match is buffered,
+/// and the reader can stop at the first stale one.
+pub(super) fn scope_pending_sql() -> String {
     format!(
-        "{CANDIDATES} AND ($2::uuid IS NULL OR m.database_id=$2)
-           AND (lower(btrim(m.white))=ANY($3) OR lower(btrim(m.black))=ANY($3))"
+        "WITH freshness AS MATERIALIZED (SELECT ({STALE}) AS pending FROM ({CANDIDATES}
+            AND ($2::uuid IS NULL OR m.database_id=$2)
+            AND (lower(btrim(m.white))=ANY($3) OR lower(btrim(m.black))=ANY($3))
+            AND (NOT $4 OR {INDEPENDENT_MATCH})) candidates)
+         SELECT EXISTS(SELECT 1 FROM freshness WHERE pending)"
     )
 }
 
@@ -86,34 +95,61 @@ pub(super) fn version() -> String {
     format!("{INDEX_VERSION}:{}", crate::game_plan::CLASSIFIER)
 }
 
-/// Bring the index up to date for one player's matches in the scope.
-pub(super) async fn ensure(
-    pool: &PgPool,
+pub(super) async fn require_current(
+    connection: &mut PgConnection,
     database: Option<Uuid>,
     player: &[String],
+    independent_only: bool,
 ) -> ApiResult<()> {
-    // Older imports gain their displayed analysis only once they are cataloged.
-    // This is bounded per request and reports when a retry is needed.
-    super::imported::catalog_legacy(pool, database, None, Some(player)).await?;
-    let candidates: Vec<Candidate> = sqlx::query_as(&scope_candidates_sql())
+    let pending: bool = sqlx::query_scalar(&scope_pending_sql())
         .bind(version())
         .bind(database)
         .bind(player)
-        .fetch_all(pool)
+        .bind(independent_only)
+        .persistent(false)
+        .fetch_one(connection)
         .await
         .map_err(anyhow::Error::from)?;
-    let stale: Vec<Uuid> = candidates
-        .into_iter()
-        .filter(|candidate| !candidate.is_current())
-        .map(|candidate| candidate.id)
-        .collect();
-    if stale.len() > MAX_REBUILDS {
-        return Err(ApiError::invalid(super::source::TOO_BROAD));
-    }
-    for id in stale {
-        publish(pool, id).await?;
+    if pending {
+        return Err(crate::browse_indexes::preparing("The decision index"));
     }
     Ok(())
+}
+
+/// Advance in UUID order so a damaged or changing source cannot prevent
+/// other matches from being indexed. Continue immediately at either batch
+/// limit. A later wakeup starts a new pass and retries failed matches.
+pub async fn backfill_batch(pool: &PgPool, after: &mut Option<Uuid>) -> ApiResult<bool> {
+    let matches: Vec<(Uuid, bool)> = sqlx::query_as(&format!(
+        "SELECT id, ({STALE}) FROM ({CANDIDATES} AND m.id=ANY(ARRAY(
+             SELECT id FROM matches WHERE NOT collection_only AND ($2::uuid IS NULL OR id>$2)
+             ORDER BY id LIMIT $3))) candidates ORDER BY id"
+    ))
+    .bind(version())
+    .bind(*after)
+    .bind(SCAN_SIZE as i64)
+    .persistent(false)
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let full_scan = matches.len() == SCAN_SIZE;
+    let mut attempted = 0;
+    for (id, stale) in matches {
+        *after = Some(id);
+        if stale {
+            if let Err(ApiError(status, body)) = publish(pool, id).await {
+                tracing::warn!(match_id=%id, %status, error=%body.error, "Could not prepare decision index");
+            }
+            attempted += 1;
+            if attempted == BATCH_SIZE {
+                return Ok(true);
+            }
+        }
+    }
+    if !full_scan {
+        *after = None;
+    }
+    Ok(full_scan)
 }
 
 /// Record the current fingerprint for every match that already has an index
@@ -358,7 +394,7 @@ pub(super) const INDEPENDENT_MATCH: &str =
 /// Aggregate one player's indexed decisions into mistake groups.
 /// Returns the groups, the evaluable decisions and the matches they cover.
 pub(super) async fn groups(
-    pool: &PgPool,
+    connection: &mut PgConnection,
     database: Option<Uuid>,
     player: &[String],
     plan: Option<crate::game_plan::GamePlan>,
@@ -387,7 +423,7 @@ pub(super) async fn groups(
     .bind(database)
     .bind(plan)
     .bind(independent_only)
-    .fetch_one(pool)
+    .fetch_one(&mut *connection)
     .await
     .map_err(anyhow::Error::from)?;
     let rows: Vec<GroupRow> = sqlx::query_as(&format!(
@@ -415,7 +451,7 @@ pub(super) async fn groups(
     .bind(plan)
     .bind(independent_only)
     .bind(min_loss)
-    .fetch_all(pool)
+    .fetch_all(&mut *connection)
     .await
     .map_err(anyhow::Error::from)?;
     let count = |value: i64| usize::try_from(value).unwrap_or(0);
@@ -459,9 +495,9 @@ pub(super) async fn groups(
 }
 
 /// The player's matches in the scope and how many of them have no indexed
-/// decision. Call after `ensure`, which brings the index up to date.
+/// decision. Read in the snapshot verified by `require_current`.
 pub(super) async fn coverage(
-    pool: &PgPool,
+    connection: &mut PgConnection,
     database: Option<Uuid>,
     player: &[String],
     independent_only: bool,
@@ -478,7 +514,7 @@ pub(super) async fn coverage(
     .bind(database)
     .bind(player)
     .bind(independent_only)
-    .fetch_one(pool)
+    .fetch_one(&mut *connection)
     .await
     .map_err(anyhow::Error::from)?;
     let count = |value: i64| usize::try_from(value).unwrap_or(0);
@@ -498,18 +534,6 @@ pub(super) async fn independent_matches(
     .await
     .map_err(anyhow::Error::from)?;
     Ok(ids.into_iter().collect())
-}
-
-pub(super) async fn ensure_and_group(
-    pool: &PgPool,
-    database: Option<Uuid>,
-    player: &[String],
-    plan: Option<crate::game_plan::GamePlan>,
-    min_loss: f64,
-    independent_only: bool,
-) -> ApiResult<(Vec<super::MistakeGroup>, usize, usize)> {
-    ensure(pool, database, player).await?;
-    groups(pool, database, player, plan, min_loss, independent_only).await
 }
 
 #[cfg(test)]
@@ -599,7 +623,7 @@ mod tests {
         .unwrap()
         .r#match
         .id;
-        // `ensure` catalogs older imports before it reads fingerprints.
+        // The worker catalogs older imports before it reads fingerprints.
         crate::move_catalog::ensure_catalog(&pool, id)
             .await
             .unwrap();

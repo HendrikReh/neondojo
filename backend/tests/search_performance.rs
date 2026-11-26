@@ -96,33 +96,22 @@ async fn decision_search_stays_index_bound_on_a_large_library(pool: PgPool) {
     assert_eq!(hero, (94_500, 31_571, 215));
 
     // Hero's matches in the scope, and those without a match analysis.
-    for (query, matches, unanalyzed) in [
-        ("player=Hero&min_loss=0.05", 5_000, 500),
+    for (query, unanalyzed) in [
+        ("player=Hero&min_loss=0.05", 500),
         (
             "player=Hero&min_loss=0.05&kind=cube_offer&cube_value=4",
-            5_000,
             500,
         ),
         (
             "player=Hero&min_loss=0.05&database_id=81a18d0f-38c1-4db8-81c0-a743adbc4480",
-            2_500,
             0,
         ),
-        ("player=Hero&page=1801", 5_000, 500),
+        ("player=Hero&page=1801", 500),
     ] {
         let database = query.contains("database_id");
         let plans = decision_search_plans(&pool, query).await;
         let plan = |step: &str| &plans.iter().find(|(name, _)| *name == step).unwrap().1;
-        for step in ["legacy_size", "legacy_ids"] {
-            // Nothing is pending: one probe of the empty partial index.
-            assert!(
-                uses_index(plan(step), "matches_pending_imported_catalog"),
-                "{:#}",
-                plan(step)
-            );
-        }
         let candidates = plan("candidates");
-        assert_eq!(candidates[0]["Plan"]["Actual Rows"], matches);
         if !database {
             assert!(uses_index(candidates, "matches_library_white_player"));
             assert!(uses_index(candidates, "matches_library_black_player"));

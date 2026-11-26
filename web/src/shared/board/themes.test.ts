@@ -1,6 +1,11 @@
 import archiveThemes from './archive-themes';
-import { expect, it } from 'vitest';
-import { pointColumns, pointStackGeometry, stackGeometry } from './themes';
+import { expect, it, vi } from 'vitest';
+import {
+  loadArchiveThemes,
+  pointColumns,
+  pointStackGeometry,
+  stackGeometry,
+} from './themes';
 
 it('uses XML column positions for both player directions, the bar and bear-off trays', () => {
   expect(pointColumns.map((p) => p.point)).toEqual([
@@ -76,4 +81,21 @@ it('matches the X22 checker-to-point proportions on built-in boards', () => {
   const next = pointStackGeometry(14, 1);
   expect(first.width / (next.x - first.x)).toBeCloseTo(84 / 90, 8);
   expect(first.step / first.height).toBe(1);
+});
+
+it('shares one archive request and retries after a transient chunk failure', async () => {
+  vi.doMock('./archive-themes', () => {
+    throw new TypeError('Failed to fetch dynamically imported module');
+  });
+  const failed = loadArchiveThemes();
+  expect(loadArchiveThemes()).toBe(failed);
+  try {
+    await expect(failed).rejects.toThrow();
+  } finally {
+    vi.doUnmock('./archive-themes');
+  }
+  const retry = loadArchiveThemes();
+  expect(retry).not.toBe(failed);
+  await expect(retry).resolves.toEqual(archiveThemes);
+  expect(loadArchiveThemes()).toBe(retry);
 });

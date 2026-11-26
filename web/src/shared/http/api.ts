@@ -41,7 +41,12 @@ export class HttpError extends AppError {
     readonly code = '',
     readonly issues: readonly ErrorIssue[] = [],
   ) {
-    super('error.request', { status: String(status) }, diagnostic);
+    const preparing = status === 503 && code === 'index_preparing';
+    super(
+      preparing ? 'error.indexPreparing' : 'error.request',
+      { status: String(status) },
+      preparing ? '' : diagnostic,
+    );
     this.name = 'HttpError';
   }
 }

@@ -8237,6 +8237,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "The saved-position index is being prepared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -10812,6 +10822,16 @@
                 }
               }
             }
+          },
+          "503": {
+            "description": "Decision index is being prepared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -10967,6 +10987,16 @@
           },
           "422": {
             "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Decision index is being prepared",
             "content": {
               "application/json": {
                 "schema": {

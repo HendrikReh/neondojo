@@ -443,6 +443,7 @@ export default {
     'error.fileSize': 'Die Datei darf höchstens 16 MiB groß sein.',
     'error.positionMissing': 'Die analysierte Position wurde nicht gefunden.',
     'error.invalidResponse': 'Das Backend hat keine gültige Antwort geliefert.',
+    'error.indexPreparing': 'Die Suchergebnisse werden vorbereitet. Bitte versuche es in Kürze erneut.',
     'error.request': 'Anfrage fehlgeschlagen (HTTP {status}).',
     'error.network': 'Verbindung zum Backend fehlgeschlagen.',
     'error.conflict': 'Die Daten haben sich inzwischen geändert.',

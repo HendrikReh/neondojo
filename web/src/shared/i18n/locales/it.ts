@@ -443,6 +443,7 @@ export default {
     'error.fileSize': 'Il file non può superare i 16 MiB.',
     'error.positionMissing': 'La posizione analizzata non è stata trovata.',
     'error.invalidResponse': 'Il server ha restituito una risposta non valida.',
+    'error.indexPreparing': 'Preparazione dei risultati di ricerca in corso. Riprova tra poco.',
     'error.request': 'Richiesta non riuscita (HTTP {status}).',
     'error.network': 'Impossibile connettersi al server.',
     'error.conflict': 'I dati sono cambiati nel frattempo.',
