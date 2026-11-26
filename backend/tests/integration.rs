@@ -10,6 +10,7 @@ mod analysis_catalog;
 mod analysis_remaining_time;
 mod analysis_statistics;
 mod analysis_time_estimate;
+mod anki_package_import;
 mod annotations;
 mod api_errors;
 mod benchmarks;

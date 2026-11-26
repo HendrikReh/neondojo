@@ -7,7 +7,7 @@ use axum::extract::DefaultBodyLimit;
 use axum::response::Response;
 use sqlx::{PgConnection, Postgres, Transaction};
 use std::{path::Path as FilePath, process::Stdio, time::Duration};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
 const MAX_UPLOAD: usize = 128 * 1024 * 1024;
 static PACKAGE_IMPORT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
@@ -410,6 +410,50 @@ async fn source_deck(tx: &mut Transaction<'_, Postgres>, name: &str) -> Result<U
     Ok(id)
 }
 
+const MAX_MEDIA_FILE_BYTES: u64 = 32 * 1024 * 1024;
+// JSON escaping can take six bytes per byte of the 5 MiB of permitted CSS and card faces.
+const MAX_CARD_RECORD_BYTES: u64 = 32 * 1024 * 1024;
+
+async fn read_media_file(path: &FilePath, remaining: &mut u64) -> Result<Vec<u8>> {
+    let limit = MAX_MEDIA_FILE_BYTES.min(*remaining);
+    let message = if limit == MAX_MEDIA_FILE_BYTES {
+        "Anki media is too large"
+    } else {
+        "Anki package media exceeds the total size limit"
+    };
+    let file = tokio::fs::File::open(path).await?;
+    let size = file.metadata().await?.len();
+    ensure!(size <= limit, message);
+
+    // Count actual bytes as well, even if the file grows after the metadata check.
+    let mut bytes = Vec::with_capacity(size as usize);
+    file.take(limit + 1).read_to_end(&mut bytes).await?;
+    let read = bytes.len() as u64;
+    ensure!(read <= limit, message);
+    *remaining -= read;
+    Ok(bytes)
+}
+
+async fn read_card_record(
+    reader: &mut (impl AsyncBufRead + Unpin),
+    limit: u64,
+) -> Result<Option<ImportedCard>> {
+    let mut line = Vec::new();
+    // Allow for CRLF as well as LF and an unterminated final record.
+    if reader.take(limit + 2).read_until(b'\n', &mut line).await? == 0 {
+        return Ok(None);
+    }
+    let payload = line
+        .strip_suffix(b"\r\n")
+        .or_else(|| line.strip_suffix(b"\n"))
+        .unwrap_or(&line);
+    ensure!(
+        payload.len() as u64 <= limit,
+        "Anki card record is too large"
+    );
+    Ok(Some(serde_json::from_str(std::str::from_utf8(payload)?)?))
+}
+
 /// Import an Anki collection prepared by tools/import_anki_flashcards.py.
 pub async fn import_rendered_package(
     pool: &PgPool,
@@ -447,6 +491,7 @@ pub async fn import_rendered_package(
         );
     }
 
+    let mut remaining_media = MAX_UNCOMPRESSED;
     let mut media = tokio::fs::read_dir(directory.join("media")).await?;
     while let Some(file) = media.next_entry().await? {
         ensure!(file.file_type().await?.is_file(), "Invalid media entry");
@@ -458,8 +503,7 @@ pub async fn import_rendered_package(
             !name.chars().any(char::is_control) && name.len() <= 255,
             "Invalid media filename"
         );
-        let bytes = tokio::fs::read(file.path()).await?;
-        ensure!(bytes.len() <= 32 * 1024 * 1024, "Anki media is too large");
+        let bytes = read_media_file(&file.path(), &mut remaining_media).await?;
         let content_type = media_type(&name, &bytes)?;
         sqlx::query("INSERT INTO anki_media(package,name,content_type,content) VALUES($1,$2,$3,$4) ON CONFLICT DO NOTHING")
             .bind(&manifest.package)
@@ -471,11 +515,9 @@ pub async fn import_rendered_package(
     }
 
     let mut cards =
-        tokio::io::BufReader::new(tokio::fs::File::open(directory.join("cards.jsonl")).await?)
-            .lines();
+        tokio::io::BufReader::new(tokio::fs::File::open(directory.join("cards.jsonl")).await?);
     let mut imported = BTreeSet::new();
-    while let Some(line) = cards.next_line().await? {
-        let input: ImportedCard = serde_json::from_str(&line)?;
+    while let Some(input) = read_card_record(&mut cards, MAX_CARD_RECORD_BYTES).await? {
         let (deck_id, expected, seen, added) =
             decks.get_mut(&input.deck).context("Unknown source deck")?;
         *seen += 1;
@@ -517,6 +559,70 @@ mod tests {
     use std::io::{Cursor, Write};
 
     const MIB: u64 = 1024 * 1024;
+
+    #[tokio::test]
+    async fn media_reads_enforce_individual_and_remaining_package_bytes() {
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(b"GIF89a").unwrap();
+        let mut remaining = 12;
+        for _ in 0..2 {
+            assert_eq!(
+                read_media_file(file.path(), &mut remaining).await.unwrap(),
+                b"GIF89a"
+            );
+        }
+        assert_eq!(remaining, 0);
+        assert_eq!(
+            read_media_file(file.path(), &mut remaining)
+                .await
+                .unwrap_err()
+                .to_string(),
+            "Anki package media exceeds the total size limit"
+        );
+
+        file.as_file().set_len(32 * MIB + 1).unwrap();
+        let mut remaining = MAX_UNCOMPRESSED;
+        assert_eq!(
+            read_media_file(file.path(), &mut remaining)
+                .await
+                .unwrap_err()
+                .to_string(),
+            "Anki media is too large"
+        );
+        assert_eq!(remaining, MAX_UNCOMPRESSED);
+    }
+
+    #[tokio::test]
+    async fn card_record_limit_excludes_line_endings() {
+        let row = r#"{"guid":"x","template_number":1,"deck":"D","prompt":"","tags":[],"css":"","front":"Q","back":"A"}"#;
+        let limit = row.len() as u64;
+        let records = format!("{row}\r\n{row}\n{row}");
+        let mut reader = records.as_bytes();
+        for _ in 0..3 {
+            assert_eq!(
+                read_card_record(&mut reader, limit)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .guid,
+                "x"
+            );
+        }
+        assert!(
+            read_card_record(&mut reader, limit)
+                .await
+                .unwrap()
+                .is_none()
+        );
+        for ending in ["", "\r\n", "\n"] {
+            let oversized = format!("{row} {ending}");
+            let error = read_card_record(&mut oversized.as_bytes(), limit)
+                .await
+                .err()
+                .unwrap();
+            assert_eq!(error.to_string(), "Anki card record is too large");
+        }
+    }
 
     /// A package with a collection and one deflated entry of `size` zero bytes.
     /// With `claimed_size`, both ZIP headers of that entry claim that size.
