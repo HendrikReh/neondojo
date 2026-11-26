@@ -6,6 +6,15 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-11-26
+
+- Adds six original board finishes with matching marbled checker sets.
+- Supports NeonGammon 3.2.1 cooperative 3- and 4-ply checker batches. Existing engine snapshots retain their interpreter, identity, and supported evaluation paths.
+- Verified batches check file metadata at both boundaries and repeat SHA-256 verification when the installation changes.
+- Expired benchmarks are cleaned up while idle. Engine Duels retry temporary database connection errors within their lease.
+- Saved Positions respect cube rules when showing and sorting decks. Single-game statistics report historical analyses that need cube-rule reanalysis.
+- Adds the home page for resuming analysis and starting common tasks. The GNUbg installation check runs outside the async request worker.
+
 ## [1.4.1] - 2026-11-25
 
 ### Fixed
@@ -309,7 +318,8 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/neondojo/pull/4) · [#5](https://github.com/HendrikReh/neondojo/pull/5) · [#6](https://github.com/HendrikReh/neondojo/pull/6) · [#7](https://github.com/HendrikReh/neondojo/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/HendrikReh/neondojo/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/HendrikReh/neondojo/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/HendrikReh/neondojo/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/HendrikReh/neondojo/compare/v1.2.0...v1.3.0

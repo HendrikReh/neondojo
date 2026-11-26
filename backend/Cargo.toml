@@ -1,6 +1,6 @@
 [package]
 name = "neondojo"
-version = "1.4.1"
+version = "1.4.2"
 edition = "2024"
 # All integration tests link into one binary; see tests/integration.rs.
 autotests = false
