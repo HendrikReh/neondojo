@@ -59,6 +59,7 @@ import {
 } from '../workspaces/library/library-api';
 import type { PlaySessionRequest } from '../workspaces/play/usePlaySession';
 import type { PlaySession } from '../workspaces/play/play-api';
+import AppFooter from './AppFooter';
 import { DEFAULT_ANALYSIS_PLIES } from '../shared/engine/analysis-depth';
 import type { MoveNotesTarget } from '../workspaces/analysis/notes/MoveNotesDialog';
 import { useUiAppearance } from '../settings/appearance/useUiAppearance';
@@ -69,7 +70,7 @@ import AppNotices from './AppNotices';
 import AppWelcome from './AppWelcome';
 import MatchImportInputs from './MatchImportInputs';
 import { bulkJobPending, useBulkAnalysis } from './useBulkAnalysis';
-import { useHealth, useInstalledSettings } from './useInstalledSettings';
+import { useInstalledSettings } from './useInstalledSettings';
 import { useMatchImporter } from './useMatchImporter';
 import { usePositionKeys } from './usePositionKeys';
 import { useSelectionRestore } from './useSelectionRestore';
@@ -224,7 +225,10 @@ export default function App() {
   const bookConfigurationKey = openingBookConfigurationKey(
     confirmed?.opening_book,
   );
-  const health = useHealth(settings?.version);
+  const footerEngine =
+    view === 'play'
+      ? (confirmed?.play.engine ?? settings?.play_engine ?? 'gnubg')
+      : analysisEngine;
   const [error, setError] = useState<unknown>();
   const [revision, setRevision] = useState(0);
   const [annotationRevision, setAnnotationRevision] = useState(0);
@@ -973,19 +977,12 @@ export default function App() {
             )}
           </LazyPanel>
         </div>
-        <footer className="app-footer">
-          <span>
-            <span className={`status-dot ${health === 'ok' ? 'ready' : ''}`} />
-            {health === 'ok'
-              ? t('app.engineConnected')
-              : health === 'checking'
-                ? t('app.healthChecking')
-                : t('app.healthUnavailable')}
-          </span>
-          <a href="/api/openapi.json" target="_blank" rel="noreferrer">
-            OpenAPI ↗
-          </a>
-        </footer>
+        <AppFooter
+          key={footerEngine}
+          engine={footerEngine}
+          settingsOpen={settingsOpen}
+          settingsVersion={settings?.version}
+        />
       </main>
       {moveNotes && (
         <LazyPanel>

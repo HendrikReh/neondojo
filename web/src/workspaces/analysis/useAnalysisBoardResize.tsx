@@ -132,14 +132,9 @@ export function useAnalysisBoardResize(
       // the grid ends where they still fit in the window.
       const body = grid.closest('.app-body');
       const footer = body?.querySelector(':scope > .app-footer');
-      const footerStyle = footer && getComputedStyle(footer);
       const below =
         (body ? parseFloat(getComputedStyle(body).paddingBottom) || 0 : 0) +
-        (footer && footerStyle
-          ? footer.getBoundingClientRect().height +
-            (parseFloat(footerStyle.marginTop) || 0) +
-            (parseFloat(footerStyle.marginBottom) || 0)
-          : 0);
+        (footer?.getBoundingClientRect().height ?? 0);
       // Page scrolling should not change the saved or automatic geometry.
       const viewportSpace = Math.max(
         0,

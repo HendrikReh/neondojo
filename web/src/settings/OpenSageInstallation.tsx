@@ -120,6 +120,7 @@ export default function OpenSageInstallation({
           <span>{t('sagePythonPath')}</span>
           <input
             value={path}
+            title={path}
             disabled={!installation}
             onChange={(e) => setPath(e.target.value)}
             spellCheck={false}
@@ -135,9 +136,6 @@ export default function OpenSageInstallation({
           onClick={() => void verify().catch(() => {})}
         />
       </div>
-      <p className="settings-help" id={saveTargetId}>
-        {t('verifySageTarget')}
-      </p>
       <div className="settings-engine-status" role="status">
         {snapshot ? (
           <>
@@ -176,6 +174,9 @@ export default function OpenSageInstallation({
           installation && <p>{t('sageUnverified')}</p>
         )}
       </div>
+      <p className="settings-help" id={saveTargetId}>
+        {t('verifySageTarget')}
+      </p>
       {error !== undefined && (
         <div className="settings-error" role="alert">
           <p>{formatError(error)}</p>

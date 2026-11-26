@@ -139,6 +139,16 @@ test('keyboard switches settings categories and respects the profile draft guard
   await expect(profiles).toHaveAttribute('aria-current', 'page');
   await page.keyboard.press('Home');
   await expect(name).toHaveValue(initialSettings.player_name);
+  await profiles.click();
+  const footer = dialog.locator('.settings-footer');
+  await expect(
+    footer.getByRole('button', { name: 'Apply', exact: true }),
+  ).toBeHidden();
+  await footer.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByRole('button', { name: 'Settings', exact: true }),
+  ).toBeFocused();
   expect(backend.writes).toHaveLength(0);
 });
 
@@ -295,7 +305,7 @@ for (const { version, supported, onePly, verified } of [
     page,
   }, info) => {
     await settingsBackend(page);
-    const python = '/opt/neongammon/bin/python';
+    const python = `/Volumes/Engine installations/NeonDojo/local-data/neongammon-${version}/venv/bin/python`;
     let savedPath = python;
     let available = true;
     const catalogPending = Promise.withResolvers<void>();
@@ -373,6 +383,19 @@ for (const { version, supported, onePly, verified } of [
       await expect(
         dialog.getByRole('combobox', { name: 'Simultaneous analysis jobs' }),
       ).toBeInViewport({ ratio: 1 });
+      await expect(
+        card.getByRole('textbox', { name: 'Python path' }),
+      ).toHaveAttribute('title', python);
+      for (const fieldset of await dialog.locator('.settings-engine').all()) {
+        const field = await fieldset.getByRole('textbox').boundingBox();
+        const button = await fieldset.getByRole('button').first().boundingBox();
+        expect(button!.y).toBeGreaterThanOrEqual(field!.y + field!.height);
+        const status = await fieldset
+          .locator('.settings-engine-status')
+          .boundingBox();
+        const help = await fieldset.locator('p.settings-help').boundingBox();
+        expect(help!.y).toBeGreaterThanOrEqual(status!.y + status!.height);
+      }
       await dialog.screenshot({
         path: info.outputPath(`verified-engines-${width}.png`),
       });

@@ -11,7 +11,10 @@ import {
   PLAY_PLIES,
   preferredDepth as enginePreferredDepth,
 } from '../../shared/engine/analysis-depth';
-import { formatBenchmarkDuration } from './benchmark-duration';
+import {
+  benchmarkTimeDigits,
+  formatBenchmarkDuration,
+} from './benchmark-duration';
 import {
   DEFAULT_BENCHMARK_HISTORY_ORDER,
   nextBenchmarkHistoryOrder,
@@ -277,7 +280,7 @@ export default function BenchmarkWorkspace({
   }
   const time = (run: BenchmarkRun, value: number | null | undefined) =>
     run.status === 'completed' && typeof value === 'number'
-      ? `${formatNumber(value, { maximumFractionDigits: 2 })} ms`
+      ? `${formatNumber(value, benchmarkTimeDigits)} ms`
       : '—';
   const date = (value: string) => new Date(value).toLocaleString(locale);
   const progress = (run: BenchmarkRun) =>

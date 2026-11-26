@@ -243,6 +243,23 @@ for (const theme of ['graphite', 'club', 'paper'] as const) {
         .selectOption(mode);
       const preview = dialog.locator('.ui-appearance-preview');
       await expect(preview).toHaveAttribute('data-ui-theme', theme);
+      const contrast = await preview.evaluate((element) => {
+        const styles = getComputedStyle(element);
+        function luminance(token: string) {
+          const hex = styles.getPropertyValue(token).trim();
+          const [r, g, b] = [1, 3, 5].map((offset) => {
+            const channel = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+            return channel <= 0.04045
+              ? channel / 12.92
+              : ((channel + 0.055) / 1.055) ** 2.4;
+          });
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        }
+        const a = luminance('--ui-muted');
+        const b = luminance('--ui-selected');
+        return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      });
+      expect(contrast).toBeGreaterThanOrEqual(4.5);
       await expect(preview).toHaveCSS(
         'background-color',
         backgrounds[theme][mode],

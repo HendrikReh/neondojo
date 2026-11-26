@@ -53,10 +53,9 @@
   padding: 3px 4px;
   text-align: left;
 }
-.candidate-preview-button:hover,
 .candidate-preview-button[aria-pressed='true'] {
-  background: var(--ui-selected);
-  border-color: var(--ui-accent);
+  border-bottom: 1px solid currentColor;
+  font-weight: var(--font-weight-semibold);
 }
 .position-inspector .inspector-tabs {
   flex-wrap: wrap;

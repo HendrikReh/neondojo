@@ -329,6 +329,8 @@ fieldset.player-form legend {
   gap: 2px;
 }
 .player-rating-plot {
+  /* Leave room for the final point and its keyboard focus outline. */
+  margin-right: 8px;
   position: relative;
   height: 140px;
   margin-left: 28px;

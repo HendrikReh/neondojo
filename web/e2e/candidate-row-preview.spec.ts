@@ -300,7 +300,15 @@ for (const source of ['engine', 'file', 'book'] as const)
     const first = rows
       .first()
       .getByRole('button', { name: /^Preview move 1:/ });
-    await first.focus();
+    await first.click();
+    await expect(first).toHaveAttribute('aria-pressed', 'true');
+    await page.mouse.move(0, 0);
+    await expect(first).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)');
+    await expect(first).toHaveCSS('outline-style', 'none');
+    await first.press('Tab');
+    await page.keyboard.press('Shift+Tab');
+    await expect(first).toBeFocused();
+    await expect(first).toHaveCSS('outline-style', 'solid');
     await page.keyboard.press('Enter');
     await expect(page.locator('.board-review-selection')).toContainText(
       'Candidate 1',

@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { request } from '../shared/http/api';
 import { loadSettings, type AppSettings } from '../settings/settings-api';
 
 /** The settings of this installation, loaded at the start and on request. */
@@ -36,21 +35,4 @@ export function useInstalledSettings() {
       setError(undefined);
     },
   };
-}
-
-/** Whether the backend and its engine respond, checked per settings version. */
-export function useHealth(settingsVersion: number | undefined) {
-  const [health, setHealth] = useState<'checking' | 'ok' | 'degraded'>(
-    'checking',
-  );
-  useEffect(() => {
-    const abort = new AbortController();
-    void request<{ status: string }>('/health', { signal: abort.signal })
-      .then((value) => setHealth(value.status === 'ok' ? 'ok' : 'degraded'))
-      .catch(() => {
-        if (!abort.signal.aborted) setHealth('degraded');
-      });
-    return () => abort.abort();
-  }, [settingsVersion]);
-  return health;
 }
