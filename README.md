@@ -148,6 +148,8 @@ Open <http://127.0.0.1:5173>. Vite forwards `/api` to `http://127.0.0.1:8787` by
 
 ## Documentation
 
+Read the [NeonDojo documentation on GitHub Pages](https://hendrikreh.github.io/neondojo/).
+
 | Audience | Document | Contents |
 | --- | --- | --- |
 | Players | [User guide](docs/user-guide/README.md) | Guided tour of every workspace, learning paths by level, keyboard reference, troubleshooting and glossary |
