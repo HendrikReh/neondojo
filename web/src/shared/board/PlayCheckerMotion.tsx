@@ -1,55 +1,8 @@
 import type { CSSProperties } from 'react';
 import BuiltInChecker from './BuiltInChecker';
-import { checkerCounts } from './boardMath';
 import type { CheckerFrame } from './play-animation';
-import { pointColumns, stackGeometry, type BgBlitzTheme } from './themes';
+import { checkerCenter, pointStackGeometry, type BgBlitzTheme } from './themes';
 
-export function checkerCenter(
-  board: number[],
-  point: number,
-  player: number,
-  theme?: BgBlitzTheme,
-) {
-  const off = point === -1 || point === 26;
-  const count = off
-    ? 15 - checkerCounts(board)[player]
-    : Math.abs(board[point]);
-  const bottom = point === 25 || point === -1 || (point >= 1 && point <= 12);
-  const column = off
-    ? 14
-    : point === 0 || point === 25
-      ? 7
-      : pointColumns.find((p) => p.point === point)!.column;
-  if (theme) {
-    const image = (
-      player === 0 ? theme.checkers.white : theme.checkers.black
-    )[0];
-    const geometry = stackGeometry(
-      theme,
-      image,
-      column,
-      Math.max(1, count),
-      bottom,
-    );
-    return {
-      x: geometry.x + image.width / 2,
-      y:
-        geometry.y +
-        (bottom ? -1 : 1) * (geometry.visible - 1) * geometry.step +
-        image.height / 2,
-    };
-  }
-  const x = off
-    ? 706
-    : column === 7
-      ? 340
-      : 40 + (column - 1 - (column > 7 ? 1 : 0)) * 51 + (column > 7 ? 28 : 0);
-  const first = point === 0 ? 64 : point === 25 ? 406 : bottom ? 409 : 61;
-  return {
-    x,
-    y: first + (bottom ? -1 : 1) * (Math.min(5, Math.max(1, count)) - 1) * 29,
-  };
-}
 export default function PlayCheckerMotion({
   frame,
   theme,
@@ -74,6 +27,11 @@ export default function PlayCheckerMotion({
               ? theme.checkers.white
               : theme.checkers.black)[0]
           : undefined;
+        const size = pointStackGeometry(
+          motion.from,
+          motion.player === 0 ? 1 : -1,
+          theme,
+        );
         const sourceCount = Math.abs(frame.before[motion.from] ?? 0);
         const topIndex = Math.max(0, Math.min(5, sourceCount) - 1);
         return (
@@ -95,10 +53,10 @@ export default function PlayCheckerMotion({
             {image ? (
               <image
                 href={image.src}
-                x={-image.width / 2}
-                y={-image.height / 2}
-                width={image.width}
-                height={image.height}
+                x={-size.width / 2}
+                y={-size.height / 2}
+                width={size.width}
+                height={size.height}
               />
             ) : (
               <BuiltInChecker

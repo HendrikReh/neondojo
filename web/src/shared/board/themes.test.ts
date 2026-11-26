@@ -1,6 +1,6 @@
 import archiveThemes from './archive-themes';
 import { expect, it } from 'vitest';
-import { pointColumns, stackGeometry } from './themes';
+import { pointColumns, pointStackGeometry, stackGeometry } from './themes';
 
 it('uses XML column positions for both player directions, the bar and bear-off trays', () => {
   expect(pointColumns.map((p) => p.point)).toEqual([
@@ -21,12 +21,47 @@ it('uses XML column positions for both player directions, the bar and bear-off t
       );
       expect(geometry.visible).toBe(5);
       expect(geometry.total).toBe(15);
-      expect(geometry.x).toBe(theme.columns[13] + theme.checkerOffsetX);
+      expect(geometry.x + geometry.width / 2).toBeCloseTo(
+        theme.columns[13] +
+          theme.checkerOffsetX +
+          theme.checkers.white[0].width / 2,
+      );
       const end = geometry.y + (bottom ? -1 : 1) * geometry.step * 4;
       expect(Math.min(geometry.y, end)).toBeGreaterThanOrEqual(0);
-      expect(
-        Math.max(geometry.y, end) + theme.checkers.white[0].height,
-      ).toBeLessThan(theme.background.height);
+      expect(Math.max(geometry.y, end) + geometry.height).toBeLessThan(
+        theme.background.height,
+      );
+    }
+  }
+});
+
+it('fits five separate checkers on points, bars and off trays and keeps a clear middle lane', () => {
+  for (const theme of [undefined, ...archiveThemes]) {
+    const height = theme?.background.height ?? 470;
+    for (const total of [5, 8]) {
+      for (const player of [0, 1]) {
+        const count = total * (player === 0 ? 1 : -1);
+        for (const point of [
+          ...pointColumns.map(({ point }) => point),
+          player === 0 ? 25 : 0,
+          player === 0 ? -1 : 26,
+        ]) {
+          const stack = pointStackGeometry(point, count, theme);
+          expect(stack.visible).toBe(5);
+          expect(stack.total).toBe(total);
+          const bottom =
+            point === -1 || point === 25 || (point >= 1 && point <= 12);
+          const top = stack.y - (bottom ? 4 * stack.step : 0);
+          const end = top + stack.height + 4 * stack.step;
+          expect(stack.step - stack.height).toBeGreaterThan(
+            stack.height * 0.03,
+          );
+          expect(top).toBeGreaterThan(0);
+          expect(end).toBeLessThan(height);
+          if (bottom) expect(top).toBeGreaterThan(height * 0.54);
+          else expect(end).toBeLessThan(height * 0.46);
+        }
+      }
     }
   }
 });

@@ -1,5 +1,5 @@
 import type { MovePreviewStep } from './move-preview';
-import { pointColumns, stackGeometry, type BgBlitzTheme } from './themes';
+import { checkerCenter, type BgBlitzTheme } from './themes';
 
 interface Point {
   x: number;
@@ -19,40 +19,9 @@ export function moveArrowGeometry(
   const sign = player === 0 ? 1 : -1;
   const ownBar = player === 0 ? 25 : 0;
   const opponentBar = player === 0 ? 0 : 25;
-  const ownCount = () =>
-    board.reduce((sum, count) => sum + Math.max(0, sign * count), 0);
-  function center(point: number | 'off', count: number): Point {
-    const mapping = pointColumns.find((entry) => entry.point === point);
-    const bottom = mapping?.bottom ?? player === 0;
-    const column = mapping?.column ?? (point === 'off' ? 14 : 7);
-    const index = Math.max(0, Math.min(5, Math.abs(count)) - 1);
-    if (theme) {
-      const image = theme.checkers[player === 0 ? 'white' : 'black'][0];
-      const geometry = stackGeometry(theme, image, column, count, bottom);
-      return {
-        x: geometry.x + image.width / 2,
-        y:
-          geometry.y +
-          (bottom ? -1 : 1) * index * geometry.step +
-          image.height / 2,
-      };
-    }
-    if (point === 'off') return { x: 660, y: bottom ? 376 : 94 };
-    const i = mapping
-      ? mapping.point >= 13
-        ? mapping.point - 13
-        : 12 - mapping.point
-      : null;
-    return {
-      x: i === null ? 340 : 40 + i * 51 + (i >= 6 ? 28 : 0),
-      y:
-        (mapping ? (bottom ? 409 : 61) : bottom ? 406 : 64) +
-        (bottom ? -1 : 1) * index * 29,
-    };
-  }
   return steps.map((step) => {
     const from = step.from === 'bar' ? ownBar : step.from;
-    const start = center(from, board[from]);
+    const start = checkerCenter(board, from, player, theme);
     board[from] -= sign;
     if (step.to !== 'off') {
       if (step.hit) {
@@ -61,10 +30,16 @@ export function moveArrowGeometry(
       }
       board[step.to] += sign;
     }
-    const end = center(
-      step.to,
-      step.to === 'off' ? 15 - ownCount() : board[step.to],
-    );
+    // The native preview omits the play-only off tray from its viewBox.
+    const end =
+      step.to === 'off' && !theme
+        ? { x: 660, y: player === 0 ? 376 : 94 }
+        : checkerCenter(
+            board,
+            step.to === 'off' ? (player === 0 ? -1 : 26) : step.to,
+            player,
+            theme,
+          );
     return { start, end };
   });
 }

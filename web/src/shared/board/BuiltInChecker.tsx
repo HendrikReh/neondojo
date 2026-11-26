@@ -1,3 +1,5 @@
+import { nativeCheckerSize } from './themes';
+
 const artwork = import.meta.glob<string>('./checkers/*.webp', {
   eager: true,
   import: 'default',
@@ -24,20 +26,31 @@ export default function BuiltInChecker({
   theme?: string;
   variant: number;
 }) {
-  // The artwork's transparent margin contains its shadow. The visible face
-  // fits the same 37.4-unit hit area as the plain SVG pieces.
   const image = theme && checkerArtwork(theme, white, variant);
   if (image)
-    return <image href={image} x={x - 20} y={y - 20} width="40" height="40" />;
+    return (
+      <image
+        href={image}
+        x={x - nativeCheckerSize / 2}
+        y={y - nativeCheckerSize / 2}
+        width={nativeCheckerSize}
+        height={nativeCheckerSize}
+      />
+    );
   return (
     <>
       <circle
         cx={x}
         cy={y}
-        r="18.7"
+        r={nativeCheckerSize / 2 - 0.75}
         className={white ? 'white-checker' : 'black-checker'}
       />
-      <circle cx={x} cy={y} r="13.5" className="checker-ring" />
+      <circle
+        cx={x}
+        cy={y}
+        r={nativeCheckerSize * 0.34}
+        className="checker-ring"
+      />
     </>
   );
 }

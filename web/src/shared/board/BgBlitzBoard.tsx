@@ -55,6 +55,7 @@ export default function BgBlitzBoard({
     x: number,
     y: number,
     key?: string | number,
+    size: { width: number; height: number } = image,
   ) {
     return (
       <image
@@ -62,8 +63,8 @@ export default function BgBlitzBoard({
         href={image.src}
         x={x}
         y={y}
-        width={image.width}
-        height={image.height}
+        width={size.width}
+        height={size.height}
         onError={onError}
       />
     );
@@ -91,22 +92,23 @@ export default function BgBlitzBoard({
             geometry.x,
             geometry.y + (bottom ? -1 : 1) * i * geometry.step,
             i,
+            geometry,
           ),
         )}
         {geometry.total > 5 && (
           <g
-            transform={`translate(${geometry.x + image.width / 2},${geometry.y + (bottom ? -1 : 1) * 4 * geometry.step + image.height / 2})`}
+            transform={`translate(${geometry.x + geometry.width / 2},${geometry.y + (bottom ? -1 : 1) * 4 * geometry.step + geometry.height / 2})`}
           >
             <circle
-              r={image.width * 0.2}
+              r={geometry.width * 0.2}
               fill="#fffbed"
               stroke="#172b22"
               strokeWidth="2"
             />
             <text
-              y={image.width * 0.075}
+              y={geometry.width * 0.075}
               textAnchor="middle"
-              fontSize={image.width * 0.23}
+              fontSize={geometry.width * 0.23}
               fontWeight="700"
               fill="#172b22"
             >

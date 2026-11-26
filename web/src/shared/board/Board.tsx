@@ -14,7 +14,12 @@ import PlayCube from './PlayCube';
 import PlayCheckerMotion from './PlayCheckerMotion';
 import { underlayBoard, type PlaybackFrame } from './play-animation';
 import BoardPlayTargets, { type BoardInteraction } from './BoardPlayTargets';
-import { useArchiveThemes, type Theme } from './themes';
+import {
+  nativePointX,
+  pointStackGeometry,
+  useArchiveThemes,
+  type Theme,
+} from './themes';
 import MoveArrows from './MoveArrows';
 import type { BoardView, MovePreview } from './move-preview';
 import { displayedBoardPosition } from './displayed-board';
@@ -24,42 +29,43 @@ export type { Theme } from './themes';
 
 function Checkers({
   count,
-  x,
-  y,
-  bottom = false,
   point,
   theme,
 }: {
   count: number;
-  x: number;
-  y: number;
-  bottom?: boolean;
   point: number;
   theme: string;
 }) {
-  const n = Math.abs(count);
+  const geometry = pointStackGeometry(point, count);
+  const x = geometry.x + geometry.width / 2;
   return (
     <g data-point={point} data-count={count}>
-      {Array.from({ length: Math.min(n, 5) }, (_, index) => (
-        <g key={index}>
-          <BuiltInChecker
-            x={x}
-            y={y + (bottom ? -1 : 1) * index * 29}
-            white={count > 0}
-            theme={theme}
-            variant={point + index}
-          />
-          {index === 4 && n > 5 && (
-            <text
-              className={`checker-count ${count > 0 ? 'on-white' : 'on-black'}`}
+      {Array.from({ length: geometry.visible }, (_, index) => {
+        const y =
+          geometry.y +
+          geometry.height / 2 +
+          (geometry.bottom ? -1 : 1) * index * geometry.step;
+        return (
+          <g key={index}>
+            <BuiltInChecker
               x={x}
-              y={y + (bottom ? -1 : 1) * index * 29 + 5}
-            >
-              {n}
-            </text>
-          )}
-        </g>
-      ))}
+              y={y}
+              white={count > 0}
+              theme={theme}
+              variant={point + index}
+            />
+            {index === 4 && geometry.total > 5 && (
+              <text
+                className={`checker-count ${count > 0 ? 'on-white' : 'on-black'}`}
+                x={x}
+                y={y + 5}
+              >
+                {geometry.total}
+              </text>
+            )}
+          </g>
+        );
+      })}
     </g>
   );
 }
@@ -128,7 +134,6 @@ export default function Board({
   const displayedCube = context.cube * (cubePending ? 2 : 1);
   const cubeOwner = cubePending ? null : context.owner;
   const active = position.player === 0 ? white : black;
-  const x = (index: number) => 40 + index * 51 + (index >= 6 ? 28 : 0);
   const cubeLabel = t('board.cube', {
     value: displayedCube,
     owner:
@@ -251,47 +256,27 @@ export default function Board({
               bottom = 12 - i;
             return (
               <g key={i}>
-                <text x={x(i)} y="25" className="point-number">
+                <text x={nativePointX(i)} y="25" className="point-number">
                   {position.player === 0 ? top : 25 - top}
                 </text>
                 <path
-                  d={`M${x(i) - 24} 38 L${x(i) + 24} 38 L${x(i)} 214 Z`}
+                  d={`M${nativePointX(i) - 24} 38 L${nativePointX(i) + 24} 38 L${nativePointX(i)} 214 Z`}
                   className={i % 2 ? 'point-light' : 'point-dark'}
                 />
-                <Checkers
-                  theme={theme}
-                  count={board[top]}
-                  x={x(i)}
-                  y={61}
-                  point={top}
-                />
+                <Checkers theme={theme} count={board[top]} point={top} />
                 <path
-                  d={`M${x(i) - 24} 432 L${x(i) + 24} 432 L${x(i)} 256 Z`}
+                  d={`M${nativePointX(i) - 24} 432 L${nativePointX(i) + 24} 432 L${nativePointX(i)} 256 Z`}
                   className={i % 2 ? 'point-dark' : 'point-light'}
                 />
-                <Checkers
-                  theme={theme}
-                  count={board[bottom]}
-                  x={x(i)}
-                  y={409}
-                  bottom
-                  point={bottom}
-                />
-                <text x={x(i)} y="455" className="point-number">
+                <Checkers theme={theme} count={board[bottom]} point={bottom} />
+                <text x={nativePointX(i)} y="455" className="point-number">
                   {position.player === 0 ? bottom : 25 - bottom}
                 </text>
               </g>
             );
           })}
-          <Checkers theme={theme} count={board[0]} x={340} y={64} point={0} />
-          <Checkers
-            theme={theme}
-            count={board[25]}
-            x={340}
-            y={406}
-            bottom
-            point={25}
-          />
+          <Checkers theme={theme} count={board[0]} point={0} />
+          <Checkers theme={theme} count={board[25]} point={25} />
           {interaction && <BoardPlayTargets interaction={interaction} />}
           <PlayCube
             transform={`translate(328,${cubeOwner === null ? 223 : cubeOwner === 0 ? 365 : 81})`}

@@ -122,7 +122,7 @@ test.skipIf(archivesOmitted)(
   },
 );
 
-test('arrow endpoints follow actual archive checker offsets and compressed stacks', () => {
+test('arrow endpoints follow actual archive checker offsets and the fifth visible checker', () => {
   for (const theme of archiveThemes)
     for (const player of [0, 1]) {
       const source = position(player);
@@ -146,13 +146,12 @@ test('arrow endpoints follow actual archive checker offsets and compressed stack
         source.board[from],
         player === 1,
       );
-      expect(arrows[0].start).toEqual({
-        x: geometry.x + image.width / 2,
-        y:
-          geometry.y +
+      expect(arrows[0].start.x).toBeCloseTo(geometry.x + geometry.width / 2);
+      expect(arrows[0].start.y).toBeCloseTo(
+        geometry.y +
           (player === 1 ? -1 : 1) * 4 * geometry.step +
-          image.height / 2,
-      });
+          geometry.height / 2,
+      );
       for (const arrow of arrows)
         for (const point of [arrow.start, arrow.end]) {
           expect(point.x).toBeGreaterThan(0);
