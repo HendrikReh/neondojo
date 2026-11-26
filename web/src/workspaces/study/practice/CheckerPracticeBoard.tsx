@@ -158,6 +158,7 @@ export default function CheckerPracticeBoard({
           type="button"
           icon="undo"
           label={t('undo')}
+          shortcut="Z"
           disabled={busy || !steps.length}
           onClick={() => {
             setHovered(null);

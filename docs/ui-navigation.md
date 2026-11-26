@@ -250,9 +250,9 @@ selected scope.
 
 In every desktop analysis tab, a focusable separator resizes the board. Left/Right
 changes its width, Shift uses larger steps, and Home/End select the available
-limits. A double-click sets the maximum width for the current window and
-saves it in the profile. Enter restores the default. Escape cancels a drag.
-The profile stores a separate board width for each tab. On wide screens the
+limits. End maximizes the board. Double-click or press Enter to restore the
+default width. Escape cancels a drag. The browser stores a separate board width
+for each tab. On wide screens the
 board and move history grow. The move history filter stays visible while the
 rows scroll. **Statistics** places the player summaries side by side when
 their pane is wide enough. The comment field in **Notes** grows with the
@@ -372,7 +372,7 @@ shows shared deck memberships and duplicate records, with confirmation before
 removing a membership or deleting a copy.
 
 In Flashcards & Anki, Study now opens the next due card. Checker cards accept a
-complete turn on the board, with undo before submission. Cube cards use separate
+complete turn on the board, with **Z** to undo a step before submission. Cube cards use separate
 offer and response choices and show the offered cube on response cards. Check
 the answer to see your choice, the best answer and the analysis source, or use
 Show answer for self-assessment. A checked answer reopens at the review step

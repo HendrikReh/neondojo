@@ -142,10 +142,10 @@ nativeTest(
     await expect(separator).toHaveAttribute('aria-valuenow', String(manual));
     await expect.poll(() => width('.board-panel')).toBeCloseTo(manual, 0);
     await expect(separator).toHaveAttribute('aria-valuemax', '1680');
-    await separator.dblclick();
+    await separator.press('End');
     await expect(separator).toHaveAttribute('aria-valuenow', '1680');
     await page.screenshot({ path: testInfo.outputPath('maximum-2560.png') });
-    await separator.press('Enter');
+    await separator.dblclick();
     await expect.poll(savedOverview).toBeNull();
     await expect.poll(() => width('.board-panel')).toBeGreaterThan(before + 50);
     await page.setViewportSize({ width: 1800, height: 1169 });
@@ -156,7 +156,7 @@ nativeTest(
       await separator.getAttribute('aria-valuemax'),
     );
     const artworkBefore = await width('.board-panel .board');
-    await separator.dblclick();
+    await separator.press('End');
     await expect(separator).toHaveAttribute(
       'aria-valuenow',
       String(maxOverviewWidth),
@@ -186,7 +186,8 @@ nativeTest(
       analysis_overview_board_width: null,
     });
     await page.setViewportSize({ width: 3840, height: 2160 });
-    await separator.dblclick();
+    await expect(separator).toHaveAttribute('aria-valuemax', '1680');
+    await separator.press('End');
     await expect.poll(savedOverview).toBe(1680);
     await page.screenshot({ path: testInfo.outputPath('maximum-3840.png') });
     await page.reload();
@@ -292,7 +293,7 @@ nativeTest('Notes uses wide windows for a larger board and comment editor', asyn
   await expect(pane.getByRole('button', { name: 'Save notes' })).toBeInViewport();
 
   const separator = page.getByRole('separator', { name: 'Resize analysis board', exact: true });
-  await separator.dblclick();
+  await separator.press('End');
   const saved = () => localBoardWidths(page);
   await expect.poll(saved).toMatchObject({
     analysis_notes_board_width: 1680,
@@ -302,14 +303,14 @@ nativeTest('Notes uses wide windows for a larger board and comment editor', asyn
   await page.getByRole('tab', { name: 'Study cards', exact: true }).click();
   await expect(separator).toHaveAttribute('aria-valuemax', '1680');
   await separator.press('Home');
-  await separator.dblclick();
+  await separator.press('End');
   await expect(separator).toHaveAttribute('aria-valuenow', '1680');
   await expect.poll(saved).toMatchObject({ analysis_board_width: 1680 });
   await expect(board).toBeInViewport({ ratio: 0.99 });
   await page.screenshot({ path: testInfo.outputPath('cards-maximum.png') });
   await separator.press('Enter');
   await expect.poll(saved).toMatchObject({ analysis_board_width: null });
-  await notes.click();
+  await notes.press('Enter');
   await expect(separator).toHaveAttribute('aria-valuenow', '1680');
   await expect(editor).toHaveValue('Draft in the larger comment editor');
   await separator.press('Enter');
@@ -354,7 +355,7 @@ nativeTest('Statistics fits a larger board and readable tables in wide windows',
   await expect(pane).toBeInViewport();
 
   const separator = page.getByRole('separator', { name: 'Resize analysis board', exact: true });
-  await separator.dblclick();
+  await separator.press('End');
   const saved = () => localBoardWidths(page);
   await expect.poll(saved).toMatchObject({
     analysis_statistics_board_width: 1680,
@@ -420,7 +421,7 @@ nativeTest('Errors uses wide windows for the board and move history', async ({
   await page.screenshot({ path: testInfo.outputPath('errors-3840x2160.png') });
 
   const separator = page.getByRole('separator', { name: 'Resize analysis board' });
-  await separator.dblclick();
+  await separator.press('End');
   const saved = () => localBoardWidths(page);
   await expect.poll(saved).toMatchObject({
     analysis_errors_board_width: 1680,

@@ -549,7 +549,7 @@ export default {
       'Die einzelnen Cube-Optionen wurden für diese Analyse nicht gespeichert.',
     resizeBoard: 'Brettgröße ändern',
     resizeBoardHelp:
-      'Ziehen oder Pfeiltasten links/rechts nutzen. Mit Umschalt geht es schneller. Doppelklick oder Ende maximiert das Brett. Eingabe stellt die Standardbreite wieder her.',
+      'Ziehen oder Pfeiltasten links/rechts nutzen. Mit Umschalt geht es schneller. Ende maximiert das Brett. Ein Doppelklick oder die Eingabetaste stellt die Standardbreite wieder her.',
     pipsLabel: '{white} {whitePips} Pips, {black} {blackPips} Pips',
     views: 'Brettansicht',
     before: 'Initial',

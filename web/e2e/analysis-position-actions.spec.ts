@@ -527,7 +527,10 @@ test('practice scores the move played on the board', async ({ page }) => {
   await expect(submit).toBeDisabled();
   await point.click();
   await expect(submit).toBeEnabled();
-  await dialog.getByRole('button', { name: 'Undo step', exact: true }).click();
+  await expect(
+    dialog.getByRole('button', { name: 'Undo step', exact: true }),
+  ).toHaveAttribute('aria-keyshortcuts', 'Z');
+  await page.keyboard.press('z');
   await expect(submit).toBeDisabled();
   await point.click();
   await submit.click();

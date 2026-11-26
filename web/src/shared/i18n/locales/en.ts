@@ -538,7 +538,7 @@ export default {
       'Individual cube outcomes were not recorded for this analysis.',
     resizeBoard: 'Resize analysis board',
     resizeBoardHelp:
-      'Drag or use Left/Right arrows. Shift changes faster. Double-click or End maximizes the board. Enter restores the default width.',
+      'Drag or use Left/Right arrows. Shift changes faster. End maximizes the board. Double-click or Enter restores the default width.',
     pipsLabel: '{white} {whitePips} pips, {black} {blackPips} pips',
     views: 'Board view',
     before: 'Initial',
