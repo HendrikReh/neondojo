@@ -53,7 +53,7 @@ Match database, Positions and Study views (using the `graphite` light theme,
 since interface themes only redefine color tokens; `web/e2e/ui-themes.spec.ts`
 verifies all six light/dark theme palettes). It covers every UI language (`en`,
 `de`, `es`, `fr`, `pl`, `it`), dialogs, previews, notes, statistics, cube
-review, and the deliberate monospace and board (`Arial, sans-serif`) exceptions.
+review, monospace position IDs and the board’s graphical dice pips.
 Desktop checks use the logical viewports 1800×1169, 2560×1440 and 3840×2160.
 Different text roles remain visually distinct to preserve the dense analysis
 hierarchy.

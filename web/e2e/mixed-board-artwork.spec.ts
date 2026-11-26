@@ -1,10 +1,26 @@
 import { installedBoardThemes } from './board-themes';
+import { historyFixture } from './play-history-review-helpers';
 import { applyAndCloseSettings } from './settings-actions';
-import { backendTest, expect } from './test';
+import { backendTest, expect, type Locator } from './test';
+
+async function expectDiceArtwork(board: Locator, theme: string) {
+  const die = board.locator('[data-die-owner]').first();
+  if (theme.startsWith('bgblitz:'))
+    await expect(die.locator('image')).toHaveAttribute(
+      'href',
+      new RegExp(`/themes/${theme.slice('bgblitz:'.length)}/dice_`),
+    );
+  else {
+    await expect(die.locator('svg')).toHaveAttribute('data-dice-theme', theme);
+    await expect(die.locator('circle')).toHaveCount(3);
+  }
+}
 
 backendTest(
   'saved mixed artwork fits the playing board with five edge-to-edge checkers',
   async ({ page }) => {
+    // Resume a position with dice on the table. Configuration uses the real backend.
+    await historyFixture(page);
     const moon = installedBoardThemes.find(
       ({ id }) => id === 'bgblitz:bg-moon',
     );
@@ -16,6 +32,17 @@ backendTest(
         board: 'Terra Rossa',
         checkers: 'ion',
         cube: 'slate',
+        dice: 'match-board',
+        expectedDice: 'terra-rossa',
+        piece: /ion-white-/,
+        cubeImage: false,
+      },
+      {
+        board: 'Slate',
+        checkers: 'ion',
+        cube: 'forest',
+        dice: null,
+        expectedDice: 'ion',
         piece: /ion-white-/,
         cubeImage: false,
       },
@@ -25,6 +52,8 @@ backendTest(
               board: moon.name,
               checkers: 'pelagic',
               cube: poseidon.id,
+              dice: poseidon.id,
+              expectedDice: poseidon.id,
               piece: /pelagic-white-/,
               cubeImage: true,
             },
@@ -32,6 +61,8 @@ backendTest(
               board: 'Moonstone',
               checkers: moon.id,
               cube: 'carbon',
+              dice: 'forest',
+              expectedDice: 'forest',
               piece: /\/themes\/bg-moon\//,
               cubeImage: false,
             },
@@ -39,13 +70,23 @@ backendTest(
               board: moon.name,
               checkers: 'walnut',
               cube: poseidon.id,
+              dice: 'match-board',
+              expectedDice: moon.id,
               piece: null,
               cubeImage: true,
             },
           ]
         : []),
     ];
-    for (const { board, checkers, cube, piece, cubeImage } of cases) {
+    for (const {
+      board,
+      checkers,
+      cube,
+      dice,
+      expectedDice,
+      piece,
+      cubeImage,
+    } of cases) {
       await page.goto('/#home');
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       const dialog = page.getByRole('dialog', {
@@ -60,30 +101,13 @@ backendTest(
       await dialog
         .getByRole('combobox', { name: 'Doubling cube' })
         .selectOption(cube);
-      const dice =
-        board === 'Terra Rossa'
-          ? 'match-board'
-          : moon && checkers !== moon.id
-            ? moon.id
-            : 'forest';
       await dialog
         .getByRole('combobox', { name: 'Dice', exact: true })
-        .selectOption(dice);
-      const previewDie = dialog
-        .locator('.settings-preview [data-die-owner]')
-        .first();
-      if (dice === 'match-board')
-        await expect(previewDie.locator('svg')).toHaveAttribute(
-          'data-dice-theme',
-          'terra-rossa',
-        );
-      else if (dice === 'forest')
-        await expect(previewDie.locator('circle')).toHaveCount(3);
-      else
-        await expect(previewDie.locator('image')).toHaveAttribute(
-          'href',
-          /bg-moon\/dice_/,
-        );
+        .selectOption(dice ?? '');
+      await expectDiceArtwork(
+        dialog.locator('.settings-preview'),
+        expectedDice,
+      );
       await applyAndCloseSettings(dialog);
       const state = await (await page.request.get('/api/configuration')).json();
       expect(state.current_configuration.appearance).toMatchObject({
@@ -95,9 +119,10 @@ backendTest(
       });
       await page.reload();
       await page.getByRole('tab', { name: 'Playing', exact: true }).click();
-      const playing = page.locator('.play-board .board-shell').first();
+      const playing = page.locator('.play-live-board > .board-shell');
       await expect(playing).toHaveAttribute('data-checker-theme', checkers);
-      const stack = playing.locator('[data-point="6"]');
+      await expectDiceArtwork(playing, expectedDice);
+      const stack = playing.locator('[data-point="13"]');
       const discs = stack.locator(piece ? 'image' : 'circle.white-checker');
       await expect(discs).toHaveCount(5);
       if (piece) await expect(discs.first()).toHaveAttribute('href', piece);
