@@ -10,6 +10,21 @@ theme:
   font: false
   logo: assets/neondojo-logo.svg
   favicon: assets/neondojo-logo.svg
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: pink
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: pink
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
 
 nav:
   - NeonDojo manual: index.md
