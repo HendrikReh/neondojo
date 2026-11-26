@@ -677,6 +677,67 @@ test('English default, alphabetical languages, draft cancellation, focus trap an
   );
 });
 
+test('board, checker and cube choices preview independently and survive reload after Apply', async ({
+  page,
+}) => {
+  await settingsBackend(page);
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+  const boardTab = dialog.getByRole('button', { name: 'Board', exact: true });
+  await boardTab.click();
+  const checkers = dialog.getByRole('combobox', {
+    name: 'Checker set',
+    exact: true,
+  });
+  const cube = dialog.getByRole('combobox', {
+    name: 'Doubling cube',
+    exact: true,
+  });
+  const preview = dialog.locator('.settings-preview .board-shell');
+  const expectedOptions = ['Match board', ...themes.map(({ name }) => name)];
+  await expect(checkers.locator('option')).toHaveText(expectedOptions);
+  await expect(cube.locator('option')).toHaveText(expectedOptions);
+  await expect(checkers).toHaveValue('');
+  await expect(cube).toHaveValue('');
+
+  const cubeId =
+    themes.find(({ id }) => id.startsWith('bgblitz:'))?.id ?? 'carbon';
+  await checkers.selectOption('ion');
+  await cube.selectOption(cubeId);
+  await dialog.getByRole('button', { name: 'Walnut', exact: true }).click();
+  await expect(preview).toHaveAttribute('data-checker-theme', 'ion');
+  await expect(preview.locator('.play-cube-artwork')).toHaveAttribute(
+    'data-cube-theme',
+    cubeId,
+  );
+  await applyAndCloseSettings(dialog);
+  await page.reload();
+  await openSettings(page);
+  await boardTab.click();
+  await expect(checkers).toHaveValue('ion');
+  await expect(cube).toHaveValue(cubeId);
+  const walnut = dialog.getByRole('button', { name: 'Walnut', exact: true });
+  await expect(walnut).toHaveAttribute('aria-pressed', 'true');
+  await expect(walnut.locator('.board-shell')).toHaveAttribute(
+    'data-checker-theme',
+    'walnut',
+  );
+
+  await cube.selectOption('');
+  await expect(preview.locator('.play-cube-artwork')).toHaveAttribute(
+    'data-cube-theme',
+    'walnut',
+  );
+  await page.keyboard.press('Escape');
+  await page
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
+  await openSettings(page);
+  await boardTab.click();
+  await expect(cube).toHaveValue(cubeId);
+  await expect(checkers).toHaveValue('ion');
+});
+
 test('real artwork previews, independent profiles and settings persist only after save', async ({
   page,
 }) => {

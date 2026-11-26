@@ -718,7 +718,7 @@ Select the gear in the header. Choose a category on the left. **Apply** saves yo
 <td><img src="images/settings-playing.webp" alt="Settings: Playing"><br><b>Playing</b>: bot engine and strength (including <b>2-ply + Top-2 (10 mEq)</b> for NeonGammon), default play mode, <i>Open training analysis automatically</i>, game sounds and bear-off direction.</td>
 </tr>
 <tr>
-<td><img src="images/settings-board.webp" alt="Settings: Board"><br><b>Board</b>: a gallery of board artwork (built-in boards and local BGBlitz themes) next to a large preview.</td>
+<td><img src="images/settings-board.webp" alt="Settings: Board"><br><b>Board</b>: choose a playing surface from the gallery. The <b>Checker set</b> and <b>Doubling cube</b> menus start at <b>Match board</b>. Choose another theme in either menu to preview a mix. The dice come with the checker set. Use <b>Apply</b> to save your combination.</td>
 <td><img src="images/settings-profiles.webp" alt="Settings: Profiles"><br><b>Profiles</b>: the active profile and its changes, <b>Save in profile</b>, <b>Save as new profile</b>, and <b>Profile actions</b> (Rename, Delete).</td>
 </tr>
 </table>

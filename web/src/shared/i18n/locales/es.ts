@@ -2011,6 +2011,8 @@ export default {
     ui_theme: 'Tema de interfaz',
     mode: 'Modo de color',
     board_theme: 'Tema del tablero',
+    checker_theme: 'Juego de fichas',
+    cube_theme: 'Cubo de doblar',
     bearoff_direction: 'Dirección de salida',
     board_view: 'Vista previa del tablero',
     analysis_board_width: 'Ancho del tablero en los detalles del análisis',
@@ -2335,7 +2337,8 @@ export default {
     strengthStronger: 'Más fuerte — {depth}',
     strengthStrongest: 'Máxima fuerza — {depth}',
     boardHelp:
-      'Elige un tablero. La vista previa utiliza el mismo renderizado y las imágenes originales que el tablero de análisis.',
+      'Elige un tablero, las fichas y el cubo de doblar. Los dados van a juego con las fichas.',
+    followBoard: 'Usar el tema del tablero',
     gallery: 'Temas de tablero disponibles',
     preview: 'Vista previa: {theme}',
     selected: 'Seleccionado',

@@ -2011,6 +2011,8 @@ export default {
     ui_theme: 'Tema interfaccia',
     mode: 'Modalità colore',
     board_theme: 'Tema tavoliere',
+    checker_theme: 'Set di pedine',
+    cube_theme: 'Cubo del raddoppio',
     bearoff_direction: 'Direzione di uscita',
     board_view: 'Anteprima tavoliere',
     analysis_board_width: 'Larghezza della tavola nei dettagli dell’analisi',
@@ -2336,7 +2338,8 @@ export default {
     strengthStronger: 'Più forte — {depth}',
     strengthStrongest: 'Forza massima — {depth}',
     boardHelp:
-      'Scegli una tavola. L’anteprima usa lo stesso rendering e le immagini originali della tavola di analisi.',
+      'Scegli il tavoliere, le pedine e il cubo del raddoppio. I dadi sono abbinati alle pedine.',
+    followBoard: 'Come il tavoliere',
     gallery: 'Temi della tavola disponibili',
     preview: 'Anteprima: {theme}',
     selected: 'Selezionato',

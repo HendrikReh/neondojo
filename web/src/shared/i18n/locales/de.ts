@@ -2021,6 +2021,8 @@ export default {
     ui_theme: 'UI-Theme',
     mode: 'Farbmodus',
     board_theme: 'Board-Design',
+    checker_theme: 'Spielsteine',
+    cube_theme: 'Dopplerwürfel',
     bearoff_direction: 'Ausspielrichtung',
     board_view: 'Board-Vorschau',
     analysis_board_width: 'Brettbreite in den Detail-Tabs',
@@ -2346,7 +2348,8 @@ export default {
     strengthStronger: 'Stärker — {depth}',
     strengthStrongest: 'Am stärksten — {depth}',
     boardHelp:
-      'Wähle ein Brett. Die Vorschau nutzt dasselbe Rendering und die originalen Themegrafiken wie das Analysebrett.',
+      'Wähle ein Brett und dazu die Spielsteine und den Dopplerwürfel. Die Würfel passen zu den Spielsteinen.',
+    followBoard: 'Passend zum Brett',
     gallery: 'Verfügbare Brett-Themes',
     preview: 'Vorschau: {theme}',
     selected: 'Ausgewählt',

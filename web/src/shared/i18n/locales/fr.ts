@@ -2025,6 +2025,8 @@ export default {
     ui_theme: 'Thème de l’interface',
     mode: 'Mode de couleur',
     board_theme: 'Thème du plateau',
+    checker_theme: 'Jeu de pions',
+    cube_theme: 'Videau',
     bearoff_direction: 'Direction de sortie',
     board_view: 'Aperçu du plateau',
     analysis_board_width: 'Largeur du plateau dans les détails de l’analyse',
@@ -2353,7 +2355,8 @@ export default {
     strengthStronger: 'Plus fort — {depth}',
     strengthStrongest: 'Force maximale — {depth}',
     boardHelp:
-      'Choisissez un plateau. L’aperçu utilise le même rendu et les images originales que le plateau d’analyse.',
+      'Choisissez un plateau, puis les pions et le videau. Les dés sont assortis aux pions.',
+    followBoard: 'Assorti au plateau',
     gallery: 'Thèmes de plateau disponibles',
     preview: 'Aperçu : {theme}',
     selected: 'Sélectionné',

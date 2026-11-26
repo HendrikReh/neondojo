@@ -1973,6 +1973,8 @@ export default {
     ui_theme: 'Interface theme',
     mode: 'Color mode',
     board_theme: 'Board theme',
+    checker_theme: 'Checker set',
+    cube_theme: 'Doubling cube',
     bearoff_direction: 'Bear-off direction',
     board_view: 'Board preview',
     analysis_board_width: 'Board width in analysis details',
@@ -2293,7 +2295,8 @@ export default {
     strengthStronger: 'Stronger — {depth}',
     strengthStrongest: 'Strongest — {depth}',
     boardHelp:
-      'Choose a board. The preview uses the same rendering and original theme artwork as the analysis board.',
+      'Choose a board, then choose its checkers and doubling cube. The dice use the checker set.',
+    followBoard: 'Match board',
     gallery: 'Available board themes',
     preview: 'Preview: {theme}',
     selected: 'Selected',
