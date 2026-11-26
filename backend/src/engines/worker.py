@@ -136,7 +136,7 @@ class Runtime:
         self.guard = paths, snapshot
 
     def verify_unchanged(self):
-        """Steady-state check around a single request.
+        """Check installation metadata at request and batch boundaries.
 
         Unchanged metadata of every locked path, recorded at the last complete
         check, stands for that check; any difference runs the complete check
@@ -245,12 +245,15 @@ class Runtime:
             raise ValueError('Invalid cube evaluation batch')
         inputs = [self.checker_input(row) if checker else dict(board=board(row['board']), **cube_context(row))
                   for row in rows]
-        # Released wheels use one thread per native batch row. Deep checker
-        # searches need the whole profile budget for high-branching doubles.
+        # Older native batches give a heavy double only one thread. The
+        # cooperative scheduler in 3.2.1 can distribute its legal moves.
         depth = self.profile['plies']
         scalar = self.analyzer.checker_play if checker else self.analyzer.cube_action
-        can_batch = (self.release['checker_batch'] and not self.cubeless and depth < 3
-                     if checker else self.release['shared_models'])
+        if checker:
+            can_batch = (not self.cubeless and self.release['checker_batch']
+                         and (depth < 3 or self.release['deep_checker_batch']))
+        else:
+            can_batch = self.release['shared_models']
         # The checker API takes Jacoby once per call. Cube inputs carry it per row.
         groups = groupby(inputs, key=lambda row: row['jacoby']) if checker and can_batch else [(False, inputs)]
         native = []
@@ -272,13 +275,13 @@ class Runtime:
         if operation == 'begin_batch':
             if self.batch_active:
                 raise ValueError('Integrity batch already active')
-            self.verify()
+            self.verify_unchanged()
             self.batch_active = True
             return self.identity, None
         if operation == 'end_batch':
             if not self.batch_active:
                 raise ValueError('No active integrity batch')
-            self.verify()
+            self.verify_unchanged()
             self.batch_active = False
             return self.identity, None
         if self.batch_active and operation not in ('checker', 'cube', 'checker_batch', 'cube_batch_nply'):
