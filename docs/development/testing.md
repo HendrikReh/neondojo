@@ -49,6 +49,10 @@ To repeat the observation, serve `web/dist` from the production build with a dis
 
 CI has neither GNUbg, NeonGammon, import corpora, nor the BGBlitz theme archives. The `Web` job therefore prepares themes with `NEONDOJO_ALLOW_MISSING_THEMES=1`. That empties the archive catalog for the run, and the test that renders every archive theme is skipped. The Playwright suite, the ignored Rust tests, and the macOS-specific code paths still need a local run before a release.
 
+### Documentation site
+
+The [documentation workflow](../../.github/workflows/docs.yml) publishes the current manual to [GitHub Pages](https://hendrikreh.github.io/neondojo/) when its sources change on `main`. To preview it locally, install the workflow's pinned version of `mkdocs-material` in a Python virtual environment and run `mkdocs serve` from the repository root. Run `mkdocs build --strict` to check page links and section anchors before publishing.
+
 ### Which Rust tests run by default
 
 | Requirement | Default `cargo test --workspace` | Marked |

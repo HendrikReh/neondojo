@@ -2,7 +2,7 @@
 
 NeonDojo is a local backgammon workbench. You can play against an engine, import and analyze matches, search your library for positions, and turn your own mistakes into practice material. Everything runs on your own computer. Your matches, notes and learning progress stay in your local database.
 
-This guide walks through every workspace in the header and each of its tabs. Each chapter starts with what a newcomer needs and ends with details for stronger players. Exact rules, limits and edge cases are in the [reference](../reference/); a *Details* link at the end of a section leads to the matching part.
+This guide walks through every workspace in the header and each of its tabs. Each chapter starts with what a newcomer needs and ends with details for stronger players. Exact rules, limits and edge cases are in the [reference](../index.md#feature-reference); a *Details* link at the end of a section leads to the matching part.
 
 | Level | You are … | Start with |
 | --- | --- | --- |
@@ -837,7 +837,7 @@ Shortcuts are ignored while you type in a text field. When a dialog is open, onl
 | *Apply* reports a conflict | Another browser window saved newer settings. **Apply** retries your changed settings against the newer version. If the conflict remains, choose **Load latest and discard draft**, or save your changes as a new profile in **Settings → Profiles**. |
 | A benchmark is running and other work waits | This is intended. Engine work resumes when the benchmark finishes or is cancelled. |
 
-For installation and server details, see the [project README](../../README.md). Detailed behavior is described in the [reference](../reference/).
+For installation and server details, see the [project README](../../README.md). Detailed behavior is described in the [reference](../index.md#feature-reference).
 
 ---
 
