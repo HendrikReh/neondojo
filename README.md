@@ -5,6 +5,7 @@
 <!-- The repository is private: Shields.io cannot read it, so its badges are static, and GitHub shows the CI badge only to viewers with access. Update the version badge together with backend/Cargo.toml and web/package.json for each release. -->
 [![Version 1.4.2](https://img.shields.io/badge/version-1.4.2-2ea44f)](CHANGELOG.md)
 [![CI](https://github.com/HendrikReh/neondojo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/HendrikReh/neondojo/actions/workflows/ci.yml?query=branch%3Amain)
+[![Documentation](https://img.shields.io/badge/Documentation-GitHub%20Pages-0969DA)](https://hendrikreh.github.io/neondojo/)
 [![Platform: macOS on Apple Silicon](https://img.shields.io/badge/platform-macOS%20%7C%20Apple%20Silicon-000000?logo=apple&logoColor=white)](#requirements)
 [![Rust 1.93.1](https://img.shields.io/badge/Rust-1.93.1-CE422B?logo=rust&logoColor=white)](#requirements)
 [![Node.js 22.12+ or 24+](https://img.shields.io/badge/Node.js-22.12%2B%20%7C%2024%2B-5FA04E?logo=nodedotjs&logoColor=white)](#requirements)
