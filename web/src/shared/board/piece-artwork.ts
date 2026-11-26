@@ -1,5 +1,16 @@
-import { checkerArtwork } from './BuiltInChecker';
 import type { BgBlitzTheme } from './themes';
+
+const artwork = import.meta.glob<string>('./checkers/*.webp', {
+  eager: true,
+  import: 'default',
+  query: '?url&no-inline',
+});
+
+function checkerArtwork(theme: string, white: boolean, variant = 0) {
+  return artwork[
+    `./checkers/${theme}-${white ? 'white' : 'black'}-${variant % 2}.webp`
+  ];
+}
 
 export interface PieceSet {
   id: string;
@@ -18,7 +29,16 @@ export function checkerSource(set: PieceSet, white: boolean, variant = 0) {
     : checkerArtwork(set.id, white, variant);
 }
 
-export function cubeImage(theme: BgBlitzTheme | undefined, value: number, owner: number | null, pending: boolean) {
+export function cubeImage(
+  theme: BgBlitzTheme | undefined,
+  value: number,
+  owner: number | null,
+  pending: boolean,
+) {
   const face = String(value === 1 ? 64 : value);
-  return (!pending && owner === null && value === 1 ? theme?.cubes['64_r'] : undefined) ?? theme?.cubes[face];
+  return (
+    (!pending && owner === null && value === 1
+      ? theme?.cubes['64_r']
+      : undefined) ?? theme?.cubes[face]
+  );
 }

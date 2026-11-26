@@ -1,15 +1,18 @@
 import type { CSSProperties } from 'react';
-import BuiltInChecker from './BuiltInChecker';
+import CheckerPiece from './CheckerPiece';
+import type { PieceSet } from './piece-artwork';
 import type { CheckerFrame } from './play-animation';
 import { checkerCenter, pointStackGeometry, type BgBlitzTheme } from './themes';
 
 export default function PlayCheckerMotion({
   frame,
   theme,
-  builtInTheme,
+  checkerSet,
+  onError,
 }: {
   frame: CheckerFrame;
-  builtInTheme?: string;
+  checkerSet: PieceSet;
+  onError: () => void;
   theme?: BgBlitzTheme;
 }) {
   return (
@@ -22,11 +25,6 @@ export default function PlayCheckerMotion({
           theme,
         );
         const end = checkerCenter(frame.after, motion.to, motion.player, theme);
-        const image = theme
-          ? (motion.player === 0
-              ? theme.checkers.white
-              : theme.checkers.black)[0]
-          : undefined;
         const size = pointStackGeometry(
           motion.from,
           motion.player === 0 ? 1 : -1,
@@ -50,21 +48,16 @@ export default function PlayCheckerMotion({
               } as CSSProperties
             }
           >
-            {image ? (
-              <image
-                href={image.src}
-                x={-size.width / 2}
-                y={-size.height / 2}
-                width={size.width}
-                height={size.height}
-              />
-            ) : (
-              <BuiltInChecker
-                white={motion.player === 0}
-                theme={builtInTheme}
-                variant={Math.abs(motion.from) + topIndex}
-              />
-            )}
+            <CheckerPiece
+              x={-size.width / 2}
+              y={-size.height / 2}
+              width={size.width}
+              height={size.height}
+              set={checkerSet}
+              white={motion.player === 0}
+              variant={(theme ? size.column : Math.abs(motion.from)) + topIndex}
+              onError={onError}
+            />
           </g>
         );
       })}

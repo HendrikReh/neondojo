@@ -103,7 +103,10 @@ export default function PlayBoardDice({
                   onError={onError}
                 />
               ) : (
-                <g className={checkerSet ? `theme-${checkerSet.id}` : undefined} transform={`scale(${width / 33} ${height / 33})`}>
+                <g
+                  className={checkerSet ? `theme-${checkerSet.id}` : undefined}
+                  transform={`scale(${width / 33} ${height / 33})`}
+                >
                   <rect
                     width="33"
                     height="33"

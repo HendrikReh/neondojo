@@ -1,3 +1,4 @@
+import CheckerPiece from './CheckerPiece';
 import { cubeImage, type PieceSet } from './piece-artwork';
 import type { Position } from '../http/api';
 import { checkerCounts } from './boardMath';
@@ -55,7 +56,6 @@ export default function BgBlitzBoard({
     x: number,
     y: number,
     key?: string | number,
-    size: { width: number; height: number } = image,
   ) {
     return (
       <image
@@ -63,8 +63,8 @@ export default function BgBlitzBoard({
         href={image.src}
         x={x}
         y={y}
-        width={size.width}
-        height={size.height}
+        width={image.width}
+        height={image.height}
         onError={onError}
       />
     );
@@ -75,8 +75,7 @@ export default function BgBlitzBoard({
     bottom: boolean,
     point: number | string,
   ) {
-    const choices = count > 0 ? theme.checkers.white : theme.checkers.black;
-    const image = choices[0];
+    const image = theme.checkers[count > 0 ? 'white' : 'black'][0];
     const geometry = stackGeometry(theme, image, column, count, bottom);
     if (!geometry.total) return null;
     return (
@@ -86,15 +85,19 @@ export default function BgBlitzBoard({
         data-count={count}
         data-player={count > 0 ? 'white' : 'black'}
       >
-        {Array.from({ length: geometry.visible }, (_, i) =>
-          artwork(
-            choices[(i + column) % choices.length],
-            geometry.x,
-            geometry.y + (bottom ? -1 : 1) * i * geometry.step,
-            i,
-            geometry,
-          ),
-        )}
+        {Array.from({ length: geometry.visible }, (_, i) => (
+          <CheckerPiece
+            key={i}
+            x={geometry.x}
+            y={geometry.y + (bottom ? -1 : 1) * i * geometry.step}
+            width={geometry.width}
+            height={geometry.height}
+            set={checkerSet}
+            white={count > 0}
+            variant={column + i}
+            onError={onError}
+          />
+        ))}
         {geometry.total > 5 && (
           <g
             transform={`translate(${geometry.x + geometry.width / 2},${geometry.y + (bottom ? -1 : 1) * 4 * geometry.step + geometry.height / 2})`}
@@ -185,7 +188,13 @@ export default function BgBlitzBoard({
         onError={onError}
       />
       {moving && (
-        <PlayCheckerMotion key={animation?.id} frame={moving} theme={theme} />
+        <PlayCheckerMotion
+          key={animation?.id}
+          frame={moving}
+          theme={theme}
+          checkerSet={checkerSet}
+          onError={onError}
+        />
       )}
       {previewSteps && (
         <MoveArrows

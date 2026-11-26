@@ -107,7 +107,11 @@ export function pointStackGeometry(
   const column = mapping?.column ?? (off ? 14 : 7);
   if (theme) {
     const image = theme.checkers[count < 0 ? 'black' : 'white'][0];
-    return { ...stackGeometry(theme, image, column, count, bottom), bottom };
+    return {
+      ...stackGeometry(theme, image, column, count, bottom),
+      column,
+      bottom,
+    };
   }
   const index = column - 1 - (column > 7 ? 1 : 0);
   const centerX = off ? 706 : column === 7 ? 340 : nativePointX(index);
@@ -120,6 +124,7 @@ export function pointStackGeometry(
     visible: Math.min(5, Math.abs(count)),
     total: Math.abs(count),
     bottom,
+    column,
   };
 }
 

@@ -5,8 +5,8 @@ import { useEffect, useId, useState } from 'react';
 import { useI18n } from '../i18n/i18n';
 import { useBoardReviewText } from './board-review-messages';
 import { useConfirmedConfiguration } from '../../settings/configuration/ConfigurationProvider';
-import { checkerSource, pieceSet } from './piece-artwork';
-import BuiltInChecker from './BuiltInChecker';
+import { checkerSource, pieceSet, type PieceSet } from './piece-artwork';
+import CheckerPiece from './CheckerPiece';
 import BoardFinish, { boardSurface, finishPaint } from './BoardFinish';
 import BgBlitzBoard from './BgBlitzBoard';
 import PlayBoardDice from './PlayBoardDice';
@@ -30,11 +30,13 @@ export type { Theme } from './themes';
 function Checkers({
   count,
   point,
-  theme,
+  set,
+  onError,
 }: {
   count: number;
   point: number;
-  theme: string;
+  set: PieceSet;
+  onError: () => void;
 }) {
   const geometry = pointStackGeometry(point, count);
   const x = geometry.x + geometry.width / 2;
@@ -47,11 +49,14 @@ function Checkers({
           (geometry.bottom ? -1 : 1) * index * geometry.step;
         return (
           <g key={index}>
-            <BuiltInChecker
-              x={x}
-              y={y}
+            <CheckerPiece
+              x={geometry.x}
+              y={y - geometry.height / 2}
+              width={geometry.width}
+              height={geometry.height}
               white={count > 0}
-              theme={theme}
+              set={set}
+              onError={onError}
               variant={point + index}
             />
             {index === 4 && geometry.total > 5 && (
@@ -103,15 +108,20 @@ export default function Board({
   const { t, formatNumber, formatPoints } = useI18n();
   const review = useBoardReviewText();
   const appearance = useConfirmedConfiguration()?.appearance;
-  const checkerId = (checkerTheme === undefined ? appearance?.checker_theme : checkerTheme) ?? theme;
-  const cubeId = (cubeTheme === undefined ? appearance?.cube_theme : cubeTheme) ?? theme;
+  const checkerId =
+    (checkerTheme === undefined ? appearance?.checker_theme : checkerTheme) ??
+    theme;
+  const cubeId =
+    (cubeTheme === undefined ? appearance?.cube_theme : cubeTheme) ?? theme;
   const selection = JSON.stringify([theme, checkerId, cubeId]);
   const [failedTheme, setFailedTheme] = useState('');
   useEffect(() => setFailedTheme(''), [selection]);
   const failed = failedTheme === selection;
   const finishId = useId();
   const surface = failed ? undefined : boardSurface(theme);
-  const archiveThemes = useArchiveThemes([theme, checkerId, cubeId].some(id => id.startsWith('bgblitz:')));
+  const archiveThemes = useArchiveThemes(
+    [theme, checkerId, cubeId].some((id) => id.startsWith('bgblitz:')),
+  );
   const boardSet = pieceSet(failed ? 'forest' : theme, archiveThemes);
   const custom = boardSet.archive;
   const checkerSet = pieceSet(failed ? 'forest' : checkerId, archiveThemes);
@@ -185,7 +195,9 @@ export default function Board({
               onError={assetFailed}
             />
           ) : (
-            <i className={`theme-${checkerSet.id} player-dot black piece-marker`} />
+            <i
+              className={`theme-${checkerSet.id} player-dot black piece-marker`}
+            />
           )}
           {black} <small>· {formatPoints(context.scores[1])}</small>
         </span>
@@ -263,20 +275,40 @@ export default function Board({
                   d={`M${nativePointX(i) - 24} 38 L${nativePointX(i) + 24} 38 L${nativePointX(i)} 214 Z`}
                   className={i % 2 ? 'point-light' : 'point-dark'}
                 />
-                <Checkers theme={theme} count={board[top]} point={top} />
+                <Checkers
+                  set={checkerSet}
+                  onError={assetFailed}
+                  count={board[top]}
+                  point={top}
+                />
                 <path
                   d={`M${nativePointX(i) - 24} 432 L${nativePointX(i) + 24} 432 L${nativePointX(i)} 256 Z`}
                   className={i % 2 ? 'point-dark' : 'point-light'}
                 />
-                <Checkers theme={theme} count={board[bottom]} point={bottom} />
+                <Checkers
+                  set={checkerSet}
+                  onError={assetFailed}
+                  count={board[bottom]}
+                  point={bottom}
+                />
                 <text x={nativePointX(i)} y="455" className="point-number">
                   {position.player === 0 ? bottom : 25 - bottom}
                 </text>
               </g>
             );
           })}
-          <Checkers theme={theme} count={board[0]} point={0} />
-          <Checkers theme={theme} count={board[25]} point={25} />
+          <Checkers
+            set={checkerSet}
+            onError={assetFailed}
+            count={board[0]}
+            point={0}
+          />
+          <Checkers
+            set={checkerSet}
+            onError={assetFailed}
+            count={board[25]}
+            point={25}
+          />
           {interaction && <BoardPlayTargets interaction={interaction} />}
           <PlayCube
             transform={`translate(328,${cubeOwner === null ? 223 : cubeOwner === 0 ? 365 : 81})`}
@@ -300,7 +332,8 @@ export default function Board({
             <PlayCheckerMotion
               key={animation?.id}
               frame={moving}
-              builtInTheme={theme}
+              checkerSet={checkerSet}
+              onError={assetFailed}
             />
           )}
           {effectiveMode === 'arrows' && preview?.ok && (
@@ -322,7 +355,9 @@ export default function Board({
               onError={assetFailed}
             />
           ) : (
-            <i className={`theme-${checkerSet.id} player-dot white piece-marker`} />
+            <i
+              className={`theme-${checkerSet.id} player-dot white piece-marker`}
+            />
           )}
           {white}{' '}
           <small>
