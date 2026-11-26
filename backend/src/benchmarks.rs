@@ -205,33 +205,24 @@ async fn history(State(state): State<AppState>) -> ApiResult<Json<BenchmarkHisto
     .fetch_all(&state.pool)
     .await
     .map_err(anyhow::Error::from)?;
-    let active: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status IN ('queued','running'))",
-    )
-    .fetch_one(&state.pool)
-    .await
-    .map_err(anyhow::Error::from)?;
+    let active = has_active(&state.pool).await?;
     Ok(Json(BenchmarkHistory { runs, active }))
 }
 #[utoipa::path(get,path="/api/benchmarks/status",responses((status=200,body=BenchmarkStatus)),tag="Benchmark")]
 async fn status(State(state): State<AppState>) -> ApiResult<Json<BenchmarkStatus>> {
-    let active: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status IN ('queued','running'))",
-    )
-    .fetch_one(&state.pool)
-    .await
-    .map_err(anyhow::Error::from)?;
+    let active = has_active(&state.pool).await?;
     Ok(Json(BenchmarkStatus { active }))
 }
 
-/// During an exclusive measurement, availability is the already validated
-/// installation snapshot. Starting a second probe would contaminate the run.
-pub(crate) async fn has_queued(pool: &sqlx::PgPool) -> anyhow::Result<bool> {
-    Ok(
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='queued')")
-            .fetch_one(pool)
-            .await?,
-    )
+async fn has_active(pool: &PgPool) -> anyhow::Result<bool> {
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='queued' OR (status='running' AND lease_until>now()))")
+        .fetch_one(pool).await?)
+}
+
+/// A lone expired row also needs a worker to record its failure.
+pub(crate) async fn needs_worker(pool: &PgPool) -> anyhow::Result<bool> {
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='queued' OR (status='running' AND (lease_until IS NULL OR lease_until<=now())))")
+        .fetch_one(pool).await?)
 }
 
 pub(crate) async fn running_engine_version(
@@ -239,7 +230,7 @@ pub(crate) async fn running_engine_version(
     path: &str,
 ) -> anyhow::Result<Option<String>> {
     let run: Option<(String, String, Option<serde_json::Value>)> = sqlx::query_as(
-        "SELECT engine_path,engine_version,engine_snapshot FROM benchmark_runs WHERE status='running' LIMIT 1",
+        "SELECT engine_path,engine_version,engine_snapshot FROM benchmark_runs WHERE status='running' AND lease_until>now() LIMIT 1",
     )
     .fetch_optional(pool)
     .await?;

@@ -7,12 +7,10 @@ use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::time::Duration;
-use tokio::time::{Instant, timeout_at};
+use tokio::time::Instant;
 use uuid::Uuid;
 
-const LEASE: Duration = Duration::from_secs(30);
-const WATCH_INTERVAL: Duration = Duration::from_millis(500);
-const RENEW_INTERVAL: Duration = Duration::from_secs(1);
+use crate::worker_lease::{self, LEASE, Owner};
 
 /// A timing run is indivisible: a crashed process must never resume partial times.
 pub async fn recover_interrupted(pool: &PgPool) -> Result<()> {
@@ -33,7 +31,7 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
     if !owns {
         return Ok(false);
     }
-    sqlx::query("UPDATE benchmark_runs SET status='failed',finished_at=now(),error='Benchmark worker lease expired; start a new measurement',worker_token=NULL,lease_until=NULL WHERE status='running' AND (lease_until IS NULL OR lease_until<now())")
+    sqlx::query("UPDATE benchmark_runs SET status='failed',finished_at=now(),error='Benchmark worker lease expired; start a new measurement',worker_token=NULL,lease_until=NULL WHERE status='running' AND (lease_until IS NULL OR lease_until<=now())")
         .execute(&mut *tx).await?;
     let claimed_at = Instant::now();
     let run: Option<BenchmarkRun> = sqlx::query_as("UPDATE benchmark_runs SET status='running',worker_token=$1,lease_until=statement_timestamp()+make_interval(secs=>$2) WHERE id=(SELECT id FROM benchmark_runs WHERE status='queued' AND NOT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='running') ORDER BY created_at,queue_no FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")
@@ -44,56 +42,13 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
     };
     let result = tokio::select! {
         result = benchmark_exclusive(measure(state, &run, token)) => result,
-        watched = watch_lease(&state.pool, run.id, token, claimed_at) => match watched {
+        watched = worker_lease::watch(Owner::Benchmark, &state.pool, run.id, token, claimed_at) => match watched {
             Ok(()) => return Ok(true),
             Err(error) => Err(error),
         },
     };
     finish(&state.pool, run.id, token, result).await?;
     Ok(true)
-}
-
-/// Return when the worker no longer owns a confirmed live lease. Keep polling
-/// the measurement while the database is busy, up to the last known deadline.
-async fn watch_lease(pool: &PgPool, id: Uuid, token: Uuid, mut renewed: Instant) -> Result<()> {
-    loop {
-        let deadline = renewed + LEASE;
-        let poll = async {
-            tokio::time::sleep(WATCH_INTERVAL).await;
-            let mut db = pool.acquire().await?;
-            let attempt = Instant::now();
-            if attempt.duration_since(renewed) >= RENEW_INTERVAL {
-                // Check expiry after acquiring the row lock. An UPDATE alone
-                // can evaluate its predicate before waiting for another writer.
-                let updated = sqlx::query(
-                    "WITH owned AS MATERIALIZED (
-                        SELECT id,lease_until FROM benchmark_runs
-                        WHERE id=$1 AND worker_token=$2 AND status='running' FOR UPDATE
-                     )
-                     UPDATE benchmark_runs SET lease_until=statement_timestamp()+make_interval(secs=>$3)
-                     FROM owned WHERE benchmark_runs.id=owned.id AND owned.lease_until>clock_timestamp()",
-                )
-                .bind(id)
-                .bind(token)
-                .bind(LEASE.as_secs_f64())
-                .execute(&mut *db)
-                .await?;
-                renewed = attempt;
-                Ok(updated.rows_affected() == 1)
-            } else {
-                sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE id=$1 AND worker_token=$2 AND status='running' AND lease_until>now())")
-                    .bind(id).bind(token).fetch_one(&mut *db).await
-            }
-        };
-        match timeout_at(deadline, poll).await {
-            Ok(Ok(true)) => {}
-            Ok(Err(sqlx::Error::PoolTimedOut)) => {
-                tracing::warn!(benchmark = %id, "Retrying the benchmark lease check after a pool timeout");
-            }
-            Ok(Ok(false)) | Err(_) => return Ok(()),
-            Ok(Err(error)) => return Err(error.into()),
-        }
-    }
 }
 
 async fn finish(pool: &PgPool, id: Uuid, token: Uuid, result: Result<f64>) -> Result<()> {
@@ -327,7 +282,7 @@ mod tests {
         let worker = single_connection(&pool, Duration::from_millis(200)).await;
         let held = worker.acquire().await.unwrap();
         let (id, token) = running(&pool, LEASE).await;
-        let watch = watch_lease(&worker, id, token, Instant::now());
+        let watch = worker_lease::watch(Owner::Benchmark, &worker, id, token, Instant::now());
         tokio::pin!(watch);
         let original: chrono::DateTime<chrono::Utc> =
             sqlx::query_scalar("SELECT lease_until FROM benchmark_runs WHERE id=$1")
@@ -386,7 +341,7 @@ mod tests {
         let renewed = Instant::now() - (LEASE - remaining);
         tokio::time::timeout(
             Duration::from_secs(3),
-            watch_lease(&worker, id, token, renewed),
+            worker_lease::watch(Owner::Benchmark, &worker, id, token, renewed),
         )
         .await
         .expect("waiting for a connection must not outlive the lease")
@@ -425,7 +380,13 @@ mod tests {
             finish(&pool, id, token, Ok(100.0)),
             tokio::time::timeout(
                 Duration::from_secs(4),
-                watch_lease(&pool, id, token, Instant::now() - RENEW_INTERVAL),
+                worker_lease::watch(
+                    Owner::Benchmark,
+                    &pool,
+                    id,
+                    token,
+                    Instant::now() - Duration::from_secs(1)
+                ),
             ),
             async {
                 tokio::time::sleep(Duration::from_millis(1100)).await;

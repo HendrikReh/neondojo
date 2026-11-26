@@ -72,3 +72,5 @@ pub mod review_decisions;
 pub mod schema_migrations;
 
 pub mod analysis_catalog;
+
+mod worker_lease;
