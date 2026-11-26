@@ -60,6 +60,20 @@ backendTest(
       await dialog
         .getByRole('combobox', { name: 'Doubling cube' })
         .selectOption(cube);
+      const dice = moon && checkers !== moon.id ? moon.id : 'forest';
+      await dialog
+        .getByRole('combobox', { name: 'Dice', exact: true })
+        .selectOption(dice);
+      const previewDie = dialog
+        .locator('.settings-preview [data-die-owner]')
+        .first();
+      if (dice === 'forest')
+        await expect(previewDie.locator('circle')).toHaveCount(3);
+      else
+        await expect(previewDie.locator('image')).toHaveAttribute(
+          'href',
+          /bg-moon\/dice_/,
+        );
       await applyAndCloseSettings(dialog);
       const state = await (await page.request.get('/api/configuration')).json();
       expect(state.current_configuration.appearance).toMatchObject({
@@ -67,6 +81,7 @@ backendTest(
           .id,
         checker_theme: checkers,
         cube_theme: cube,
+        dice_theme: dice,
       });
       await page.reload();
       await page.getByRole('tab', { name: 'Playing', exact: true }).click();

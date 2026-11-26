@@ -83,6 +83,7 @@ export default function Board({
   black,
   theme,
   checkerTheme,
+  diceTheme,
   cubeTheme,
   preview,
   previewMode,
@@ -97,6 +98,7 @@ export default function Board({
   black: string;
   theme: Theme;
   checkerTheme?: string | null;
+  diceTheme?: string | null;
   cubeTheme?: string | null;
   preview?: MovePreview;
   previewMode?: BoardView;
@@ -113,20 +115,23 @@ export default function Board({
   const checkerId =
     (checkerTheme === undefined ? appearance?.checker_theme : checkerTheme) ??
     theme;
+  const diceId =
+    (diceTheme === undefined ? appearance?.dice_theme : diceTheme) ?? checkerId;
   const cubeId =
     (cubeTheme === undefined ? appearance?.cube_theme : cubeTheme) ?? theme;
-  const selection = JSON.stringify([theme, checkerId, cubeId]);
+  const selection = JSON.stringify([theme, checkerId, cubeId, diceId]);
   const [failedTheme, setFailedTheme] = useState('');
   useEffect(() => setFailedTheme(''), [selection]);
   const failed = failedTheme === selection;
   const finishId = useId();
   const surface = failed ? undefined : boardSurface(theme);
   const archiveThemes = useArchiveThemes(
-    [theme, checkerId, cubeId].some((id) => id.startsWith('bgblitz:')),
+    [theme, checkerId, cubeId, diceId].some((id) => id.startsWith('bgblitz:')),
   );
   const boardSet = pieceSet(failed ? 'forest' : theme, archiveThemes);
   const custom = boardSet.archive;
   const checkerSet = pieceSet(failed ? 'forest' : checkerId, archiveThemes);
+  const diceSet = pieceSet(failed ? 'forest' : diceId, archiveThemes);
   const cubeSet = pieceSet(failed ? 'forest' : cubeId, archiveThemes);
   const blackMarker = checkerArtwork(checkerSet, false)?.src;
   const whiteMarker = checkerArtwork(checkerSet, true)?.src;
@@ -222,6 +227,7 @@ export default function Board({
           position={displayedPosition}
           theme={custom}
           checkerSet={checkerSet}
+          diceSet={diceSet}
           cubeSet={cubeSet}
           label={label}
           cubeLabel={cubeLabel}
@@ -326,7 +332,7 @@ export default function Board({
             onError={assetFailed}
           />
           <PlayBoardDice
-            checkerSet={checkerSet}
+            diceSet={diceSet}
             onError={assetFailed}
             dice={displayedPosition.dice}
             player={position.player}

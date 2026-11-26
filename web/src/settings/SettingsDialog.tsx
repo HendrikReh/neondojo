@@ -117,6 +117,7 @@ function profilePreferences(current: ProfileConfiguration) {
     board: {
       theme: current.appearance.board_theme,
       checkerTheme: current.appearance.checker_theme ?? null,
+      diceTheme: current.appearance.dice_theme ?? null,
       cubeTheme: current.appearance.cube_theme ?? null,
     },
     locale: current.general.locale,
@@ -179,6 +180,7 @@ export default function SettingsDialog({
   const board: BoardArtworkSelection = {
     theme,
     checkerTheme: null,
+    diceTheme: null,
     cubeTheme: null,
   };
   const preferences = useLatest({ board, locale, appearance });

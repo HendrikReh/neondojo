@@ -21,6 +21,7 @@ export default function BgBlitzBoard({
   position,
   theme,
   checkerSet,
+  diceSet,
   cubeSet,
   label,
   cubeLabel,
@@ -33,6 +34,7 @@ export default function BgBlitzBoard({
   position: Position;
   theme: BgBlitzTheme;
   checkerSet: PieceSet;
+  diceSet: PieceSet;
   cubeSet: PieceSet;
   label: string;
   cubeLabel: string;
@@ -180,7 +182,7 @@ export default function BgBlitzBoard({
         onError={onError}
       />
       <PlayBoardDice
-        checkerSet={checkerSet}
+        diceSet={diceSet}
         dice={position.dice}
         player={position.player}
         interaction={interaction?.dice}

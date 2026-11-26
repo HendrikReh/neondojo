@@ -224,6 +224,9 @@ pub struct ConfigurationAppearance {
     /// Checker artwork theme. Omitted or null inherits the board theme.
     #[serde(default)]
     pub checker_theme: Option<String>,
+    /// Dice artwork theme. Omitted or null inherits the checker set.
+    #[serde(default)]
+    pub dice_theme: Option<String>,
     /// Doubling cube artwork theme. Omitted or null inherits the board theme.
     #[serde(default)]
     pub cube_theme: Option<String>,
@@ -685,7 +688,7 @@ mod tests {
             "../../tests/fixtures/configuration-normalization.json"
         ))
         .unwrap();
-        for field in ["checker_theme", "cube_theme"] {
+        for field in ["checker_theme", "cube_theme", "dice_theme"] {
             let mut config = fixture["base"].clone();
             config["appearance"][field] = serde_json::json!("unknown");
             let error = validation::normalize(serde_json::from_value(config).unwrap()).unwrap_err();

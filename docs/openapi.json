@@ -15182,6 +15182,13 @@
             ],
             "description": "Doubling cube artwork theme. Omitted or null inherits the board theme."
           },
+          "dice_theme": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Dice artwork theme. Omitted or null inherits the checker set."
+          },
           "mode": {
             "$ref": "#/components/schemas/ConfigurationMode"
           },

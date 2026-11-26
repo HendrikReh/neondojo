@@ -176,6 +176,7 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             "appearance.checker_theme",
             appearance.checker_theme.as_deref(),
         ),
+        ("appearance.dice_theme", appearance.dice_theme.as_deref()),
         ("appearance.cube_theme", appearance.cube_theme.as_deref()),
     ] {
         if let Some(theme) = theme

@@ -56,6 +56,7 @@ export default function ProfileSummary({
         appearance?.board_theme,
         appearance?.checker_theme,
         appearance?.cube_theme,
+        appearance?.dice_theme,
       ].some((theme) => theme?.startsWith('bgblitz:')),
     ),
   );
@@ -115,8 +116,13 @@ export default function ProfileSummary({
   };
   const format = (value: unknown, path: string): string => {
     const pieceTheme =
-      path === 'appearance.checker_theme' || path === 'appearance.cube_theme';
-    if (pieceTheme && value == null) return settingsText('followBoard');
+      path === 'appearance.checker_theme' ||
+      path === 'appearance.cube_theme' ||
+      path === 'appearance.dice_theme';
+    if (pieceTheme && value == null)
+      return settingsText(
+        path === 'appearance.dice_theme' ? 'followCheckers' : 'followBoard',
+      );
     if (value === null || value === undefined || value === '')
       return path.includes('column_widths') ? t('automatic') : t('empty');
     if (typeof value === 'boolean') return t(value ? 'yes' : 'no');

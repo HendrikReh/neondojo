@@ -99,6 +99,7 @@ export interface ProfileConfiguration {
     mode: UiMode;
     board_theme: string;
     checker_theme?: string | null;
+    dice_theme?: string | null;
     cube_theme?: string | null;
     bearoff_direction: 'left' | 'right';
     board_view: 'before' | 'arrows' | 'after';
@@ -173,6 +174,7 @@ export const defaultConfiguration: ProfileConfiguration = {
     mode: 'system',
     board_theme: 'forest',
     checker_theme: null,
+    dice_theme: null,
     cube_theme: null,
     bearoff_direction: 'right',
     board_view: 'arrows',
@@ -266,7 +268,7 @@ function canonical(value: unknown): unknown {
     );
   return value;
 }
-const pieceThemeFields = ['checker_theme', 'cube_theme'] as const;
+const pieceThemeFields = ['checker_theme', 'cube_theme', 'dice_theme'] as const;
 const boardWidthFields = [
   'analysis_board_width',
   'analysis_overview_board_width',

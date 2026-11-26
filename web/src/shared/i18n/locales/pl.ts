@@ -2002,6 +2002,7 @@ export default {
     ui_theme: 'Motyw interfejsu',
     mode: 'Tryb kolorów',
     board_theme: 'Motyw planszy',
+    dice_theme: 'Kości do gry',
     checker_theme: 'Zestaw pionków',
     cube_theme: 'Kostka dublująca',
     bearoff_direction: 'Kierunek zdejmowania',
@@ -2325,7 +2326,8 @@ export default {
     strengthStronger: 'Silniejsza — {depth}',
     strengthStrongest: 'Najsilniejsza — {depth}',
     boardHelp:
-      'Wybierz planszę, pionki i kostkę dublującą. Wygląd kości do gry zależy od zestawu pionków.',
+      'Wybierz osobno planszę, pionki, kostkę dublującą i kości do gry.',
+    followCheckers: 'Jak pionki',
     followBoard: 'Zgodnie z motywem planszy',
     gallery: 'Dostępne motywy planszy',
     preview: 'Podgląd: {theme}',

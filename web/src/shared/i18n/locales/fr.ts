@@ -2025,6 +2025,7 @@ export default {
     ui_theme: 'Thème de l’interface',
     mode: 'Mode de couleur',
     board_theme: 'Thème du plateau',
+    dice_theme: 'Dés',
     checker_theme: 'Jeu de pions',
     cube_theme: 'Videau',
     bearoff_direction: 'Direction de sortie',
@@ -2355,7 +2356,8 @@ export default {
     strengthStronger: 'Plus fort — {depth}',
     strengthStrongest: 'Force maximale — {depth}',
     boardHelp:
-      'Choisissez un plateau, puis les pions et le videau. Les dés sont assortis aux pions.',
+      'Choisissez séparément le plateau, les pions, le videau et les dés.',
+    followCheckers: 'Assortis aux pions',
     followBoard: 'Assorti au plateau',
     gallery: 'Thèmes de plateau disponibles',
     preview: 'Aperçu : {theme}',

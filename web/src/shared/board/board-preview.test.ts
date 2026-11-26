@@ -81,7 +81,7 @@ test('retains the existing board when no preview props are supplied', () => {
   const html = render(position(), 'forest');
   expect(html).not.toContain('move-arrows');
   expect(html).not.toContain('Selected candidate');
-  expect(html).toContain('⚅');
+  expect(html).toContain('data-dice="6-1"');
 });
 
 test('before, arrows and after distinguish original checker placement and dice', () => {
@@ -102,7 +102,7 @@ test('before, arrows and after distinguish original checker placement and dice',
     expect(after).toContain('data-preview-mode="after"');
     expect(after).toContain('data-point="13" data-count="0"');
     expect(after).toContain('data-point="6" data-count="1"');
-    expect(after).not.toContain('⚅');
+    expect(after).not.toContain('data-dice="6-1"');
     expect(after).not.toContain('move-arrows');
     expect(source.board[13]).toBe(1);
   }
@@ -115,7 +115,7 @@ test('an invalid projection leaves the original board and dice visible', () => {
   });
   expect(html).toContain('data-preview-mode="before"');
   expect(html).toContain('data-point="13" data-count="1"');
-  expect(html).toContain('⚅');
+  expect(html).toContain('data-dice="6-1"');
 });
 
 // CI prepares themes without the BGBlitz archives

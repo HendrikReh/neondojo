@@ -1973,6 +1973,7 @@ export default {
     ui_theme: 'Interface theme',
     mode: 'Color mode',
     board_theme: 'Board theme',
+    dice_theme: 'Dice',
     checker_theme: 'Checker set',
     cube_theme: 'Doubling cube',
     bearoff_direction: 'Bear-off direction',
@@ -2295,7 +2296,8 @@ export default {
     strengthStronger: 'Stronger — {depth}',
     strengthStrongest: 'Strongest — {depth}',
     boardHelp:
-      'Choose a board, then choose its checkers and doubling cube. The dice use the checker set.',
+      'Choose the board, checkers, doubling cube, and dice independently.',
+    followCheckers: 'Match checkers',
     followBoard: 'Match board',
     gallery: 'Available board themes',
     preview: 'Preview: {theme}',

@@ -36,7 +36,7 @@ export default function BoardSettingsSection({
 }) {
   const t = useSettingsText();
   const profileT = useProfileText();
-  const { theme, checkerTheme, cubeTheme } = artwork;
+  const { theme, checkerTheme, cubeTheme, diceTheme } = artwork;
   const archiveThemes = useArchiveThemes(true);
   const themes = [...builtInThemes, ...archiveThemes];
   const boardGallery = useRef<HTMLDivElement>(null);
@@ -105,6 +105,7 @@ export default function BoardSettingsSection({
                       theme={entry.id}
                       checkerTheme={null}
                       cubeTheme={null}
+                      diceTheme={null}
                       white=""
                       black=""
                     />
@@ -128,6 +129,7 @@ export default function BoardSettingsSection({
               [
                 ['checkerTheme', profileT('checker_theme')],
                 ['cubeTheme', profileT('cube_theme')],
+                ['diceTheme', profileT('dice_theme')],
               ] as const
             ).map(([field, label]) => {
               const value = artwork[field];
@@ -143,7 +145,13 @@ export default function BoardSettingsSection({
                       })
                     }
                   >
-                    <option value="">{t('followBoard')}</option>
+                    <option value="">
+                      {t(
+                        field === 'diceTheme'
+                          ? 'followCheckers'
+                          : 'followBoard',
+                      )}
+                    </option>
                     {value && !themes.some(({ id }) => id === value) && (
                       <option value={value} disabled>
                         {value} ({t('unavailable')})
@@ -164,6 +172,7 @@ export default function BoardSettingsSection({
             theme={theme}
             checkerTheme={checkerTheme}
             cubeTheme={cubeTheme}
+            diceTheme={diceTheme}
             white={t('light')}
             black={t('dark')}
           />

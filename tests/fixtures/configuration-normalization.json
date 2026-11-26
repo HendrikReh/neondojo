@@ -322,10 +322,14 @@
       ]
     },
     {
-      "name": "missing and null artwork overrides inherit the board",
+      "name": "missing and null artwork overrides use inherited themes",
       "changes": [
         {
           "path": "appearance.checker_theme",
+          "value": null
+        },
+        {
+          "path": "appearance.dice_theme",
           "value": null
         },
         {
@@ -336,11 +340,15 @@
       "expected_paths": []
     },
     {
-      "name": "checker and cube overrides are independent including a pinned board match",
+      "name": "checker, cube and dice overrides are independent including a pinned board match",
       "changes": [
         {
           "path": "appearance.checker_theme",
           "value": "bgblitz:bg-earth"
+        },
+        {
+          "path": "appearance.dice_theme",
+          "value": "bgblitz:bg-moon"
         },
         {
           "path": "appearance.cube_theme",
@@ -349,7 +357,8 @@
       ],
       "expected_paths": [
         "appearance.checker_theme",
-        "appearance.cube_theme"
+        "appearance.cube_theme",
+        "appearance.dice_theme"
       ]
     }
   ]

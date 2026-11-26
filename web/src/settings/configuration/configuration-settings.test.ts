@@ -111,6 +111,7 @@ describe('settings/profile boundary', () => {
       board: {
         theme: 'walnut',
         checkerTheme: 'moonstone',
+        diceTheme: 'bgblitz:bg-earth',
         cubeTheme: 'bgblitz:bg-moon',
       },
       appearance: { theme: 'paper', mode: 'dark' },
@@ -124,6 +125,7 @@ describe('settings/profile boundary', () => {
     expect(updated.appearance).toMatchObject({
       board_theme: 'walnut',
       checker_theme: 'moonstone',
+      dice_theme: 'bgblitz:bg-earth',
       cube_theme: 'bgblitz:bg-moon',
       ui_theme: 'paper',
       mode: 'dark',
@@ -144,6 +146,7 @@ describe('settings/profile boundary', () => {
       board: {
         theme: 'forest',
         checkerTheme: 'moonstone',
+        diceTheme: 'bgblitz:bg-earth',
         cubeTheme: 'carbon',
       },
       appearance: { theme: 'paper' as const, mode: 'dark' as const },
@@ -168,6 +171,7 @@ describe('settings/profile boundary', () => {
       board: {
         theme: 'walnut',
         checkerTheme: 'moonstone',
+        diceTheme: 'bgblitz:bg-earth',
         cubeTheme: 'bgblitz:bg-moon',
       },
       appearance: { theme: 'paper' as const, mode: 'dark' as const },

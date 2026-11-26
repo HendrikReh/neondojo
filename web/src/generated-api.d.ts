@@ -3559,6 +3559,8 @@ export interface components {
             checker_theme?: string | null;
             /** @description Doubling cube artwork theme. Omitted or null inherits the board theme. */
             cube_theme?: string | null;
+            /** @description Dice artwork theme. Omitted or null inherits the checker set. */
+            dice_theme?: string | null;
             mode: components["schemas"]["ConfigurationMode"];
             ui_theme: components["schemas"]["ConfigurationUiTheme"];
         };

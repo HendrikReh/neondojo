@@ -18,14 +18,17 @@ describe('configuration comparison', () => {
       large_blunder: 0.12,
     });
   });
-  it.each(['checker_theme', 'cube_theme'])('rejects an unknown %s', (field) => {
-    expect(() =>
-      normalizeConfiguration({
-        ...vectors.base,
-        appearance: { ...vectors.base.appearance, [field]: 'unknown' },
-      }),
-    ).toThrow(`appearance.${field}`);
-  });
+  it.each(['checker_theme', 'cube_theme', 'dice_theme'])(
+    'rejects an unknown %s',
+    (field) => {
+      expect(() =>
+        normalizeConfiguration({
+          ...vectors.base,
+          appearance: { ...vectors.base.appearance, [field]: 'unknown' },
+        }),
+      ).toThrow(`appearance.${field}`);
+    },
+  );
   it('normalizes legacy and independently saved board widths', () => {
     const legacy = structuredClone(vectors.base);
     expect(normalizeConfiguration(legacy).appearance).toMatchObject({

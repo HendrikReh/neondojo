@@ -2011,6 +2011,7 @@ export default {
     ui_theme: 'Tema interfaccia',
     mode: 'Modalità colore',
     board_theme: 'Tema tavoliere',
+    dice_theme: 'Dadi',
     checker_theme: 'Set di pedine',
     cube_theme: 'Cubo del raddoppio',
     bearoff_direction: 'Direzione di uscita',
@@ -2338,7 +2339,8 @@ export default {
     strengthStronger: 'Più forte — {depth}',
     strengthStrongest: 'Forza massima — {depth}',
     boardHelp:
-      'Scegli il tavoliere, le pedine e il cubo del raddoppio. I dadi sono abbinati alle pedine.',
+      'Scegli separatamente il tavoliere, le pedine, il cubo del raddoppio e i dadi.',
+    followCheckers: 'Come le pedine',
     followBoard: 'Come il tavoliere',
     gallery: 'Temi della tavola disponibili',
     preview: 'Anteprima: {theme}',

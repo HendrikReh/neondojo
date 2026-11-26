@@ -2021,6 +2021,7 @@ export default {
     ui_theme: 'UI-Theme',
     mode: 'Farbmodus',
     board_theme: 'Board-Design',
+    dice_theme: 'Spielwürfel',
     checker_theme: 'Spielsteine',
     cube_theme: 'Dopplerwürfel',
     bearoff_direction: 'Ausspielrichtung',
@@ -2348,7 +2349,8 @@ export default {
     strengthStronger: 'Stärker — {depth}',
     strengthStrongest: 'Am stärksten — {depth}',
     boardHelp:
-      'Wähle ein Brett und dazu die Spielsteine und den Dopplerwürfel. Die Würfel passen zu den Spielsteinen.',
+      'Wähle Brett, Spielsteine, Dopplerwürfel und Spielwürfel unabhängig voneinander.',
+    followCheckers: 'Passend zu den Spielsteinen',
     followBoard: 'Passend zum Brett',
     gallery: 'Verfügbare Brett-Themes',
     preview: 'Vorschau: {theme}',

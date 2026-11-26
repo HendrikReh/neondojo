@@ -1,4 +1,4 @@
-import { closeSettings } from './settings-actions';
+import { applyAndCloseSettings, closeSettings } from './settings-actions';
 import {
   openFullMatchAnalysis,
   submitFullMatchAnalysis,
@@ -268,7 +268,12 @@ test('comment editors, modal titles and study questions follow their roles while
     'font-size',
     '14px',
   );
-  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  // Walnut uses font-based dice faces.
+  await dialog.getByRole('button', { name: 'Board', exact: true }).click();
+  await dialog
+    .getByRole('combobox', { name: 'Dice', exact: true })
+    .selectOption('walnut');
+  await applyAndCloseSettings(dialog);
   await page.getByRole('tab', { name: 'Study', exact: true }).click();
   await page
     .getByRole('tab', { name: 'Flashcards & Anki', exact: true })

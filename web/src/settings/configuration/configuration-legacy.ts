@@ -31,7 +31,12 @@ export function readLegacyConfiguration(
     locale: readLocale(storage),
     sounds: readPlaySounds(storage),
     appearance: readUiAppearance(storage),
-    board: { theme: readTheme(storage), checkerTheme: null, cubeTheme: null },
+    board: {
+      theme: readTheme(storage),
+      checkerTheme: null,
+      diceTheme: null,
+      cubeTheme: null,
+    },
   });
   c.opening_book = {
     provider: book.provider as ProfileConfiguration['opening_book']['provider'],
