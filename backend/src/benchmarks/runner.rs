@@ -1,4 +1,4 @@
-use super::{BenchmarkRun, REFERENCE_SGF};
+use super::{BenchmarkRun, REFERENCE_CHECKER_COUNTS, REFERENCE_SGF};
 use crate::{
     api::AppState,
     engine::{Engine, benchmark_exclusive},
@@ -92,24 +92,32 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
         .bind(run.id)
         .fetch_one(&state.pool)
         .await?;
-    ensure!(
-        format!("{:x}", Sha256::digest(source.as_bytes())) == reference.sha256,
-        "Reference checksum mismatch"
+    let checksum = reference.sha256.clone();
+    let source = tokio::task::spawn_blocking(move || {
+        ensure!(
+            format!("{:x}", Sha256::digest(source.as_bytes())) == checksum,
+            "Reference checksum mismatch"
+        );
+        ensure!(
+            source == REFERENCE_SGF,
+            "Unsupported benchmark protocol or reference version"
+        );
+        anyhow::Ok(source)
+    })
+    .await
+    .context("Benchmark reference validation worker failed")??;
+    let workload = super::reference_for(
+        &run.engine_id,
+        run.plies,
+        crate::engine::GnubgMoveFilter::for_analysis(&run.engine_id, run.plies),
     );
     ensure!(
-        source == REFERENCE_SGF
-            && super::known_protocol_id(
-                &run.engine_id,
-                run.plies,
-                crate::engine::GnubgMoveFilter::for_analysis(&run.engine_id, run.plies),
-                &protocol.id,
-            ),
+        protocol.id == workload.protocol.id,
         "Unsupported benchmark protocol or reference version"
     );
-    let imported = crate::import::parse_sgf(&source)?;
     ensure!(
-        imported.positions.len() == reference.total_moves as usize
-            && imported.games.len() == reference.total_games as usize,
+        reference.total_moves == workload.total_moves
+            && reference.total_games == workload.total_games,
         "Incomplete reference workload"
     );
     let engine = saved_engine(&state.pool, run).await?;
@@ -130,7 +138,7 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
         elapsed_ms += preparing.elapsed().as_secs_f64() * 1000.0;
     }
     let mut moves = 0;
-    for game_no in 1..=reference.total_games {
+    for (game_no, expected) in (1..=reference.total_games).zip(REFERENCE_CHECKER_COUNTS) {
         guard_engine
             .version()
             .await
@@ -169,9 +177,8 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
             .iter()
             .filter(|d| d.kind == "checker")
             .count();
-        let expected = imported.games[(game_no - 1) as usize].position_count as usize;
         ensure!(
-            count == expected,
+            count == expected as usize,
             "Incomplete checker coverage in game {game_no}: {count}/{expected}"
         );
         moves += count as i32;
