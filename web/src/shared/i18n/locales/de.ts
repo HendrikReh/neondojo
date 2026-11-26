@@ -263,6 +263,7 @@ export default {
     'board.cube': 'Doppler {value}, {owner}',
     'board.centered': 'zentriert',
     'board.themeSource': 'BGBlitz · {name}',
+    'app.documentation': 'Dokumentation',
     'app.home': 'NeonDojo-Startseite',
     'app.tagline': 'JEDEN ZUG VERSTEHEN.',
     'app.libraryEyebrow': 'DEINE BIBLIOTHEK',

@@ -256,6 +256,7 @@ export default {
     'board.cube': 'Cube {value}, {owner}',
     'board.centered': 'centered',
     'board.themeSource': 'BGBlitz · {name}',
+    'app.documentation': 'Documentation',
     'app.home': 'NeonDojo home',
     'app.tagline': 'EVERY MOVE, UNDERSTOOD.',
     'app.libraryEyebrow': 'YOUR LIBRARY',
