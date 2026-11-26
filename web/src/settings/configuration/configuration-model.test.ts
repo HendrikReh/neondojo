@@ -26,6 +26,16 @@ describe('configuration comparison', () => {
     },
   );
 
+  it('matches the board for fresh dice settings and the checkers for missing or null legacy settings', () => {
+    expect(defaultConfiguration.appearance.dice_theme).toBe('match-board');
+    for (const overrides of [{}, { dice_theme: null }]) {
+      const legacy = {
+        ...vectors.base,
+        appearance: { ...vectors.base.appearance, ...overrides },
+      };
+      expect(normalizeConfiguration(legacy).appearance.dice_theme).toBeNull();
+    }
+  });
   it('defaults legacy profiles to the four analysis thresholds', () => {
     expect(
       normalizeConfiguration(vectors.base).analysis.error_thresholds,
