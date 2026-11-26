@@ -126,9 +126,22 @@ test('virtual profiles group members, consolidate results and stand for me in St
     await expect(
       card.getByRole('region', { name: 'PR over time' }),
     ).toBeVisible();
-    await card.screenshot({
-      path: test.info().outputPath('virtual-player-card.png'),
-    });
+    for (const [width, height] of [
+      [1800, 1169],
+      [2560, 1440],
+    ]) {
+      await page.setViewportSize({ width, height });
+      for (const box of [card, card.locator('.player-rating-trends')]) {
+        expect(
+          await box.evaluate(
+            (element) => element.scrollWidth - element.clientWidth,
+          ),
+        ).toBe(0);
+      }
+      await card.screenshot({
+        path: test.info().outputPath(`virtual-player-card-${width}.png`),
+      });
+    }
 
     // Members stay in the player list and name their group.
     await page.getByRole('searchbox', { name: 'Search players' }).fill(alias);

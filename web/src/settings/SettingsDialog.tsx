@@ -1131,7 +1131,7 @@ export default function SettingsDialog({
               </p>
             )}
           </div>
-          <div className="settings-actions" hidden={category === 'profiles'}>
+          <div className="settings-actions">
             <ActionButton
               icon="close"
               label={t('done')}
@@ -1139,7 +1139,7 @@ export default function SettingsDialog({
               onClick={() => requestDestination('close')}
               disabled={saving || sage.busy}
             />
-            {(dirty || saving) && (
+            {category !== 'profiles' && (dirty || saving) && (
               <ActionButton
                 icon="save"
                 label={saving ? t('saving') : applyLabel}

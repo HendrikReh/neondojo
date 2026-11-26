@@ -170,6 +170,7 @@ export default function EngineSettingsSection({
                   id={`${id}-path`}
                   required
                   value={draft.gnubg_path}
+                  title={draft.gnubg_path}
                   spellCheck={false}
                   autoComplete="off"
                   aria-describedby={`${id}-local-help ${id}-check-status`}

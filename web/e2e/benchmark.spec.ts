@@ -441,11 +441,11 @@ test('play-turn latency starts independently and has its own history metric', as
   await engine.selectOption('bgsage');
   await expect(playingDepth).toHaveValue('1');
   await page.getByRole('button', { name: 'Measure play-turn latency' }).click();
-  const row = page.getByRole('row').filter({ hasText: '42 ms' });
+  const row = page.getByRole('row').filter({ hasText: '42.00 ms' });
   await expect(row).toContainText('NeonGammon');
   await expect(row).toContainText('1-ply');
   await expect(row).not.toContainText('11 / 11 checker turns');
-  await expect(row).toContainText('42 ms');
+  await expect(row).toContainText('42.00 ms');
   await expect(page.locator('.benchmark-history tbody tr')).toHaveCount(1);
   await row.getByText('Details', { exact: true }).click();
   await expect(
@@ -731,6 +731,7 @@ test('comparison identifies stored engine versions and measurement protocols', a
   ].flatMap(({ version, protocol, threads }) =>
     [1, 2, 3].map((index) => ({
       ...run(`${protocol}-${index}`),
+      average_move_ms: [36, 37.3, 640.69][index - 1],
       engine_version: version,
       protocol: { ...reference.protocol, id: protocol },
       engine_snapshot: {
@@ -767,8 +768,9 @@ test('comparison identifies stored engine versions and measurement protocols', a
   ).toBeVisible();
   await expect(groups.nth(1)).toContainText('2 threads');
   await expect(groups.nth(1).locator('.benchmark-median')).toHaveText(
-    /^\d[\d.,]* ms$/,
+    '37.30 ms',
   );
+  await expect(groups.nth(1)).toContainText('36.00–640.69 ms');
 });
 
 test('the global benchmark status is read at start, on focus and only while a run is active', async ({

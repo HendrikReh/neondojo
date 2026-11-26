@@ -3,6 +3,11 @@ type FormatNumber = (
   options?: Intl.NumberFormatOptions,
 ) => string;
 
+export const benchmarkTimeDigits = {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+};
+
 const unit = (name: 'second' | 'minute' | 'hour', digits = 0) =>
   ({
     style: 'unit',

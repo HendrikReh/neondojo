@@ -5,6 +5,7 @@ import {
   benchmarkComparisons,
   benchmarkThreadCount,
 } from './benchmark-comparison';
+import { benchmarkTimeDigits } from './benchmark-duration';
 import { useBenchmarkText } from './benchmark-messages';
 import type { BenchmarkRun } from './benchmark-api';
 const labels = {
@@ -80,7 +81,7 @@ export default function BenchmarkComparison({
                   ? run.engine_snapshot?.rules_version
                   : null;
               const ms = (value: number) =>
-                `${formatNumber(value, { maximumFractionDigits: 2 })} ms`;
+                `${formatNumber(value, benchmarkTimeDigits)} ms`;
               return (
                 <tr key={run.id}>
                   <th scope="row">
@@ -94,8 +95,7 @@ export default function BenchmarkComparison({
                     {ms(median)}
                   </td>
                   <td className="benchmark-number">
-                    {formatNumber(minimum, { maximumFractionDigits: 2 })}–
-                    {ms(maximum)}
+                    {formatNumber(minimum, benchmarkTimeDigits)}–{ms(maximum)}
                   </td>
                   <td>
                     <details className="benchmark-row-details">
@@ -143,8 +143,7 @@ export function BenchmarkInitialization({
   const { locale, formatNumber } = useI18n();
   return milliseconds == null ? null : (
     <small>
-      {labels[locale][3]}:{' '}
-      {formatNumber(milliseconds, { maximumFractionDigits: 2 })} ms
+      {labels[locale][3]}: {formatNumber(milliseconds, benchmarkTimeDigits)} ms
     </small>
   );
 }

@@ -349,3 +349,58 @@ test('a failed archive preview preserves the profile name draft and retries insi
   ).toBeVisible();
   expect(requests).toBe(2);
 });
+
+test('retrying an artwork load preserves four independent choices and the unsaved settings draft', async ({
+  page,
+}) => {
+  const archive = installedBoardThemes.find((theme) =>
+    theme.id.startsWith('bgblitz:'),
+  );
+  test.skip(!archive, 'requires local BGBlitz artwork');
+  const backend = await profileBackend(page);
+  const open = page.getByRole('button', { name: 'Settings', exact: true });
+  const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
+  const board = dialog.getByRole('button', { name: 'Board', exact: true });
+  const walnut = dialog.getByRole('button', { name: 'Walnut', exact: true });
+  const checkers = dialog.getByRole('combobox', {
+    name: 'Checker set',
+    exact: true,
+  });
+  const cube = dialog.getByRole('combobox', {
+    name: 'Doubling cube',
+    exact: true,
+  });
+  const dice = dialog.getByRole('combobox', { name: 'Dice', exact: true });
+
+  await page.goto('/');
+  await open.click();
+  await board.click();
+  await walnut.click();
+  await checkers.selectOption(archive!.id);
+  await cube.selectOption('ion');
+  await dice.selectOption('forest');
+  await applyAndCloseSettings(dialog);
+
+  // A new page load gives the archive module a cold cache. The active profile
+  // still has artwork changes that have not been saved to the profile.
+  await page.route('**/archive-themes.ts*', (route) => route.abort('failed'), {
+    times: 1,
+  });
+  await page.reload();
+  await open.click();
+  const player = dialog.getByLabel('Player name', { exact: true });
+  await player.fill('Unsaved player');
+  await board.click();
+  await expect(dialog.getByRole('alert')).toContainText('could not be loaded');
+  await dialog.getByRole('button', { name: 'Try again' }).click();
+  await expect(walnut).toHaveAttribute('aria-pressed', 'true');
+  await expect(checkers).toHaveValue(archive!.id);
+  await expect(cube).toHaveValue('ion');
+  await expect(dice).toHaveValue('forest');
+  await dialog.getByRole('button', { name: 'General', exact: true }).click();
+  await expect(player).toHaveValue('Unsaved player');
+  expect(backend.state.current_configuration.general.player_name).not.toBe(
+    'Unsaved player',
+  );
+  expect(backend.state.dirty).toBe(true);
+});

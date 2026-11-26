@@ -140,8 +140,11 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 .settings-engine-path {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+.settings-engine-path button {
+  justify-self: start;
 }
 .settings-field-pair .settings-field,
 .settings-engine-path .settings-field {
@@ -460,12 +463,6 @@
   .settings-section > legend {
     margin-bottom: 17px;
   }
-  .settings-engine-path {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .settings-engine-path button {
-    justify-self: start;
-  }
   .settings-footer {
     flex-wrap: wrap;
     gap: 12px;
@@ -517,9 +514,6 @@
   accent-color: var(--ui-accent);
 }
 
-.settings-actions[hidden] {
-  display: none;
-}
 .settings-draft-actions {
   flex-wrap: wrap;
   margin-top: 16px;
