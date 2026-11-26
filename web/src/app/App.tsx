@@ -553,6 +553,14 @@ export default function App() {
             label={w('settings')}
             compact
           ></ActionButton>
+          <a
+            className="documentation-link"
+            href="https://hendrikreh.github.io/neondojo/user-guide/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('app.documentation')}
+          </a>
         </div>
         <MatchImportInputs importer={importer} />
       </header>

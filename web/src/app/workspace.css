@@ -37,6 +37,14 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+.documentation-link {
+  align-self: center;
+  color: var(--ui-accent);
+  font-size: var(--font-size-body);
+}
+.documentation-link:hover {
+  text-decoration: underline;
+}
 .settings-trigger {
   display: flex;
   align-items: center;

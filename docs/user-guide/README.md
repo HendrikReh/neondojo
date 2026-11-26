@@ -40,7 +40,7 @@ Tips for a particular level are marked with these labels:
 
 Open NeonDojo in your browser at <http://127.0.0.1:8787>. The header is the same in every workspace.
 
-![The NeonDojo header with its seven workspaces, the profile selector and Settings](images/header.webp)
+![The NeonDojo header with its seven workspaces, the profile selector, Settings and Documentation](images/header.webp)
 
 | # | Header item | What you do there |
 | --- | --- | --- |
@@ -53,6 +53,7 @@ Open NeonDojo in your browser at <http://127.0.0.1:8787>. The header is the same
 | 7 | **Extras** | Run engine benchmarks and engine duels, back up the database, and check versions. |
 | 8 | **Profile** | Switch configuration profiles and see whether the current settings differ from the saved profile. |
 | 9 | **Settings** (gear) | Set the language, appearance, engines, error thresholds, playing defaults and board artwork. |
+| 10 | **Documentation** | Open this user guide in a new browser tab. |
 
 Each workspace contains further tabs, as the map below shows.
 
