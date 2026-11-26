@@ -1,6 +1,8 @@
 import { test, expect } from './test';
 import { historyFixture } from './play-history-review-helpers';
 import { botDice, playMenuItem, resignGame } from './play-board-actions';
+import { eitherOrder } from './play-turn-fixtures';
+import { nativeSteps } from '../src/shared/board/play-sound-events';
 
 test('the action panel confirms a turn by button and by Enter', async ({
   page,
@@ -17,8 +19,9 @@ test('the action panel confirms a turn by button and by Enter', async ({
   ).toBeVisible();
   await expect(confirm).toBeDisabled();
   await expect(confirm).toHaveAttribute('aria-keyshortcuts', 'Enter');
-  await expect(toolbar.locator('.play-turn-help')).toContainText(
-    'Hover over a checker',
+  // The fixture's roll leaves exactly one legal move.
+  await expect(toolbar.locator('.play-turn-help')).toHaveText(
+    'Only one legal move with this roll: 13/10 6/5. Every other play is blocked or would leave a playable die unused. The rules require playing as many dice as possible, and the higher die if only one can be played.',
   );
   await page.keyboard.press('Enter');
   expect(writes).toEqual([]);
@@ -38,6 +41,30 @@ test('the action panel confirms a turn by button and by Enter', async ({
   await expect
     .poll(() => writes)
     .toEqual([{ version: 7, action: 'move', move: 0 }]);
+});
+
+test('the action panel explains only a forced move, not a free choice', async ({
+  page,
+}) => {
+  const { saved } = await historyFixture(page);
+  saved.legal_moves.push({
+    notation: '13/10 13/12',
+    steps: nativeSteps('13/10 13/12', 0),
+  });
+  saved.legal_turns = [
+    ...(saved.legal_turns ?? []),
+    ...eitherOrder([3, 1], '13/10 13/12').map((turn) => ({
+      ...turn,
+      move_index: 1,
+    })),
+  ];
+  await page.reload();
+  await page.getByRole('tab', { name: 'Playing', exact: true }).click();
+  const help = page
+    .getByTestId('play-board-toolbar')
+    .locator('.play-turn-help');
+  await expect(help).toContainText('Hover over a checker');
+  await expect(help).not.toContainText('Only one legal move');
 });
 
 test('Roll, Double and Hint stay visible after the bot has rolled', async ({

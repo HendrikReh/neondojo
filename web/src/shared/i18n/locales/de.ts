@@ -1546,6 +1546,8 @@ export default {
     select:
       'Zeige auf einen Stein, um sein Ziel zu sehen. Klicke, um ihn zu ziehen. Sind beide Würfel spielbar, hat der erste Vorrang.',
     ready: 'Klicke auf das Würfelpaar, um deinen Zug zu bestätigen.',
+    onlyMove:
+      'Mit diesem Wurf ist nur ein Zug legal: {move}. Jeder andere Zug ist blockiert oder ließe einen spielbaren Würfel ungenutzt. Die Regeln verlangen, so viele Würfel wie möglich zu setzen, und den höheren, wenn nur einer spielbar ist.',
     retry: 'Gespeicherten Stand laden',
     export: 'SGF herunterladen',
     engine: 'Engine',

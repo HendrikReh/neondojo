@@ -1507,6 +1507,8 @@ export default {
     select:
       'Hover over a checker to preview its destination. Click to move it. If both dice can be used, the first die takes priority.',
     ready: 'Click the dice pair to confirm your turn.',
+    onlyMove:
+      'Only one legal move with this roll: {move}. Every other play is blocked or would leave a playable die unused. The rules require playing as many dice as possible, and the higher die if only one can be played.',
     retry: 'Reload saved state',
     export: 'Download SGF',
     engine: 'Engine',
