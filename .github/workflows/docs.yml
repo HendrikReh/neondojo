@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'docs-theme/**'
       - 'mkdocs.yml'
       - 'tools/docs_pages.py'
       - 'web/public/neondojo-logo.svg'

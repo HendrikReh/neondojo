@@ -7,6 +7,7 @@ site_dir: target/docs-site
 
 theme:
   name: material
+  custom_dir: docs-theme
   font: false
   logo: assets/neondojo-logo.svg
   favicon: assets/neondojo-logo.svg
