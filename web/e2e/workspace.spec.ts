@@ -8,12 +8,16 @@ import { expect, test } from './test';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
-test('analysis-first tabs preserve the selected game, notes and database navigation', async ({
+test('workspace tabs preserve the selected game, notes and database navigation', async ({
   page,
 }) => {
   await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
   await page.goto('/');
+  await expect(
+    page.getByRole('heading', { name: 'Startseite', exact: true }),
+  ).toBeVisible();
   const analysisTab = page.getByRole('tab', { name: 'Analyse', exact: true });
+  await analysisTab.click();
   await expect(analysisTab).toHaveAttribute('aria-selected', 'true');
   await page.getByLabel('Matchdatei').setInputFiles({
     name: 'workspace.sgf',

@@ -1,3 +1,4 @@
+import { fulfillJson, fulfillJsonList } from './api-fixtures';
 import { expect, test } from './test';
 
 const gnubgVersion = 'GNU Backgammon 1.08.003 20261108';
@@ -18,29 +19,31 @@ test('shows the running app and engine versions under Extras', async ({
   };
   let engineStatus = 200;
   await page.route('**/api/engines', (route) =>
-    route.fulfill({
-      status: engineStatus,
-      json:
-        engineStatus === 200
-          ? [
-              {
-                id: 'gnubg',
-                name: 'GNUbg',
-                available: true,
-                version: gnubgVersion,
-                plies: [1, 2, 3, 4, 5],
-              },
-              {
-                id: 'bgsage',
-                name: 'NeonGammon',
-                available: sageVersion !== null,
-                version: sageVersion,
-                fork: sageFork,
-                plies: [2],
-              },
-            ]
-          : { error: 'Engine catalog unavailable' },
-    }),
+    engineStatus === 200
+      ? fulfillJsonList<'EngineInfo'>(route, [
+          {
+            id: 'gnubg',
+            name: 'GNUbg',
+            available: true,
+            version: gnubgVersion,
+            plies: [1, 2, 3, 4, 5],
+            max_parallel_threads: 7,
+          },
+          {
+            id: 'bgsage',
+            name: 'NeonGammon',
+            available: sageVersion !== null,
+            version: sageVersion,
+            fork: sageFork,
+            plies: [2],
+            max_parallel_threads: 9,
+          },
+        ])
+      : fulfillJson<'ErrorBody'>(
+          route,
+          { error: 'Engine catalog unavailable' },
+          engineStatus,
+        ),
   );
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.setViewportSize({ width: 1800, height: 1169 });

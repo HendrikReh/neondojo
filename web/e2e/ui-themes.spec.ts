@@ -1,4 +1,4 @@
-import { mockSettings, settingsFixture } from './api-fixtures';
+import { mockEngineCatalog, mockSettings, settingsFixture } from './api-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { expect, test, type Page } from './test';
 import { readFileSync } from 'node:fs';
@@ -54,19 +54,16 @@ async function setup(page: Page, boardTheme = 'walnut') {
     saved = { ...proposed, version: saved.version + 1 };
     return route.fallback();
   });
-  await page.route('**/api/engines', (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: 'gnubg',
-          name: 'GNU Backgammon',
-          available: true,
-          version: 'GNUbg 1.08',
-          plies: [1, 2, 3, 4, 5],
-        },
-      ],
-    }),
-  );
+  await mockEngineCatalog(page, () => [
+    {
+      id: 'gnubg',
+      max_parallel_threads: 7,
+      name: 'GNU Backgammon',
+      available: true,
+      version: 'GNUbg 1.08',
+      plies: [1, 2, 3, 4, 5],
+    },
+  ]);
   await page.addInitScript((boardTheme) => {
     localStorage.setItem('neondojo.locale', 'en');
     localStorage.setItem('neondojo.theme', boardTheme);

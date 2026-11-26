@@ -1,3 +1,4 @@
+import { mockEngineCatalog } from './api-fixtures';
 import {
   openFullMatchAnalysis,
   openMatchAnalysisOptions,
@@ -93,26 +94,24 @@ test('starts GNUbg 5-ply for the selected game with a NeonGammon profile', async
   const config = structuredClone(defaultConfiguration);
   config.analysis.engine = 'bgsage';
   const profile = await profileBackend(page, { configuration: config });
-  await page.route('**/api/engines', (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: 'gnubg',
-          name: 'GNUbg',
-          available: true,
-          version: null,
-          plies: [1, 2, 3, 4, 5],
-        },
-        {
-          id: 'bgsage',
-          name: 'NeonGammon',
-          available: true,
-          version: null,
-          plies: [2, 3],
-        },
-      ],
-    }),
-  );
+  await mockEngineCatalog(page, () => [
+    {
+      id: 'gnubg',
+      max_parallel_threads: 7,
+      name: 'GNUbg',
+      available: true,
+      version: null,
+      plies: [1, 2, 3, 4, 5],
+    },
+    {
+      id: 'bgsage',
+      max_parallel_threads: 9,
+      name: 'NeonGammon',
+      available: true,
+      version: null,
+      plies: [2, 3],
+    },
+  ]);
   const match = await openMatch(page);
   await openMatchAnalysisOptions(page);
   const engine = page.getByLabel('Analysis engine', { exact: true });

@@ -22,11 +22,11 @@ function hasJsonOption(node: ts.Expression): boolean {
   );
 }
 
-function rawSettingsReplies(path: string, text: string) {
-  if (!text.replaceAll('\\/', '/').includes('/api/settings')) return [];
+function rawCoreReplies(path: string, text: string) {
+  if (!text.replaceAll('\\/', '/').match(/\/api\/(settings|engines)/)) return [];
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
   const found: string[] = [];
-  function visit(node: ts.Node, settingsHandler: boolean) {
+  function visit(node: ts.Node, coreHandler: boolean) {
     if (
       ts.isCallExpression(node) &&
       ts.isPropertyAccessExpression(node.expression)
@@ -36,12 +36,12 @@ function rawSettingsReplies(path: string, text: string) {
         const matcher = first.getText(source).replaceAll('\\/', '/');
         visit(
           handler,
-          /\/api\/settings(?=['"`?$*]|\/[dgimsuvy]*$)/.test(matcher),
+          /\/api\/(?:settings|engines(?:\/bgsage|\/gnubg\/check)?)(?=['"`?$*]|\/[dgimsuvy]*$)/.test(matcher),
         );
         return;
       }
       if (
-        settingsHandler &&
+        coreHandler &&
         node.expression.name.text === 'fulfill' &&
         first &&
         hasJsonOption(first)
@@ -50,13 +50,13 @@ function rawSettingsReplies(path: string, text: string) {
         found.push(`${path}:${line + 1}`);
       }
     }
-    ts.forEachChild(node, (child) => visit(child, settingsHandler));
+    ts.forEachChild(node, (child) => visit(child, coreHandler));
   }
   visit(source, false);
   return found;
 }
 
-it('finds raw settings JSON while allowing typed replies and transport behavior', () => {
+it('finds raw settings and engine JSON while allowing typed replies and transport behavior', () => {
   const text = [
     "page.route('**/api/settings', r => r.fulfill({ json: partial }));",
     "context.route(url => url.pathname === '/api/settings', r => r.fulfill(failed ? { status: 503, json: error } : { json: saved }));",
@@ -69,19 +69,27 @@ it('finds raw settings JSON while allowing typed replies and transport behavior'
     "page.route('**/api/settings-other', r => r.fulfill({ json }));",
     "page.route('**/api/settings/detail', r => r.fulfill({ json }));",
     "page.route('**/api/health', r => r.fulfill({ json }));",
+    "page.route('**/api/engines', r => r.fulfill({ json }));",
+    "page.route('**/api/engines/bgsage', r => r.fulfill({ json }));",
+    "page.route('**/api/engines/gnubg/check', r => r.fulfill({ json }));",
+    "page.route('**/api/engines/other', r => r.fulfill({ json }));",
+    "page.route('**/api/engines', r => fulfillJsonList<'EngineInfo'>(r, engines));",
     "const response = await page.request.get('/api/settings');",
   ].join('\n');
-  expect(rawSettingsReplies('spec', text)).toEqual([
+  expect(rawCoreReplies('spec', text)).toEqual([
     'spec:1',
     'spec:2',
     'spec:3',
+    'spec:12',
+    'spec:13',
+    'spec:14',
   ]);
 });
 
-it('uses typed JSON responses for Playwright settings mocks', () => {
+it('uses typed JSON responses for Playwright settings and engine mocks', () => {
   expect(
     Object.entries(sources).flatMap(([path, text]) =>
-      rawSettingsReplies(path, text),
+      rawCoreReplies(path, text),
     ),
   ).toEqual([]);
 });
