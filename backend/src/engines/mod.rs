@@ -1078,6 +1078,12 @@ mod tests {
             .expect("release v3.2.0 is recognized");
         assert_eq!(fork.repository, "HendrikReh/neongammon");
         assert_eq!(fork.revision, "9d9486074fdabc6957e3694d20be354c008515d9");
+
+        let fork = snapshot("32376db9d2ea5c39264ed153e835080ccbcb3c7201b46b764c3c5511c79f4a74")
+            .known_fork()
+            .expect("release v3.2.1 is recognized");
+        assert_eq!(fork.repository, "HendrikReh/neongammon");
+        assert_eq!(fork.revision, "4553ed8727feb5f45a992a6c416da03d26e9ffe9");
     }
 
     #[test]

@@ -275,6 +275,24 @@ class BatchTests(unittest.TestCase):
             self.runtime.analyzer.cube_action.assert_called_once_with(board=self.cube['board'], beaver=False, **self.cube['context'])
             self.assertEqual(actual, [self.runtime.dispatch(self.cube)[0]])
 
+    def test_cooperative_wheel_batches_deep_cubeful_checkers(self):
+        self.runtime.release = PROBE.RELEASES['3.2.1']
+        self.runtime.models = object()
+        self.runtime.analyzer.checker_play = Mock()
+        self.runtime.checker_output = lambda row, result: result
+        self.runtime.sage = SimpleNamespace(batch_checker_play=Mock(return_value=['a', 'b']))
+        self.runtime.dispatch({'operation': 'begin_batch'})
+        for depth in (3, 4):
+            self.runtime.profile.update(plies=depth, threads=4)
+            rows = [dict(self.cube, operation='checker', dice=dice) for dice in ([2, 2], [4, 1])]
+            actual, _ = self.runtime.dispatch(dict(operation='checker_batch', rows=rows))
+            self.assertEqual(actual, ['a', 'b'])
+            call = self.runtime.sage.batch_checker_play.call_args
+            self.assertEqual(call.kwargs['eval_level'], f'{depth}ply')
+            self.assertEqual(call.kwargs['n_threads'], 4)
+            self.assertEqual([(p['die1'], p['die2']) for p in call.args[0]], [(2, 2), (4, 1)])
+        self.runtime.analyzer.checker_play.assert_not_called()
+
     def test_mixed_jacoby_cubes_use_one_ordered_native_call(self):
         self.runtime.models = object()
         self.runtime.release = PROBE.RELEASES['3.2.0']
