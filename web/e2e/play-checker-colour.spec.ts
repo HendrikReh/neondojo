@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { installedBoardThemes } from './board-themes';
 import type { Page } from '@playwright/test';
 import { eitherOrder } from './play-turn-fixtures';
 import { test, expect } from './test';
@@ -48,7 +48,7 @@ function session(human: 0 | 1) {
 }
 
 // Mean luminance of the checker artwork rendered on each point: the fill of a
-// built-in SVG checker, or the opaque pixels of a BGBlitz checker image. The
+// plain SVG checker, or the opaque pixels of a textured checker image. The
 // stacks are read in one synchronous step, so a re-render cannot detach them.
 async function stackLuminance(page: Page, points: number[]) {
   return page.evaluate(async (points) => {
@@ -128,25 +128,17 @@ async function startMatch(page: Page, theme: string, color: 'White' | 'Black') {
     : { human: player1, opponent: player0 };
 }
 
-const themes = [
-  'forest',
-  'walnut',
-  'slate',
-  ...(
-    JSON.parse(readFileSync('src/generated-themes.json', 'utf8')) as {
-      id: string;
-    }[]
-  ).map((theme) => theme.id),
-];
-
-for (const theme of themes)
+for (const { id: theme } of installedBoardThemes)
   test(`White plays the light checkers on ${theme}`, async ({ page }) => {
     const { human, opponent } = await startMatch(page, theme, 'White');
     expect(human).toBeGreaterThan(opponent);
   });
 
 test('Black plays the dark checkers on BG Moon', async ({ page }) => {
-  test.skip(!themes.includes('bgblitz:bg-moon'), 'BG Moon archive not present');
+  test.skip(
+    !installedBoardThemes.some(({ id }) => id === 'bgblitz:bg-moon'),
+    'BG Moon archive not present',
+  );
   const { human, opponent } = await startMatch(
     page,
     'bgblitz:bg-moon',

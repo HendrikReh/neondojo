@@ -1,3 +1,4 @@
+import { installedBoardThemes } from './board-themes';
 import {
   openFullMatchAnalysis,
   openPositionCalculation,
@@ -521,15 +522,8 @@ test('all board themes render the same arrows and projected checker counts', asy
     ),
   });
   await expect(page.locator('.analysis-workspace .board-shell')).toBeVisible();
-  const themes = [
-    'forest',
-    'walnut',
-    'slate',
-    ...JSON.parse(readFileSync('src/generated-themes.json', 'utf8')).map(
-      (theme: { id: string }) => theme.id,
-    ),
-  ];
-  for (const theme of themes) {
+
+  for (const { id: theme } of installedBoardThemes) {
     await expect
       .poll(() =>
         page.evaluate(() =>

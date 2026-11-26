@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 648 396">
+  <defs>
+    <linearGradient id="stone" x2=".85" y2="1" gradientUnits="objectBoundingBox">
+      <stop stop-color="#d2dce1"/><stop offset=".53" stop-color="#a8bbc7"/><stop offset="1" stop-color="#8398aa"/>
+    </linearGradient>
+    <radialGradient id="basin" cx=".42" cy=".36" r=".69">
+      <stop offset=".72" stop-color="#526779" stop-opacity=".02"/>
+      <stop offset=".93" stop-color="#516777" stop-opacity=".36"/>
+      <stop offset=".98" stop-color="#e9f1f3" stop-opacity=".72"/>
+      <stop offset="1" stop-color="#80909e" stop-opacity=".25"/>
+    </radialGradient>
+    <pattern id="grain" width="7" height="9" patternUnits="userSpaceOnUse">
+      <path d="M1 2h1m3 4h1" stroke="#495e72" opacity=".18"/>
+    </pattern>
+  </defs>
+  <rect width="648" height="396" fill="url(#stone)"/>
+  <g fill="url(#basin)" opacity=".54">
+    <circle cx="26" cy="179" r="69"/><circle cx="100" cy="217" r="15"/>
+    <circle cx="115" cy="193" r="6"/><circle cx="58" cy="203" r="12"/>
+    <circle cx="500" cy="74" r="91"/><circle cx="566" cy="134" r="21"/>
+    <circle cx="632" cy="273" r="59"/><circle cx="580" cy="258" r="11"/>
+    <circle cx="230" cy="385" r="47"/><circle cx="279" cy="367" r="9"/>
+  </g>
+  <rect width="648" height="396" fill="url(#grain)"/>
+</svg>

@@ -13,19 +13,7 @@ import {
 } from './analysis-controls';
 import { backendTest, test, expect, type Page } from './test';
 import { profileBackend } from './profile-backend';
-import { readFileSync } from 'node:fs';
-
-const themes: { id: string; name: string }[] = [
-  { id: 'forest', name: 'Forest' },
-  { id: 'walnut', name: 'Walnut' },
-  { id: 'slate', name: 'Slate' },
-  ...JSON.parse(
-    readFileSync(
-      new URL('../src/generated-themes.json', import.meta.url),
-      'utf8',
-    ),
-  ),
-];
+import { installedBoardThemes as themes } from './board-themes';
 
 const initialSettings = {
   ...settingsFixture(),

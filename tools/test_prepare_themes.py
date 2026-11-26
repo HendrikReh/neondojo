@@ -7,7 +7,7 @@ import unittest
 from zipfile import ZipFile
 import struct
 import zlib
-from prepare_themes import main, png_luminance, prepare
+from prepare_themes import BUILTIN_THEMES, main, png_luminance, prepare
 
 ROOT = Path(__file__).resolve().parents[1]
 ADAM7 = [(0, 0, 8, 8), (4, 0, 8, 8), (0, 4, 4, 8), (2, 0, 4, 4), (0, 2, 2, 4), (1, 0, 2, 2), (0, 1, 1, 2)]
@@ -98,7 +98,7 @@ class ThemePreparationTests(unittest.TestCase):
                     target / "configuration-options.json", update_options=True)
             self.assertEqual(
                 json.loads((target / "configuration-options.json").read_text()),
-                {"board_themes": ["forest", "walnut", "slate"]},
+                {"board_themes": list(BUILTIN_THEMES)},
             )
 
     def test_missing_listed_archive_fails_without_changing_outputs(self):
@@ -141,7 +141,7 @@ class ThemePreparationTests(unittest.TestCase):
             )
             self.assertEqual(
                 json.loads(options.read_text()),
-                {"board_themes": ["forest", "walnut", "slate"]},
+                {"board_themes": list(BUILTIN_THEMES)},
             )
 
     def test_allowed_missing_archive_without_update_flag_keeps_options(self):
@@ -188,7 +188,7 @@ class ThemePreparationTests(unittest.TestCase):
                 main(["--update-options"], root=root, environ=env)
             self.assertEqual(
                 json.loads(options.read_text())["board_themes"],
-                ["forest", "walnut", "slate"],
+                list(BUILTIN_THEMES),
             )
             self.assertEqual(
                 {k: v for k, v in json.loads(options.read_text()).items() if k != "board_themes"},
@@ -281,7 +281,7 @@ class ThemePreparationTests(unittest.TestCase):
             )
             self.assertEqual(
                 json.loads(options.read_text())["board_themes"],
-                ["forest", "walnut", "slate", "bgblitz:synthetic"],
+                [*BUILTIN_THEMES, "bgblitz:synthetic"],
             )
             self.assertEqual(theme["name"], "Synthetic")
             self.assertEqual(theme["background"]["width"], 128)

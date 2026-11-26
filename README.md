@@ -19,6 +19,8 @@
 
 NeonDojo is a local backgammon study app for Apple Silicon Macs. Import your matches, find positions in your library, and practice decisions you missed. You can review checker plays and cube decisions with GNU Backgammon (GNUbg) or install [NeonGammon](https://github.com/HendrikReh/neongammon) as a second engine. NeonDojo shows the engine’s analysis alongside your moves and lets you play matches against either engine.
 
+We chose “Neon” as a nod to Arm’s Neon SIMD (single instruction, multiple data) instructions on Apple Silicon. They let the CPU apply the same operation to several values at once.
+
 NeonDojo’s headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
 
 ## Features
