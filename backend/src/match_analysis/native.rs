@@ -146,13 +146,23 @@ pub(super) fn retain_checker_paths<'a>(
 pub(crate) async fn retain_hint_paths(
     hint_sgf: &std::path::Path,
     position_id: &str,
-    candidates: &mut [Candidate],
-) {
+    mut candidates: Vec<Candidate>,
+) -> Result<Vec<Candidate>> {
     // Some GNUbg builds and decisions only expose textual hints.
     let Ok(sgf) = read_analysis_artifact(hint_sgf).await else {
-        return;
+        return Ok(candidates);
     };
-    let Ok((matched, _)) = crate::import::sgf::parse_native_sgf_with_context(&sgf) else {
+    let position_id = position_id.to_owned();
+    tokio::task::spawn_blocking(move || {
+        retain_hint_sgf_paths(&sgf, &position_id, &mut candidates);
+        candidates
+    })
+    .await
+    .context("Parsing GNUbg hint SGF")
+}
+
+fn retain_hint_sgf_paths(sgf: &str, position_id: &str, candidates: &mut [Candidate]) {
+    let Ok((matched, _)) = crate::import::sgf::parse_native_sgf_with_context(sgf) else {
         return;
     };
     let Some(position) = matched
@@ -162,7 +172,7 @@ pub(crate) async fn retain_hint_paths(
     else {
         return;
     };
-    let Ok(trees) = parse_trees(&sgf) else {
+    let Ok(trees) = parse_trees(sgf) else {
         return;
     };
     if let Some(analysis) = trees

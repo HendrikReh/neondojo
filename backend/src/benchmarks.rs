@@ -381,6 +381,7 @@ async fn enqueue(
         let engine = snapshot.engine()?;
         let path = engine
             .resolved_binary()
+            .await
             .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
         // snapshot_for just verified the exact NeonGammon profile. GNUbg's
         // snapshot only reads its version and still needs a real evaluation.

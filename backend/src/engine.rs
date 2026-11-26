@@ -675,14 +675,13 @@ impl Engine {
             let output = self.run(temp.path(), &forced_commands).await?;
             vec![parse_pass(&output, plies, self.cubeless_checker)?]
         } else {
-            let mut candidates = parse_hints(&output, !self.cubeless_checker)?;
+            let candidates = parse_hints(&output, !self.cubeless_checker)?;
             crate::match_analysis::retain_hint_paths(
                 &temp.path().join("hint.sgf"),
                 position_id,
-                &mut candidates,
+                candidates,
             )
-            .await;
-            candidates
+            .await?
         };
         Ok(Analysis {
             engine,
@@ -797,14 +796,13 @@ impl Engine {
                     !part.contains("There are no legal moves."),
                     "GNUbg found no legal move for {a}-{b}, but the rules allow one"
                 );
-                let mut candidates = parse_hints(part, !self.cubeless_checker)?;
+                let candidates = parse_hints(part, !self.cubeless_checker)?;
                 crate::match_analysis::retain_hint_paths(
                     &temp.path().join(format!("hint-{index}.sgf")),
                     position_id,
-                    &mut candidates,
+                    candidates,
                 )
-                .await;
-                candidates
+                .await?
             };
             analyses[index] = Some(Analysis {
                 engine: engine.clone(),
@@ -838,14 +836,14 @@ impl Engine {
         let output = self
             .run_with_timeout(directory.path(), &commands, Duration::from_secs(180))
             .await?;
-        let (mut candidates, evaluated_plies) =
+        let (candidates, evaluated_plies) =
             parse_full_checker_hints(&output, plies, !self.cubeless_checker)?;
-        crate::match_analysis::retain_hint_paths(
+        let candidates = crate::match_analysis::retain_hint_paths(
             &directory.path().join("hint.sgf"),
             position_id,
-            &mut candidates,
+            candidates,
         )
-        .await;
+        .await?;
         Ok(Analysis {
             engine: output
                 .lines()

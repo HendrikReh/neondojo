@@ -187,7 +187,7 @@ pub(crate) async fn initialize(
     // The engine is the job's own snapshot engine (GNUbg for legacy jobs).
     let engine_id = engine.id().id();
     // Benchmarks measure GNUbg single-threaded.
-    let benchmark = match engine.resolved_binary() {
+    let benchmark = match engine.resolved_binary().await {
         Ok(path) if engine.gnubg_threads().is_none_or(|threads| threads == 1) => {
             crate::benchmarks::estimate::matching_benchmark(
                 pool,

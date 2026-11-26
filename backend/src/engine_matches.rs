@@ -10,7 +10,7 @@ pub use runner::worker;
 use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    engine::{Engine, resolve_binary},
+    engine::{Engine, resolve_binary_async},
     engines::EngineId,
     model::MatchSummary,
     settings::{self, EngineSnapshot},
@@ -335,8 +335,9 @@ async fn create(
         }
     }
     let settings = settings::load(&state).await?;
-    let path =
-        resolve_binary(&settings.gnubg_path).map_err(|e| ApiError::invalid(e.to_string()))?;
+    let path = resolve_binary_async(&settings.gnubg_path)
+        .await
+        .map_err(|e| ApiError::invalid(e.to_string()))?;
     let gnubg_threads = settings.gnubg_threads.filter(|&threads| threads != 1);
     let version = Engine::new(path.clone())
         .with_threads(gnubg_threads)

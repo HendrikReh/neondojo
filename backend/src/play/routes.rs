@@ -128,7 +128,9 @@ async fn start_session(
     if crate::benchmarks::has_live_run(&state.pool).await? {
         return Err(benchmark_conflict());
     }
-    let pinned_path = resolve_binary(&settings.gnubg_path).map_err(native_error)?;
+    let pinned_path = resolve_binary_async(&settings.gnubg_path)
+        .await
+        .map_err(native_error)?;
     let engine = Engine::new(pinned_path.clone()).interactive();
     let rules_version = engine.version().await.map_err(native_error)?;
     let rules = crate::settings::EngineSnapshot {
