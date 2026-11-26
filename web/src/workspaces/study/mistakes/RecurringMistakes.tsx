@@ -1,3 +1,4 @@
+import { useAnalysisErrorThresholds } from '../../../settings/configuration/ConfigurationProvider';
 import IndependentOnlyToggle from './IndependentOnlyToggle';
 import { useDecimalInput } from '../../../shared/format/decimal-input';
 import UnanalyzedMatches from './UnanalyzedMatches';
@@ -49,7 +50,9 @@ export default function RecurringMistakes({
   const [player, setPlayer] = useState(''),
     [database, setDatabase] = useState(''),
     [plan, setPlan] = useState<GamePlan | ''>(''),
-    [loss, setLoss] = useState('0.08');
+    [enteredLoss, setLoss] = useState<string>();
+  const profileLoss = useAnalysisErrorThresholds().blunder;
+  const loss = enteredLoss ?? String(profileLoss);
   const lossInput = useDecimalInput({
     value: loss,
     onChange: (value) => {

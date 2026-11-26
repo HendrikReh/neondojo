@@ -1,4 +1,6 @@
 import { test, expect } from './test';
+import { profileBackend } from './profile-backend';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
 const position = {
   id: '11111111-1111-4111-8111-111111111111',
@@ -101,7 +103,7 @@ test('all analyzed decisions are filtered on the server, previewed and practiced
   expect(Object.fromEntries(searches[0])).toEqual({
     player: 'Alice',
     kind: 'cube_response',
-    min_loss: '0.05',
+    min_loss: '0.02',
     away: '2',
     limit: '50',
     page: '1',
@@ -193,6 +195,9 @@ test('all analyzed decisions are filtered on the server, previewed and practiced
 test('Clear filters resets the decision filters but keeps the player and refreshes results', async ({
   page,
 }) => {
+  const config = structuredClone(defaultConfiguration);
+  config.analysis.error_thresholds.error = 0.037;
+  const profiles = await profileBackend(page, { configuration: config });
   await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.route('**/api/study/mistakes?*', (route) =>
     route.fulfill({
@@ -224,10 +229,19 @@ test('Clear filters resets the decision filters but keeps the player and refresh
   await player.selectOption('Alice');
   const kind = search.getByRole('combobox', { name: 'Decision type' });
   await kind.selectOption('cube_response');
+  const minLoss = search.getByRole('spinbutton', { name: 'Equity loss from' });
+  await expect(minLoss).toHaveValue('0.037');
+  await minLoss.fill('');
   const maxLoss = search.getByRole('spinbutton', { name: 'Equity loss to' });
   await maxLoss.fill('0.5');
   await search.getByRole('button', { name: 'Search decisions' }).click();
   await expect.poll(() => searches.at(-1)?.max_loss).toBe('0.5');
+
+  expect(searches.at(-1)).not.toHaveProperty('min_loss');
+  config.analysis.error_thresholds.error = 0.048;
+  profiles.updateRemote(config);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(minLoss).toHaveValue('');
 
   await search
     .getByRole('button', { name: 'Clear filters', exact: true })
@@ -237,7 +251,16 @@ test('Clear filters resets the decision filters but keeps the player and refresh
   await expect(maxLoss).toHaveValue('');
   await expect
     .poll(() => searches.at(-1))
-    .toEqual({ player: 'Alice', min_loss: '0.05', limit: '50', page: '1' });
+    .toEqual({ player: 'Alice', min_loss: '0.048', limit: '50', page: '1' });
+  await expect(minLoss).toHaveValue('0.048');
+  config.analysis.error_thresholds.error = 0.055;
+  profiles.updateRemote(config);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(minLoss).toHaveValue('0.055');
+  await expect.poll(() => searches.at(-1)?.min_loss).toBe('0.055');
+  await minLoss.fill('0');
+  await search.getByRole('button', { name: 'Search decisions' }).click();
+  await expect.poll(() => searches.at(-1)?.min_loss).toBe('0');
 });
 
 test('decision search has a visible heading, a column picker and resizable columns', async ({
@@ -356,6 +379,17 @@ test('decision search has a visible heading, a column picker and resizable colum
 test('a pre-filled player lists its decisions at once and hits join a deck one by one or by page', async ({
   page,
 }, testInfo) => {
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.analysis.error_thresholds.error = 0.035;
+  await profileBackend(page, { configuration });
+  let releaseConfiguration!: () => void;
+  const waiting = new Promise<void>((resolve) => {
+    releaseConfiguration = resolve;
+  });
+  await page.route('**/api/configuration', async (route) => {
+    await waiting;
+    await route.fallback();
+  });
   await page.setViewportSize({ width: 1800, height: 1169 });
   await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.route('**/api/study/mistakes?*', (route) =>
@@ -447,6 +481,12 @@ test('a pre-filled player lists its decisions at once and hits join a deck one b
   expect(searches).toHaveLength(1);
   expect(searches[0].get('player')).toBe('Alice');
   expect(searches[0].get('page')).toBe('1');
+  expect(searches[0].get('min_loss')).toBe('0.02');
+  releaseConfiguration();
+  await expect.poll(() => searches.at(-1)?.get('min_loss')).toBe('0.035');
+  await expect(
+    search.getByRole('spinbutton', { name: 'Equity loss from' }),
+  ).toHaveValue('0.035');
   await expect(search).not.toContainText('Select “Search decisions”');
   await page.screenshot({ path: testInfo.outputPath('decision-auto.png') });
 

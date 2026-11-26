@@ -1,4 +1,6 @@
 import { test, expect, type Page } from './test';
+import { profileBackend } from './profile-backend';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 import type { Database } from '../src/workspaces/library/library-api';
 
 const database: Database = {
@@ -421,6 +423,9 @@ test('imported practice keeps original depth, uses imported references and hides
 test('requires an exact player, filters groups and reveals saved answers only on demand, resets on Next and completes', async ({
   page,
 }) => {
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.analysis.error_thresholds.blunder = 0.095;
+  await profileBackend(page, { configuration });
   const writes: string[] = [];
   page.on('request', (r) => {
     const p = new URL(r.url()).pathname;
@@ -492,7 +497,7 @@ test('requires an exact player, filters groups and reveals saved answers only on
     player: 'Alice',
     database_id: database.id,
     game_plan: 'priming',
-    min_loss: 0.08,
+    min_loss: 0.095,
     mistake_kind: 'checker',
   });
   await dialog
@@ -1023,6 +1028,10 @@ test('the independent-play choice filters the statistics and practice and is sha
 test('the loss threshold uses the app language decimal separator', async ({
   page,
 }) => {
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.general.locale = 'de';
+  configuration.analysis.error_thresholds.blunder = 0.093;
+  const profiles = await profileBackend(page, { configuration });
   const calls: URL[] = [];
   await page.route('**/api/study/mistakes?*', (r) => {
     calls.push(new URL(r.request().url()));
@@ -1034,7 +1043,14 @@ test('the loss threshold uses the app language decimal separator', async ({
     exact: true,
   });
   // Native number inputs would follow the operating system instead.
-  await expect(loss).toHaveValue('0,08');
+  await expect(loss).toHaveValue('0,093');
+  await expect
+    .poll(() => calls.at(-1)?.searchParams.get('min_loss'))
+    .toBe('0.093');
+  configuration.analysis.error_thresholds.blunder = 0.099;
+  profiles.updateRemote(configuration);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(loss).toHaveValue('0,099');
   await loss.fill('0,1');
   await expect(loss).toHaveValue('0,1');
   await expect
@@ -1049,4 +1065,10 @@ test('the loss threshold uses the app language decimal separator', async ({
   await expect
     .poll(() => calls.at(-1)?.searchParams.get('min_loss'))
     .toBe('0.2');
+  configuration.analysis.error_thresholds.blunder = 0.088;
+  profiles.updateRemote(configuration);
+  const refreshed = page.waitForResponse('**/api/configuration');
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await refreshed;
+  await expect(loss).toHaveValue('0,2');
 });

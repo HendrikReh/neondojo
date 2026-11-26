@@ -17,7 +17,7 @@ const draft = {
 
 describe('decision search filters', () => {
   it('sends only the filters that were filled in', () => {
-    expect(decisionFilters(draft)).toEqual({
+    expect(decisionFilters(draft, 0.02)).toEqual({
       player: 'Alice',
       database_id: undefined,
       kind: 'cube_response',
@@ -33,7 +33,7 @@ describe('decision search filters', () => {
     });
   });
   it('waits for a player and for usable numbers', () => {
-    expect(decisionFilters({ ...draft, player: '' })).toBeUndefined();
-    expect(decisionFilters({ ...draft, minLoss: 'abc' })).toBeUndefined();
+    expect(decisionFilters({ ...draft, player: '' }, 0.02)).toBeUndefined();
+    expect(decisionFilters({ ...draft, minLoss: 'abc' }, 0.02)).toBeUndefined();
   });
 });

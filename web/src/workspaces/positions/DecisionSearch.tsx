@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { useAnalysisErrorThresholds } from '../../settings/configuration/ConfigurationProvider';
 import { useDecimalInput } from '../../shared/format/decimal-input';
 import ActionButton from '../../shared/ui/ActionButton';
 import { useDatabases } from '../library/useDatabases';
@@ -74,7 +75,7 @@ type Draft = {
   kind: string;
   mistake: string;
   plan: string;
-  minLoss: string;
+  minLoss?: string;
   maxLoss: string;
   away: string;
   opponentAway: string;
@@ -87,7 +88,6 @@ const emptyDraft: Draft = {
   kind: '',
   mistake: '',
   plan: '',
-  minLoss: '0.05',
   maxLoss: '',
   away: '',
   opponentAway: '',
@@ -99,10 +99,14 @@ const optional = (text: string) =>
   text.trim() === '' ? undefined : Number(text);
 
 /** Draft text to request filters; undefined while a number is not usable. */
-export function decisionFilters(draft: Draft): DecisionFilters | undefined {
+export function decisionFilters(
+  draft: Draft,
+  profileLoss: number,
+): DecisionFilters | undefined {
   if (!draft.player) return undefined;
   const numbers = {
-    min_loss: optional(draft.minLoss),
+    min_loss:
+      draft.minLoss === undefined ? profileLoss : optional(draft.minLoss),
     max_loss: optional(draft.maxLoss),
     away: optional(draft.away),
     opponent_away: optional(draft.opponentAway),
@@ -176,12 +180,23 @@ export default function DecisionSearch({
   const plan = useGamePlanText();
   const { formatDecision, formatError, formatNumber } = useI18n();
   const [players, setPlayers] = useState<string[]>([]);
+  const profileLoss = useAnalysisErrorThresholds().error;
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [applied, setApplied] = useState<{
     filters: DecisionFilters;
+    usesProfileLoss: boolean;
     page: number;
     attempt: number;
   }>();
+  // Keep applied filters independent of unsubmitted draft edits. A change to
+  // their inherited minimum starts a new result set at its first page.
+  if (applied?.usesProfileLoss && applied.filters.min_loss !== profileLoss) {
+    setApplied({
+      ...applied,
+      filters: { ...applied.filters, min_loss: profileLoss },
+      page: 1,
+    });
+  }
   const [result, setResult] = useState<Result>({ status: 'idle' });
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string>();
@@ -193,7 +208,7 @@ export default function DecisionSearch({
   // That player's decisions are listed once, on the first visit.
   const autoSearch = useRef(true);
   const minLoss = useDecimalInput({
-    value: draft.minLoss,
+    value: draft.minLoss ?? String(profileLoss),
     onChange: (value) => set('minLoss')(value),
     step: 0.005,
     min: 0,
@@ -211,13 +226,18 @@ export default function DecisionSearch({
   function clearFilters() {
     const next = { ...emptyDraft, player: draft.player };
     setDraft(next);
-    const cleared = decisionFilters(next);
-    if (applied && cleared)
-      setApplied((current) => ({
-        filters: { ...cleared, direction: current?.filters.direction },
-        page: 1,
-        attempt: (current?.attempt ?? 0) + 1,
-      }));
+    if (applied) submitDraft(next);
+  }
+  function submitDraft(next: Draft) {
+    const filters = decisionFilters(next, profileLoss);
+    if (!filters) return false;
+    setApplied((current) => ({
+      filters: { ...filters, direction: current?.filters.direction },
+      usesProfileLoss: next.minLoss === undefined,
+      page: 1,
+      attempt: (current?.attempt ?? 0) + 1,
+    }));
+    return true;
   }
   const set = (key: keyof Draft) => (value: string) => {
     if (key === 'player') playerChosen.current = true;
@@ -254,11 +274,9 @@ export default function DecisionSearch({
       autoSearch.current = false;
       return;
     }
-    const filters = draft.player ? decisionFilters(draft) : undefined;
-    if (!filters) return;
-    autoSearch.current = false;
-    setApplied({ filters, page: 1, attempt: 1 });
-  }, [visible, applied, draft]);
+    if (!draft.player) return;
+    if (submitDraft(draft)) autoSearch.current = false;
+  }, [visible, applied, draft, profileLoss]);
 
   useEffect(() => {
     if (!visible || !applied) return;
@@ -288,7 +306,7 @@ export default function DecisionSearch({
     return () => abort.abort();
   }, [visible, applied, revision]);
 
-  const filters = decisionFilters(draft);
+  const filters = decisionFilters(draft, profileLoss);
   const items = result.status === 'ready' ? result.page.items : [];
   const preview =
     items.find((item) => mistakeReferenceKey(item.reference) === selected) ??
@@ -406,15 +424,7 @@ export default function DecisionSearch({
           className="position-filter-form"
           onSubmit={(event) => {
             event.preventDefault();
-            if (filters)
-              setApplied((current) => ({
-                filters: {
-                  ...filters,
-                  direction: current?.filters.direction,
-                },
-                page: 1,
-                attempt: (current?.attempt ?? 0) + 1,
-              }));
+            submitDraft(draft);
           }}
         >
           <div className="position-search-row decision-search-row">
