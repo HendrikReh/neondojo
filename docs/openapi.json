@@ -18885,6 +18885,9 @@
               "$ref": "#/components/schemas/CatalogGameStatistics"
             }
           },
+          "needs_cube_rule_reanalysis": {
+            "type": "boolean"
+          },
           "summary": {
             "oneOf": [
               {

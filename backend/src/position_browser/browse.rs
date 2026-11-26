@@ -21,8 +21,7 @@ pub(super) const NAME: &str = "lower(coalesce(nullif(m.display_name,''),m.filena
 pub(super) const CURSOR_SCOPE: &str = "saved-positions-v1:";
 
 // Matches learning::card_signature; source occurrence UUIDs can differ for one shared card.
-pub(super) const CHECKER_SIGNATURE: &str =
-    "(p.position_id || ':' || p.gnubg_match_id || ':checker')";
+pub(super) const CHECKER_SIGNATURE: &str = "(p.position_id || ':' || p.gnubg_match_id || ':checker' || CASE WHEN g.cube_enabled IS FALSE THEN ':nocube' ELSE '' END)";
 
 pub(super) fn table_sort_expression(sort: PositionBrowserSort) -> String {
     match sort {
@@ -490,7 +489,7 @@ pub(super) async fn load_deck_memberships(
     }
     let ids: Vec<Uuid> = items.iter().map(|hit| hit.position.id).collect();
     let rows: Vec<(Uuid, Uuid, String)> = sqlx::query_as(&format!(
-        "SELECT p.id,dk.id,dk.name FROM positions p JOIN learning_cards c ON c.signature={CHECKER_SIGNATURE} JOIN deck_cards dc ON dc.card_id=c.id JOIN decks dk ON dk.id=dc.deck_id WHERE p.id=ANY($1) ORDER BY lower(dk.name) COLLATE \"C\",dk.name COLLATE \"C\",dk.id"
+        "SELECT p.id,dk.id,dk.name FROM positions p LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no JOIN learning_cards c ON c.signature={CHECKER_SIGNATURE} JOIN deck_cards dc ON dc.card_id=c.id JOIN decks dk ON dk.id=dc.deck_id WHERE p.id=ANY($1) ORDER BY lower(dk.name) COLLATE \"C\",dk.name COLLATE \"C\",dk.id"
     )).bind(ids).fetch_all(pool).await.map_err(anyhow::Error::from)?;
     let mut memberships = HashMap::<Uuid, Vec<PositionDeckMembership>>::new();
     for (position, id, name) in rows {

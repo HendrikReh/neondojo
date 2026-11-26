@@ -1865,6 +1865,14 @@ async fn nocube_statistics_and_cards_follow_source_rules(pool: PgPool) {
     let game = &statistics["games"][0];
     assert_eq!(game["analyzed"], true, "{statistics}");
     assert!(game["needs_cube_rule_reanalysis"].is_null());
+    let scoped_url = format!(
+        "/api/matches/{}/analysis-statistics?analysis_id=job:{}&game_no=1",
+        imported.r#match.id, job.id
+    );
+    let (status, current) = call(app.clone(), "GET", &scoped_url, Value::Null).await;
+    assert_eq!(status, 200, "{current}");
+    assert!(current["needs_cube_rule_reanalysis"].is_null());
+
     for player in game["summary"]["players"].as_array().unwrap() {
         assert_eq!(player["cube_decisions"], 0);
         assert_eq!(player["checker_decisions"], 1);
@@ -1890,6 +1898,11 @@ async fn nocube_statistics_and_cards_follow_source_rules(pool: PgPool) {
         .unwrap();
     let (_, historical) = call(app.clone(), "GET", &stats_url, Value::Null).await;
     assert_eq!(historical["games"][0]["needs_cube_rule_reanalysis"], true);
+    let (status, scoped) = call(app.clone(), "GET", &scoped_url, Value::Null).await;
+    assert_eq!(status, 200, "{scoped}");
+    assert_eq!(scoped["needs_cube_rule_reanalysis"], true);
+    assert_eq!(scoped["games"], json!([]));
+
     let (_, deck) = call(
         app.clone(),
         "POST",
