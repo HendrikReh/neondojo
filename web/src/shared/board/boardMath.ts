@@ -20,6 +20,11 @@ export function checkerCounts(board: number[]): [number, number] {
   );
 }
 
+export function borneOffCounts(board: number[]): [number, number] {
+  const [white, black] = checkerCounts(board);
+  return [15 - white, 15 - black];
+}
+
 export function matchContext(id: string): {
   scores: [number, number];
   length: number;

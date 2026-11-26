@@ -1,4 +1,6 @@
 import archiveThemes from './archive-themes';
+import { createElement, use } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it, vi } from 'vitest';
 import {
   loadArchiveThemes,
@@ -83,7 +85,7 @@ it('matches the X22 checker-to-point proportions on built-in boards', () => {
   expect(first.step / first.height).toBe(1);
 });
 
-it('shares one archive request and retries after a transient chunk failure', async () => {
+it('shares one archive request and makes a successful retry synchronously readable by React', async () => {
   vi.doMock('./archive-themes', () => {
     throw new TypeError('Failed to fetch dynamically imported module');
   });
@@ -98,4 +100,11 @@ it('shares one archive request and retries after a transient chunk failure', asy
   expect(retry).not.toBe(failed);
   await expect(retry).resolves.toEqual(archiveThemes);
   expect(loadArchiveThemes()).toBe(retry);
+
+  function PreloadedCatalog() {
+    return use(retry).length;
+  }
+  expect(renderToStaticMarkup(createElement(PreloadedCatalog))).toBe(
+    String(archiveThemes.length),
+  );
 });

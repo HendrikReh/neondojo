@@ -1,7 +1,7 @@
 import { fulfillJsonList } from './api-fixtures';
 import { checkerPath, eitherOrder } from './play-turn-fixtures';
 import { botDice, doubleCube, rollDice } from './play-board-actions';
-import { test, expect, type Page } from './test';
+import { test, expect, type Locator, type Page } from './test';
 import type { PlaySession } from '../src/workspaces/play/play-api';
 import { applySteps } from '../src/shared/board/play-state';
 declare global {
@@ -137,8 +137,22 @@ async function install(
     requestAnimationFrame(sample);
   });
 }
+async function expectDiceHalf(
+  board: Locator,
+  dice: Locator,
+  side: 'left' | 'right',
+) {
+  await expect(dice).toHaveCount(2);
+  const bounds = (await board.locator('svg.board').boundingBox())!;
+  const midpoint = bounds.x + bounds.width / 2;
+  for (const die of await dice.all()) {
+    const box = (await die.boundingBox())!;
+    if (side === 'right') expect(box.x).toBeGreaterThan(midpoint);
+    else expect(box.x + box.width).toBeLessThan(midpoint);
+  }
+}
 for (const config of [
-  { human: 0, direction: 'right' as const, theme: 'forest' },
+  { human: 0, direction: 'right' as const, theme: 'terra-rossa' },
   { human: 0, direction: 'left' as const, theme: 'bgblitz:bg-earth' },
   { human: 1, direction: 'right' as const, theme: 'bgblitz:bg-earth' },
   { human: 1, direction: 'left' as const, theme: 'forest' },
@@ -163,6 +177,12 @@ for (const config of [
     await expect(botDice(page)).toHaveCount(1);
     await expect(botDice(page).locator('[data-used="true"]')).toHaveCount(2);
     await expect(board.locator('[data-dice="6-1"]')).toBeVisible();
+    const dice = botDice(page).locator(`[data-die-owner="${bot}"]`);
+    await expectDiceHalf(
+      board,
+      dice,
+      (bot === 0) === (config.direction === 'right') ? 'right' : 'left',
+    );
     await expect(page.locator('dialog:modal')).toHaveCount(0);
     await expect(board).toHaveAttribute('data-play-animation', 'idle');
     const samples = await page.evaluate(() => window.__animationSamples);
@@ -242,9 +262,18 @@ test('a blocked bot waits for the human to roll or double', async ({
   await expect(botDice(page)).toBeEnabled();
   await expect(doubleCube(page)).toBeEnabled();
   expect(writes).toHaveLength(1);
+  await expectDiceHalf(
+    board,
+    botDice(page).locator('[data-die-owner="1"]'),
+    'left',
+  );
   await botDice(page).click();
   await expect(board).toHaveAttribute('data-play-phase', 'move');
-  await expect(board.locator('[data-dice="3-1"]')).toBeVisible();
+  await expectDiceHalf(
+    board,
+    board.locator('[data-dice="3-1"] [data-die-owner="0"]'),
+    'right',
+  );
   expect(writes).toEqual([
     { version: 0, action: 'start_opening_move' },
     { version: 1, action: 'roll' },
@@ -397,11 +426,20 @@ for (const human of [0, 1])
       page.getByRole('button', { name: 'Undo step', exact: true }),
     ).toBeDisabled();
     await expect(board).toHaveAttribute('data-play-animation', 'idle');
+    const tray = board.locator(
+      `[data-point="off-${human === 0 ? 'white' : 'black'}"]`,
+    );
+    const initialOff = human === 0 ? '14' : '-14';
+    await expect(tray).toHaveAttribute('data-count', initialOff);
     await page.locator(`[data-play-point="${to}"] .play-point`).click();
     await expect(
       page.locator(`[data-animated-checker="${human}"][data-to="${off}"]`),
     ).toBeVisible();
     await expect(board).toHaveAttribute('data-play-animation', 'idle');
+    await expect(tray).toHaveAttribute(
+      'data-count',
+      human === 0 ? '15' : '-15',
+    );
     await page.getByRole('button', { name: 'Undo step', exact: true }).click();
     await expect(
       page.locator(
@@ -409,6 +447,7 @@ for (const human of [0, 1])
       ),
     ).toBeVisible();
     await expect(board).toHaveAttribute('data-play-animation', 'idle');
+    await expect(tray).toHaveAttribute('data-count', initialOff);
     await page.getByRole('button', { name: 'Undo step', exact: true }).click();
     await expect(
       page.locator(

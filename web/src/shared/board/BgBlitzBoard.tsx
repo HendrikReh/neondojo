@@ -1,7 +1,6 @@
 import CheckerPiece from './CheckerPiece';
 import { cubeImage, type PieceSet } from './piece-artwork';
 import type { Position } from '../http/api';
-import { checkerCounts } from './boardMath';
 import {
   pointColumns,
   stackGeometry,
@@ -13,16 +12,19 @@ import MoveArrows from './MoveArrows';
 import PlayBoardDice from './PlayBoardDice';
 import PlayCube from './PlayCube';
 import PlayCheckerMotion from './PlayCheckerMotion';
-import { underlayBoard, type PlaybackFrame } from './play-animation';
+import type { PlaybackFrame } from './play-animation';
 import BoardPlayTargets, { type BoardInteraction } from './BoardPlayTargets';
 import type { MovePreviewStep } from './move-preview';
 
 export default function BgBlitzBoard({
   position,
+  board,
+  trayCounts,
   theme,
   numberOrientation,
   checkerSet,
   diceSet,
+  showBothDiceColors,
   cubeSet,
   label,
   cubeLabel,
@@ -33,10 +35,13 @@ export default function BgBlitzBoard({
   animation,
 }: {
   position: Position;
+  board: number[];
+  trayCounts: [number, number];
   theme: BgBlitzTheme;
   numberOrientation: 'RLD' | 'RLU' | 'LRD' | 'LRU';
   checkerSet: PieceSet;
   diceSet: PieceSet;
+  showBothDiceColors: boolean;
   cubeSet: PieceSet;
   label: string;
   cubeLabel: string;
@@ -48,13 +53,8 @@ export default function BgBlitzBoard({
 }) {
   const { formatNumber } = useI18n();
   const { width, height } = theme.background;
-  const counts = checkerCounts(position.board);
   const moving = animation?.kind === 'checker' ? animation : undefined;
-  const board = moving ? underlayBoard(moving) : position.board;
-  const offWhite =
-    15 - counts[0] - (moving?.motions.filter((m) => m.from === -1).length ?? 0);
-  const offBlack =
-    15 - counts[1] - (moving?.motions.filter((m) => m.from === 26).length ?? 0);
+  const [offWhite, offBlack] = trayCounts;
   function artwork(
     image: ThemeImage,
     x: number,
@@ -199,6 +199,7 @@ export default function BgBlitzBoard({
       />
       <PlayBoardDice
         diceSet={diceSet}
+        showBothDiceColors={showBothDiceColors}
         dice={position.dice}
         player={position.player}
         interaction={interaction?.dice}

@@ -1,6 +1,6 @@
 import { matchBoardDice } from '../../settings/configuration/configuration-model';
 import type { Position } from '../http/api';
-import { checkerCounts, pipCounts, matchContext } from './boardMath';
+import { borneOffCounts, pipCounts, matchContext } from './boardMath';
 
 import { useEffect, useId, useState, type CSSProperties } from 'react';
 import { useI18n } from '../i18n/i18n';
@@ -18,6 +18,7 @@ import { underlayBoard, type PlaybackFrame } from './play-animation';
 import BoardPlayTargets, { type BoardInteraction } from './BoardPlayTargets';
 import {
   nativeField,
+  nativeOffTray,
   nativePointPitch,
   nativePointX,
   pointStackGeometry,
@@ -45,7 +46,12 @@ function Checkers({
   const geometry = pointStackGeometry(point, count);
   const x = geometry.x + geometry.width / 2;
   return (
-    <g data-point={point} data-count={count}>
+    <g
+      data-point={
+        point === -1 ? 'off-white' : point === 26 ? 'off-black' : point
+      }
+      data-count={count}
+    >
       {Array.from({ length: geometry.visible }, (_, index) => {
         const y =
           geometry.y +
@@ -61,7 +67,7 @@ function Checkers({
               white={count > 0}
               set={set}
               onError={onError}
-              variant={point + index}
+              variant={Math.abs(point) + index}
             />
             {index === 4 && geometry.total > 5 && (
               <text
@@ -94,6 +100,7 @@ export default function Board({
   interaction,
   animation,
   showPipCounts = true,
+  showBothDiceColors = false,
   cubeOfferPending = false,
 }: {
   position: Position;
@@ -110,6 +117,7 @@ export default function Board({
   interaction?: BoardInteraction;
   animation?: PlaybackFrame | null;
   showPipCounts?: boolean;
+  showBothDiceColors?: boolean;
   /** A response exercise may carry an older Match ID without the offer bit. */
   cubeOfferPending?: boolean;
 }) {
@@ -160,7 +168,11 @@ export default function Board({
   const moving = animation?.kind === 'checker' ? animation : undefined;
   const board = moving ? underlayBoard(moving) : displayedPosition.board;
   const pips = pipCounts(displayedPosition.board);
-  const counts = checkerCounts(displayedPosition.board);
+  const off = borneOffCounts(displayedPosition.board);
+  const trayCounts: [number, number] = [...off];
+  for (const { from, player } of moving?.motions ?? []) {
+    if (from === -1 || from === 26) trayCounts[player]--;
+  }
   const context = matchContext(position.gnubg_match_id);
   const cubePending = context.doubled || cubeOfferPending;
   const displayedCube = context.cube * (cubePending ? 2 : 1);
@@ -189,13 +201,15 @@ export default function Board({
           )
           .join(' · ')
       : hasDice
-        ? t('board.label', {
-            player: active,
-            first: displayedPosition.dice[0],
-            second: displayedPosition.dice[1],
-            white: pips[0],
-            black: pips[1],
-          })
+        ? showBothDiceColors
+          ? `${white} · ${displayedPosition.dice[0]}, ${black} · ${displayedPosition.dice[1]}. ${cubeLabel}`
+          : t('board.label', {
+              player: active,
+              first: displayedPosition.dice[0],
+              second: displayedPosition.dice[1],
+              white: pips[0],
+              black: pips[1],
+            })
         : effectiveMode === 'after'
           ? `${review('pipsLabel', { white, black, whitePips: formatNumber(pips[0]), blackPips: formatNumber(pips[1]) })}. ${cubeLabel}`
           : `${t('app.toMove', { player: active })}. ${cubeLabel}`;
@@ -235,7 +249,7 @@ export default function Board({
           <span>
             {t('board.pipsOff', {
               pips: pips[1],
-              off: formatNumber(15 - counts[1]),
+              off: formatNumber(off[1]),
             })}
           </span>
         )}
@@ -248,7 +262,10 @@ export default function Board({
       {custom ? (
         <BgBlitzBoard
           position={displayedPosition}
+          board={board}
+          trayCounts={trayCounts}
           theme={custom}
+          showBothDiceColors={showBothDiceColors}
           numberOrientation={`${flipX === -1 ? 'LR' : 'RL'}${numberPlayer === 0 ? 'D' : 'U'}`}
           checkerSet={checkerSet}
           diceSet={diceSet}
@@ -273,7 +290,7 @@ export default function Board({
         <svg
           className="board"
           style={surface ? finishPaint(finishId) : undefined}
-          viewBox={interaction ? '0 0 730 470' : '0 0 680 470'}
+          viewBox="0 0 680 470"
           role={interaction ? 'group' : 'img'}
           aria-label={label}
         >
@@ -294,6 +311,7 @@ export default function Board({
             height={nativeField.height}
             className="board-bar"
           />
+          <rect {...nativeOffTray} rx="3" className="board-bar" />
           {Array.from({ length: 12 }, (_, i) => {
             const top = 13 + i,
               bottom = 12 - i;
@@ -343,6 +361,22 @@ export default function Board({
             count={board[25]}
             point={25}
           />
+          {trayCounts[1] > 0 && (
+            <Checkers
+              set={checkerSet}
+              onError={assetFailed}
+              count={-trayCounts[1]}
+              point={26}
+            />
+          )}
+          {trayCounts[0] > 0 && (
+            <Checkers
+              set={checkerSet}
+              onError={assetFailed}
+              count={trayCounts[0]}
+              point={-1}
+            />
+          )}
           {interaction && <BoardPlayTargets interaction={interaction} />}
           <PlayCube
             transform={`translate(325,${cubeOwner === null ? 220 : cubeOwner === 0 ? 362 : 78})`}
@@ -357,6 +391,8 @@ export default function Board({
           />
           <PlayBoardDice
             diceSet={diceSet}
+            sideByOwner={Boolean(playOrientation)}
+            showBothDiceColors={showBothDiceColors}
             onError={assetFailed}
             dice={displayedPosition.dice}
             player={position.player}
@@ -403,7 +439,7 @@ export default function Board({
           <span>
             {t('board.pipsOff', {
               pips: pips[0],
-              off: formatNumber(15 - counts[0]),
+              off: formatNumber(off[0]),
             })}
           </span>
         )}

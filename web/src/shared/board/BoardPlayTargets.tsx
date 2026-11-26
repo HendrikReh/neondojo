@@ -3,6 +3,7 @@ import type { CubeInteraction } from './PlayCube';
 import type { BgBlitzTheme } from './themes';
 import {
   nativeField,
+  nativeOffTray,
   nativePointPitch,
   nativePointX,
   pointColumns,
@@ -27,7 +28,7 @@ export default function BoardPlayTargets({
   interaction: BoardInteraction;
   theme?: BgBlitzTheme;
 }) {
-  const width = theme?.background.width ?? 730,
+  const width = theme?.background.width ?? 680,
     height = theme?.background.height ?? 470;
   const inset = theme
     ? stackGeometry(theme, theme.checkers.white[0], 1, 1, false).y
@@ -56,13 +57,15 @@ export default function BoardPlayTargets({
       width: barWidth,
       height: targetHeight,
     });
-  const offX = theme ? theme.columns[14] + theme.checkerOffsetX - 2 : 686;
+  const offX = theme
+    ? theme.columns[14] + theme.checkerOffsetX - 2
+    : nativeOffTray.x;
   for (const point of [-1, 26])
     rectangles.push({
       point,
       x: offX,
       y: point === 26 ? topY : bottomY,
-      width: theme ? theme.checkers.white[0].width + 4 : 40,
+      width: theme ? theme.checkers.white[0].width + 4 : nativeOffTray.width,
       height: targetHeight,
     });
   return (
@@ -135,7 +138,11 @@ export default function BoardPlayTargets({
               <text
                 className="play-bearoff-arrow"
                 x={x + w / 2}
-                y={y + h / 2}
+                y={
+                  point === 26
+                    ? nativeOffTray.y - 5
+                    : nativeOffTray.y + nativeOffTray.height + 16
+                }
                 textAnchor="middle"
                 fontSize="12"
               >
