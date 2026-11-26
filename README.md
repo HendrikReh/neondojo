@@ -17,7 +17,9 @@
 [![NeonGammon 3.2.0 optional](https://img.shields.io/badge/NeonGammon-3.2.0%20optional-8250DF)](docs/open-sage-local.md)
 [![Languages: 6](https://img.shields.io/badge/languages-EN%20%7C%20DE%20%7C%20ES%20%7C%20FR%20%7C%20IT%20%7C%20PL-0969DA)](docs/reference/settings.md#interface-appearance-and-language)
 
-NeonDojo is a local backgammon application for importing matches, finding positions, analyzing decisions with GNU Backgammon (GNUbg) or NeonGammon, playing against an engine, and practicing your own mistakes. It runs on your own computer and is designed for dense desktop use on Apple Silicon Macs. Its headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
+NeonDojo is a local backgammon study app for Apple Silicon Macs. Import your matches, find positions in your library, and practice decisions you missed. You can review checker plays and cube decisions with GNU Backgammon (GNUbg) or install [NeonGammon](https://github.com/HendrikReh/neongammon) as a second engine. NeonDojo shows the engine’s analysis alongside your moves and lets you play matches against either engine.
+
+NeonDojo’s headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
 
 ## Features
 
