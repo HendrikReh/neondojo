@@ -1,4 +1,4 @@
-import { mockSettings, settingsFixture } from './api-fixtures';
+import { fulfillJsonList, mockSettings, settingsFixture } from './api-fixtures';
 import { checkerPath, eitherOrder } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { rollDice } from './play-board-actions';
@@ -106,7 +106,7 @@ async function install(
   }, id);
   let saved = value;
   await page.route('**/api/play/sessions', (route) =>
-    route.fulfill({ json: [saved] }),
+    fulfillJsonList<'PlaySession'>(route, [saved]),
   );
   await page.route(`**/api/play/sessions/${id}`, (route) =>
     route.fulfill({ json: saved }),

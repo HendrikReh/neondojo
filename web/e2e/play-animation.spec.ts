@@ -1,3 +1,4 @@
+import { fulfillJsonList } from './api-fixtures';
 import { checkerPath, eitherOrder } from './play-turn-fixtures';
 import { botDice, doubleCube, rollDice } from './play-board-actions';
 import { test, expect, type Page } from './test';
@@ -102,7 +103,7 @@ async function install(
   );
   let saved = before;
   await page.route('**/api/play/sessions', (route) =>
-    route.fulfill({ json: [saved] }),
+    fulfillJsonList<'PlaySession'>(route, [saved]),
   );
   await page.route(`**/api/play/sessions/${id}`, (route) =>
     route.fulfill({ json: saved }),

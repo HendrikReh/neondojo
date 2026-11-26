@@ -1,3 +1,4 @@
+import { fulfillJson } from './api-fixtures';
 import { expect, test } from './test';
 
 // The Match Database reloads a page with a queued or running analysis only
@@ -80,12 +81,10 @@ test('queued library analyses refresh the table on job transitions only', async 
   );
   await page.route('**/api/library/matches?*', (route) => {
     tableReads++;
-    return route.fulfill({
-      json: {
-        items: [{ ...match, analysis_status: status }],
-        total: 1,
-        next_cursor: null,
-      },
+    return fulfillJson<'LibraryPage'>(route, {
+      items: [{ ...match, analysis_status: status }],
+      total: 1,
+      next_cursor: null,
     });
   });
   await page.route(`**/api/matches/${matchId}/analysis/jobs`, (route) =>

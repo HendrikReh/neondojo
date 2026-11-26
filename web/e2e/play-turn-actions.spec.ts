@@ -1,4 +1,4 @@
-import { mockEngineCatalog } from './api-fixtures';
+import { fulfillJson, mockEngineCatalog } from './api-fixtures';
 import { test, expect } from './test';
 import { historyFixture } from './play-history-review-helpers';
 import { botDice, playMenuItem, resignGame } from './play-board-actions';
@@ -179,10 +179,11 @@ test('the setup dialog overlays the match and sends this match’s name, engine 
   await page.route('**/api/play/sessions', (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
     created.push(route.request().postDataJSON());
-    return route.fulfill({
-      status: 201,
-      json: { ...saved, human_name: 'Guest' },
-    });
+    return fulfillJson<'PlaySession'>(
+      route,
+      { ...saved, human_name: 'Guest' },
+      201,
+    );
   });
   await (await playMenuItem(page, 'New match')).click();
   const dialog = page.getByRole('dialog', { name: 'New match', exact: true });
