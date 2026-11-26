@@ -1,5 +1,6 @@
+import type { components } from '../src/generated-api';
 import {
-  fulfillJson,
+  mockSettings,
   mockEngineCatalog,
   settingsFixture,
 } from './api-fixtures';
@@ -30,16 +31,14 @@ async function settingsBackend(
 ) {
   let saved = { ...initialSettings, analysis_plies: analysisPlies };
   let conflict = false;
-  const writes: (typeof initialSettings)[] = [];
-  await page.route('**/api/settings', async (route) => {
-    if (route.request().method() === 'GET')
-      return fulfillJson<'AppSettings'>(route, saved);
-    const body = route.request().postDataJSON();
+  const writes: components['schemas']['AppSettings'][] = [];
+  await mockSettings(page, ({ request, respond, fail }) => {
+    if (request.method() === 'GET') return respond(saved);
+    const body = request.postDataJSON();
     writes.push(body);
-    if (conflict)
-      return route.fulfill({ status: 409, json: { error: 'Version changed' } });
+    if (conflict) return fail(409, { error: 'Version changed' });
     saved = { ...saved, ...body, version: saved.version + 1 };
-    await fulfillJson<'AppSettings'>(route, saved);
+    return respond(saved);
   });
   await page.route('**/api/configuration', async (route) => {
     if (route.request().method() !== 'PUT') return route.fallback();
@@ -864,13 +863,11 @@ test('load errors offer retry and the mobile dialog has reachable actions', asyn
   page,
 }) => {
   await settingsBackend(page);
-  let fail = true;
-  await page.route('**/api/settings', (route) =>
-    route.fulfill(
-      fail
-        ? { status: 503, json: { error: 'Temporarily unavailable' } }
-        : { json: initialSettings },
-    ),
+  let unavailable = true;
+  await mockSettings(page, ({ respond, fail }) =>
+    unavailable
+      ? fail(503, { error: 'Temporarily unavailable' })
+      : respond(initialSettings),
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
@@ -885,7 +882,7 @@ test('load errors offer retry and the mobile dialog has reachable actions', asyn
   await expect(dialog.getByLabel('Player name', { exact: true })).toHaveCount(
     0,
   );
-  fail = false;
+  unavailable = false;
   await dialog.getByRole('button', { name: 'Try again', exact: true }).click();
   await expect(dialog.getByLabel('Player name', { exact: true })).toHaveValue(
     initialSettings.player_name,

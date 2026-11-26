@@ -1,4 +1,9 @@
-import { fulfillJson, fulfillJsonList, settingsFixture } from './api-fixtures';
+import {
+  fulfillJson,
+  fulfillJsonList,
+  mockSettings,
+  settingsFixture,
+} from './api-fixtures';
 import type { Page, Route } from '@playwright/test';
 import {
   defaultConfiguration,
@@ -267,13 +272,14 @@ export async function profileBackend(
     },
   );
   if (options.legacyEndpoints !== false) {
-    await page.route('**/api/settings', async (route) => {
-      if (route.request().method() !== 'GET')
-        return error(route, 422, 'unexpected_legacy_write');
-      return fulfillJson<'AppSettings'>(
-        route,
-        settingsFixture(control.state.current_configuration),
-      );
+    await mockSettings(page, ({ request, respond, fail }) => {
+      if (request.method() !== 'GET')
+        return fail(422, {
+          error: 'unexpected_legacy_write',
+          code: 'unexpected_legacy_write',
+          issues: [],
+        });
+      return respond(settingsFixture(control.state.current_configuration));
     });
     await page.route('**/api/opening-book', async (route) => {
       if (route.request().method() !== 'GET')

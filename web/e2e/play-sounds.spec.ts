@@ -1,3 +1,4 @@
+import { mockSettings, settingsFixture } from './api-fixtures';
 import { checkerPath, eitherOrder } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
 import { rollDice } from './play-board-actions';
@@ -11,6 +12,24 @@ declare global {
   }
 }
 const id = 'd4a5d25c-023e-4fdb-8737-5630839c4861';
+function mockSoundSettings(page: Page) {
+  let settings = {
+    ...settingsFixture(),
+    player_name: 'Player',
+    play_plies: 2,
+    gnubg_path: '/test/gnubg',
+  };
+  return mockSettings(page, ({ request, respond }) => {
+    if (request.method() === 'PUT')
+      settings = {
+        ...settings,
+        ...request.postDataJSON(),
+        version: settings.version + 1,
+      };
+    return respond(settings);
+  });
+}
+
 function fixture(human = 0): PlaySession {
   const board = Array<number>(26).fill(0);
   board[6] = 2;
@@ -235,24 +254,7 @@ for (const opening of [false, true])
 test('sound setting cancels, saves, survives reload and applies to ongoing games', async ({
   page,
 }) => {
-  let settings = {
-    version: 1,
-    player_name: 'Player',
-    analysis_engine: 'gnubg',
-    analysis_plies: 3,
-    play_engine: 'gnubg',
-    play_plies: 2,
-    gnubg_path: '/test/gnubg',
-    bearoff_direction: 'right',
-  };
-  await page.route('**/api/settings', (route) => {
-    if (route.request().method() === 'PUT')
-      settings = {
-        ...route.request().postDataJSON(),
-        version: settings.version + 1,
-      };
-    return route.fulfill({ json: settings });
-  });
+  await mockSoundSettings(page);
   await install(page, fixture());
   const dialog = page.getByRole('dialog', { name: 'Settings', exact: true });
   const open = async () => {
@@ -381,24 +383,7 @@ test('muting while a recording loads prevents delayed playback after decode', as
     if (route.request().resourceType() === 'fetch') await gate;
     return route.continue();
   });
-  let settings = {
-    version: 1,
-    player_name: 'Player',
-    analysis_engine: 'gnubg',
-    analysis_plies: 3,
-    play_engine: 'gnubg',
-    play_plies: 2,
-    gnubg_path: '/test/gnubg',
-    bearoff_direction: 'right',
-  };
-  await page.route('**/api/settings', (route) => {
-    if (route.request().method() === 'PUT')
-      settings = {
-        ...route.request().postDataJSON(),
-        version: settings.version + 1,
-      };
-    return route.fulfill({ json: settings });
-  });
+  await mockSoundSettings(page);
   await install(page, fixture());
   await step(page, 6, 4);
   expect(await heard(page)).toEqual([]);

@@ -48,6 +48,25 @@ export function settingsFixture(
   };
 }
 
+type SettingsMock = {
+  request: { method(): string; postDataJSON(): Schemas['AppSettings'] };
+  respond(settings: Required<Schemas['AppSettings']>): Promise<void>;
+  fail(status: number, body: Schemas['ErrorBody']): Promise<void>;
+};
+
+export function mockSettings(
+  page: Page,
+  handle: (mock: SettingsMock) => Promise<void>,
+) {
+  return page.route('**/api/settings', (route) =>
+    handle({
+      request: route.request(),
+      respond: (settings) => fulfillJson<'AppSettings'>(route, settings),
+      fail: (status, body) => fulfillJson<'ErrorBody'>(route, body, status),
+    }),
+  );
+}
+
 type EngineCatalog = Schemas['EngineInfo'][];
 const defaultCatalog: EngineCatalog = [
   {

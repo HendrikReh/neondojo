@@ -1,7 +1,8 @@
+import { mockSettings, settingsFixture } from './api-fixtures';
 import type { PlayDecision } from '../src/workspaces/play/play-api';
 import { eitherOrder } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
-import { test, expect } from './test';
+import { test, expect, type Page } from './test';
 const id = '7a8f98a9-8b48-4d76-95fd-c8c8d4ced0ab';
 const decision = {
   id: '07aab353-8dc9-40c8-91a9-3377483240b5',
@@ -21,6 +22,22 @@ const decision = {
   attempts: [],
   committed: false,
 };
+function mockCoachSettings(page: Page) {
+  return mockSettings(page, ({ respond }) =>
+    respond({
+      ...settingsFixture(),
+      version: 0,
+      player_name: 'Learner',
+      gnubg_path: 'gnubg',
+      default_play_mode: 'coach',
+      analysis_plies: 3,
+      play_plies: 1,
+      tutor_threshold: 0.04,
+      training_auto_analysis: true,
+    }),
+  );
+}
+
 function saved(mode = 'coach', pending: unknown = null) {
   return {
     id,
@@ -97,22 +114,7 @@ async function resume(
 test('Coach is the default mode and all four profiles are selectable', async ({
   page,
 }) => {
-  await page.route('**/api/settings', (route) =>
-    route.fulfill({
-      json: {
-        version: 0,
-        player_name: 'Learner',
-        analysis_engine: 'gnubg',
-        analysis_plies: 3,
-        play_engine: 'gnubg',
-        play_plies: 1,
-        gnubg_path: 'gnubg',
-        default_play_mode: 'coach',
-        tutor_threshold: 0.04,
-        training_auto_analysis: true,
-      },
-    }),
-  );
+  await mockCoachSettings(page);
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   const modes = page
@@ -347,21 +349,7 @@ test('completed review identifies the original and corrected choices with help s
 test('Analysis thresholds and the default play mode apply to new matches', async ({
   page,
 }) => {
-  const settings = {
-    version: 0,
-    player_name: 'Learner',
-    analysis_engine: 'gnubg',
-    analysis_plies: 3,
-    play_engine: 'gnubg',
-    play_plies: 1,
-    gnubg_path: 'gnubg',
-    default_play_mode: 'coach',
-    tutor_threshold: 0.04,
-    training_auto_analysis: true,
-  };
-  await page.route('**/api/settings', async (route) => {
-    await route.fulfill({ json: settings });
-  });
+  await mockCoachSettings(page);
   await page.goto('/');
   await page
     .getByRole('button', { name: 'Settings', exact: true })
