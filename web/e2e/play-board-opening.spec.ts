@@ -141,6 +141,19 @@ for (const config of [
         'href',
         theme.numbers[orientation][config.human === 0 ? 1 : 0].src,
       );
+      if (theme.id === 'bgblitz:bg-earth' && config.direction === 'left') {
+        // In both original BG Earth left-bearing strips, the 1 is centered
+        // 46 pixels from the left edge of the 1190-pixel image.
+        const strip = (await numberOne.boundingBox())!;
+        const point = config.human === 0 ? 1 : 24;
+        const target = (await board
+          .locator(`[data-play-point="${point}"] .play-point`)
+          .boundingBox())!;
+        expect(strip.x + (46 / 1190) * strip.width).toBeCloseTo(
+          target.x + target.width / 2,
+          0,
+        );
+      }
     } else {
       await expect(board.locator('.point-number')).toHaveCount(24);
       const target = board.locator(
