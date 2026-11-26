@@ -1,3 +1,5 @@
+import type { components } from '../src/generated-api';
+import { fulfillJson } from './api-fixtures';
 import { expect, test, type Page } from './test';
 
 test.use({ actionTimeout: 10000 });
@@ -67,7 +69,7 @@ test('retrying a failed match page clears the error and keeps the loaded rows', 
   page,
 }) => {
   const { database } = await fixture(page);
-  const first = await (
+  const first: components['schemas']['LibraryPage'] = await (
     await page.request.get(`/api/library/matches?database_id=${database.id}`)
   ).json();
   let attempts = 0;
@@ -75,20 +77,21 @@ test('retrying a failed match page clears the error and keeps the loaded rows', 
     const params = new URL(route.request().url()).searchParams;
     if (params.get('database_id') !== database.id) return route.fallback();
     if (params.get('page') !== '2')
-      return route.fulfill({
-        json: {
-          items: first.items.slice(0, 1),
-          total: 52,
-          next_cursor: 'second',
-        },
+      return fulfillJson<'LibraryPage'>(route, {
+        items: first.items.slice(0, 1),
+        total: 52,
+        next_cursor: 'second',
       });
     if (++attempts === 1)
-      return route.fulfill({
-        status: 503,
-        json: { error: 'Page unavailable' },
-      });
-    return route.fulfill({
-      json: { items: first.items.slice(1), total: 52, next_cursor: null },
+      return fulfillJson<'ErrorBody'>(
+        route,
+        { error: 'Page unavailable' },
+        503,
+      );
+    return fulfillJson<'LibraryPage'>(route, {
+      items: first.items.slice(1),
+      total: 52,
+      next_cursor: null,
     });
   });
   await page.reload();
@@ -248,7 +251,7 @@ test('current match rows still open while the same database refreshes in the bac
 }) => {
   const f = await fixture(page);
   await expect(rows(page)).toHaveCount(3);
-  const snapshot = await (
+  const snapshot: components['schemas']['LibraryPage'] = await (
     await page.request.get(`/api/library/matches?database_id=${f.database.id}`)
   ).json();
   await rows(page).first().locator('.match-card').click();
@@ -265,7 +268,7 @@ test('current match rows still open while the same database refreshes in the bac
     await page.route('**/api/library/matches?**', async (route) => {
       started();
       await held;
-      await route.fulfill({ json: snapshot }).catch(() => {});
+      await fulfillJson<'LibraryPage'>(route, snapshot).catch(() => {});
     });
     await page
       .getByRole('tab', { name: 'Match database', exact: true })

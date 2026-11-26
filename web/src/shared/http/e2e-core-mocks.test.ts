@@ -23,7 +23,10 @@ function hasJsonOption(node: ts.Expression): boolean {
 }
 
 function rawCoreReplies(path: string, text: string) {
-  if (!text.replaceAll('\\/', '/').match(/\/api\/(settings|engines)/)) return [];
+  if (
+    !text.replaceAll('\\/', '/').match(/\/api\/(settings|engines|play|library)/)
+  )
+    return [];
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
   const found: string[] = [];
   function visit(node: ts.Node, coreHandler: boolean) {
@@ -36,7 +39,9 @@ function rawCoreReplies(path: string, text: string) {
         const matcher = first.getText(source).replaceAll('\\/', '/');
         visit(
           handler,
-          /\/api\/(?:settings|engines(?:\/bgsage|\/gnubg\/check)?)(?=['"`?$*]|\/[dgimsuvy]*$)/.test(matcher),
+          /\/api\/(?:settings|engines(?:\/bgsage|\/gnubg\/check)?|play\/sessions|library\/matches)(?=['"`?$*]|\/[dgimsuvy]*$)/.test(
+            matcher,
+          ),
         );
         return;
       }
@@ -56,7 +61,7 @@ function rawCoreReplies(path: string, text: string) {
   return found;
 }
 
-it('finds raw settings and engine JSON while allowing typed replies and transport behavior', () => {
+it('finds raw core endpoint JSON while allowing typed replies and transport behavior', () => {
   const text = [
     "page.route('**/api/settings', r => r.fulfill({ json: partial }));",
     "context.route(url => url.pathname === '/api/settings', r => r.fulfill(failed ? { status: 503, json: error } : { json: saved }));",
@@ -74,6 +79,12 @@ it('finds raw settings and engine JSON while allowing typed replies and transpor
     "page.route('**/api/engines/gnubg/check', r => r.fulfill({ json }));",
     "page.route('**/api/engines/other', r => r.fulfill({ json }));",
     "page.route('**/api/engines', r => fulfillJsonList<'EngineInfo'>(r, engines));",
+    "page.route('**/api/play/sessions', r => r.fulfill({ json }));",
+    "page.route('**/api/library/matches?*', r => r.fulfill({ json }));",
+    "page.route(url => url.pathname === '/api/library/matches', r => r.fulfill({ status: 503, json }));",
+    "page.route('**/api/play/sessions/*/actions', r => r.fulfill({ json }));",
+    "page.route('**/api/library/matches/export', r => r.fulfill({ json }));",
+    "page.route('**/api/play/sessions', r => fulfillJsonList<'PlaySession'>(r, sessions));",
     "const response = await page.request.get('/api/settings');",
   ].join('\n');
   expect(rawCoreReplies('spec', text)).toEqual([
@@ -83,10 +94,13 @@ it('finds raw settings and engine JSON while allowing typed replies and transpor
     'spec:12',
     'spec:13',
     'spec:14',
+    'spec:17',
+    'spec:18',
+    'spec:19',
   ]);
 });
 
-it('uses typed JSON responses for Playwright settings and engine mocks', () => {
+it('uses typed JSON responses for core Playwright API mocks', () => {
   expect(
     Object.entries(sources).flatMap(([path, text]) =>
       rawCoreReplies(path, text),

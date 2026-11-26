@@ -1,3 +1,4 @@
+import { fulfillJson } from './api-fixtures';
 import { expect, test, type Page } from './test';
 
 const localWidths = (page: Page) =>
@@ -7,41 +8,43 @@ async function openLibrary(page: Page, width = 1800, height = 1169) {
   await page.setViewportSize({ width, height });
   await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
   await page.route('**/api/library/matches?*', (route) =>
-    route.fulfill({
-      json: {
-        items: [
-          {
-            id: '00000000-0000-0000-0000-000000000007',
-            match_no: 7,
-            database_id: '00000000-0000-0000-0000-000000000001',
-            filename: 'resize.sgf',
-            display_name: 'resize.sgf',
-            format: 'sgf',
-            white: 'Resize Alice',
-            black: 'Resize Bob',
-            match_length: 7,
-            position_count: 460,
-            game_count: 10,
-            created_at: '2026-11-09T12:00:00Z',
-            played_on: null,
-            tournament: null,
-            round: null,
-            place: null,
-            result_state: 'completed',
-            white_score: 7,
-            black_score: 5,
-            white_pr: 3.2,
-            black_pr: 4.2,
-            pr_method: null,
-            pr_profile: null,
-            analysis_status: 'imported',
-            tags: ['Study'],
-            comment: 'Review the cube decision',
-            version: 0,
-          },
-        ],
-        next_cursor: null,
-      },
+    fulfillJson<'LibraryPage'>(route, {
+      items: [
+        {
+          id: '00000000-0000-0000-0000-000000000007',
+          match_no: 7,
+          database_id: '00000000-0000-0000-0000-000000000001',
+          filename: 'resize.sgf',
+          display_name: 'resize.sgf',
+          format: 'sgf',
+          white: 'Resize Alice',
+          black: 'Resize Bob',
+          match_length: 7,
+          position_count: 460,
+          game_count: 10,
+          created_at: '2026-11-09T12:00:00Z',
+          played_on: null,
+          tournament: null,
+          round: null,
+          place: null,
+          result_state: 'completed',
+          white_score: 7,
+          black_score: 5,
+          white_pr: 3.2,
+          black_pr: 4.2,
+          pr_method: null,
+          pr_profile: null,
+          analysis_status: 'imported',
+          import_warning_count: 0,
+          play_assisted: false,
+          play_paused: false,
+          source_available: true,
+          tags: ['Study'],
+          comment: 'Review the cube decision',
+          version: 0,
+        },
+      ],
+      next_cursor: null,
     }),
   );
   await page.goto('/');

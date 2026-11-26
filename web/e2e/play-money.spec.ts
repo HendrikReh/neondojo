@@ -1,3 +1,4 @@
+import { fulfillJson } from './api-fixtures';
 import { test, expect } from './test';
 import { playMenuItem } from './play-board-actions';
 test.use({ actionTimeout: 10000 });
@@ -15,7 +16,7 @@ test('Money game selection applies to the new session and leaves the profile def
   };
   await page.route('**/api/play/sessions', (r) => {
     payload = r.request().postDataJSON();
-    return r.fulfill({ status: 201, json: money });
+    return fulfillJson<'PlaySession'>(r, money, 201);
   });
   await (await playMenuItem(page, 'New match')).click();
   await page
@@ -62,15 +63,16 @@ test('starts a match while preserving conflicting profile changes for recovery',
   let payload: unknown;
   await page.route('**/api/play/sessions', (route) => {
     payload = route.request().postDataJSON();
-    return route.fulfill({
-      status: 201,
-      json: {
+    return fulfillJson<'PlaySession'>(
+      route,
+      {
         ...saved,
         human_player: 1,
         match_length: 3,
         play_mode: 'training',
       },
-    });
+      201,
+    );
   });
 
   await (await playMenuItem(page, 'New match')).click();

@@ -1,3 +1,4 @@
+import { fulfillJsonList } from './api-fixtures';
 import {
   checkerPath,
   eitherOrder,
@@ -60,7 +61,7 @@ for (const config of [
       { id, theme: config.theme },
     );
     await page.route('**/api/play/sessions', (route) =>
-      route.fulfill({ json: [saved] }),
+      fulfillJsonList<'PlaySession'>(route, [saved]),
     );
     await page.route(`**/api/play/sessions/${id}`, (route) =>
       route.fulfill({ json: saved }),
@@ -204,7 +205,7 @@ for (const mode of [
       id,
     );
     await page.route('**/api/play/sessions', (route) =>
-      route.fulfill({ json: [saved] }),
+      fulfillJsonList<'PlaySession'>(route, [saved]),
     );
     await page.route(`**/api/play/sessions/${id}`, (route) =>
       route.fulfill({ json: saved }),

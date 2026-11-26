@@ -1,3 +1,5 @@
+import type { components } from '../src/generated-api';
+import { fulfillJsonList, fulfillJson } from './api-fixtures';
 import { installedBoardThemes } from './board-themes';
 import type { Page } from '@playwright/test';
 import { eitherOrder } from './play-turn-fixtures';
@@ -10,7 +12,7 @@ const initialBoard = [
 ];
 const id = 'e0c7f6d0-58a1-4f43-9d39-2b8f1f0c6a11';
 
-function session(human: 0 | 1) {
+function session(human: 0 | 1): components['schemas']['PlaySession'] {
   return {
     id,
     version: 0,
@@ -103,9 +105,10 @@ async function startMatch(page: Page, theme: string, color: 'White' | 'Black') {
     theme,
   );
   await page.route('**/api/play/sessions', (route) => {
-    if (route.request().method() !== 'POST') return route.fulfill({ json: [] });
+    if (route.request().method() !== 'POST')
+      return fulfillJsonList<'PlaySession'>(route, []);
     requests.push(route.request().postDataJSON());
-    return route.fulfill({ json: session(human) });
+    return fulfillJson<'PlaySession'>(route, session(human), 201);
   });
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();

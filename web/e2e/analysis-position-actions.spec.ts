@@ -1,3 +1,5 @@
+import type { components } from '../src/generated-api';
+import { fulfillJson } from './api-fixtures';
 import { openMatchAnalysisOptions } from './analysis-controls';
 import { test, expect, type Page } from './test';
 import type { BookLookup } from '../src/workspaces/analysis/candidates/source-analysis-api';
@@ -322,7 +324,9 @@ test('similar search opens from a saved position with the current match excluded
     same_cube: 'true',
     include_current_match: 'true',
   });
-  await expect(results.getByRole('img')).toBeVisible();
+  await expect(
+    results.getByRole('img', { name: /^Backgammon position\./ }),
+  ).toBeVisible();
   // Rows share the keyboard model of the other position tables.
   await row.click();
   await expect(row).toHaveAttribute('aria-selected', 'true');
@@ -805,7 +809,7 @@ test('a later source-position search cannot be replaced by a delayed earlier res
   page,
 }) => {
   const position = await fixture(page);
-  const metadata = await (
+  const metadata: components['schemas']['DatabaseMatch'] = await (
     await page.request.get(`/api/matches/${position.match_uuid}/metadata`)
   ).json();
   let release = () => {},
@@ -822,33 +826,27 @@ test('a later source-position search cannot be replaced by a delayed earlier res
     if (!source) return route.continue();
     if (source === position.position_id) {
       await delayed;
-      await route
-        .fulfill({
-          json: {
-            items: [
-              {
-                ...metadata,
-                white: 'Stale source result',
-                display_name: 'Stale source result',
-              },
-            ],
-            next_cursor: null,
+      await fulfillJson<'LibraryPage'>(route, {
+        items: [
+          {
+            ...metadata,
+            white: 'Stale source result',
+            display_name: 'Stale source result',
           },
-        })
-        .catch(() => {});
+        ],
+        next_cursor: null,
+      }).catch(() => {});
       finished();
     } else
-      await route.fulfill({
-        json: {
-          items: [
-            {
-              ...metadata,
-              white: 'Current source result',
-              display_name: 'Current source result',
-            },
-          ],
-          next_cursor: null,
-        },
+      await fulfillJson<'LibraryPage'>(route, {
+        items: [
+          {
+            ...metadata,
+            white: 'Current source result',
+            display_name: 'Current source result',
+          },
+        ],
+        next_cursor: null,
       });
   });
   const oldRequest = page.waitForRequest(

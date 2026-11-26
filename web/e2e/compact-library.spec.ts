@@ -1,4 +1,4 @@
-import { mockEngineCatalog } from './api-fixtures';
+import { fulfillJson, mockEngineCatalog } from './api-fixtures';
 import { expect, test, type Page } from './test';
 
 const databaseId = '00000000-0000-0000-0000-000000000001';
@@ -36,6 +36,9 @@ const entries = Array.from({ length: 50 }, (_, index) => ({
   pr_method: 'gnubg_emg_500_v1',
   pr_profile: 'GNUbg 3-ply',
   analysis_status: index === 1 ? 'imported' : 'completed',
+  import_warning_count: 0,
+  play_assisted: false,
+  play_paused: false,
   source_available: index !== 3,
   tags:
     index === 1
@@ -71,7 +74,7 @@ async function mockLibrary(page: Page) {
     }),
   );
   await page.route('**/api/library/matches?*', (route) =>
-    route.fulfill({ json: { items: entries, next_cursor: null } }),
+    fulfillJson<'LibraryPage'>(route, { items: entries, next_cursor: null }),
   );
   const previewRequests: string[] = [];
   await page.route(
@@ -102,12 +105,10 @@ test('loads match pages only while the database workspace is open', async ({
   await page.route('**/api/library/matches?*', (route) => {
     const params = new URL(route.request().url()).searchParams;
     requests.push(params);
-    return route.fulfill({
-      json: {
-        items: params.get('page') === '2' ? entries.slice(1, 2) : entries,
-        total: 51,
-        next_cursor: null,
-      },
+    return fulfillJson<'LibraryPage'>(route, {
+      items: params.get('page') === '2' ? entries.slice(1, 2) : entries,
+      total: 51,
+      next_cursor: null,
     });
   });
   await page.clock.install();

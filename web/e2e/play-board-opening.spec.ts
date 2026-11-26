@@ -1,3 +1,4 @@
+import { fulfillJsonList } from './api-fixtures';
 import { test, expect } from './test';
 import type { PlaySession } from '../src/workspaces/play/play-api';
 import { readFileSync } from 'node:fs';
@@ -64,7 +65,7 @@ for (const config of [
       { id, theme: config.theme },
     );
     await page.route('**/api/play/sessions', (route) =>
-      route.fulfill({ json: [state] }),
+      fulfillJsonList<'PlaySession'>(route, [state]),
     );
     await page.route(`**/api/play/sessions/${id}`, (route) =>
       route.fulfill({ json: state }),

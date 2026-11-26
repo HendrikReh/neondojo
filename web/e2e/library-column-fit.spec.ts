@@ -1,3 +1,5 @@
+import type { components } from '../src/generated-api';
+import { fulfillJson } from './api-fixtures';
 import { expect, test, type Page } from './test';
 
 // Automatic Match Database widths keep PR values with their import warning,
@@ -61,7 +63,7 @@ const entries = [
     tournament:
       'An international tournament with a very long title that no automatic column width shows completely in one line',
   },
-];
+] satisfies components['schemas']['DatabaseMatch'][];
 const fitted = [
   'white_pr',
   'black_pr',
@@ -100,8 +102,10 @@ async function open(page: Page, locale: string) {
     }),
   );
   await page.route('**/api/library/matches?*', (route) =>
-    route.fulfill({
-      json: { items: entries, total: entries.length, next_cursor: null },
+    fulfillJson<'LibraryPage'>(route, {
+      items: entries,
+      total: entries.length,
+      next_cursor: null,
     }),
   );
   await page.goto('/');

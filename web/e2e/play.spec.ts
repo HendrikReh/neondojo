@@ -1,4 +1,10 @@
-import { mockSettings, settingsFixture } from './api-fixtures';
+import type { components } from '../src/generated-api';
+import {
+  fulfillJsonList,
+  fulfillJson,
+  mockSettings,
+  settingsFixture,
+} from './api-fixtures';
 import type { PlaySession } from '../src/workspaces/play/play-api';
 import { eitherOrder, joinedThirteenToEight } from './play-turn-fixtures';
 import { applyAndCloseSettings } from './settings-actions';
@@ -9,7 +15,10 @@ const initialBoard = [
   0,
 ];
 const id = '9ef7a4aa-56c7-4b32-b7dd-78029632e879';
-function session(human = 0, direction = 'right') {
+function session(
+  human = 0,
+  direction = 'right',
+): components['schemas']['PlaySession'] {
   return {
     id,
     version: 0,
@@ -60,9 +69,9 @@ for (const direction of ['right', 'left'])
     let saved = session(0, direction);
     const writes: unknown[] = [];
     await page.route('**/api/play/sessions', (route) =>
-      route.fulfill({
-        json: route.request().method() === 'POST' ? saved : [saved],
-      }),
+      route.request().method() === 'POST'
+        ? fulfillJson<'PlaySession'>(route, saved, 201)
+        : fulfillJsonList<'PlaySession'>(route, [saved]),
     );
     await page.route(`**/api/play/sessions/${id}`, (route) =>
       route.fulfill({ json: saved }),
@@ -130,7 +139,9 @@ test('black perspective is stable and uses archive artwork with readable labels'
     localStorage.setItem('neondojo.theme', 'bgblitz:bg-earth'),
   );
   await page.route('**/api/play/sessions', (route) =>
-    route.fulfill({ json: route.request().method() === 'POST' ? saved : [] }),
+    route.request().method() === 'POST'
+      ? fulfillJson<'PlaySession'>(route, saved, 201)
+      : fulfillJsonList<'PlaySession'>(route, []),
   );
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
@@ -189,9 +200,9 @@ test('a bot response remains owned when switching workspaces while it is thinkin
     release = resolve;
   });
   await page.route('**/api/play/sessions', (route) =>
-    route.fulfill({
-      json: route.request().method() === 'POST' ? saved : [saved],
-    }),
+    route.request().method() === 'POST'
+      ? fulfillJson<'PlaySession'>(route, saved, 201)
+      : fulfillJsonList<'PlaySession'>(route, [saved]),
   );
   await page.route(`**/api/play/sessions/${id}`, (route) =>
     route.fulfill({ json: saved }),
@@ -281,7 +292,9 @@ test('cube responses, forced pass and next game submit only the available action
   } as ReturnType<typeof session>;
   const writes: unknown[] = [];
   await page.route('**/api/play/sessions', (route) =>
-    route.fulfill({ json: route.request().method() === 'POST' ? saved : [] }),
+    route.request().method() === 'POST'
+      ? fulfillJson<'PlaySession'>(route, saved, 201)
+      : fulfillJsonList<'PlaySession'>(route, []),
   );
   await page.route(`**/api/play/sessions/${id}/actions`, async (route) => {
     const action = route.request().postDataJSON();
@@ -328,7 +341,9 @@ for (const theme of ['forest', 'bgblitz:bg-earth'])
       theme,
     );
     await page.route('**/api/play/sessions', (route) =>
-      route.fulfill({ json: route.request().method() === 'POST' ? saved : [] }),
+      route.request().method() === 'POST'
+        ? fulfillJson<'PlaySession'>(route, saved, 201)
+        : fulfillJsonList<'PlaySession'>(route, []),
     );
     await page.goto('/');
     await page.getByRole('tab', { name: 'Playing', exact: true }).click();
@@ -436,7 +451,9 @@ test('a black hit after an already moved checker remains confirmable with source
     localStorage.setItem('neondojo.theme', 'bgblitz:bg-earth'),
   );
   await page.route('**/api/play/sessions', (route) =>
-    route.fulfill({ json: route.request().method() === 'POST' ? saved : [] }),
+    route.request().method() === 'POST'
+      ? fulfillJson<'PlaySession'>(route, saved, 201)
+      : fulfillJsonList<'PlaySession'>(route, []),
   );
   await page.goto('/');
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();

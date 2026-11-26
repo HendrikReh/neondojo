@@ -1,3 +1,4 @@
+import { fulfillJsonList } from './api-fixtures';
 import { checkerPath, joinedThirteenToEight } from './play-turn-fixtures';
 import { rollDice } from './play-board-actions';
 import { test, expect } from './test';
@@ -96,7 +97,7 @@ for (const config of [
       { id, theme: config.theme },
     );
     await page.route('**/api/play/sessions', (route) =>
-      route.fulfill({ json: [state] }),
+      fulfillJsonList<'PlaySession'>(route, [state]),
     );
     await page.route(`**/api/play/sessions/${id}`, (route) =>
       route.fulfill({ json: state }),
@@ -275,7 +276,7 @@ for (const mode of ['double', 'double_archive', 'single_usable'] as const)
       { id, theme: mode === 'double_archive' ? 'bgblitz:bg-earth' : 'forest' },
     );
     await page.route('**/api/play/sessions', (route) =>
-      route.fulfill({ json: [state] }),
+      fulfillJsonList<'PlaySession'>(route, [state]),
     );
     await page.route(`**/api/play/sessions/${id}`, (route) =>
       route.fulfill({ json: state }),

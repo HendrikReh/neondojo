@@ -1,3 +1,4 @@
+import { fulfillJsonList, fulfillJson } from './api-fixtures';
 import { eitherOrder } from './play-turn-fixtures';
 import { rollDice } from './play-board-actions';
 import { test, expect } from './test';
@@ -46,9 +47,9 @@ for (const tie of [false, true])
     let state = pending();
     const writes: unknown[] = [];
     await page.route('**/api/play/sessions', (route) =>
-      route.fulfill({
-        json: route.request().method() === 'POST' ? state : [state],
-      }),
+      route.request().method() === 'POST'
+        ? fulfillJson<'PlaySession'>(route, state, 201)
+        : fulfillJsonList<'PlaySession'>(route, [state]),
     );
     await page.route(`**/api/play/sessions/${id}`, (route) =>
       route.fulfill({ json: state }),
