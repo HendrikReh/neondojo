@@ -482,6 +482,40 @@ mod tests {
     fn session(mode: PlayMode) -> PlaySession {
         serde_json::from_value(serde_json::json!({"id":Uuid::new_v4(),"version":0,"human_player":0,"human_name":"Human","match_length":5,"bearoff_direction":"right","engine":{"id":"gnubg","version":"test","plies":1},"position":{"id":Uuid::new_v4(),"match_uuid":Uuid::new_v4(),"ordinal":0,"game_no":1,"ply":0,"player":0,"dice":[3,1],"board":vec![0;26],"position_id":"","gnubg_match_id":"","notation":""},"phase":"move","can_double":false,"legal_moves":[],"history":[],"scores":[0,0],"game_no":1,"winner":null,"play_mode":mode})).unwrap()
     }
+    #[test]
+    fn empty_money_report_yields_while_sgf_preparation_is_queued() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .max_blocking_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (release, wait) = tokio::sync::oneshot::channel::<()>();
+            let blocker = tokio::task::spawn_blocking(move || wait.blocking_recv());
+            let mut state = session(PlayMode::Competition);
+            state.match_length = 0;
+            state.game_no = 2;
+            {
+                let report = super::super::reports::build(
+                    &mut state,
+                    "(;GM[6];W[42hdfd])(;GM[6]RU[NoCube])",
+                    "gnubg",
+                );
+                tokio::pin!(report);
+                assert!(futures_util::poll!(&mut report).is_pending());
+                release.send(()).unwrap();
+                blocker.await.unwrap().unwrap();
+                report.await.unwrap();
+            }
+            let games = state.review.unwrap().games;
+            assert_eq!(games.len(), 1);
+            assert_eq!(games[0].game_no, 2);
+            assert!(!games[0].cube_enabled);
+            assert!(games[0].decisions.is_empty());
+            assert!(games[0].statistics.is_none());
+        });
+    }
+
     fn alternatives() -> Vec<PlayAlternative> {
         vec![
             PlayAlternative {

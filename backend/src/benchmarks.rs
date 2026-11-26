@@ -13,7 +13,6 @@ use axum::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use sqlx::{FromRow, PgPool, types::Json as SqlJson};
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
@@ -25,6 +24,9 @@ mod runner;
 use play_latency::PlayBenchmarkReference;
 pub use runner::{recover_interrupted, run_one};
 pub const REFERENCE_SGF: &str = include_str!("benchmarks/reference.sgf");
+// Workload for the immutable wc2014-v1 protocol, verified against the bundled SGF.
+const REFERENCE_CHECKER_COUNTS: [i32; 10] = [8, 11, 30, 9, 46, 76, 57, 83, 75, 65];
+const REFERENCE_SHA256: &str = "d9d0336c686b0be4d69b4ac548c756bf6e2d41541739c258ba6a6cfdd5641b77";
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct Machine {
@@ -124,10 +126,10 @@ pub fn reference() -> BenchmarkReference {
         id: "wc2014-v1".into(),
         version: 1,
         name: "WC2014 – Yazawa / Mayfield".into(),
-        sha256: format!("{:x}", Sha256::digest(REFERENCE_SGF.as_bytes())),
+        sha256: REFERENCE_SHA256.into(),
         match_length: 11,
-        total_games: 10,
-        total_moves: 460,
+        total_games: REFERENCE_CHECKER_COUNTS.len() as i32,
+        total_moves: REFERENCE_CHECKER_COUNTS.iter().sum(),
         protocol: protocol(),
     }
 }
@@ -474,6 +476,24 @@ pub struct BenchmarkDoc;
 mod tests {
     use super::*;
 
+    #[test]
+    fn versioned_workload_matches_the_reference_sgf() {
+        use sha2::{Digest, Sha256};
+        let replay = crate::import::parse_sgf(REFERENCE_SGF).unwrap();
+        assert_eq!(
+            format!("{:x}", Sha256::digest(REFERENCE_SGF.as_bytes())),
+            REFERENCE_SHA256
+        );
+        assert_eq!(replay.positions.len(), reference().total_moves as usize);
+        assert_eq!(
+            replay
+                .games
+                .iter()
+                .map(|game| game.position_count)
+                .collect::<Vec<_>>(),
+            REFERENCE_CHECKER_COUNTS
+        );
+    }
     #[test]
     fn every_supported_analysis_depth_has_a_runnable_protocol() {
         for engine in [EngineId::Gnubg.id(), EngineId::NeonGammon.id()] {
