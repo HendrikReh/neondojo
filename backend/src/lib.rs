@@ -1,5 +1,6 @@
 mod advisory_locks;
 pub mod api;
+mod async_temp_dir;
 mod backgammon;
 pub mod cube_context;
 pub mod engine;

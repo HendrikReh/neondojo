@@ -1,5 +1,5 @@
 use super::*;
-use crate::engine::EngineWorkspace;
+use crate::async_temp_dir::AsyncTempDir;
 
 /// One request to the GNUbg adapter. Depths are NeonDojo plies here and are
 /// written as GNUbg-native levels in `request.json`.
@@ -71,7 +71,7 @@ pub(super) struct NativeSnapshot {
 }
 
 pub(crate) async fn probe_native(engine: &Engine) -> anyhow::Result<()> {
-    let directory = EngineWorkspace::new().await?;
+    let directory = AsyncTempDir::new().await?;
     tokio::fs::write(directory.path().join("probe.py"),"import gnubg\nassert all(callable(getattr(gnubg,key,None)) for key in ['command','nextturn','board','posinfo','gnubgid','match','hint','navigate'])\nopen('ready.txt','w').write('ready')\n").await?;
     engine
         .run_with_timeout(
@@ -166,7 +166,7 @@ pub(super) async fn run_native(
     request: &NativeRequest<'_>,
     sgf: Option<&str>,
 ) -> anyhow::Result<(NativeSnapshot, String)> {
-    let directory = EngineWorkspace::new().await?;
+    let directory = AsyncTempDir::new().await?;
     if let Some(sgf) = sgf {
         tokio::fs::write(directory.path().join("input.sgf"), sgf).await?;
     }

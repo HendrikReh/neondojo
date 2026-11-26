@@ -123,7 +123,7 @@ pub(super) async fn send(
 ) -> ApiResult<StatusCode> {
     let _transfer = reserve()?;
     let bytes = build_deck_package(&state, id, query).await?;
-    let directory = tempfile::tempdir().map_err(anyhow::Error::from)?;
+    let directory = crate::async_temp_dir::AsyncTempDir::new().await?;
     let package = directory.path().join("neondojo.apkg");
     tokio::fs::write(&package, bytes)
         .await

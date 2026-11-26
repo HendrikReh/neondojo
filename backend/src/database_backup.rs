@@ -276,7 +276,7 @@ struct Manifest {
     created_at: Option<DateTime<Utc>>,
 }
 
-#[derive(sqlx::FromRow)]
+#[derive(Debug, PartialEq, Eq, sqlx::FromRow)]
 struct Sequence {
     name: String,
     table_name: String,
@@ -702,12 +702,19 @@ mod tests {
                 continue;
             }
             let layout = copy_layout(&mut db).await;
+            let sequence_layout = super::sequences(&mut db).await.unwrap();
             let fingerprint = super::schema(&mut db).await.unwrap();
             db.apply(migration).await.unwrap();
             assert_eq!(
                 copy_layout(&mut db).await,
                 layout,
                 "COPY layout changed in migration {}",
+                migration.version
+            );
+            assert_eq!(
+                super::sequences(&mut db).await.unwrap(),
+                sequence_layout,
+                "owned sequences changed in migration {}",
                 migration.version
             );
             assert_eq!(

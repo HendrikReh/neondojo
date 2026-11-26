@@ -1,5 +1,5 @@
 use super::*;
-use crate::engine::EngineWorkspace;
+use crate::async_temp_dir::AsyncTempDir;
 
 impl Engine {
     pub async fn analyze_game(&self, sgf: &str, game_no: i32, plies: i32) -> Result<AnalyzedGame> {
@@ -27,7 +27,7 @@ impl Engine {
             anyhow::Ok((source, input))
         })
         .await??;
-        let temp = EngineWorkspace::new().await?;
+        let temp = AsyncTempDir::new().await?;
         tokio::fs::write(temp.path().join("input.sgf"), input).await?;
         let mut commands = String::from(
             "set confirm default yes\nset confirm new no\nset display off\nset analysis moves on\nset analysis cube on\nset analysis luck off\nset analysis player 0 analyse on\nset analysis player 1 analyse on\nset output mwc off\nset output digits 6\nset export moves number 10000\nset export include statistics on\n",

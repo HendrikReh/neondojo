@@ -290,18 +290,21 @@ impl SageEngine {
             valid_sage_threads(threads),
             "Unsupported NeonGammon thread count"
         );
-        // Preserve the venv executable symlink; canonicalizing it loses pyvenv.cfg.
-        let path = Path::new(&python);
-        let python = if path.is_absolute() {
-            path.to_path_buf()
-        } else if python.contains(std::path::is_separator) {
-            std::env::current_dir()?.join(path)
-        } else {
-            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-                .map(|base| base.join(path))
-                .find(|path| path.is_file())
-                .context("NeonGammon Python was not found on PATH")?
-        };
+        let python = tokio::task::spawn_blocking(move || -> Result<_> {
+            // Preserve the venv executable symlink; canonicalizing it loses pyvenv.cfg.
+            let path = Path::new(&python);
+            if path.is_absolute() {
+                Ok(path.to_path_buf())
+            } else if python.contains(std::path::is_separator) {
+                Ok(std::env::current_dir()?.join(path))
+            } else {
+                std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+                    .map(|base| base.join(path))
+                    .find(|path| path.is_file())
+                    .context("NeonGammon Python was not found on PATH")
+            }
+        })
+        .await??;
         let mut snapshot = SageSnapshot {
             python: python
                 .to_str()
