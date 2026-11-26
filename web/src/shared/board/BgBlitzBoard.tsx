@@ -20,6 +20,7 @@ import type { MovePreviewStep } from './move-preview';
 export default function BgBlitzBoard({
   position,
   theme,
+  numberOrientation,
   checkerSet,
   diceSet,
   cubeSet,
@@ -33,6 +34,7 @@ export default function BgBlitzBoard({
 }: {
   position: Position;
   theme: BgBlitzTheme;
+  numberOrientation: 'RLD' | 'RLU' | 'LRD' | 'LRU';
   checkerSet: PieceSet;
   diceSet: PieceSet;
   cubeSet: PieceSet;
@@ -124,7 +126,14 @@ export default function BgBlitzBoard({
       </g>
     );
   }
-  const numbers = theme.numbers[position.player === 0 ? 'RLD' : 'RLU'];
+  const numbers = theme.numbers[numberOrientation];
+  // Number strips have uneven transparent margins. Mirror their slot around
+  // the outer point centers so the upright artwork stays aligned to the points.
+  const outerPointCenterSum =
+    theme.columns[1] +
+    theme.columns[13] +
+    2 * theme.checkerOffsetX +
+    theme.checkers.white[0].width;
   const { value: displayedCube, owner: cubeOwner, pending: cubePending } = cube;
   const cubeSlot = cubeImage(theme, displayedCube, cubeOwner, cubePending);
   const cubeWidth = cubeSlot?.width ?? 64;
@@ -151,9 +160,16 @@ export default function BgBlitzBoard({
       data-theme={theme.id}
     >
       {artwork(theme.background, 0, 0)}
-      <g data-number-orientation={position.player === 0 ? 'RLD' : 'RLU'}>
+      <g data-number-orientation={numberOrientation}>
         {numbers.map((image, i) =>
-          artwork(image, theme.numbersX, theme.numbersY[i], i),
+          artwork(
+            image,
+            numberOrientation.startsWith('LR')
+              ? outerPointCenterSum - theme.numbersX - image.width
+              : theme.numbersX,
+            theme.numbersY[i],
+            i,
+          ),
         )}
       </g>
       {pointColumns.map(({ point, column, bottom }) =>

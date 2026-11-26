@@ -106,7 +106,6 @@ export default function CheckerPracticeBoard({
                 ? nextPoints(moves, steps, hovered)
                 : [],
             board,
-            human: player,
             onHover: setHovered,
             onPoint: moveChecker,
             label: (point) =>

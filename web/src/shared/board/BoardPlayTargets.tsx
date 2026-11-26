@@ -9,10 +9,8 @@ import {
   pointStackGeometry,
   stackGeometry,
 } from './themes';
-import { relativePoint } from './play-state';
 export interface BoardInteraction {
   enabled: number[];
-  human: number;
   sources: number[];
   destinations: number[];
   board: number[];
@@ -133,20 +131,9 @@ export default function BoardPlayTargets({
                 onPointerLeave={() => interaction.onHover(null)}
               />
             )}
-            {point >= 1 && point <= 24 && (
-              <text
-                className="play-point-number"
-                x={x + w / 2}
-                y={point >= 13 ? height * 0.055 : height * 0.97}
-                textAnchor="middle"
-                fontSize={height * 0.029}
-              >
-                {relativePoint(point, interaction.human)}
-              </text>
-            )}
             {!theme && (point === -1 || point === 26) && (
               <text
-                className="play-point-number"
+                className="play-bearoff-arrow"
                 x={x + w / 2}
                 y={y + h / 2}
                 textAnchor="middle"

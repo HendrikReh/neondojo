@@ -249,14 +249,11 @@
   transform: scale(var(--play-flip-x), var(--play-flip-y));
   transform-origin: center;
 }
-.play-board .board text {
+.play-board .board text,
+.play-board [data-number-orientation] image {
   transform: scale(var(--play-flip-x), var(--play-flip-y));
   transform-box: fill-box;
   transform-origin: center;
-}
-.play-board .point-number,
-.play-board [data-number-orientation] {
-  display: none;
 }
 .play-point {
   fill: transparent;
@@ -267,7 +264,7 @@
 .board-play-targets [data-enabled='true'] > .play-point {
   cursor: pointer;
 }
-.play-point-number {
+.play-bearoff-arrow {
   fill: var(--board-point-number);
   font-weight: 600;
   pointer-events: none;

@@ -1,14 +1,8 @@
-import {
-  useMemo,
-  type CSSProperties,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import { useMemo, type ReactNode, type RefObject } from 'react';
 import Board from '../../shared/board/Board';
 import { projectMove, type MovePreview } from '../../shared/board/move-preview';
 import {
   applySteps,
-  boardFlips,
   relativePoint,
   type CheckerStep,
 } from '../../shared/board/play-state';
@@ -123,10 +117,6 @@ export default function PlayBoardStage({
         : openingPhase
           ? []
           : turn.dice;
-  const [flipX, flipY] = boardFlips(
-    session.human_player,
-    session.bearoff_direction ?? 'right',
-  );
   const historical = review.entry;
   const historyView = playHistoryView(review);
   const historicalPosition = historical
@@ -161,12 +151,6 @@ export default function PlayBoardStage({
       data-board-actions={showActions}
       data-play-phase={paused ? undefined : session.phase}
       ref={anchor}
-      style={
-        {
-          '--play-flip-x': flipX,
-          '--play-flip-y': flipY,
-        } as CSSProperties
-      }
       data-play-review={review.index ?? undefined}
       data-play-animation={frame?.kind ?? (pendingRoll ? 'dice' : 'idle')}
       data-animation-player={frame?.player}
@@ -176,6 +160,10 @@ export default function PlayBoardStage({
     >
       {before}
       <Board
+        playOrientation={{
+          human: session.human_player,
+          direction: session.bearoff_direction ?? 'right',
+        }}
         position={
           historicalPosition ?? {
             ...session.position,
@@ -265,7 +253,6 @@ export default function PlayBoardStage({
                 ? null
                 : turn.usedDice.findIndex((used) => Number(used) < 1),
           },
-          human: session.human_player,
           onPoint: turn.point,
           label: (p) =>
             p === -1 || p === 26

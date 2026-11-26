@@ -12,6 +12,8 @@ const id = 'ec9b317a-615f-49b1-b1de-8cddaf2561f1';
 for (const config of [
   { human: 0, direction: 'right' as const, theme: 'forest' },
   { human: 1, direction: 'left' as const, theme: 'forest' },
+  { human: 0, direction: 'right' as const, theme: 'bgblitz:bg-earth' },
+  { human: 1, direction: 'left' as const, theme: 'bgblitz:bg-earth' },
   { human: 0, direction: 'left' as const, theme: 'bgblitz:bg-earth' },
   { human: 1, direction: 'right' as const, theme: 'bgblitz:bg-earth' },
 ])
@@ -126,6 +128,40 @@ for (const config of [
         board.locator('[data-opening-player="1"] circle'),
       ).toHaveCount(2);
     }
+    // The winning roll belongs to White, including when the human plays Black.
+    const numberOne = theme
+      ? board
+          .locator('[data-number-orientation] image')
+          .nth(config.human === 0 ? 1 : 0)
+      : board.locator('.point-number').filter({ hasText: /^1$/ });
+    await expect(numberOne).toBeVisible();
+    if (theme) {
+      const orientation = `${config.direction === 'left' ? 'LR' : 'RL'}${config.human === 0 ? 'D' : 'U'}`;
+      await expect(numberOne).toHaveAttribute(
+        'href',
+        theme.numbers[orientation][config.human === 0 ? 1 : 0].src,
+      );
+    } else {
+      await expect(board.locator('.point-number')).toHaveCount(24);
+      const target = board.locator(
+        `[data-play-point="${config.human === 0 ? 1 : 24}"] .play-point`,
+      );
+      const labelBounds = (await numberOne.boundingBox())!;
+      const targetBounds = (await target.boundingBox())!;
+      expect(labelBounds.y + labelBounds.height / 2).toBeGreaterThan(
+        targetBounds.y + targetBounds.height,
+      );
+      expect(labelBounds.x + labelBounds.width / 2).toBeCloseTo(
+        targetBounds.x + targetBounds.width / 2,
+        0,
+      );
+    }
+    expect(
+      await numberOne.evaluate((el) => {
+        const matrix = (el as SVGGraphicsElement).getScreenCTM()!;
+        return matrix.a > 0 && matrix.d > 0;
+      }),
+    ).toBe(true);
     const bounds = await board.boundingBox(),
       white = await board.locator('[data-opening-player="0"]').boundingBox(),
       black = await board.locator('[data-opening-player="1"]').boundingBox();

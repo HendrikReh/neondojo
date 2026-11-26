@@ -1,9 +1,6 @@
-import type { CSSProperties, RefObject } from 'react';
+import type { RefObject } from 'react';
 import Board from '../../shared/board/Board';
-import {
-  boardFlips,
-  type BearoffDirection,
-} from '../../shared/board/play-state';
+import type { BearoffDirection } from '../../shared/board/play-state';
 import type { Theme } from '../../shared/board/themes';
 import type { PlaySession } from './play-api';
 import { usePlayText } from './play-messages';
@@ -41,21 +38,15 @@ export default function PlayIdleBoard({
   theme: Theme;
 }) {
   const t = usePlayText();
-  const [flipX, flipY] = boardFlips(human, direction);
   return (
     <div
       className="play-board play-idle-board"
       inert={inert}
       ref={anchor}
       data-human-player={human}
-      style={
-        {
-          '--play-flip-x': flipX,
-          '--play-flip-y': flipY,
-        } as CSSProperties
-      }
     >
       <Board
+        playOrientation={{ human, direction }}
         position={idlePosition}
         white={t(human === 0 ? 'you' : 'bot')}
         black={t(human === 1 ? 'you' : 'bot')}

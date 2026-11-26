@@ -1,11 +1,12 @@
 import type { Position } from '../http/api';
 import { checkerCounts, pipCounts, matchContext } from './boardMath';
 
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type CSSProperties } from 'react';
 import { useI18n } from '../i18n/i18n';
 import { useBoardReviewText } from './board-review-messages';
 import { useConfirmedConfiguration } from '../../settings/configuration/ConfigurationProvider';
 import { checkerArtwork, pieceSet, type PieceSet } from './piece-artwork';
+import { boardFlips, relativePoint, type BearoffDirection } from './play-state';
 import CheckerPiece from './CheckerPiece';
 import BoardFinish, { boardSurface, finishPaint } from './BoardFinish';
 import BgBlitzBoard from './BgBlitzBoard';
@@ -82,6 +83,7 @@ export default function Board({
   white,
   black,
   theme,
+  playOrientation,
   checkerTheme,
   diceTheme,
   cubeTheme,
@@ -97,6 +99,7 @@ export default function Board({
   white: string;
   black: string;
   theme: Theme;
+  playOrientation?: { human: number; direction: BearoffDirection };
   checkerTheme?: string | null;
   diceTheme?: string | null;
   cubeTheme?: string | null;
@@ -111,6 +114,11 @@ export default function Board({
 }) {
   const { t, formatNumber, formatPoints } = useI18n();
   const review = useBoardReviewText();
+  const numberPlayer = playOrientation?.human ?? position.player;
+  const [flipX, flipY] = boardFlips(
+    numberPlayer,
+    playOrientation?.direction ?? 'right',
+  );
   const appearance = useConfirmedConfiguration()?.appearance;
   const checkerId =
     (checkerTheme === undefined ? appearance?.checker_theme : checkerTheme) ??
@@ -188,6 +196,14 @@ export default function Board({
   return (
     <div
       className={`board-shell theme-${custom ? 'bgblitz' : boardSet.id}`}
+      style={
+        playOrientation
+          ? ({
+              '--play-flip-x': flipX,
+              '--play-flip-y': flipY,
+            } as CSSProperties)
+          : undefined
+      }
       data-checker-theme={checkerSet.id}
       data-board-finish={surface ? theme : undefined}
       data-preview-mode={effectiveMode}
@@ -226,6 +242,7 @@ export default function Board({
         <BgBlitzBoard
           position={displayedPosition}
           theme={custom}
+          numberOrientation={`${flipX === -1 ? 'LR' : 'RL'}${numberPlayer === 0 ? 'D' : 'U'}`}
           checkerSet={checkerSet}
           diceSet={diceSet}
           cubeSet={cubeSet}
@@ -279,7 +296,7 @@ export default function Board({
             return (
               <g key={i}>
                 <text x={center} y="25" className="point-number">
-                  {position.player === 0 ? top : 25 - top}
+                  {relativePoint(top, numberPlayer)}
                 </text>
                 <path
                   d={`M${left} ${nativeField.y} H${right} L${center} 214 Z`}
@@ -302,7 +319,7 @@ export default function Board({
                   point={bottom}
                 />
                 <text x={center} y="455" className="point-number">
-                  {position.player === 0 ? bottom : 25 - bottom}
+                  {relativePoint(bottom, numberPlayer)}
                 </text>
               </g>
             );
