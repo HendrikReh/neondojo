@@ -53,7 +53,7 @@ Open NeonDojo in your browser at <http://127.0.0.1:8787>. The header is the same
 | 7 | **Extras** | Run engine benchmarks and engine duels, back up the database, and check versions. |
 | 8 | **Profile** | Switch configuration profiles and see whether the current settings differ from the saved profile. |
 | 9 | **Settings** (gear) | Set the language, appearance, engines, error thresholds, playing defaults and board artwork. |
-| 10 | **Documentation** | Open this user guide in a new browser tab. |
+| 10 | **NeonDojo manual** | Open this user guide in a new browser tab. |
 | 11 | **NeonGammon manual** | Open the [NeonGammon engine manual](https://hendrikreh.github.io/neongammon/) in a new browser tab. |
 
 Each workspace contains further tabs, as the map below shows.

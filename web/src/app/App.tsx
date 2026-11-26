@@ -559,7 +559,7 @@ export default function App() {
             target="_blank"
             rel="noreferrer"
           >
-            {t('app.documentation')}
+            {t('app.neondojoManual')}
           </a>
           <a
             className="documentation-link"
