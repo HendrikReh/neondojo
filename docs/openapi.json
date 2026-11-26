@@ -15168,6 +15168,20 @@
           "board_view": {
             "$ref": "#/components/schemas/ConfigurationBoardView"
           },
+          "checker_theme": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Checker artwork theme. Omitted or null inherits the board theme."
+          },
+          "cube_theme": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Doubling cube artwork theme. Omitted or null inherits the board theme."
+          },
           "mode": {
             "$ref": "#/components/schemas/ConfigurationMode"
           },
