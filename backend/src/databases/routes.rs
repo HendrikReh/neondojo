@@ -239,22 +239,28 @@ pub(super) async fn export(
     if r.match_ids.is_empty() || r.match_ids.len() > MAX_EXPORTS {
         return Err(ApiError::invalid("Select between 1 and 50 matches"));
     }
-    if !["original", "sgf", "xg"].contains(&r.format.as_str()) {
-        return Err(ApiError::invalid("format must be original, sgf or xg"));
-    }
     let mut seen = HashSet::new();
     if r.match_ids.iter().any(|id| !seen.insert(*id)) {
         return Err(ApiError::invalid("Duplicate match IDs are not allowed"));
     }
     let mut tx = s.pool.begin().await.map_err(anyhow::Error::from)?;
-    let sizes:Vec<(Uuid,i64)>=sqlx::query_as(if r.format=="original"{"SELECT id,octet_length(original)::bigint FROM matches WHERE id=ANY($1) AND NOT collection_only ORDER BY id FOR SHARE"}else{"SELECT id,octet_length(sgf)::bigint FROM matches WHERE id=ANY($1) AND NOT collection_only ORDER BY id FOR SHARE"}).bind(&r.match_ids).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
+    let original = r.format == ExportFormat::Original;
+    let sizes: Vec<(Uuid, i64)> = sqlx::query_as(if original {
+        "SELECT id,octet_length(original)::bigint FROM matches WHERE id=ANY($1) AND NOT collection_only ORDER BY id FOR SHARE"
+    } else {
+        "SELECT id,octet_length(sgf)::bigint FROM matches WHERE id=ANY($1) AND NOT collection_only ORDER BY id FOR SHARE"
+    })
+    .bind(&r.match_ids)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
     if sizes.len() != r.match_ids.len() {
         return Err(ApiError::missing());
     }
     if sizes.iter().map(|(_, n)| n).sum::<i64>() > MAX_EXPORT_BYTES {
         return Err(ApiError::invalid("Export exceeds 64 MiB"));
     }
-    let files: Vec<(Uuid, String, Vec<u8>)> = if r.format == "xg" {
+    let files: Vec<(Uuid, String, Vec<u8>)> = if r.format == ExportFormat::Xg {
         type XgSource = (
             Uuid,
             String,
@@ -297,7 +303,7 @@ pub(super) async fn export(
         .await
         .map_err(anyhow::Error::from)??
     } else {
-        let files = sqlx::query_as(if r.format == "original" {
+        let files = sqlx::query_as(if original {
             "SELECT id,filename,original FROM matches WHERE id=ANY($1) ORDER BY id"
         } else {
             "SELECT id,filename,convert_to(sgf,'UTF8') FROM matches WHERE id=ANY($1) ORDER BY id"
@@ -327,9 +333,9 @@ pub(super) async fn export(
         } else {
             clean
         };
-        if r.format != "original" {
+        if let Some(extension) = r.format.converted_extension() {
             let stem = clean.rsplit_once('.').map(|(s, _)| s).unwrap_or(&clean);
-            format!("{stem}-{id}.{}", r.format)
+            format!("{stem}-{id}.{extension}")
         } else {
             format!("{id}-{clean}")
         }
@@ -367,5 +373,5 @@ pub(super) async fn export(
 }
 
 #[derive(OpenApi)]
-#[openapi(paths(list_databases,create_database,update_database,delete_database,clear_database,library_matches,get_metadata,update_metadata,actions,export),components(schemas(Database,DatabaseWrite,DatabaseMatch,LibraryOccurrence,LibraryPage,MetadataWrite,LibraryAction,ActionItem,ActionResponse,ExportRequest)),tags((name="Databases",description="Independent match databases and library management")))]
+#[openapi(paths(list_databases,create_database,update_database,delete_database,clear_database,library_matches,get_metadata,update_metadata,actions,export),components(schemas(Database,DatabaseWrite,DatabaseMatch,LibraryOccurrence,LibraryPage,MetadataWrite,LibraryAction,ActionItem,ActionResponse,ExportRequest,ExportFormat)),tags((name="Databases",description="Independent match databases and library management")))]
 pub struct DatabaseDoc;

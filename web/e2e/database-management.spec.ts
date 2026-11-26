@@ -1,3 +1,4 @@
+import { readFile } from 'node:fs/promises';
 import { expect, test } from './test';
 import type { Database } from '../src/workspaces/library/library-api';
 
@@ -511,6 +512,49 @@ test('multiple import outcomes and batch tags, move, ZIP export and delete', asy
         )
       ).status(),
     ).toBe(204);
+});
+
+test('the library exports the original, SGF, and XG formats', async ({ page }) => {
+  const player = `Export ${crypto.randomUUID()}`;
+  const source = `(;GM[6]FF[4]PW[${player}]PB[Opponent]MI[length:5][ws:0][bs:0];W[31hefe];B[42qusu])`;
+  const uploaded = await page.request.post('/api/imports', {
+    multipart: {
+      file: {
+        name: 'typed-export.sgf',
+        mimeType: 'application/octet-stream',
+        buffer: Buffer.from(source),
+      },
+    },
+  });
+  expect(uploaded.ok()).toBe(true);
+  const { match } = await uploaded.json();
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'en'));
+  await page.goto('/');
+  await page.getByRole('tab', { name: 'Match database', exact: true }).click();
+  const row = page.locator('.database-table tbody tr').filter({ hasText: player });
+  const exportButton = page
+    .locator('.library-batch-bar')
+    .getByRole('button', { name: 'Export', exact: true });
+  const dialog = page.getByRole('dialog');
+
+  for (const [format, filename] of [
+    ['original', `${match.id}-typed-export.sgf`],
+    ['sgf', `typed-export-${match.id}.sgf`],
+    ['xg', `typed-export-${match.id}.xg`],
+  ]) {
+    await row.getByRole('checkbox').check();
+    await exportButton.click();
+    await dialog.getByLabel('Export format', { exact: true }).selectOption(format);
+    const pending = page.waitForEvent('download');
+    await dialog.getByRole('button', { name: 'Export', exact: true }).click();
+    const download = await pending;
+    expect(download.suggestedFilename()).toBe(filename);
+    const bytes = await readFile(await download.path());
+    if (format === 'original') expect(bytes.toString()).toBe(source);
+    else if (format === 'sgf') expect(bytes.toString()).toContain('W[31hefe]');
+    else expect(bytes.subarray(0, 4).toString()).toBe('RGMH');
+    await expect(dialog).toHaveCount(0);
+  }
 });
 
 test('a native full-match analysis supplies GNUbg PR to the match overview', async ({

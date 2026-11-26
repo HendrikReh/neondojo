@@ -247,10 +247,27 @@ pub struct ActionItem {
 pub struct ActionResponse {
     pub results: Vec<ActionItem>,
 }
+#[derive(Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    Original,
+    Sgf,
+    Xg,
+}
+impl ExportFormat {
+    fn converted_extension(self) -> Option<&'static str> {
+        match self {
+            Self::Original => None,
+            Self::Sgf => Some("sgf"),
+            Self::Xg => Some("xg"),
+        }
+    }
+}
+
 #[derive(Deserialize, ToSchema)]
 pub struct ExportRequest {
     pub match_ids: Vec<Uuid>,
-    pub format: String,
+    pub format: ExportFormat,
 }
 
 const DB_SELECT: &str = "SELECT d.*, (SELECT count(*) FROM matches m WHERE m.database_id=d.id) AS match_count FROM databases d";

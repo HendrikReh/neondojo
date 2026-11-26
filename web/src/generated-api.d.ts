@@ -4259,11 +4259,13 @@ export interface components {
         };
         /** @enum {string} */
         EstimateUnavailableReason: "no_matching_benchmark" | "engine_unavailable" | "no_checker_moves";
+        /** @enum {string} */
+        ExportFormat: "original" | "sgf" | "xg";
         ExportQuery: {
             locale?: null | components["schemas"]["ConfigurationLocale"];
         };
         ExportRequest: {
-            format: string;
+            format: components["schemas"]["ExportFormat"];
             match_ids: string[];
         };
         /** @enum {string} */

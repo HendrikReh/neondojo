@@ -17470,6 +17470,14 @@
           "no_checker_moves"
         ]
       },
+      "ExportFormat": {
+        "type": "string",
+        "enum": [
+          "original",
+          "sgf",
+          "xg"
+        ]
+      },
       "ExportQuery": {
         "type": "object",
         "properties": {
@@ -17493,7 +17501,7 @@
         ],
         "properties": {
           "format": {
-            "type": "string"
+            "$ref": "#/components/schemas/ExportFormat"
           },
           "match_ids": {
             "type": "array",

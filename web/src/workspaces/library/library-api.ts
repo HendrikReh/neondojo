@@ -185,12 +185,13 @@ export const loadImportWarnings = (matchId: string, signal: AbortSignal) =>
 export type ActionItem = Schema['ActionItem'];
 export type ActionResponse = Schema['ActionResponse'];
 export type BatchAction = 'copy' | 'move' | 'delete' | 'tags';
-export type ExportFormat = 'original' | 'sgf' | 'xg';
+export type ExportFormat = Schema['ExportFormat'];
 export async function exportMatches(ids: string[], format: ExportFormat) {
+  const body: Schema['ExportRequest'] = { match_ids: ids, format };
   const response = await requestResponse('/library/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ match_ids: ids, format }),
+    body: JSON.stringify(body),
   });
   await downloadResponse(
     response,
