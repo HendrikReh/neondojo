@@ -1,6 +1,6 @@
 import archiveThemes from './archive-themes';
-import { expect, it } from 'vitest';
-import { pointColumns, stackGeometry } from './themes';
+import { expect, it, vi } from 'vitest';
+import { loadArchiveThemes, pointColumns, stackGeometry } from './themes';
 
 it('uses XML column positions for both player directions, the bar and bear-off trays', () => {
   expect(pointColumns.map((p) => p.point)).toEqual([
@@ -29,4 +29,21 @@ it('uses XML column positions for both player directions, the bar and bear-off t
       ).toBeLessThan(theme.background.height);
     }
   }
+});
+
+it('shares one archive request and retries after a transient chunk failure', async () => {
+  vi.doMock('./archive-themes', () => {
+    throw new TypeError('Failed to fetch dynamically imported module');
+  });
+  const failed = loadArchiveThemes();
+  expect(loadArchiveThemes()).toBe(failed);
+  try {
+    await expect(failed).rejects.toThrow();
+  } finally {
+    vi.doUnmock('./archive-themes');
+  }
+  const retry = loadArchiveThemes();
+  expect(retry).not.toBe(failed);
+  await expect(retry).resolves.toEqual(archiveThemes);
+  expect(loadArchiveThemes()).toBe(retry);
 });

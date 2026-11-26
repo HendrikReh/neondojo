@@ -1,4 +1,5 @@
 import { use } from 'react';
+import { isChunkLoadError, RetryableChunkError } from '../chunk-load';
 
 export interface ThemeImage {
   src: string;
@@ -28,13 +29,25 @@ export interface BgBlitzTheme {
 }
 
 let archiveRequest: Promise<BgBlitzTheme[]> | undefined;
+let archiveFailure: unknown;
 let installed: BgBlitzTheme[] | undefined;
 
 export function loadArchiveThemes() {
+  archiveFailure = undefined;
   return (archiveRequest ??= import('./archive-themes').then(
     ({ default: themes }) => {
       installed = themes;
       return themes;
+    },
+    (error: unknown) => {
+      archiveRequest = undefined;
+      // React replays a suspended render. Keep the failure visible until a retry.
+      archiveFailure = isChunkLoadError(error)
+        ? new RetryableChunkError(error, () => {
+            archiveFailure = undefined;
+          })
+        : error;
+      throw archiveFailure;
     },
   ));
 }
@@ -42,6 +55,7 @@ export function loadArchiveThemes() {
 const empty: BgBlitzTheme[] = [];
 export function useArchiveThemes(required: boolean) {
   if (!required) return empty;
+  if (archiveFailure !== undefined) throw archiveFailure;
   return installed ?? use(loadArchiveThemes());
 }
 
