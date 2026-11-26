@@ -1,0 +1,45 @@
+NeonDojo Noncommercial License 1.0
+
+Scope
+
+This license covers the original NeonDojo software and documentation in this
+repository (the "Software"). Each copyright holder grants the permissions
+below for the portions of the Software they have the right to license.
+Third-party materials and separately licensed files are governed by their
+own terms. For example, the Open Sage classifier in backend/src/game_plan.rs
+is licensed under MPL-2.0, reproduced in backend/licenses/MPL-2.0.txt.
+
+Noncommercial permission
+
+Subject to these terms, you may use, copy, modify, and distribute the
+Software, in source or compiled form, for noncommercial purposes. This
+includes personal study and unpaid instruction offered free of charge.
+When distributing original or modified copies, include this license,
+retain copyright and license notices, and pass on the covered Software
+under these terms.
+
+Commercial use and paid instruction
+
+You may not use, copy, modify, or distribute the Software for commercial
+purposes, including selling copies, charging for access, or using it to
+provide a paid service.
+
+You may not use the Software to prepare or deliver paid courses, lessons,
+workshops, or coaching, whether live or recorded, individual or group.
+Instruction is paid if participants are charged for it or an instructor
+or provider receives compensation for it from another party. This includes
+payment through tuition, subscriptions, or membership fees. The restriction
+applies to individuals, clubs, nonprofits, and educational institutions,
+even when the Software itself is free or is used only during preparation.
+
+Other rights
+
+Copyright holders reserve all rights they have not expressly granted.
+Nothing in this license limits rights you have under applicable law
+independently of this license.
+
+Warranty and liability
+
+To the extent permitted by applicable law, the copyright holders provide
+the Software as is, without warranties of any kind, and accept no liability
+for damages arising from its use or distribution.
