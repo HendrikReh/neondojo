@@ -1,0 +1,11 @@
+[
+  {"id": "forest", "name": "Forest"},
+  {"id": "walnut", "name": "Walnut"},
+  {"id": "slate", "name": "Slate"},
+  {"id": "moonstone", "name": "Moonstone"},
+  {"id": "viridian", "name": "Viridian"},
+  {"id": "terra-rossa", "name": "Terra Rossa"},
+  {"id": "ion", "name": "Ion"},
+  {"id": "pelagic", "name": "Pelagic"},
+  {"id": "carbon", "name": "Carbon"}
+]

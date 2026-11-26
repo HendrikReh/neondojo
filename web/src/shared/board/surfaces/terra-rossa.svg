@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 648 396">
+  <defs>
+    <linearGradient id="clay" x2=".7" y2="1">
+      <stop stop-color="#edcc9c"/><stop offset=".55" stop-color="#dcb484"/><stop offset="1" stop-color="#c69b74"/>
+    </linearGradient>
+    <path id="stratum" d="M-70 246Q-1 146 74 167T222 132Q274 92 325 104T463 96Q552 39 718 63"/>
+    <pattern id="sand" width="11" height="13" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="4" r=".65" fill="#6e432e"/><circle cx="7" cy="11" r=".8" fill="#fff3d8"/>
+    </pattern>
+  </defs>
+  <rect width="648" height="396" fill="url(#clay)"/>
+  <g fill="none" stroke="#a77552" opacity=".31">
+    <use href="#stratum" transform="translate(0 -34)"/><use href="#stratum" transform="translate(-4 -25)"/>
+    <use href="#stratum" transform="translate(1 -19)"/><use href="#stratum" transform="translate(0 -3)" stroke-width="2"/>
+    <use href="#stratum" transform="translate(7 8)"/><use href="#stratum" transform="translate(1 98)"/>
+    <use href="#stratum" transform="translate(-2 105)"/><use href="#stratum" transform="translate(4 124)"/>
+    <use href="#stratum" transform="translate(1 146)"/><use href="#stratum" transform="translate(0 152)"/>
+  </g>
+  <rect width="648" height="396" fill="url(#sand)" opacity=".35"/>
+</svg>

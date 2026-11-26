@@ -19,7 +19,9 @@ import zlib
 ROOT = Path(__file__).resolve().parents[1]
 MAX_ARCHIVE = 32 * 1024 * 1024
 MAX_EXPANDED = 64 * 1024 * 1024
-BUILTIN_THEMES = ("forest", "walnut", "slate")
+BUILTIN_THEMES = [
+    entry["id"] for entry in json.loads((ROOT / "shared/builtin-board-themes.json").read_text())
+]
 ALLOW_MISSING_ENV = "NEONDOJO_ALLOW_MISSING_THEMES"
 UPDATE_OPTIONS_FLAG = "--update-options"
 MAX_CHECKER_PIXELS = 1024 * 1024

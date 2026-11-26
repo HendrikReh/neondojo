@@ -1,0 +1,114 @@
+.theme-moonstone {
+  --frame: #394858;
+  --felt: #adbdc7;
+  --bar: #475666;
+  --light: #dce7eb;
+  --dark: #718499;
+  --white: #e6eff7;
+  --black: #28374b;
+  --inlay: #cfdae2;
+}
+
+.theme-viridian {
+  --frame: #283e34;
+  --felt: #39725e;
+  --bar: #354b3c;
+  --light: #a9ca9e;
+  --dark: #1e4939;
+  --white: #fff1ce;
+  --black: #183e32;
+  --inlay: #e0ba78;
+}
+
+.theme-terra-rossa {
+  --frame: #603d33;
+  --felt: #dfb88a;
+  --bar: #674538;
+  --light: #f5ddae;
+  --dark: #a5573e;
+  --white: #f5dbb7;
+  --black: #643727;
+  --inlay: #f1b785;
+}
+
+.theme-ion {
+  --frame: #1d233c;
+  --felt: #292d55;
+  --bar: #252844;
+  --light: #65b9c9;
+  --dark: #927ac2;
+  --white: #f5c6dc;
+  --black: #355983;
+  --inlay: #9ccedc;
+}
+
+.theme-pelagic {
+  --frame: #163948;
+  --felt: #34677b;
+  --bar: #204252;
+  --light: #9ccfc8;
+  --dark: #1c435d;
+  --white: #f3eedf;
+  --black: #233b5c;
+  --inlay: #a6c8c5;
+}
+
+.theme-carbon {
+  --frame: #26292c;
+  --felt: #34393c;
+  --bar: #323538;
+  --light: #b1b6b6;
+  --dark: #c57154;
+  --white: #f4ccb0;
+  --black: #212529;
+  --inlay: #d59072;
+}
+
+.board-shell[data-board-finish] {
+  --rail-highlight: color-mix(in srgb, var(--frame), var(--inlay) 23%);
+  --rail-shadow: color-mix(in srgb, var(--frame), black 32%);
+  --board-point-number: #f1f1e8;
+}
+
+[data-board-finish] .board-frame {
+  fill: var(--frame-fill, var(--frame));
+}
+
+.board-inlay {
+  fill: none;
+  stroke: var(--inlay);
+  opacity: 0.58;
+}
+
+[data-board-finish] .board-bar {
+  stroke: var(--rail-shadow);
+  stroke-width: 1.5;
+}
+
+[data-board-finish] .point-number {
+  fill: var(--board-point-number);
+}
+
+[data-board-finish] .white-checker,
+[data-board-finish] .black-checker {
+  stroke: color-mix(in srgb, var(--black), var(--inlay) 48%);
+}
+
+[data-board-finish] .checker-count {
+  paint-order: stroke;
+  stroke: var(--white);
+  stroke-width: 2.5px;
+  stroke-linejoin: round;
+}
+
+[data-board-finish] .checker-count.on-black {
+  stroke: var(--black);
+}
+
+[data-board-finish] .on-white {
+  fill: var(--black);
+}
+
+[data-board-finish] .on-black {
+  fill: var(--white);
+}

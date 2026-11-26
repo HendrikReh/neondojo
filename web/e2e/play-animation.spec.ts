@@ -278,10 +278,15 @@ test('human roll starts moving immediately, settles on native dice, and animates
   const gate = new Promise<void>((resolve) => {
     release = resolve;
   });
-  await install(page, before, async () => {
-    await gate;
-    return after;
-  });
+  await install(
+    page,
+    before,
+    async () => {
+      await gate;
+      return after;
+    },
+    'ion',
+  );
   await rollDice(page).click();
   await expect(page.locator('.play-die-rolling')).toHaveCount(2);
   const faces = await page.locator('.die-value').allTextContents();
@@ -293,10 +298,17 @@ test('human roll starts moving immediately, settles on native dice, and animates
     'data-play-animation',
     'idle',
   );
+  const sourceArt = await page
+    .locator('.play-board [data-point="8"] image')
+    .last()
+    .getAttribute('href');
+  expect(sourceArt).toContain('ion-white');
   await page.locator('[data-play-point="8"] .play-point').click();
   await expect(
-    page.locator('[data-animated-checker="0"][data-from="8"][data-to="5"]'),
-  ).toBeVisible();
+    page.locator(
+      '[data-animated-checker="0"][data-from="8"][data-to="5"] image',
+    ),
+  ).toHaveAttribute('href', sourceArt!);
   await expect(page.locator('[data-dice-action="confirm"]')).not.toBeVisible();
   await expect(page.locator('.play-board')).toHaveAttribute(
     'data-play-animation',

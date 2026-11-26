@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 648 396">
+  <defs>
+    <linearGradient id="ocean" x2=".35" y2="1">
+      <stop stop-color="#438190"/><stop offset=".55" stop-color="#2c6278"/><stop offset="1" stop-color="#234d66"/>
+    </linearGradient>
+    <path id="bank" d="M-76 43Q-20 19 20 48T111 75Q164 75 174 115T143 193Q105 221 118 261T50 324Q5 332-36 375"/>
+    <g id="soundings" fill="none" stroke="#a2d1cf" stroke-width="1">
+      <use href="#bank"/><use href="#bank" transform="translate(-10 -4)"/><use href="#bank" transform="translate(-19 -7)"/>
+      <use href="#bank" transform="translate(-33 -9)"/><use href="#bank" transform="translate(-50 -11)"/>
+      <use href="#bank" transform="translate(-69 -8)"/><use href="#bank" transform="translate(-91 0)"/>
+    </g>
+  </defs>
+  <rect width="648" height="396" fill="url(#ocean)"/>
+  <g opacity=".24">
+    <use href="#soundings"/><use href="#soundings" transform="rotate(180 324 198)"/>
+  </g>
+</svg>

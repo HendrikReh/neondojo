@@ -45,11 +45,7 @@ export function useArchiveThemes(required: boolean) {
   return installed ?? use(loadArchiveThemes());
 }
 
-export const builtInThemes = [
-  { id: 'forest', name: 'Forest' },
-  { id: 'walnut', name: 'Walnut' },
-  { id: 'slate', name: 'Slate' },
-];
+export { default as builtInThemes } from '../../../../shared/builtin-board-themes.json' with { type: 'json' };
 export type Theme = string;
 export const pointColumns = [
   ...Array.from({ length: 12 }, (_, i) => ({

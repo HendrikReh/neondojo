@@ -1,9 +1,11 @@
 import type { Position } from '../http/api';
 import { checkerCounts, pipCounts, matchContext } from './boardMath';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useI18n } from '../i18n/i18n';
 import { useBoardReviewText } from './board-review-messages';
+import BuiltInChecker, { checkerArtwork } from './BuiltInChecker';
+import BoardFinish, { boardSurface, finishPaint } from './BoardFinish';
 import BgBlitzBoard from './BgBlitzBoard';
 import PlayBoardDice from './PlayBoardDice';
 import PlayCube from './PlayCube';
@@ -15,6 +17,7 @@ import MoveArrows from './MoveArrows';
 import type { BoardView, MovePreview } from './move-preview';
 import { displayedBoardPosition } from './displayed-board';
 import './board-preview.css';
+import './board-finishes.css';
 export type { Theme } from './themes';
 
 function Checkers({
@@ -23,29 +26,26 @@ function Checkers({
   y,
   bottom = false,
   point,
+  theme,
 }: {
   count: number;
   x: number;
   y: number;
   bottom?: boolean;
-  point?: number;
+  point: number;
+  theme: string;
 }) {
   const n = Math.abs(count);
   return (
     <g data-point={point} data-count={count}>
       {Array.from({ length: Math.min(n, 5) }, (_, index) => (
         <g key={index}>
-          <circle
-            cx={x}
-            cy={y + (bottom ? -1 : 1) * index * 29}
-            r="18.7"
-            className={count > 0 ? 'white-checker' : 'black-checker'}
-          />
-          <circle
-            cx={x}
-            cy={y + (bottom ? -1 : 1) * index * 29}
-            r="13.5"
-            className="checker-ring"
+          <BuiltInChecker
+            x={x}
+            y={y + (bottom ? -1 : 1) * index * 29}
+            white={count > 0}
+            theme={theme}
+            variant={point + index}
           />
           {index === 4 && n > 5 && (
             <text
@@ -92,10 +92,16 @@ export default function Board({
   const review = useBoardReviewText();
   const [failedTheme, setFailedTheme] = useState('');
   useEffect(() => setFailedTheme(''), [theme]);
+  const finishId = useId();
+  const surface = boardSurface(theme);
   const archiveSelected = theme.startsWith('bgblitz:');
   const archiveThemes = useArchiveThemes(archiveSelected);
   const archive = archiveThemes.find((entry) => entry.id === theme);
   const custom = failedTheme === theme ? undefined : archive;
+  const blackMarker =
+    custom?.checkers.black[0].src ?? checkerArtwork(theme, false);
+  const whiteMarker =
+    custom?.checkers.white[0].src ?? checkerArtwork(theme, true);
   const effectiveMode = preview?.ok ? (previewMode ?? 'before') : 'before';
   const displayedPosition = displayedBoardPosition(
     position,
@@ -149,16 +155,17 @@ export default function Board({
   return (
     <div
       className={`board-shell theme-${custom ? 'bgblitz' : archiveSelected ? 'forest' : theme}`}
+      data-board-finish={surface ? theme : undefined}
       data-preview-mode={effectiveMode}
     >
       <div className="player-bar">
         <span>
-          {custom ? (
+          {blackMarker ? (
             <img
               className="theme-player-checker"
-              src={custom.checkers.black[0].src}
+              src={blackMarker}
               alt=""
-              onError={() => setFailedTheme(theme)}
+              onError={custom ? () => setFailedTheme(theme) : undefined}
             />
           ) : (
             <i className="player-dot black" />
@@ -202,6 +209,7 @@ export default function Board({
       ) : (
         <svg
           className="board"
+          style={surface ? finishPaint(finishId) : undefined}
           viewBox={interaction ? '0 0 730 470' : '0 0 680 470'}
           role={interaction ? 'group' : 'img'}
           aria-label={label}
@@ -222,6 +230,7 @@ export default function Board({
             rx="3"
             className="board-felt"
           />
+          {surface && <BoardFinish id={finishId} surface={surface} />}
           <rect x="325" y="37" width="30" height="396" className="board-bar" />
           {Array.from({ length: 12 }, (_, i) => {
             const top = 13 + i,
@@ -235,12 +244,19 @@ export default function Board({
                   d={`M${x(i) - 24} 38 L${x(i) + 24} 38 L${x(i)} 214 Z`}
                   className={i % 2 ? 'point-light' : 'point-dark'}
                 />
-                <Checkers count={board[top]} x={x(i)} y={61} point={top} />
+                <Checkers
+                  theme={theme}
+                  count={board[top]}
+                  x={x(i)}
+                  y={61}
+                  point={top}
+                />
                 <path
                   d={`M${x(i) - 24} 432 L${x(i) + 24} 432 L${x(i)} 256 Z`}
                   className={i % 2 ? 'point-dark' : 'point-light'}
                 />
                 <Checkers
+                  theme={theme}
                   count={board[bottom]}
                   x={x(i)}
                   y={409}
@@ -253,8 +269,15 @@ export default function Board({
               </g>
             );
           })}
-          <Checkers count={board[0]} x={340} y={64} point={0} />
-          <Checkers count={board[25]} x={340} y={406} bottom point={25} />
+          <Checkers theme={theme} count={board[0]} x={340} y={64} point={0} />
+          <Checkers
+            theme={theme}
+            count={board[25]}
+            x={340}
+            y={406}
+            bottom
+            point={25}
+          />
           {interaction && <BoardPlayTargets interaction={interaction} />}
           <PlayCube
             transform={`translate(328,${cubeOwner === null ? 223 : cubeOwner === 0 ? 365 : 81})`}
@@ -288,7 +311,13 @@ export default function Board({
             player={position.player}
             interaction={interaction?.dice}
           />
-          {moving && <PlayCheckerMotion key={animation?.id} frame={moving} />}
+          {moving && (
+            <PlayCheckerMotion
+              key={animation?.id}
+              frame={moving}
+              builtInTheme={theme}
+            />
+          )}
           {effectiveMode === 'arrows' && preview?.ok && (
             <MoveArrows
               board={position.board}
@@ -300,12 +329,12 @@ export default function Board({
       )}
       <div className="player-bar">
         <span>
-          {custom ? (
+          {whiteMarker ? (
             <img
               className="theme-player-checker"
-              src={custom.checkers.white[0].src}
+              src={whiteMarker}
               alt=""
-              onError={() => setFailedTheme(theme)}
+              onError={custom ? () => setFailedTheme(theme) : undefined}
             />
           ) : (
             <i className="player-dot white" />
