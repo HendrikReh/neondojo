@@ -3555,6 +3555,10 @@ export interface components {
             bearoff_direction: components["schemas"]["ConfigurationDirection"];
             board_theme: string;
             board_view: components["schemas"]["ConfigurationBoardView"];
+            /** @description Checker artwork theme. Omitted or null inherits the board theme. */
+            checker_theme?: string | null;
+            /** @description Doubling cube artwork theme. Omitted or null inherits the board theme. */
+            cube_theme?: string | null;
             mode: components["schemas"]["ConfigurationMode"];
             ui_theme: components["schemas"]["ConfigurationUiTheme"];
         };

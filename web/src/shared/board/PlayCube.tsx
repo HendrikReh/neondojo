@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { cubeImage, type PieceSet } from './piece-artwork';
 
 export interface CubeInteraction {
   activate?: () => void;
@@ -14,7 +14,8 @@ export default function PlayCube({
   transform,
   bounds,
   interaction,
-  children,
+  artwork,
+  onError,
 }: {
   label: string;
   value: number;
@@ -23,8 +24,10 @@ export default function PlayCube({
   transform?: string;
   bounds: { x: number; y: number; width: number; height: number };
   interaction?: CubeInteraction;
-  children: ReactNode;
+  artwork: PieceSet;
+  onError?: () => void;
 }) {
+  const face = cubeImage(artwork.archive, value, owner, pending);
   return (
     <g
       transform={transform}
@@ -50,7 +53,37 @@ export default function PlayCube({
       {interaction?.activate && (
         <rect {...bounds} fill="transparent" aria-hidden="true" />
       )}
-      <g className="play-cube-artwork">{children}</g>
+      <g className="play-cube-artwork" data-cube-theme={artwork.id}>
+        {face ? (
+          <image href={face.src} {...bounds} onError={onError} />
+        ) : (
+          <svg
+            {...bounds}
+            viewBox="0 0 24 24"
+            className={`theme-${artwork.id}`}
+          >
+            <rect
+              x=".5"
+              y=".5"
+              width="23"
+              height="23"
+              rx="3"
+              fill="var(--white)"
+              stroke="var(--black)"
+            />
+            <text
+              x="12"
+              y="16.5"
+              textAnchor="middle"
+              fontSize={value >= 100 ? 9 : 13}
+              fill="var(--black)"
+              fontWeight="600"
+            >
+              {value === 1 ? '64' : value}
+            </text>
+          </svg>
+        )}
+      </g>
     </g>
   );
 }

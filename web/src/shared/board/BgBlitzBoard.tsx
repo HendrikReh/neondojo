@@ -1,3 +1,5 @@
+import CheckerPiece from './CheckerPiece';
+import { cubeImage, type PieceSet } from './piece-artwork';
 import type { Position } from '../http/api';
 import { checkerCounts } from './boardMath';
 import {
@@ -18,6 +20,8 @@ import type { MovePreviewStep } from './move-preview';
 export default function BgBlitzBoard({
   position,
   theme,
+  checkerSet,
+  cubeSet,
   label,
   cubeLabel,
   cube,
@@ -28,6 +32,8 @@ export default function BgBlitzBoard({
 }: {
   position: Position;
   theme: BgBlitzTheme;
+  checkerSet: PieceSet;
+  cubeSet: PieceSet;
   label: string;
   cubeLabel: string;
   cube: { value: number; owner: number | null; pending: boolean };
@@ -69,8 +75,7 @@ export default function BgBlitzBoard({
     bottom: boolean,
     point: number | string,
   ) {
-    const choices = count > 0 ? theme.checkers.white : theme.checkers.black;
-    const image = choices[0];
+    const image = theme.checkers[count > 0 ? 'white' : 'black'][0];
     const geometry = stackGeometry(theme, image, column, count, bottom);
     if (!geometry.total) return null;
     return (
@@ -80,28 +85,33 @@ export default function BgBlitzBoard({
         data-count={count}
         data-player={count > 0 ? 'white' : 'black'}
       >
-        {Array.from({ length: geometry.visible }, (_, i) =>
-          artwork(
-            choices[(i + column) % choices.length],
-            geometry.x,
-            geometry.y + (bottom ? -1 : 1) * i * geometry.step,
-            i,
-          ),
-        )}
+        {Array.from({ length: geometry.visible }, (_, i) => (
+          <CheckerPiece
+            key={i}
+            x={geometry.x}
+            y={geometry.y + (bottom ? -1 : 1) * i * geometry.step}
+            width={geometry.width}
+            height={geometry.height}
+            set={checkerSet}
+            white={count > 0}
+            variant={column + i}
+            onError={onError}
+          />
+        ))}
         {geometry.total > 5 && (
           <g
-            transform={`translate(${geometry.x + image.width / 2},${geometry.y + (bottom ? -1 : 1) * 4 * geometry.step + image.height / 2})`}
+            transform={`translate(${geometry.x + geometry.width / 2},${geometry.y + (bottom ? -1 : 1) * 4 * geometry.step + geometry.height / 2})`}
           >
             <circle
-              r={image.width * 0.2}
+              r={geometry.width * 0.2}
               fill="#fffbed"
               stroke="#172b22"
               strokeWidth="2"
             />
             <text
-              y={image.width * 0.075}
+              y={geometry.width * 0.075}
               textAnchor="middle"
-              fontSize={image.width * 0.23}
+              fontSize={geometry.width * 0.23}
               fontWeight="700"
               fill="#172b22"
             >
@@ -114,15 +124,9 @@ export default function BgBlitzBoard({
   }
   const numbers = theme.numbers[position.player === 0 ? 'RLD' : 'RLU'];
   const { value: displayedCube, owner: cubeOwner, pending: cubePending } = cube;
-  const cubeValue = displayedCube === 1 ? 64 : displayedCube;
-  const cubeImage =
-    theme.cubes[
-      !cubePending && cubeOwner === null && displayedCube === 1
-        ? '64_r'
-        : String(cubeValue)
-    ] || theme.cubes[String(cubeValue)];
-  const cubeWidth = cubeImage?.width ?? 64;
-  const cubeHeight = cubeImage?.height ?? 64;
+  const cubeSlot = cubeImage(theme, displayedCube, cubeOwner, cubePending);
+  const cubeWidth = cubeSlot?.width ?? 64;
+  const cubeHeight = cubeSlot?.height ?? 64;
   const barX = theme.columns[7] + theme.checkers.white[0].width / 2;
   const configuredCubeX = cubeOwner === 0 ? theme.cubeRightX : theme.cubeLeftX;
   // XML positions are image origins; only the centered/default cube is centered on the bar.
@@ -172,32 +176,11 @@ export default function BgBlitzBoard({
         value={displayedCube}
         pending={cubePending}
         owner={cubeOwner}
-      >
-        {cubeImage ? (
-          artwork(cubeImage, cubeX, cubeTop)
-        ) : (
-          <g transform={`translate(${cubeX},${cubeTop})`}>
-            <rect
-              width={cubeWidth}
-              height={cubeHeight}
-              rx="8"
-              fill="#fffbed"
-              stroke="#172b22"
-              strokeWidth="2"
-            />
-            <text
-              x="32"
-              y="42"
-              textAnchor="middle"
-              fontSize="23"
-              fill="#172b22"
-            >
-              {cubeValue}
-            </text>
-          </g>
-        )}
-      </PlayCube>
+        artwork={cubeSet}
+        onError={onError}
+      />
       <PlayBoardDice
+        checkerSet={checkerSet}
         dice={position.dice}
         player={position.player}
         interaction={interaction?.dice}
@@ -205,7 +188,13 @@ export default function BgBlitzBoard({
         onError={onError}
       />
       {moving && (
-        <PlayCheckerMotion key={animation?.id} frame={moving} theme={theme} />
+        <PlayCheckerMotion
+          key={animation?.id}
+          frame={moving}
+          theme={theme}
+          checkerSet={checkerSet}
+          onError={onError}
+        />
       )}
       {previewSteps && (
         <MoveArrows

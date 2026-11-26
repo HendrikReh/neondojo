@@ -31,7 +31,7 @@ export function readLegacyConfiguration(
     locale: readLocale(storage),
     sounds: readPlaySounds(storage),
     appearance: readUiAppearance(storage),
-    theme: readTheme(storage),
+    board: { theme: readTheme(storage), checkerTheme: null, cubeTheme: null },
   });
   c.opening_book = {
     provider: book.provider as ProfileConfiguration['opening_book']['provider'],

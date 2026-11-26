@@ -98,6 +98,8 @@ export interface ProfileConfiguration {
     ui_theme: UiTheme;
     mode: UiMode;
     board_theme: string;
+    checker_theme?: string | null;
+    cube_theme?: string | null;
     bearoff_direction: 'left' | 'right';
     board_view: 'before' | 'arrows' | 'after';
     analysis_board_width: number | null;
@@ -170,6 +172,8 @@ export const defaultConfiguration: ProfileConfiguration = {
     ui_theme: 'graphite',
     mode: 'system',
     board_theme: 'forest',
+    checker_theme: null,
+    cube_theme: null,
     bearoff_direction: 'right',
     board_view: 'arrows',
     analysis_board_width: null,
@@ -262,6 +266,7 @@ function canonical(value: unknown): unknown {
     );
   return value;
 }
+const pieceThemeFields = ['checker_theme', 'cube_theme'] as const;
 const boardWidthFields = [
   'analysis_board_width',
   'analysis_overview_board_width',
@@ -277,7 +282,7 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
   )) {
     const optional: readonly string[] =
       key === 'appearance'
-        ? boardWidthFields
+        ? [...boardWidthFields, ...pieceThemeFields]
         : key === 'positions'
           ? ['visible_columns']
           : key === 'analysis'
@@ -345,6 +350,11 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     !['before', 'arrows', 'after'].includes(c.appearance.board_view)
   )
     invalid('appearance');
+  for (const field of pieceThemeFields) {
+    const theme = (c.appearance[field] ??= null);
+    if (theme !== null && !configurationOptions.board_themes.includes(theme))
+      invalid(`appearance.${field}`);
+  }
   const { min, max } = configurationOptions.analysis_board_width;
   for (const field of boardWidthFields) {
     const width = (c.appearance[field] ??= null);
