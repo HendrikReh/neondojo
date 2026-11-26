@@ -598,6 +598,7 @@ async fn bot_matches_are_real_players_that_a_virtual_profile_groups(pool: PgPool
     let alone = call(&app, "GET", &uri, Value::Null, 200).await;
     assert_eq!(alone["match_count"], 1);
     assert_eq!(alone["rateable_match_count"], 1);
+    super::recurring_mistakes::prepare_decision_index(&pool).await;
     let mistakes = call(
         &app,
         "GET",

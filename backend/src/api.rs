@@ -32,6 +32,7 @@ pub struct AppState {
     pub pool: PgPool,
     pub engine: Engine,
     pub wake: Arc<Notify>,
+    pub(crate) browse_wake: Arc<Notify>,
     pub(crate) assessment_wake: Arc<Notify>,
     job_notifications: Arc<crate::job_events::JobNotifications>,
     pub shutdown: CancellationToken,
@@ -50,6 +51,7 @@ impl AppState {
             pool,
             engine,
             wake: Arc::new(Notify::new()),
+            browse_wake: Arc::default(),
             assessment_wake: Arc::new(Notify::new()),
             job_notifications: Arc::default(),
             shutdown: CancellationToken::new(),
@@ -119,6 +121,7 @@ impl<T: Into<String>> From<T> for ErrorBody {
         }
     }
 }
+#[derive(Debug)]
 pub struct ApiError(pub(crate) StatusCode, pub(crate) ErrorBody);
 impl ApiError {
     pub(crate) fn invalid(message: impl Into<String>) -> Self {
@@ -441,6 +444,9 @@ async fn upload(
     // Conversion warnings describe the source file, so a duplicate upload of
     // the same file reports them too.
     result.warnings = warnings;
+    if !result.duplicate {
+        state.browse_wake.notify_one();
+    }
     Ok((
         if result.duplicate {
             StatusCode::OK

@@ -26,6 +26,7 @@ mod history;
 mod imported;
 pub(crate) mod imported_projection;
 mod index;
+pub use index::backfill_batch;
 #[doc(hidden)]
 pub mod query_plans;
 mod search;
@@ -275,7 +276,7 @@ fn can_practice_correct_cube(row: &SourceDecision) -> bool {
     }
 }
 
-#[utoipa::path(get,path="/api/study/mistakes",params(MistakesQuery),responses((status=200,body=Mistakes),(status=422,body=ErrorBody)),tag="Study")]
+#[utoipa::path(get,path="/api/study/mistakes",params(MistakesQuery),responses((status=200,body=Mistakes),(status=422,body=ErrorBody),(status=503,description="Decision index is being prepared",body=ErrorBody)),tag="Study")]
 async fn list(
     State(s): State<AppState>,
     Query(q): Query<MistakesQuery>,
@@ -304,8 +305,10 @@ async fn list(
     };
     let names = player_scope::names(&s.pool, &player).await?;
     let independent_only = q.independent_only.unwrap_or(false);
-    let (groups, decisions, matches) = index::ensure_and_group(
-        &s.pool,
+    let mut tx = source::read_snapshot(&s.pool).await?;
+    index::require_current(&mut tx, q.database_id, &names, independent_only).await?;
+    let (groups, decisions, matches) = index::groups(
+        &mut tx,
         q.database_id,
         &names,
         q.game_plan,
@@ -317,7 +320,8 @@ async fn list(
     result.analyzed_decisions = decisions;
     result.analyzed_matches = matches;
     (result.player_matches, result.unanalyzed_matches) =
-        index::coverage(&s.pool, q.database_id, &names, independent_only).await?;
+        index::coverage(&mut tx, q.database_id, &names, independent_only).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(result))
 }
 #[utoipa::path(post,path="/api/study/mistakes/practice",request_body=MistakePracticeRequest,responses((status=200,body=MistakePractice),(status=422,body=ErrorBody)),tag="Study")]

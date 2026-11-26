@@ -49,6 +49,7 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState::new(pool, engine);
     let stop = state.shutdown.clone();
     let worker = tokio::spawn(jobs::worker(state.clone(), stop.clone()));
+    let browse_worker = tokio::spawn(neondojo::browse_indexes::worker(state.clone()));
     let assessment_worker = tokio::spawn(neondojo::match_assessment::worker(state.clone()));
     let match_worker = tokio::spawn(neondojo::engine_matches::worker(state.clone()));
     let anki_worker = tokio::spawn(neondojo::learning::anki_sync_worker(state.clone()));
@@ -79,6 +80,7 @@ async fn main() -> anyhow::Result<()> {
     worker.await?;
     match_worker.await?;
     assessment_worker.await?;
+    browse_worker.await?;
     anki_worker.await?;
     Ok(())
 }

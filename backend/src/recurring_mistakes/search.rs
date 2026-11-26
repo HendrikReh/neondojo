@@ -385,15 +385,16 @@ impl Search {
 }
 
 #[utoipa::path(get, path = "/api/study/decisions", params(DecisionSearchQuery),
-    responses((status = 200, body = DecisionSearchPage), (status = 422, body = ErrorBody)),
+    responses((status = 200, body = DecisionSearchPage), (status = 422, body = ErrorBody),
+              (status = 503, description = "Decision index is being prepared", body = ErrorBody)),
     tag = "Study")]
 pub(super) async fn search(
     State(s): State<AppState>,
     Query(q): Query<DecisionSearchQuery>,
 ) -> ApiResult<Json<DecisionSearchPage>> {
     let search = Search::new(&s.pool, q).await?;
-    super::index::ensure(&s.pool, search.database(), search.player()).await?;
     let mut tx = super::source::read_snapshot(&s.pool).await?;
+    super::index::require_current(&mut tx, search.database(), search.player(), false).await?;
     let (items, total) = search.read(&mut tx).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(DecisionSearchPage {

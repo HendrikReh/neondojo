@@ -203,14 +203,7 @@ pub(super) async fn require_database(pool: &PgPool, id: Uuid) -> ApiResult<()> {
     }
 }
 
-pub(super) async fn read_snapshot(pool: &PgPool) -> ApiResult<Transaction<'_, Postgres>> {
-    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    Ok(tx)
-}
+pub(super) use crate::browse_indexes::read_snapshot;
 
 async fn native_rows(
     tx: &mut Transaction<'_, Postgres>,

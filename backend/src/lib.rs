@@ -56,6 +56,7 @@ pub mod study;
 
 pub mod recurring_mistakes;
 
+pub mod browse_indexes;
 mod position_game_plans;
 
 mod analysis_timing;

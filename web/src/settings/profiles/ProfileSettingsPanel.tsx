@@ -1,5 +1,6 @@
 import { createPortal } from 'react-dom';
 import { useId, useRef, useState } from 'react';
+import LazyPanel from '../../app/LazyPanel';
 import ActionButton from '../../shared/ui/ActionButton';
 import { useConfiguration } from '../configuration/ConfigurationProvider';
 import type { ConfigurationProfile } from '../configuration/configuration-api';
@@ -316,10 +317,12 @@ export default function ProfileSettingsPanel() {
         </div>
       )}
       {config.storageError && <p role="status">{t('recoveryUnavailable')}</p>}
-      <ProfileSummary
-        configuration={selected.configuration}
-        compareTo={config.current}
-      />
+      <LazyPanel key={selected.id}>
+        <ProfileSummary
+          configuration={selected.configuration}
+          compareTo={config.current}
+        />
+      </LazyPanel>
       {nameAction && (
         <ProfileNameDialog
           title={t(
@@ -360,11 +363,13 @@ export default function ProfileSettingsPanel() {
           onCancel={dismissDialog}
         >
           {dialog === 'overwrite' && (
-            <ProfileSummary
-              configuration={selected.configuration}
-              compareTo={config.current}
-              differencesOnly
-            />
+            <LazyPanel>
+              <ProfileSummary
+                configuration={selected.configuration}
+                compareTo={config.current}
+                differencesOnly
+              />
+            </LazyPanel>
           )}
         </ProfileActionDialog>
       )}

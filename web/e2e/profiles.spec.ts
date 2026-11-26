@@ -1,3 +1,4 @@
+import { installedBoardThemes } from './board-themes';
 import { applyAndCloseSettings } from './settings-actions';
 import { backendTest as test, expect } from './test';
 import { profileBackend } from './profile-backend';
@@ -279,4 +280,72 @@ test('supports cancel, save and discard decisions when switching changed profile
   await expect(
     page.getByRole('button', { name: /Profile: Standard/ }),
   ).not.toContainText('modified');
+});
+
+test('a failed archive preview preserves the profile name draft and retries inside Settings', async ({
+  page,
+}) => {
+  const archive = installedBoardThemes.find((theme) =>
+    theme.id.startsWith('bgblitz:'),
+  );
+  test.skip(!archive, 'requires local BGBlitz artwork');
+  const backend = await profileBackend(page);
+  backend.profiles[1].configuration.appearance.board_theme = archive!.id;
+  const pending = Promise.withResolvers<void>();
+  let requests = 0;
+  await page.route('**/archive-themes.ts*', async (route) => {
+    if (++requests === 1) {
+      await pending.promise;
+      return route.abort('failed');
+    }
+    return route.continue();
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await settings.getByRole('button', { name: 'Profiles', exact: true }).click();
+  const selected = settings.getByRole('button', { name: /^Deep analysis/ });
+  await selected.click();
+  const profiles = settings.getByRole('region', {
+    name: 'Profiles',
+    exact: true,
+  });
+  await expect(profiles.getByRole('status')).toHaveText('Loading …');
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+
+  await settings
+    .getByRole('button', { name: 'Save in profile', exact: true })
+    .click();
+  const overwrite = page.getByRole('dialog', {
+    name: 'Overwrite profile',
+    exact: true,
+  });
+  await expect(overwrite.getByRole('status')).toHaveText('Loading …');
+  await overwrite.getByRole('button', { name: 'Cancel' }).click();
+
+  await settings.getByRole('button', { name: 'Save as new profile' }).click();
+  const create = page.getByRole('dialog', { name: 'Save as new profile' });
+  const draft = create.getByLabel('Profile name');
+  await draft.fill('Unfinished profile');
+  pending.resolve();
+  // The native child dialog makes its parent inert until Cancel.
+  await expect(
+    page
+      .getByRole('dialog', {
+        name: 'Settings',
+        exact: true,
+        includeHidden: true,
+      })
+      .locator('[role="alert"]'),
+  ).toContainText('could not be loaded');
+  await expect(draft).toHaveValue('Unfinished profile');
+  await create.getByRole('button', { name: 'Cancel' }).click();
+  await expect(selected).toHaveAttribute('aria-pressed', 'true');
+  expect(requests).toBe(1);
+  await profiles.getByRole('button', { name: 'Try again' }).click();
+  await expect(
+    profiles.getByRole('cell', { name: archive!.name, exact: true }),
+  ).toBeVisible();
+  expect(requests).toBe(2);
 });

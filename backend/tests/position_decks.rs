@@ -55,11 +55,17 @@ async fn position_with_rules(
         .unwrap()
         .items
         .remove(0);
-    sqlx::query("INSERT INTO saved_positions(position_uuid) VALUES($1)")
-        .bind(position.id)
-        .execute(pool)
-        .await
-        .unwrap();
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    call(
+        &app,
+        "PUT",
+        &format!("/api/positions/{}/bookmark", position.id),
+        Value::Null,
+    )
+    .await;
     position
 }
 

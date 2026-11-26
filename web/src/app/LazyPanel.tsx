@@ -6,17 +6,19 @@ import {
   type ReactNode,
 } from 'react';
 import { useWorkspaceText } from '../shared/i18n/workspace-messages';
+import { isChunkLoadError, RetryableChunkError } from '../shared/chunk-load';
 import ActionButton from '../shared/ui/ActionButton';
 
-function LoadFailed() {
+function LoadFailed({ onRetry }: { onRetry?: () => void }) {
   const w = useWorkspaceText();
   return (
     <div className="error" role="alert">
       {w('chunkFailed')}
       <ActionButton
-        onClick={() => window.location.reload()}
+        type="button"
+        onClick={onRetry ?? (() => window.location.reload())}
         icon="refresh"
-        label={w('reloadPage')}
+        label={w(onRetry ? 'retry' : 'reloadPage')}
         compact
       />
     </div>
@@ -47,17 +49,17 @@ class ChunkBoundary extends Component<
     if (error === undefined) return this.props.children;
     // Only a missing chunk is handled here; other errors keep propagating.
     if (!isChunkLoadError(error)) throw error;
+    if (error instanceof RetryableChunkError)
+      return (
+        <LoadFailed
+          onRetry={() => {
+            error.retry();
+            this.setState({ error: undefined });
+          }}
+        />
+      );
     return <LoadFailed />;
   }
-}
-
-export function isChunkLoadError(error: unknown) {
-  return (
-    error instanceof Error &&
-    /dynamically imported module|Importing a module script failed|Unable to preload CSS/i.test(
-      error.message,
-    )
-  );
 }
 
 /**
