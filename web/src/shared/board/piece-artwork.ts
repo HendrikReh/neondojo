@@ -16,12 +16,12 @@ export function pieceSet(id: string, archives: BgBlitzTheme[]): PieceSet {
   return { id: !archive && id.startsWith('bgblitz:') ? 'forest' : id, archive };
 }
 
-export function checkerSource(set: PieceSet, white: boolean, variant = 0) {
+export function checkerArtwork(set: PieceSet, white: boolean, variant = 0) {
   const side = white ? 'white' : 'black';
   const images = set.archive?.checkers[side];
-  return images
-    ? images[variant % images.length].src
-    : artwork[`./checkers/${set.id}-${side}-${variant % 2}.webp`];
+  if (images) return images[variant % images.length];
+  const src = artwork[`./checkers/${set.id}-${side}-${variant % 2}.webp`];
+  return src ? { src, width: 192, height: 192 } : undefined;
 }
 
 export function cubeImage(

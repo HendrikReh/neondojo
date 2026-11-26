@@ -5,7 +5,7 @@ import { useEffect, useId, useState } from 'react';
 import { useI18n } from '../i18n/i18n';
 import { useBoardReviewText } from './board-review-messages';
 import { useConfirmedConfiguration } from '../../settings/configuration/ConfigurationProvider';
-import { checkerSource, pieceSet, type PieceSet } from './piece-artwork';
+import { checkerArtwork, pieceSet, type PieceSet } from './piece-artwork';
 import CheckerPiece from './CheckerPiece';
 import BoardFinish, { boardSurface, finishPaint } from './BoardFinish';
 import BgBlitzBoard from './BgBlitzBoard';
@@ -15,6 +15,8 @@ import PlayCheckerMotion from './PlayCheckerMotion';
 import { underlayBoard, type PlaybackFrame } from './play-animation';
 import BoardPlayTargets, { type BoardInteraction } from './BoardPlayTargets';
 import {
+  nativeField,
+  nativePointPitch,
   nativePointX,
   pointStackGeometry,
   useArchiveThemes,
@@ -126,8 +128,8 @@ export default function Board({
   const custom = boardSet.archive;
   const checkerSet = pieceSet(failed ? 'forest' : checkerId, archiveThemes);
   const cubeSet = pieceSet(failed ? 'forest' : cubeId, archiveThemes);
-  const blackMarker = checkerSource(checkerSet, false);
-  const whiteMarker = checkerSource(checkerSet, true);
+  const blackMarker = checkerArtwork(checkerSet, false)?.src;
+  const whiteMarker = checkerArtwork(checkerSet, true)?.src;
   const assetFailed = () => setFailedTheme(selection);
   const effectiveMode = preview?.ok ? (previewMode ?? 'before') : 'before';
   const displayedPosition = displayedBoardPosition(
@@ -253,26 +255,28 @@ export default function Board({
             rx="14"
             className="board-frame"
           />
-          <rect
-            x="16"
-            y="37"
-            width="648"
-            height="396"
-            rx="3"
-            className="board-felt"
-          />
+          <rect {...nativeField} rx="3" className="board-felt" />
           {surface && <BoardFinish id={finishId} surface={surface} />}
-          <rect x="325" y="37" width="30" height="396" className="board-bar" />
+          <rect
+            x={340 - nativePointPitch / 2}
+            y={nativeField.y}
+            width={nativePointPitch}
+            height={nativeField.height}
+            className="board-bar"
+          />
           {Array.from({ length: 12 }, (_, i) => {
             const top = 13 + i,
               bottom = 12 - i;
+            const center = nativePointX(i);
+            const left = center - nativePointPitch / 2;
+            const right = center + nativePointPitch / 2;
             return (
               <g key={i}>
-                <text x={nativePointX(i)} y="25" className="point-number">
+                <text x={center} y="25" className="point-number">
                   {position.player === 0 ? top : 25 - top}
                 </text>
                 <path
-                  d={`M${nativePointX(i) - 24} 38 L${nativePointX(i) + 24} 38 L${nativePointX(i)} 214 Z`}
+                  d={`M${left} ${nativeField.y} H${right} L${center} 214 Z`}
                   className={i % 2 ? 'point-light' : 'point-dark'}
                 />
                 <Checkers
@@ -282,7 +286,7 @@ export default function Board({
                   point={top}
                 />
                 <path
-                  d={`M${nativePointX(i) - 24} 432 L${nativePointX(i) + 24} 432 L${nativePointX(i)} 256 Z`}
+                  d={`M${left} ${nativeField.y + nativeField.height} H${right} L${center} 256 Z`}
                   className={i % 2 ? 'point-dark' : 'point-light'}
                 />
                 <Checkers
@@ -291,7 +295,7 @@ export default function Board({
                   count={board[bottom]}
                   point={bottom}
                 />
-                <text x={nativePointX(i)} y="455" className="point-number">
+                <text x={center} y="455" className="point-number">
                   {position.player === 0 ? bottom : 25 - bottom}
                 </text>
               </g>

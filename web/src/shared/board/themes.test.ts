@@ -35,7 +35,7 @@ it('uses XML column positions for both player directions, the bar and bear-off t
   }
 });
 
-it('fits five separate checkers on points, bars and off trays and keeps a clear middle lane', () => {
+it('uses the original checker height as stack pitch on points, bars and off trays', () => {
   for (const theme of [undefined, ...archiveThemes]) {
     const height = theme?.background.height ?? 470;
     for (const total of [5, 8]) {
@@ -53,15 +53,27 @@ it('fits five separate checkers on points, bars and off trays and keeps a clear 
             point === -1 || point === 25 || (point >= 1 && point <= 12);
           const top = stack.y - (bottom ? 4 * stack.step : 0);
           const end = top + stack.height + 4 * stack.step;
-          const gap = stack.step - stack.height;
-          expect(gap).toBeGreaterThan(0);
-          expect(gap / stack.height).toBeLessThanOrEqual(0.015);
+          expect(stack.step).toBe(stack.height);
+          if (theme) {
+            const image = theme.checkers[player === 0 ? 'white' : 'black'][0];
+            expect([stack.width, stack.height]).toEqual([
+              image.width,
+              image.height,
+            ]);
+          }
           expect(top).toBeGreaterThan(0);
           expect(end).toBeLessThan(height);
-          if (bottom) expect(top).toBeGreaterThan(height * 0.54);
-          else expect(end).toBeLessThan(height * 0.46);
+          if (bottom) expect(top).toBeGreaterThan(height / 2);
+          else expect(end).toBeLessThan(height / 2);
         }
       }
     }
   }
+});
+
+it('matches the X22 checker-to-point proportions on built-in boards', () => {
+  const first = pointStackGeometry(13, 5);
+  const next = pointStackGeometry(14, 1);
+  expect(first.width / (next.x - first.x)).toBeCloseTo(84 / 90, 8);
+  expect(first.step / first.height).toBe(1);
 });

@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { nativeField } from './themes';
 
 const surfaces = import.meta.glob<string>('./surfaces/*.svg', {
   eager: true,
@@ -43,8 +44,7 @@ export default function BoardFinish({
         rx="10"
         className="board-inlay"
       />
-      <image href={surface} x="16" y="37" width="648" height="396" />
-      <path d="M16 36.5h648m-648 397h648" className="board-inlay" />
+      <image href={surface} {...nativeField} preserveAspectRatio="none" />
     </g>
   );
 }

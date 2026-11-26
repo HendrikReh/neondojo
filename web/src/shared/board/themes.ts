@@ -61,10 +61,6 @@ export const pointColumns = [
   })),
 ];
 
-// X22 stacks sit almost edge to edge. Keep a hairline between checker slots
-// at every board scale, including when a different piece set is selected.
-const checkerGapRatio = 0.01;
-
 export function stackGeometry(
   theme: BgBlitzTheme,
   image: ThemeImage,
@@ -75,28 +71,34 @@ export function stackGeometry(
   // The artwork has a frame around the playing surface. XML supplies the
   // explicit column origins and vertical correction for each theme.
   const inset = theme.background.width * 0.028 + theme.checkerOffsetY;
-  // Leave the middle lane free for dice and the centered cube. Size the
-  // checker once for five separated slots, even when only one is occupied.
-  const height = Math.min(
-    image.height,
-    (theme.background.height * 0.45 - inset) / (5 + 4 * checkerGapRatio),
-  );
-  const width = (image.width * height) / image.height;
+  const { width, height } = image;
   return {
-    x: theme.columns[column] + theme.checkerOffsetX + (image.width - width) / 2,
+    x: theme.columns[column] + theme.checkerOffsetX,
     y: bottom ? theme.background.height - inset - height : inset,
     width,
     height,
-    step: height * (1 + checkerGapRatio),
+    step: height,
     visible: Math.min(5, Math.abs(count)),
     total: Math.abs(count),
   };
 }
 
-const nativeCheckerSize = 34;
+// X22 uses 84-pixel pieces on points roughly 90 pixels apart on its 1490px board.
+const nativeScale = 680 / 1490;
+const nativeCheckerSize = 84 * nativeScale;
+export const nativePointPitch = 90 * nativeScale;
+const fieldWidth = 13 * nativePointPitch; // twelve points plus the bar
+export const nativeField = {
+  x: (680 - fieldWidth) / 2,
+  y: 28,
+  width: fieldWidth,
+  height: 414,
+};
 
 export function nativePointX(index: number) {
-  return 40 + index * 51 + (index >= 6 ? 28 : 0);
+  return (
+    nativeField.x + (index + 0.5 + (index >= 6 ? 1 : 0)) * nativePointPitch
+  );
 }
 
 export function pointStackGeometry(
@@ -120,10 +122,12 @@ export function pointStackGeometry(
   const centerX = off ? 706 : column === 7 ? 340 : nativePointX(index);
   return {
     x: centerX - nativeCheckerSize / 2,
-    y: bottom ? 470 - 41 - nativeCheckerSize : 41,
+    y: bottom
+      ? nativeField.y + nativeField.height - nativeCheckerSize
+      : nativeField.y,
     width: nativeCheckerSize,
     height: nativeCheckerSize,
-    step: nativeCheckerSize * (1 + checkerGapRatio),
+    step: nativeCheckerSize,
     visible: Math.min(5, Math.abs(count)),
     total: Math.abs(count),
     bottom,

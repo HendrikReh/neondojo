@@ -2,6 +2,8 @@ import type { DiceInteraction } from './PlayDice';
 import type { CubeInteraction } from './PlayCube';
 import type { BgBlitzTheme } from './themes';
 import {
+  nativeField,
+  nativePointPitch,
   nativePointX,
   pointColumns,
   pointStackGeometry,
@@ -31,7 +33,7 @@ export default function BoardPlayTargets({
     height = theme?.background.height ?? 470;
   const inset = theme
     ? stackGeometry(theme, theme.checkers.white[0], 1, 1, false).y
-    : height * 0.08;
+    : nativeField.y;
   const topY = Math.max(0, inset - 4),
     bottomY = height / 2 + 6,
     targetHeight = height / 2 - inset - 6;
@@ -39,13 +41,15 @@ export default function BoardPlayTargets({
     point,
     x: theme
       ? theme.columns[column] + theme.checkerOffsetX - 2
-      : nativePointX(column - 1 - (column > 7 ? 1 : 0)) - 24,
+      : nativePointX(column - 1 - (column > 7 ? 1 : 0)) - nativePointPitch / 2,
     y: bottom ? bottomY : topY,
-    width: theme ? theme.checkers.white[0].width + 4 : 48,
+    width: theme ? theme.checkers.white[0].width + 4 : nativePointPitch,
     height: targetHeight,
   }));
-  const barX = theme ? theme.columns[7] + theme.checkerOffsetX - 2 : 325;
-  const barWidth = theme ? theme.checkers.white[0].width + 4 : 30;
+  const barX = theme
+    ? theme.columns[7] + theme.checkerOffsetX - 2
+    : 340 - nativePointPitch / 2;
+  const barWidth = theme ? theme.checkers.white[0].width + 4 : nativePointPitch;
   for (const point of [0, 25])
     rectangles.push({
       point,

@@ -3,7 +3,7 @@ import { applyAndCloseSettings } from './settings-actions';
 import { backendTest, expect } from './test';
 
 backendTest(
-  'saved mixed artwork fits the playing board with space between all five checkers',
+  'saved mixed artwork fits the playing board with five edge-to-edge checkers',
   async ({ page }) => {
     const moon = installedBoardThemes.find(
       ({ id }) => id === 'bgblitz:bg-moon',
@@ -79,11 +79,20 @@ backendTest(
       else await expect(stack.locator('.theme-walnut')).toHaveCount(5);
       const gaps = await discs.evaluateAll((nodes) => {
         const boxes = nodes
-          .map((n) => n.getBoundingClientRect())
+          .map((node) => {
+            const { top, bottom } = node.getBoundingClientRect();
+            // getBoundingClientRect excludes the circle's painted outline.
+            const stroke =
+              node instanceof SVGCircleElement
+                ? parseFloat(getComputedStyle(node).strokeWidth) *
+                  Math.abs(node.getScreenCTM()!.d)
+                : 0;
+            return { top: top - stroke / 2, bottom: bottom + stroke / 2 };
+          })
           .sort((a, b) => a.top - b.top);
         return boxes.slice(1).map((box, i) => box.top - boxes[i].bottom);
       });
-      expect(Math.min(...gaps)).toBeGreaterThan(0);
+      for (const gap of gaps) expect(Math.abs(gap)).toBeLessThan(0.01);
       const cubeArt = playing.locator('.play-cube-artwork');
       await expect(cubeArt).toHaveAttribute('data-cube-theme', cube);
       if (cubeImage)
