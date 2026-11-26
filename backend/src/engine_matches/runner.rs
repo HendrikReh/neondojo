@@ -41,12 +41,15 @@ pub async fn worker(state: AppState) {
 
 pub(super) async fn run_one(pool: &PgPool) -> Result<bool> {
     let token = Uuid::new_v4();
-    let Some(series) = claim(pool, token).await? else {
+    let Some((series, claimed_at)) = claim(pool, token).await? else {
         return Ok(false);
     };
     let result = tokio::select! {
         result = execute(pool, &series, token) => result,
-        result = monitor(pool, series.id, token) => result,
+        lost = crate::worker_lease::watch(crate::worker_lease::Owner::EngineDuel, pool, series.id, token, claimed_at) => match lost {
+            Ok(()) => return Ok(true),
+            Err(error) => Err(error),
+        },
     };
     if let Err(error) = result {
         let message = format!("{error:#}");
@@ -63,7 +66,7 @@ pub(super) async fn run_one(pool: &PgPool) -> Result<bool> {
     Ok(true)
 }
 
-async fn claim(pool: &PgPool, token: Uuid) -> Result<Option<Series>> {
+async fn claim(pool: &PgPool, token: Uuid) -> Result<Option<(Series, tokio::time::Instant)>> {
     let mut tx = pool.begin().await?;
     let owns: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
         .bind(crate::advisory_locks::ENGINE_MATCH_CLAIM)
@@ -74,22 +77,11 @@ async fn claim(pool: &PgPool, token: Uuid) -> Result<Option<Series>> {
     }
     sqlx::query("UPDATE engine_match_runs SET status=CASE WHEN attempts>=3 THEN 'failed' ELSE 'queued' END,error=CASE WHEN attempts>=3 THEN 'Worker lease expired after three attempts' ELSE NULL END,lease_token=NULL,lease_until=NULL WHERE status='running' AND lease_until<=now()")
         .execute(&mut *tx).await?;
-    let series = sqlx::query_as("UPDATE engine_match_runs SET status='running',lease_token=$1,lease_until=now()+interval '30 seconds',attempts=attempts+1 WHERE id=(SELECT id FROM engine_match_runs WHERE status='queued' AND NOT EXISTS(SELECT 1 FROM engine_match_runs WHERE status='running') ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")
-        .bind(token).fetch_optional(&mut *tx).await?;
+    let claimed_at = tokio::time::Instant::now();
+    let series = sqlx::query_as("UPDATE engine_match_runs SET status='running',lease_token=$1,lease_until=statement_timestamp()+make_interval(secs=>$2),attempts=attempts+1 WHERE id=(SELECT id FROM engine_match_runs WHERE status='queued' AND NOT EXISTS(SELECT 1 FROM engine_match_runs WHERE status='running') ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1) RETURNING *")
+        .bind(token).bind(crate::worker_lease::LEASE.as_secs_f64()).fetch_optional(&mut *tx).await?;
     tx.commit().await?;
-    Ok(series)
-}
-
-async fn monitor(pool: &PgPool, id: Uuid, token: Uuid) -> Result<()> {
-    loop {
-        tokio::time::sleep(Duration::from_secs(1)).await;
-        let updated = sqlx::query("UPDATE engine_match_runs SET lease_until=now()+interval '30 seconds' WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>now()")
-            .bind(id).bind(token).execute(pool).await?;
-        ensure!(
-            updated.rows_affected() == 1,
-            "Engine match cancelled or worker lease lost"
-        );
-    }
+    Ok(series.map(|series| (series, claimed_at)))
 }
 
 async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {

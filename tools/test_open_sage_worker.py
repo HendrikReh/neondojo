@@ -212,6 +212,7 @@ class BatchTests(unittest.TestCase):
         self.runtime.sage = SimpleNamespace(batch_checker_play=batch, possible_moves=lambda *args: [played])
         rows = [dict(self.cube, operation='checker', dice=[6, 2], force_board=played),
                 dict(self.cube, operation='checker', dice=[1, 3], context=dict(self.cube['context'], jacoby=False))]
+        rows = [rows[0], rows[0], rows[1], rows[1]]
         self.runtime.dispatch({'operation': 'begin_batch'})
         notation = SimpleNamespace(compute_move_notation=lambda *args: '8/2')
         with patch.dict(sys.modules, {'neongammon.text_export': notation}):
@@ -219,10 +220,10 @@ class BatchTests(unittest.TestCase):
             result, _ = self.runtime.dispatch(dict(operation='checker_batch', rows=rows))
             self.assertEqual(result, expected)
             self.assertEqual(batch.call_count, 2)
-            for call, row in zip(batch.call_args_list, rows):
+            for call, row in zip(batch.call_args_list, rows[::2]):
                 self.assertEqual(call.args[0], [dict(board=before, die1=row['dice'][0], die2=row['dice'][1],
                                                      force_boards=[played] if 'force_board' in row else None,
-                                                     beaver=False, **row['context'])])
+                                                     beaver=False, **row['context'])] * 2)
                 self.assertEqual(call.kwargs, dict(jacoby=row['context']['jacoby'], beaver=False,
                                                    models=self.runtime.models, n_threads=4, eval_level='2ply'))
             # Cubeless profiles and pre-parity wheels use ordered scalar evaluations.
@@ -250,6 +251,45 @@ class BatchTests(unittest.TestCase):
         batch.return_value = [cube]
         with self.assertRaises(ValueError):
             self.runtime.dispatch(request)
+
+    def test_deep_checkers_and_singletons_use_configured_scalar_analyzer(self):
+        self.runtime.models = object()
+        self.runtime.release = PROBE.RELEASES['3.2.0']
+        self.runtime.sage = SimpleNamespace(possible_moves=lambda *args: [self.cube['board']],
+                                            batch_checker_play=Mock(), batch_cube_action_nply=Mock())
+        self.runtime.dispatch({'operation': 'begin_batch'})
+        checker = dict(self.cube, operation='checker', dice=[2, 2], force_board=self.cube['board'])
+        for depth in (2, 3, 4):
+            self.runtime.profile.update(plies=depth, threads=4)
+            cube = self.runtime.analyzer.cube_action(None)
+            cube.eval_level = f'{depth}-ply'
+            self.runtime.analyzer.cube_action = Mock(return_value=cube)
+            self.runtime.analyzer.checker_play = Mock(return_value=SimpleNamespace(moves=[
+                SimpleNamespace(board=checker['board'], eval_level=cube.eval_level, equity=.2, probs=cube.probs)]))
+            rows = [checker] * (1 if depth == 2 else 4)
+            with patch.dict(sys.modules, {'neongammon.text_export': SimpleNamespace(compute_move_notation=lambda *args: '8/6')}):
+                actual, _ = self.runtime.dispatch(dict(operation='checker_batch', rows=rows))
+                self.assertEqual(self.runtime.analyzer.checker_play.call_count, len(rows))
+                self.assertEqual(actual, [self.runtime.dispatch(checker)[0]] * len(rows))
+            actual, _ = self.runtime.dispatch(dict(operation='cube_batch_nply', rows=[self.cube]))
+            self.runtime.analyzer.cube_action.assert_called_once_with(board=self.cube['board'], beaver=False, **self.cube['context'])
+            self.assertEqual(actual, [self.runtime.dispatch(self.cube)[0]])
+
+    def test_mixed_jacoby_cubes_use_one_ordered_native_call(self):
+        self.runtime.models = object()
+        self.runtime.release = PROBE.RELEASES['3.2.0']
+        self.runtime.profile.update(plies=3, threads=4)
+        rows = [dict(self.cube, context=dict(self.cube['context'], jacoby=flag)) for flag in [True, False, True]]
+        cubes = [self.runtime.analyzer.cube_action(None) for _ in rows]
+        for i, cube in enumerate(cubes):
+            cube.eval_level, cube.equity_nd = '3-ply', i / 10
+        batch = Mock(return_value=cubes)
+        self.runtime.sage = SimpleNamespace(batch_cube_action_nply=batch)
+        self.runtime.dispatch({'operation': 'begin_batch'})
+        result, _ = self.runtime.dispatch(dict(operation='cube_batch_nply', rows=rows))
+        self.assertEqual([c['no_double'] for c in result], [0, .1, .2])
+        self.assertEqual(batch.call_count, 1)
+        self.assertEqual([r['jacoby'] for r in batch.call_args.args[0]], [True, False, True])
 
     def test_rejects_cube_depth_below_profile(self):
         self.runtime.profile = {'plies': 3}

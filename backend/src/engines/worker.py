@@ -245,23 +245,25 @@ class Runtime:
             raise ValueError('Invalid cube evaluation batch')
         inputs = [self.checker_input(row) if checker else dict(board=board(row['board']), **cube_context(row))
                   for row in rows]
-        native_checker = checker and self.release['checker_batch'] and not self.cubeless
-        native_cube = not checker and self.release['shared_models']
-        if native_checker or native_cube:
+        # Released wheels use one thread per native batch row. Deep checker
+        # searches need the whole profile budget for high-branching doubles.
+        depth = self.profile['plies']
+        scalar = self.analyzer.checker_play if checker else self.analyzer.cube_action
+        can_batch = (self.release['checker_batch'] and not self.cubeless and depth < 3
+                     if checker else self.release['shared_models'])
+        # The checker API takes Jacoby once per call. Cube inputs carry it per row.
+        groups = groupby(inputs, key=lambda row: row['jacoby']) if checker and can_batch else [(False, inputs)]
+        native = []
+        for jacoby, group in groups:
+            group = list(group)
+            if not can_batch or len(group) == 1:
+                native.extend(scalar(**row) for row in group)
+                continue
             if self.models is None:  # 3.1.2 has no from_analyzer constructor.
                 self.models = self.sage.BatchModels()
             evaluate = self.sage.batch_checker_play if checker else self.sage.batch_cube_action_nply
-            native = []
-            # 3.1.2's checker API accepts one Jacoby flag per call. Preserve
-            # row order and group adjacent identical flags for all versions.
-            for jacoby, group in groupby(inputs, key=lambda row: row['jacoby']):
-                native.extend(evaluate(list(group), eval_level=f"{self.profile['plies']}ply",
-                                       jacoby=jacoby, beaver=False, models=self.models,
-                                       n_threads=self.profile['threads']))
-        elif checker:
-            native = [self.analyzer.checker_play(**row) for row in inputs]
-        else:
-            native = [self.analyzer.cube_action(**row) for row in inputs]
+            native.extend(evaluate(group, eval_level=f"{depth}ply", jacoby=jacoby, beaver=False,
+                                   models=self.models, n_threads=self.profile['threads']))
         return [self.checker_output(row, result) if checker else self.cube_output(result)
                 for row, result in zip(rows, native, strict=True)]
 

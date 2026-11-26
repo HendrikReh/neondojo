@@ -81,13 +81,46 @@ else:
     let id = Uuid::new_v4();
     sqlx::query("INSERT INTO engine_match_runs(id,configuration,engines,dice_version,status,total_matches) VALUES($1,$2,$3,$4,'queued',1)")
         .bind(id).bind(sqlx::types::Json(config)).bind(sqlx::types::Json(engines)).bind(dice::VERSION).execute(&pool).await.unwrap();
-    let run = runner::run_one(&pool);
+    let worker = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .acquire_timeout(Duration::from_millis(150))
+        .connect_with((*pool.connect_options()).clone())
+        .await
+        .unwrap();
+    let run = runner::run_one(&worker);
     tokio::pin!(run);
     tokio::select! {
         result = &mut run => panic!("worker exited before losing its lease: {result:?}"),
         result = timeout(Duration::from_secs(10), async {
             while !directory.path().join("rules").is_file() { sleep(Duration::from_millis(10)).await; }
         }) => result.expect("worker never started the opening request"),
+    }
+
+    let held = worker.acquire().await.unwrap();
+    let original: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT lease_until FROM engine_match_runs WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let delay_and_recover = async {
+        sleep(Duration::from_millis(1500)).await;
+        drop(held);
+        while !sqlx::query_scalar::<_, bool>(
+            "SELECT lease_until>$2 FROM engine_match_runs WHERE id=$1",
+        )
+        .bind(id)
+        .bind(original)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        {
+            sleep(Duration::from_millis(20)).await;
+        }
+    };
+    tokio::select! {
+        result = &mut run => panic!("duel stopped during a transient pool timeout: {result:?}"),
+        result = timeout(Duration::from_secs(5), delay_and_recover) => result.unwrap(),
     }
 
     sqlx::query("UPDATE engine_match_runs SET lease_until=now()-interval '1 second' WHERE id=$1")

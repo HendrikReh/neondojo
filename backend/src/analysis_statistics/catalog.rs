@@ -68,6 +68,8 @@ impl From<GameAnalysisStatistics> for CatalogGameStatistics {
 }
 #[derive(Serialize, ToSchema)]
 pub struct MatchAnalysisStatistics {
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub needs_cube_rule_reanalysis: bool,
     pub analysis_id: Option<String>,
     pub summary: Option<CatalogAnalysisSummary>,
     pub games: Vec<CatalogGameStatistics>,
@@ -114,6 +116,7 @@ async fn statistics(
                 let errors = selected.error_breakdown;
                 // Return a single scope without duplicating/mixing the full-match rating.
                 return Ok(Json(MatchAnalysisStatistics {
+                    needs_cube_rule_reanalysis: selected.needs_cube_rule_reanalysis,
                     analysis_id,
                     summary,
                     games: vec![],
@@ -126,6 +129,7 @@ async fn statistics(
             (result.summary.map(Into::into), result.error_breakdown)
         };
         return Ok(Json(MatchAnalysisStatistics {
+            needs_cube_rule_reanalysis: games.iter().any(|g| g.needs_cube_rule_reanalysis),
             analysis_id,
             summary,
             games,
@@ -135,6 +139,7 @@ async fn statistics(
     // A single-position result has no match statistics, even if it contains a loss.
     if !matches!(selected, Some(SelectedAnalysis::Imported { .. })) {
         return Ok(Json(MatchAnalysisStatistics {
+            needs_cube_rule_reanalysis: false,
             analysis_id,
             summary: None,
             games: vec![],
@@ -289,6 +294,7 @@ async fn statistics(
             .iter()
             .any(|p| p.checker_decisions + p.cube_decisions > 0);
         Ok(MatchAnalysisStatistics {
+            needs_cube_rule_reanalysis: false,
             analysis_id,
             summary: any.then_some(overall),
             games,

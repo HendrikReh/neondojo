@@ -209,7 +209,7 @@ async fn fill(
         return Ok(());
     }
     let slots = crate::settings::load_analysis_job_slots(&state.pool).await?;
-    if crate::benchmarks::has_queued(&state.pool).await? {
+    if crate::benchmarks::needs_worker(&state.pool).await? {
         if running.len() < slots
             && let Some(access) = state
                 .backup
@@ -403,7 +403,7 @@ async fn with_heartbeat(
 }
 
 /// Database errors after which the same query may succeed again.
-fn transient(error: &sqlx::Error) -> bool {
+pub(crate) fn transient(error: &sqlx::Error) -> bool {
     matches!(error, sqlx::Error::PoolTimedOut | sqlx::Error::Io(_))
 }
 

@@ -496,22 +496,32 @@ os.execv(real,[real]+sys.argv[1:])
 }
 
 #[sqlx::test(migrations = "./migrations")]
-#[ignore = "requires PostgreSQL and GNUbg"]
 async fn expired_worker_is_failed_without_resuming_or_publishing_partial_times(pool: PgPool) {
     let state = AppState::new(pool.clone(), engine());
     let app = api::router(state.clone());
-    let (status, runs) = call(
-        app.clone(),
-        "POST",
-        "/api/benchmarks",
-        json!({"engine_id":"gnubg","plies":[1]}),
-    )
-    .await;
-    assert_eq!(status, 202);
-    let id = uuid::Uuid::parse_str(runs[0]["id"].as_str().unwrap()).unwrap();
+    let id = insert_run(&pool, "queued").await;
     sqlx::query("UPDATE benchmark_runs SET status='running', started_at=now(), completed_games=1,analyzed_moves=10,worker_token=$2,lease_until=now()-interval '1 second' WHERE id=$1")
         .bind(id).bind(uuid::Uuid::new_v4()).execute(&pool).await.unwrap();
-    assert!(!neondojo::jobs::run_one(&state).await.unwrap());
+    let (_, status) = call(app.clone(), "GET", "/api/benchmarks/status", Value::Null).await;
+    assert_eq!(status["active"], false);
+    let stop = state.shutdown.clone();
+    let worker = tokio::spawn(neondojo::jobs::worker(state, stop.clone()));
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        while sqlx::query_scalar::<_, bool>(
+            "SELECT status='running' FROM benchmark_runs WHERE id=$1",
+        )
+        .bind(id)
+        .fetch_one(&pool)
+        .await
+        .unwrap()
+        {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+    })
+    .await
+    .unwrap();
+    stop.cancel();
+    worker.await.unwrap();
     let (_, list) = call(app, "GET", "/api/benchmarks", Value::Null).await;
     assert_eq!(list["runs"][0]["status"], "failed");
     assert!(

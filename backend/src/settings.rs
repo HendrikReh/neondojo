@@ -564,11 +564,7 @@ fn conflict() -> ApiError {
 async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo>>> {
     let saved = load_row(&state).await?;
     let settings = saved.settings;
-    let running: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE status='running')")
-            .fetch_one(&state.pool)
-            .await
-            .map_err(anyhow::Error::from)?;
+    let running = crate::benchmarks::has_live_run(&state.pool).await?;
     let version = if running {
         saved
             ._gnubg_version

@@ -4697,6 +4697,7 @@ export interface components {
             analysis_id?: string | null;
             error_breakdown?: components["schemas"]["PlayerErrorBreakdown"][] | null;
             games: components["schemas"]["CatalogGameStatistics"][];
+            needs_cube_rule_reanalysis?: boolean;
             summary?: null | components["schemas"]["CatalogAnalysisSummary"];
         };
         MatchAnalysisSummary: {

@@ -27,8 +27,19 @@ async fn call(app: &axum::Router, method: &str, uri: &str, data: Value) -> Value
 }
 
 async fn position(pool: &PgPool, name: &str, dice_move: &str, score: i32) -> Position {
-    let source =
-        format!("(;GM[6]PW[{name}]PB[Opponent]MI[length:7][ws:{score}][bs:0];W[{dice_move}])");
+    position_with_rules(pool, name, dice_move, score, "").await
+}
+
+async fn position_with_rules(
+    pool: &PgPool,
+    name: &str,
+    dice_move: &str,
+    score: i32,
+    rules: &str,
+) -> Position {
+    let source = format!(
+        "(;GM[6]{rules}PW[{name}]PB[Opponent]MI[length:7][ws:{score}][bs:0];W[{dice_move}])"
+    );
     let imported = store::import_match(
         pool,
         &format!("{name}.sgf"),
@@ -208,5 +219,36 @@ async fn deck_name_sorting_keeps_empty_memberships_last_and_pagination_unique(po
             assert!(actual.len() <= expected.len());
         }
         assert_eq!(actual, expected);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cube_rules_distinguish_deck_memberships_and_sort_order(pool: PgPool) {
+    let cube = position(&pool, "Cubeful", "31hefe", 0).await;
+    let no_cube = position_with_rules(&pool, "Cubeless", "31hefe", 0, "RU[NoCube]").await;
+    assert_eq!(cube.position_id, no_cube.position_id);
+    assert_eq!(cube.gnubg_match_id, no_cube.gnubg_match_id);
+    analyze(&pool, cube.id).await;
+    analyze(&pool, no_cube.id).await;
+    let app = api::router(api::AppState::new(pool, Engine::new("unused".into())));
+    let z = deck(&app, "Zulu", Some(cube.id)).await;
+    let a = deck(&app, "Alpha", Some(no_cube.id)).await;
+    for (direction, expected) in [
+        ("asc", [(no_cube.id, &a), (cube.id, &z)]),
+        ("desc", [(cube.id, &z), (no_cube.id, &a)]),
+    ] {
+        let result = page(
+            &app,
+            json!({"schema_version":1,"sort":"decks","direction":direction}),
+            None,
+            2,
+        )
+        .await;
+        let items = result["items"].as_array().unwrap();
+        assert_eq!(items.len(), 2);
+        for (item, (id, deck)) in items.iter().zip(expected) {
+            assert_eq!(item["decks"], json!([deck]));
+            assert_eq!(item["position"]["id"], id.to_string());
+        }
     }
 }
