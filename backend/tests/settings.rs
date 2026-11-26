@@ -63,6 +63,40 @@ async fn imported(pool: &PgPool) -> neondojo::model::ImportResponse {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn missing_gnubg_keeps_play_and_engine_match_errors(pool: PgPool) {
+    let app = api::router(AppState::new(
+        pool,
+        Engine::new("/missing/injected-gnubg".into()),
+    ));
+    let (status, play) = call(
+        app.clone(),
+        "POST",
+        "/api/play/sessions",
+        json!({"human_player":0,"match_length":1}),
+    )
+    .await;
+    assert_eq!(status, 503, "{play}");
+    assert_eq!(
+        play["error"],
+        "The engines could not complete this action; the saved session is unchanged. Cannot resolve the configured GNUbg executable"
+    );
+
+    let side = json!({"engine_id":"gnubg","plies":1});
+    let (status, duel) = call(
+        app,
+        "POST",
+        "/api/engine-matches",
+        json!({"a":side,"b":side,"match_length":1,"count":1}),
+    )
+    .await;
+    assert_eq!(status, 422, "{duel}");
+    assert_eq!(
+        duel["error"],
+        "Cannot resolve the configured GNUbg executable"
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     let app = api::router(AppState::new(
         pool.clone(),

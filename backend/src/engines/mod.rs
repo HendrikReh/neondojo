@@ -845,9 +845,9 @@ impl AnalysisEngine {
     }
     /// The executable identity benchmarks are keyed by: GNUbg's resolved
     /// binary, or NeonGammon's absolute Python path as saved in its profile.
-    pub(crate) fn resolved_binary(&self) -> Result<String> {
+    pub(crate) async fn resolved_binary(&self) -> Result<String> {
         match self {
-            Self::Gnubg(engine) => crate::engine::resolve_binary(engine.binary()),
+            Self::Gnubg(engine) => crate::engine::resolve_binary_async(engine.binary()).await,
             Self::OpenSage(engine) => Ok(engine.binary().to_owned()),
         }
     }

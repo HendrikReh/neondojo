@@ -39,7 +39,7 @@ pub(crate) use service::{build_history_snapshots, named_export};
 use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    engine::{Engine, resolve_binary},
+    engine::{Engine, resolve_binary_async},
     engines::EngineId,
     model::Position,
 };
