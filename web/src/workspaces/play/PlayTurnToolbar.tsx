@@ -60,6 +60,11 @@ export default function PlayTurnToolbar({
   onRetry: () => void;
 }) {
   const t = usePlayText();
+  // Tells the player why only some checkers respond when the rules leave one play.
+  const onlyMove =
+    canMove && !beforeRoll && !forcedPass && session.legal_moves.length === 1
+      ? session.legal_moves[0].notation
+      : null;
   return (
     <div
       className="play-board-toolbar"
@@ -160,7 +165,13 @@ export default function PlayTurnToolbar({
       )}
       {!beforeRoll && (
         <p className="play-turn-help">
-          {t(forcedPass ? 'passReady' : complete ? 'ready' : 'select')}
+          {forcedPass
+            ? t('passReady')
+            : complete
+              ? t('ready')
+              : onlyMove
+                ? t('onlyMove', { move: onlyMove })
+                : t('select')}
         </p>
       )}
     </div>

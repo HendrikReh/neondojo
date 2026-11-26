@@ -185,7 +185,7 @@ Details: [Playing feedback modes](../reference/playing.md#playing-feedback-modes
 **Moving checkers**
 
 1. Click the dice, or the gap between them, to roll. You can also press **Enter**.
-2. Hover over a checker to see where it would go. Click it to move it. If both dice could be used, the first die takes priority. Click the dice before you move to swap their order.
+2. Hover over a checker to see where it would go. Click it to move it. If both dice could be used, the first die takes priority. If only some checkers respond, the action panel names the single legal move: the rules require playing as many dice as possible, and the higher die if only one can be played. Click the dice before you move to swap their order.
 3. **Undo step** (**Z**) takes back one unconfirmed step at a time.
 4. **Confirm turn** (**Enter**) completes the move.
 
