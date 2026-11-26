@@ -14,6 +14,7 @@ import {
 import { cacheConfiguration } from './configuration-legacy';
 import {
   defaultConfiguration,
+  defaultErrorThresholds,
   normalizeConfiguration,
   type ProfileConfiguration,
 } from './configuration-model';
@@ -66,6 +67,13 @@ function writeCachedConfiguration(key: string, value: ProfileConfiguration) {
 /** Read-only settings for workspaces. Drafts and profile errors stay in management. */
 export function useConfirmedConfiguration() {
   return useContext(ConfirmedConfigurationContext);
+}
+
+export function useAnalysisErrorThresholds() {
+  return (
+    useConfirmedConfiguration()?.analysis.error_thresholds ??
+    defaultErrorThresholds
+  );
 }
 
 /** One-time seed from older installations, shared across tabs in this browser. */

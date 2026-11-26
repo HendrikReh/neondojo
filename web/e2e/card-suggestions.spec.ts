@@ -1,9 +1,8 @@
-import { expect, test } from './test';
+import { expect, test, type Page } from './test';
+import { profileBackend } from './profile-backend';
+import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
-test('match suggestions preview boards and add only the checked cards', async ({
-  page,
-}, testInfo) => {
-  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
+async function openCards(page: Page) {
   await page.goto('/');
   const importing = page.waitForResponse(
     (response) =>
@@ -16,6 +15,18 @@ test('match suggestions preview boards and add only the checked cards', async ({
   const { match } = await (await importing).json();
   const panel = page.getByRole('tabpanel', { name: 'Lernkarten', exact: true });
   await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();
+  return { match, panel };
+}
+
+test('match suggestions preview boards and add only the checked cards', async ({
+  page,
+}, testInfo) => {
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.general.locale = 'de';
+  configuration.analysis.error_thresholds.error = 0.033;
+  const profiles = await profileBackend(page, { configuration });
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
+  const { match, panel } = await openCards(page);
   await panel.getByLabel('Deckname').fill(`Vorschau ${crypto.randomUUID()}`);
   await panel
     .getByRole('button', { name: 'Deck erstellen', exact: true })
@@ -24,7 +35,17 @@ test('match suggestions preview boards and add only the checked cards', async ({
     name: 'Positionen vorschlagen',
     exact: true,
   });
+  const minimum = panel.getByRole('spinbutton', { name: 'Mindestverlust' });
+  await expect(minimum).toHaveValue('0,033');
+  configuration.analysis.error_thresholds.error = 0.03;
+  profiles.updateRemote(configuration);
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(minimum).toHaveValue('0,03');
+  const suggestionRequest = page.waitForRequest('**/card-suggestions?*');
   await suggest.click();
+  expect(
+    new URL((await suggestionRequest).url()).searchParams.get('min_loss'),
+  ).toBe('0.03');
   await expect(
     panel.getByText(
       'Für dieses Match ist noch keine abgeschlossene lokale Analyse verfügbar.',
@@ -47,7 +68,9 @@ test('match suggestions preview boards and add only the checked cards', async ({
   const items = panel.getByRole('checkbox');
   await expect(items).toHaveCount(10);
   await expect(items.first()).toBeChecked();
-  const previews = panel.locator('.card-suggestion-board').getByRole('img');
+  const previews = panel
+    .locator('.card-suggestion-board')
+    .getByRole('img', { name: /^Spiel / });
   await expect(previews).toHaveCount(10);
   const board = page.locator('.board-panel .board');
   const deck = panel.getByLabel('Deck auswählen', { exact: true });
@@ -93,4 +116,53 @@ test('match suggestions preview boards and add only the checked cards', async ({
   await suggest.click();
   await expect(panel.getByText('Bereits in diesem Deck')).toHaveCount(1);
   await expect(items.first()).not.toBeChecked();
+
+  await minimum.fill('0');
+  await page.reload();
+  await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();
+  await expect(minimum).toHaveValue('0');
+  const generation = page.waitForRequest(
+    (request) =>
+      request.method() === 'POST' &&
+      /\/api\/decks\/[^/]+\/cards$/.test(new URL(request.url()).pathname),
+  );
+  await panel
+    .getByRole('button', { name: 'Fehler aus Spiel 1 übernehmen' })
+    .click();
+  expect((await generation).postDataJSON()).toMatchObject({
+    min_loss: 0,
+    game_no: 1,
+  });
+});
+
+test('Add Cards preserves a previous generation cutoff and an existing session entry', async ({
+  page,
+}) => {
+  const configuration = structuredClone(defaultConfiguration);
+  configuration.general.locale = 'de';
+  configuration.learning.generation.min_loss = 0.125;
+  configuration.analysis.error_thresholds.error = 0.031;
+  await profileBackend(page, { configuration });
+  await page.addInitScript(() => localStorage.setItem('neondojo.locale', 'de'));
+  const { panel } = await openCards(page);
+  const minimum = panel.getByRole('spinbutton', { name: 'Mindestverlust' });
+  await expect(minimum).toHaveValue('0,125');
+
+  // A previous release could have saved the old 0.04 default in this tab.
+  await page.evaluate(() =>
+    sessionStorage.setItem(
+      'neondojo.session.analysis.card-min-loss.v1',
+      JSON.stringify('0.04'),
+    ),
+  );
+  await page.reload();
+  await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();
+  await expect(minimum).toHaveValue('0,04');
+  await minimum.fill('');
+  await page.reload();
+  await page.getByRole('tab', { name: 'Lernkarten', exact: true }).click();
+  await expect(minimum).toHaveValue('');
+  await expect(
+    panel.getByRole('button', { name: 'Positionen vorschlagen' }),
+  ).toBeDisabled();
 });

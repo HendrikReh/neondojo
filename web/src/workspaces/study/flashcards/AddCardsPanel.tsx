@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { useWorkspaceDefaults } from '../../../settings/configuration/ConfigurationProvider';
+import {
+  useAnalysisErrorThresholds,
+  useWorkspaceDefaults,
+} from '../../../settings/configuration/ConfigurationProvider';
 import { defaultConfiguration } from '../../../settings/configuration/configuration-model';
 import { request } from '../../../shared/http/api';
 import type { Theme } from '../../../shared/board/themes';
@@ -57,10 +60,15 @@ export function AddCardsPanel({
     sessionString,
   );
   const selectedDeckId = decks.some((deck) => deck.id === deckId) ? deckId : '';
+  const profileLoss = useAnalysisErrorThresholds().error;
+  const legacyLoss = legacy?.learning.generation.min_loss;
   const [minLoss, setMinLoss] = useWorkspaceSession(
     'analysis.card-min-loss',
-    legacy ? String(legacy.learning.generation.min_loss) : undefined,
-    String(defaultConfiguration.learning.generation.min_loss),
+    legacyLoss !== undefined &&
+      legacyLoss !== defaultConfiguration.learning.generation.min_loss
+      ? String(legacyLoss)
+      : undefined,
+    String(profileLoss),
     sessionString,
   );
   const minLossInput = useDecimalInput({
