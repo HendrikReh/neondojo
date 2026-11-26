@@ -85,28 +85,6 @@ it.each([
     'Rennspiel (mit Kontakt)',
     'Spiel beendet',
   ],
-  [
-    'es',
-    'Plan de juego',
-    'Carrera pura',
-    'Carrera (con contacto)',
-    'Partida terminada',
-  ],
-  [
-    'fr',
-    'Plan de jeu',
-    'Course pure',
-    'Course (avec contact)',
-    'Partie terminée',
-  ],
-  ['pl', 'Plan gry', 'Czysty wyścig', 'Wyścig (z kontaktem)', 'Gra zakończona'],
-  [
-    'it',
-    'Piano di gioco',
-    'Corsa pura',
-    'Corsa (con contatto)',
-    'Partita terminata',
-  ],
 ] as const)(
   'localizes %s and distinguishes pure races from contact racing',
   (locale, title, pure, contact, finished) => {
@@ -123,8 +101,8 @@ it.each([
   },
 );
 
-it('provides complete nonempty messages in all six languages', () => {
-  expect(Object.keys(gamePlanMessages)).toHaveLength(6);
+it('provides complete nonempty messages in both languages', () => {
+  expect(Object.keys(gamePlanMessages)).toHaveLength(2);
   for (const catalog of Object.values(gamePlanMessages)) {
     expect(Object.keys(catalog)).toEqual(Object.keys(gamePlanMessages.en));
     for (const message of Object.values(catalog))

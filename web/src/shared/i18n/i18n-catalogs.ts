@@ -1,18 +1,16 @@
+import type { components } from '../../generated-api';
 import type english from './locales/en';
 
 export type LocaleMessages = typeof english;
 export type Catalog = LocaleMessages['app'];
 export type TranslationKey = keyof Catalog;
 
-const loaders = {
+export type Locale = components['schemas']['ConfigurationLocale'];
+
+const loaders: Record<Locale, () => Promise<{ default: LocaleMessages }>> = {
   en: () => import('./locales/en'),
   de: () => import('./locales/de'),
-  es: () => import('./locales/es'),
-  fr: () => import('./locales/fr'),
-  it: () => import('./locales/it'),
-  pl: () => import('./locales/pl'),
 };
-export type Locale = keyof typeof loaders;
 
 const loaded = new Map<Locale, LocaleMessages>();
 
@@ -38,18 +36,6 @@ export function catalogsFor<N extends keyof LocaleMessages>(name: N) {
     },
     get de() {
       return read('de');
-    },
-    get es() {
-      return read('es');
-    },
-    get fr() {
-      return read('fr');
-    },
-    get it() {
-      return read('it');
-    },
-    get pl() {
-      return read('pl');
     },
   };
 }

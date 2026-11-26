@@ -216,7 +216,7 @@ test('native error is paired with its actual engine depth and job', () => {
   expect(html).toContain('gnubg · 2 ply · job native-job');
   expect(html).toContain('0.040');
 });
-test('all six position catalogs preserve keys and arguments', () => {
+test('both position catalogs preserve keys and arguments', () => {
   const source = positionMessages.en;
   for (const catalog of Object.values(positionMessages)) {
     expect(Object.keys(catalog)).toEqual(Object.keys(source));

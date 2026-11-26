@@ -10,12 +10,9 @@ describe('decimal input', () => {
   it('uses the app language separator in every catalog language', () => {
     expect(
       Object.fromEntries(
-        ['en', 'de', 'es', 'fr', 'it', 'pl'].map((locale) => [
-          locale,
-          decimalSeparator(locale),
-        ]),
+        ['en', 'de'].map((locale) => [locale, decimalSeparator(locale)]),
       ),
-    ).toEqual({ en: '.', de: ',', es: ',', fr: ',', it: ',', pl: ',' });
+    ).toEqual({ en: '.', de: ',' });
   });
 
   it('shows stored values in the app language and stores typed text with a dot', () => {

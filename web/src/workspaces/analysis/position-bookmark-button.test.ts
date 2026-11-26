@@ -295,8 +295,8 @@ it('refetches after collection changes but not when the callback identity change
   expect(fetch).toHaveBeenCalledTimes(2);
 });
 
-it('provides complete explicit collection actions in all six languages', () => {
-  expect(Object.keys(positionBookmarkMessages)).toHaveLength(6);
+it('provides complete explicit collection actions in both languages', () => {
+  expect(Object.keys(positionBookmarkMessages)).toHaveLength(2);
   for (const catalog of Object.values(positionBookmarkMessages)) {
     expect(Object.keys(catalog)).toEqual(
       Object.keys(positionBookmarkMessages.en),

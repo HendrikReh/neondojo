@@ -21,10 +21,10 @@ it.each([
   'invalid_configuration',
   'internal_error',
 ])('translates the backend code %s without the server text', (code) => {
-  const texts = (['en', 'de', 'es', 'fr', 'it', 'pl'] as const).map((locale) =>
+  const texts = (['en', 'de'] as const).map((locale) =>
     configurationErrorText(locale, http(code)),
   );
-  expect(new Set(texts).size).toBe(6);
+  expect(new Set(texts).size).toBe(texts.length);
   for (const text of texts) expect(text).not.toContain('English server text');
 });
 

@@ -264,10 +264,6 @@ it('does not present full-match PR for an independently retained position', () =
 it.each([
   ['en', 'Length', 'Played', 'Event', 'PR White', 'PR Black', '4.8'],
   ['de', 'Länge', 'Gespielt', 'Event', 'PR Weiß', 'PR Schwarz', '4,8'],
-  ['es', 'Longitud', 'Jugado', 'Evento', 'PR Blancas', 'PR Negras', '4,8'],
-  ['fr', 'Longueur', 'Joué', 'Événement', 'PR Blancs', 'PR Noirs', '4,8'],
-  ['pl', 'Długość', 'Rozegrano', 'Wydarzenie', 'PR Białe', 'PR Czarne', '4,8'],
-  ['it', 'Lunghezza', 'Giocato', 'Evento', 'PR Bianchi', 'PR Neri', '4,8'],
 ] as const)(
   'localizes %s metadata labels and PR',
   (locale, length, played, event, white, black, pr) => {

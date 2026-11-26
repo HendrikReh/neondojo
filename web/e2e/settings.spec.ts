@@ -655,12 +655,8 @@ test('English default, alphabetical languages, draft cancellation, focus trap an
   expect(await languages.locator('option').allTextContents()).toEqual([
     'Deutsch',
     'English',
-    'Español',
-    'Français',
-    'Italiano',
-    'Polski',
   ]);
-  await languages.selectOption('fr');
+  await languages.selectOption('de');
   await dialog.getByLabel('Player name', { exact: true }).fill('Draft');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await dialog.getByRole('button', { name: 'Board', exact: true }).click();

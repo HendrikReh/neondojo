@@ -2,12 +2,12 @@ import { expect, it } from 'vitest';
 import { sourceText } from './analysis-source-messages';
 
 it.each([
-  [1, '1 kontekst wyniku'],
-  [3, '3 konteksty wyniku'],
-  [5, '5 kontekstów wyniku'],
-  [1000, '1000 kontekstów wyniku'],
-])('counts %s Polish score contexts', (count, expected) =>
-  expect(sourceText('pl', 'contextCount', { count })).toBe(expected),
+  [1, '1 Spielstandkontext'],
+  [3, '3 Spielstandkontexte'],
+  [5, '5 Spielstandkontexte'],
+  [1000, '1.000 Spielstandkontexte'],
+])('counts %s German score contexts', (count, expected) =>
+  expect(sourceText('de', 'contextCount', { count })).toBe(expected),
 );
 
 it('writes counts in the language number format', () => {

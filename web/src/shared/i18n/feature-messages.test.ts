@@ -21,7 +21,7 @@ it('retains every dynamic message argument in each annotation and learning langu
   expect(annotationText('de', 'commentCount', { count: 1234 })).toContain(
     '1.234',
   );
-  expect(annotationText('fr', 'removeTag', { tag: '<script>' })).toContain(
+  expect(annotationText('de', 'removeTag', { tag: '<script>' })).toContain(
     '<script>',
   );
 });

@@ -3650,7 +3650,7 @@ export interface components {
             tournament: string;
         };
         /** @enum {string} */
-        ConfigurationLocale: "de" | "en" | "es" | "fr" | "it" | "pl";
+        ConfigurationLocale: "de" | "en";
         /** @enum {string} */
         ConfigurationMode: "light" | "dark" | "system";
         ConfigurationPlay: {
@@ -4260,7 +4260,7 @@ export interface components {
         /** @enum {string} */
         EstimateUnavailableReason: "no_matching_benchmark" | "engine_unavailable" | "no_checker_moves";
         ExportQuery: {
-            locale?: string | null;
+            locale?: null | components["schemas"]["ConfigurationLocale"];
         };
         ExportRequest: {
             format: string;
@@ -8652,7 +8652,7 @@ export interface operations {
     export_deck: {
         parameters: {
             query?: {
-                locale?: string | null;
+                locale?: null | components["schemas"]["ConfigurationLocale"];
             };
             header?: never;
             path: {

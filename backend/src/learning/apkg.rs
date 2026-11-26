@@ -45,7 +45,7 @@ impl ExportCard {
 }
 pub(super) fn prepare(
     cards: Vec<(Uuid, CardContent, CardAnswer)>,
-    locale: &str,
+    locale: ConfigurationLocale,
 ) -> anyhow::Result<Vec<ExportCard>> {
     let labels = Labels::new(locale);
     cards
@@ -204,9 +204,9 @@ struct Labels {
     german_cube_actions: bool,
 }
 impl Labels {
-    fn new(locale: &str) -> Self {
+    fn new(locale: ConfigurationLocale) -> Self {
         let words = match locale {
-            "en" => [
+            ConfigurationLocale::En => [
                 "What is the best checker play?",
                 "Would you double or play on?",
                 "The cube has been offered. Take or pass?",
@@ -218,55 +218,7 @@ impl Labels {
                 "Cube",
                 "ply",
             ],
-            "es" => [
-                "¿Cuál es la mejor jugada?",
-                "¿Doblar o seguir jugando?",
-                "Te ofrecen el cubo. ¿Aceptar o pasar?",
-                "Mejor jugada",
-                "Jugada realizada",
-                "Notas",
-                "Motor",
-                "Marcador",
-                "Cubo",
-                "ply",
-            ],
-            "fr" => [
-                "Quel est le meilleur coup ?",
-                "Doubler ou continuer ?",
-                "Le videau est proposé. Prendre ou passer ?",
-                "Meilleur coup",
-                "Coup joué",
-                "Notes",
-                "Moteur",
-                "Score",
-                "Videau",
-                "pli",
-            ],
-            "pl" => [
-                "Jaki jest najlepszy ruch?",
-                "Podwoić czy grać dalej?",
-                "Zaproponowano podwojenie. Przyjąć czy spasować?",
-                "Najlepszy ruch",
-                "Zagrano",
-                "Notatki",
-                "Silnik",
-                "Wynik",
-                "Kostka",
-                "ply",
-            ],
-            "it" => [
-                "Qual è la mossa migliore?",
-                "Raddoppiare o continuare?",
-                "È stato offerto il cubo. Accettare o passare?",
-                "Mossa migliore",
-                "Mossa giocata",
-                "Note",
-                "Motore",
-                "Punteggio",
-                "Cubo",
-                "ply",
-            ],
-            _ => [
+            ConfigurationLocale::De => [
                 "Was ist der beste Zug?",
                 "Doppeln oder weiterspielen?",
                 "Der Doppler wurde angeboten. Annehmen oder passen?",
@@ -290,7 +242,7 @@ impl Labels {
             score: words[7],
             cube: words[8],
             ply: words[9],
-            german_cube_actions: locale == "de",
+            german_cube_actions: locale == ConfigurationLocale::De,
         }
     }
 
@@ -514,7 +466,7 @@ mod tests {
         deck: Uuid,
         name: &str,
         cards: &[(Uuid, CardContent, CardAnswer)],
-        locale: &str,
+        locale: ConfigurationLocale,
     ) -> anyhow::Result<Vec<u8>> {
         build(deck, name, &prepare(cards.to_vec(), locale)?)
     }
@@ -581,7 +533,7 @@ mod tests {
             content.position.gnubg_match_id = match_id.clone();
             cards.push((Uuid::new_v4(), content.clone(), answer.clone()));
         }
-        let bytes = sample_build(id, "Black decisions", &cards, "en").unwrap();
+        let bytes = sample_build(id, "Black decisions", &cards, ConfigurationLocale::En).unwrap();
         let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
         for index in 0..3 {
             let mut svg = String::new();
@@ -660,7 +612,7 @@ mod tests {
             played: content.played.clone(),
         };
         let cards = vec![(id, content.clone(), answer.clone())];
-        let bytes = sample_build(deck, "Practice", &cards, "de").unwrap();
+        let bytes = sample_build(deck, "Practice", &cards, ConfigurationLocale::De).unwrap();
         let imported = crate::learning::anki_import::read_package(&bytes).unwrap();
         assert_eq!(imported.len(), 1);
         assert_eq!(card_signature(&imported[0].0), card_signature(&content));
@@ -694,9 +646,13 @@ mod tests {
                 .remove(0)
                 .match_id;
         assert!(
-            question(&jacoby_card, "board.svg", &Labels::new("de"))
-                .unwrap()
-                .contains("Jacoby ✓")
+            question(
+                &jacoby_card,
+                "board.svg",
+                &Labels::new(ConfigurationLocale::De)
+            )
+            .unwrap()
+            .contains("Jacoby ✓")
         );
         assert!(!fields.split('\x1f').nth(1).unwrap().contains("8/5 6/5"));
         for (kind, best, played, expected_best, expected_played) in [
@@ -735,8 +691,10 @@ mod tests {
                 tags: vec![],
             };
             let cards = vec![(id, cube, answer)];
-            let german = prepare(cards.clone(), "de").unwrap().remove(0);
-            let english = prepare(cards, "en").unwrap().remove(0);
+            let german = prepare(cards.clone(), ConfigurationLocale::De)
+                .unwrap()
+                .remove(0);
+            let english = prepare(cards, ConfigurationLocale::En).unwrap().remove(0);
             assert!(
                 german.fields.contains(&format!(
                     "<p class=\"best\">Bester Zug: {expected_best}</p><p>Gespielt: {expected_played}</p>"
@@ -771,7 +729,8 @@ mod tests {
                 .unwrap(),
             0
         );
-        let bytes = sample_build(deck, "Practice renamed", &cards, "en").unwrap();
+        let bytes =
+            sample_build(deck, "Practice renamed", &cards, ConfigurationLocale::En).unwrap();
         let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
         let mut db = Vec::new();
         zip.by_name("collection.anki2")
@@ -789,7 +748,7 @@ mod tests {
         if let Ok(output) = std::env::var("NEONDOJO_TEST_APKG") {
             std::fs::write(
                 output,
-                sample_build(deck, "Practice", &cards, "de").unwrap(),
+                sample_build(deck, "Practice", &cards, ConfigurationLocale::De).unwrap(),
             )
             .unwrap();
         }

@@ -24,7 +24,7 @@ macro_rules! string_enum {
         pub enum $name { $(#[serde(rename=$value)] $variant),+ }
     };
 }
-string_enum!(ConfigurationLocale { De=>"de", En=>"en", Es=>"es", Fr=>"fr", It=>"it", Pl=>"pl" });
+string_enum!(ConfigurationLocale { De=>"de", En=>"en" });
 string_enum!(ConfigurationEngine { Gnubg=>"gnubg", OpenSage=>"bgsage" });
 
 impl From<&ConfigurationEngine> for crate::engines::EngineId {

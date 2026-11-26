@@ -16,30 +16,6 @@ const labels = {
     'Spanne',
     'Initialisierung',
   ],
-  es: [
-    'Comparación · mediana de 3 ejecuciones',
-    'Mediana',
-    'Rango',
-    'Inicialización',
-  ],
-  fr: [
-    'Comparaison · médiane de 3 mesures',
-    'Médiane',
-    'Étendue',
-    'Initialisation',
-  ],
-  it: [
-    'Confronto · mediana di 3 esecuzioni',
-    'Mediana',
-    'Intervallo',
-    'Inizializzazione',
-  ],
-  pl: [
-    'Porównanie · mediana z 3 pomiarów',
-    'Mediana',
-    'Zakres',
-    'Inicjalizacja',
-  ],
 };
 export default function BenchmarkComparison({
   runs,

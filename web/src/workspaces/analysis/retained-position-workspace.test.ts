@@ -233,10 +233,6 @@ it('provides the loaded game as the observed-roll source', () => {
 it.each([
   ['en', 'Original match removed; saved position retained'],
   ['de', 'Originalmatch gelöscht; gemerkte Position bleibt erhalten'],
-  ['es', 'Match original eliminado; posición guardada conservada'],
-  ['fr', 'Match original supprimé ; position enregistrée conservée'],
-  ['pl', 'Oryginalny mecz usunięty; zapisana pozycja zachowana'],
-  ['it', 'Match originale eliminato; posizione salvata conservata'],
 ] as const)('explains retained context in %s', (locale, text) => {
   expect(render('overview', false, locale)).toContain(text);
 });

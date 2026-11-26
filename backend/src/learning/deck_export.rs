@@ -6,10 +6,7 @@ pub(super) async fn build_deck_package(
     query: ExportQuery,
 ) -> ApiResult<Vec<u8>> {
     static EXPORTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
-    let locale = query.locale.unwrap_or_else(|| "de".into());
-    if !["de", "en", "es", "fr", "pl", "it"].contains(&locale.as_str()) {
-        return Err(ApiError::invalid("Unsupported export locale"));
-    }
+    let locale = query.locale.unwrap_or(ConfigurationLocale::De);
     let permit = EXPORTS.try_acquire().map_err(|_| {
         ApiError(
             StatusCode::TOO_MANY_REQUESTS,
@@ -69,7 +66,7 @@ pub(super) async fn build_deck_package(
         cards.push((row.id, c, a));
     }
     let (mut prepared, permit) = tokio::task::spawn_blocking(move || {
-        apkg::prepare(cards, &locale).map(|prepared| (prepared, permit))
+        apkg::prepare(cards, locale).map(|prepared| (prepared, permit))
     })
     .await
     .map_err(anyhow::Error::from)??;

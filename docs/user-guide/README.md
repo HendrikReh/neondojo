@@ -710,7 +710,7 @@ Select the gear in the header. Choose a category on the left. **Apply** saves yo
 
 <table>
 <tr>
-<td width="50%"><img src="images/settings-general.webp" alt="Settings: General"><br><b>General</b>: the app language (Deutsch, English, Español, Français, Italiano, Polski), your player name for new games, and <b>My player profile</b>, the virtual profile that stands for you.</td>
+<td width="50%"><img src="images/settings-general.webp" alt="Settings: General"><br><b>General</b>: the app language (Deutsch or English), your player name for new games, and <b>My player profile</b>, the virtual profile that stands for you.</td>
 <td width="50%"><img src="images/settings-appearance.webp" alt="Settings: Appearance"><br><b>Appearance</b>: the <i>Graphite</i>, <i>Club</i> or <i>Paper</i> theme with <i>Light</i>, <i>Dark</i> or <i>System</i> mode, with a live preview.</td>
 </tr>
 <tr>

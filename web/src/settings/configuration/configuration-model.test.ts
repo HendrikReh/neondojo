@@ -8,6 +8,24 @@ import {
 import vectors from '../../../../tests/fixtures/configuration-normalization.json';
 
 describe('configuration comparison', () => {
+  it.each(['es', 'fr', 'it', 'pl'])(
+    'loads cached settings in English for retired locale %s',
+    (locale) => {
+      const expected = structuredClone(defaultConfiguration);
+      expected.general = {
+        ...expected.general,
+        player_name: 'Ada',
+        locale: 'en',
+      };
+      expect(
+        normalizeConfiguration({
+          ...expected,
+          general: { ...expected.general, locale },
+        }),
+      ).toEqual(normalizeConfiguration(expected));
+    },
+  );
+
   it('defaults legacy profiles to the four analysis thresholds', () => {
     expect(
       normalizeConfiguration(vectors.base).analysis.error_thresholds,

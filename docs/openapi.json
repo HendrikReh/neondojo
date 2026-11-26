@@ -3173,9 +3173,13 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": [
-                "string",
-                "null"
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigurationLocale"
+                }
               ]
             }
           }
@@ -15562,11 +15566,7 @@
         "type": "string",
         "enum": [
           "de",
-          "en",
-          "es",
-          "fr",
-          "it",
-          "pl"
+          "en"
         ]
       },
       "ConfigurationMode": {
@@ -17474,9 +17474,13 @@
         "type": "object",
         "properties": {
           "locale": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConfigurationLocale"
+              }
             ]
           }
         }

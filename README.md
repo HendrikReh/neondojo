@@ -15,7 +15,7 @@
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](docs/development/api.md)
 [![GNUbg 1.08.003](https://img.shields.io/badge/GNUbg-1.08.003-6F42C1)](#requirements)
 [![NeonGammon 3.2.1 optional](https://img.shields.io/badge/NeonGammon-3.2.1%20optional-8250DF)](docs/open-sage-local.md)
-[![Languages: 6](https://img.shields.io/badge/languages-EN%20%7C%20DE%20%7C%20ES%20%7C%20FR%20%7C%20IT%20%7C%20PL-0969DA)](docs/reference/settings.md#interface-appearance-and-language)
+[![Languages: 2](https://img.shields.io/badge/languages-EN%20%7C%20DE-0969DA)](docs/reference/settings.md#interface-appearance-and-language)
 
 NeonDojo is a local backgammon study app for Apple Silicon Macs. Import your matches, find positions in your library, and practice decisions you missed. You can review checker plays and cube decisions with GNU Backgammon (GNUbg) or install [NeonGammon](https://github.com/HendrikReh/neongammon) as a second engine. NeonDojo shows the engine’s analysis alongside your moves and lets you play matches against either engine.
 

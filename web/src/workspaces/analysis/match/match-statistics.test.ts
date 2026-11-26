@@ -233,7 +233,7 @@ it('renders native source, partial coverage, precise games and missing legacy ga
   expect(html).not.toContain('>0.000<');
 });
 
-it('provides every statistics message and parameter in all six languages', () => {
+it('provides every statistics message and parameter in both languages', () => {
   const source = statisticsMessages.en;
   for (const catalog of Object.values(statisticsMessages)) {
     expect(Object.keys(catalog).sort()).toEqual(Object.keys(source).sort());

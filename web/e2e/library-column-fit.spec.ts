@@ -142,7 +142,7 @@ for (const [width, height] of [
   [1800, 1169],
   [2560, 1440],
 ]) {
-  for (const locale of ['en', 'de', 'es', 'fr', 'it', 'pl']) {
+  for (const locale of ['en', 'de']) {
     test(`automatic library columns fit their text in ${locale} at ${width}×${height}`, async ({
       page,
     }) => {

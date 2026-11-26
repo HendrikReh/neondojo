@@ -6,6 +6,8 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+- NeonDojo now supports German and English. Profiles and browser settings saved with a retired language open in English.
+
 ## [1.4.2] - 2026-11-26
 
 - Adds six original board finishes with matching marbled checker sets.
