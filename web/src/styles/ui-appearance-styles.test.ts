@@ -55,8 +55,12 @@ it('retains the original board and checker palette independently of interface to
   expect(boardPreviewCss).toContain('fill: #28be68');
 });
 
-/** Custom properties that components set inline from measured geometry. */
+/** Custom properties that components set inline. */
 const runtimeProperties = [
+  '--analysis-board-width',
+  '--analysis-viewport-space',
+  '--card-preview-width',
+  '--frame-fill',
   '--move-from-x',
   '--move-from-y',
   '--move-to-x',
@@ -75,7 +79,7 @@ function sources(extensions: string[]) {
     }));
 }
 
-it('defines every custom property that a stylesheet reads without a fallback', () => {
+it('defines every custom property that a stylesheet reads', () => {
   const stylesheets = sources(['.css']).map(({ path, text }) => ({
     path,
     // Keep line numbers while ignoring commented-out declarations.
@@ -89,7 +93,7 @@ it('defines every custom property that a stylesheet reads without a fallback', (
     ),
   );
   const undefinedReads = stylesheets.flatMap(({ path, text }) =>
-    [...text.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)]
+    [...text.matchAll(/var\(\s*(--[\w-]+)\s*(?:,|\))/g)]
       .filter(
         ([, name]) =>
           name !== undefined &&

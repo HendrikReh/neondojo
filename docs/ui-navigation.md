@@ -481,7 +481,7 @@ The selected tab names the tool, so the tools show no separate page title; each
 keeps its heading for assistive technology.
 
 Benchmark uses one engine selector for **Match analysis** and **Play-turn
-latency**, which share a segmented switch below it. Each engine keeps its own
+latency**, which use compact text navigation below it. Each engine keeps its own
 depth selections while the app is open.
 The selected measurement type determines the setup, result columns and
 comparison. Active runs remain visible across both measurement types.

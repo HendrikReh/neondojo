@@ -1,20 +1,20 @@
 .study-match-report {
-  padding: var(--space-4, 16px);
+  padding: 16px;
   min-width: 0;
 }
 .study-match-report-heading {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: var(--space-4, 16px);
-  margin-block-end: var(--space-4, 16px);
+  gap: 16px;
+  margin-block-end: 16px;
 }
 .study-match-report-heading h1,
 .study-match-report-heading p {
   margin: 0;
 }
 .study-match-report-tabs {
-  margin-block-end: var(--space-4, 16px);
+  margin-block-end: 16px;
 }
 .match-assessment-context {
   color: var(--ui-muted);
@@ -22,7 +22,7 @@
 .match-assessment-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-5, 24px);
+  gap: 24px;
   align-items: start;
 }
 .match-assessment-text {
@@ -34,7 +34,7 @@
 .match-assessment-topics {
   display: grid;
   grid-template-columns: minmax(9rem, auto) minmax(0, 1fr);
-  gap: var(--space-2, 8px) var(--space-4, 16px);
+  gap: 8px 16px;
   line-height: 1.5;
 }
 .match-assessment-topics > div {
@@ -47,10 +47,10 @@
   margin: 0;
 }
 .match-assessment-reference {
-  margin-inline-start: var(--space-2, 8px);
+  margin-inline-start: 8px;
 }
 .match-assessment-text article {
-  margin-block-end: var(--space-4, 16px);
+  margin-block-end: 16px;
 }
 .match-assessment-preview {
   min-inline-size: 0;
@@ -61,11 +61,11 @@
   }
   .match-assessment-preview {
     position: sticky;
-    top: var(--space-4, 16px);
+    top: 16px;
   }
 }
 
 .match-assessment-preview .learning-preview-return {
   display: inline-flex;
-  margin-block-start: var(--space-2, 8px);
+  margin-block-start: 8px;
 }

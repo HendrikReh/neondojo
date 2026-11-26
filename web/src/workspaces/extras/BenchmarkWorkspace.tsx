@@ -355,7 +355,11 @@ export default function BenchmarkWorkspace({
         </label>
         {!engine && engines.length > 0 && <p role="status">{t('noEngine')}</p>}
       </div>
-      <div className="benchmark-modes" role="group" aria-label={t('mode')}>
+      <div
+        className="benchmark-modes text-navigation text-navigation--compact"
+        role="group"
+        aria-label={t('mode')}
+      >
         <button
           type="button"
           aria-pressed={!play}

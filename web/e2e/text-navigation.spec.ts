@@ -93,6 +93,39 @@ async function activeText(item: Locator, color: string) {
   await expect(item).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(item).toHaveCSS('border-bottom-color', color);
 }
+for (const theme of ['graphite', 'club', 'paper']) {
+  for (const mode of ['light', 'dark']) {
+    test(`Benchmark mode buttons use the shared navigation in ${theme} ${mode}`, async ({
+      page,
+    }) => {
+      await fixture(page, theme, mode);
+      const color = await accent(page);
+      await page.getByRole('tab', { name: 'Extras', exact: true }).click();
+      const switcher = page.getByRole('group', { name: 'Measurement type' });
+      const analysis = switcher.getByRole('button', { name: 'Match analysis' });
+      const play = switcher.getByRole('button', { name: 'Play-turn latency' });
+      await expect(analysis).toHaveAttribute('aria-pressed', 'true');
+      await activeText(analysis, color);
+
+      await analysis.focus();
+      await page.keyboard.press('Tab');
+      await expect(play).toBeFocused();
+      await expect(play).toHaveCSS('outline-color', color);
+      await page.keyboard.press('Enter');
+      await expect(play).toHaveAttribute('aria-pressed', 'true');
+      await expect(analysis).toHaveAttribute('aria-pressed', 'false');
+      await expect(page.getByLabel('Playing depth')).toBeVisible();
+      await activeText(play, color);
+
+      await page.keyboard.press('Shift+Tab');
+      await expect(analysis).toBeFocused();
+      await page.keyboard.press('Space');
+      await expect(analysis).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.getByLabel('Playing depth')).toHaveCount(0);
+    });
+  }
+}
+
 // Themes only change colour tokens; ui-themes.spec.ts checks the literal
 // palettes. One light and one dark palette cover the underline rules.
 for (const [theme, mode] of [
