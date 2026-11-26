@@ -1,5 +1,6 @@
 import type { components } from '../src/generated-api';
 import {
+  fulfillJson,
   mockSettings,
   mockEngineCatalog,
   settingsFixture,
@@ -66,7 +67,7 @@ async function settingsBackend(
   });
   await mockEngineCatalog(page);
   await page.route('**/api/engines/gnubg/check', (route) =>
-    route.fulfill({ status: 422, json: { error: 'Executable not found' } }),
+    fulfillJson<'ErrorBody'>(route, { error: 'Executable not found' }, 422),
   );
   return {
     writes,
@@ -311,25 +312,26 @@ for (const { version, supported, onePly, verified } of [
     await page.route('**/api/engines/bgsage', (route) => {
       if (route.request().method() === 'PUT') {
         if (!available)
-          return route.fulfill({
-            status: 422,
-            json: { error: 'Python not found' },
-          });
-        savedPath = route.request().postDataJSON().path;
+          return fulfillJson<'ErrorBody'>(
+            route,
+            { error: 'Python not found' },
+            422,
+          );
+        const request: components['schemas']['InstallationRequest'] =
+          route.request().postDataJSON();
+        savedPath = request.path;
       }
-      return route.fulfill({
-        json: {
-          version: 7,
-          python_path: savedPath,
-          snapshot: {
-            python: savedPath,
-            package_version: version,
-            plies: 2,
-            threads: 4,
-            adapter_version: 1,
-            artifact_fingerprint: 'a'.repeat(64),
-            one_ply_verified: savedPath === python ? onePly : false,
-          },
+      return fulfillJson<'Installation'>(route, {
+        version: 7,
+        python_path: savedPath,
+        snapshot: {
+          python: savedPath,
+          package_version: version,
+          plies: 2,
+          threads: 4,
+          adapter_version: 1,
+          artifact_fingerprint: 'a'.repeat(64),
+          one_ply_verified: savedPath === python ? onePly : false,
         },
       });
     });
@@ -453,13 +455,17 @@ test('an edited NeonGammon path stays in the draft until verified or discarded',
   let attempts = 0;
   await page.route('**/api/engines/bgsage', (route) => {
     if (route.request().method() === 'GET') {
-      return route.fulfill({ json: { version: 2, python_path: original } });
+      return fulfillJson<'Installation'>(route, {
+        version: 2,
+        python_path: original,
+      });
     }
     attempts++;
-    return route.fulfill({
-      status: 422,
-      json: { error: 'NeonGammon probe failed' },
-    });
+    return fulfillJson<'ErrorBody'>(
+      route,
+      { error: 'NeonGammon probe failed' },
+      422,
+    );
   });
   await page.goto('/');
   const { dialog } = await openSettings(page);

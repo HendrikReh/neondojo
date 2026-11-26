@@ -1,5 +1,5 @@
 import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
-import { mockEngineCatalog } from './api-fixtures';
+import { fulfillJson, mockEngineCatalog } from './api-fixtures';
 import { profileBackend } from './profile-backend';
 import { expect, test } from './test';
 
@@ -64,7 +64,7 @@ test('short workspaces keep the status bar at the bottom and follow the configur
   await expect(footer.locator('.status-dot')).not.toHaveClass(/ready/);
   await tab('Playing').click();
   await page.route('**/api/engines', (route) =>
-    route.fulfill({ status: 503, json: { error: 'Unavailable' } }),
+    fulfillJson<'ErrorBody'>(route, { error: 'Unavailable' }, 503),
   );
   await tab('Study').click();
   await expect(footer).toContainText('Could not check NeonGammon');

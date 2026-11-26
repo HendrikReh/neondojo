@@ -1,3 +1,4 @@
+import { mockEngineCatalog } from './api-fixtures';
 import { expect, test, type Page } from './test';
 
 const databaseId = '00000000-0000-0000-0000-000000000001';
@@ -141,26 +142,24 @@ test('tracks selected matches after closing the dialog and reloading the page', 
     match_uuid: id,
     status: jobs.get(id),
   });
-  await page.route('**/api/engines', (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: 'gnubg',
-          name: 'GNUbg',
-          available: true,
-          version: '1',
-          plies: [1, 3],
-        },
-        {
-          id: 'bgsage',
-          name: 'NeonGammon',
-          available: true,
-          version: '1',
-          plies: [2, 4],
-        },
-      ],
-    }),
-  );
+  await mockEngineCatalog(page, () => [
+    {
+      id: 'gnubg',
+      max_parallel_threads: 7,
+      name: 'GNUbg',
+      available: true,
+      version: '1',
+      plies: [1, 3],
+    },
+    {
+      id: 'bgsage',
+      max_parallel_threads: 9,
+      name: 'NeonGammon',
+      available: true,
+      version: '1',
+      plies: [2, 4],
+    },
+  ]);
   await page.route(/\/api\/matches\/[^/]+\/analysis$/, async (route) => {
     const id = new URL(route.request().url()).pathname.split('/')[3];
     submissions.push({ id, body: route.request().postDataJSON() });

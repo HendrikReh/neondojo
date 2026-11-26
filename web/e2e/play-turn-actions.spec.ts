@@ -1,3 +1,4 @@
+import { mockEngineCatalog } from './api-fixtures';
 import { test, expect } from './test';
 import { historyFixture } from './play-history-review-helpers';
 import { botDice, playMenuItem, resignGame } from './play-board-actions';
@@ -170,14 +171,10 @@ test('the setup dialog overlays the match and sends this match’s name, engine 
   page,
 }) => {
   const { saved } = await historyFixture(page);
-  await page.route('**/api/engines', (route) =>
-    route.fulfill({
-      json: [
-        { id: 'gnubg', name: 'GNUbg', available: true, plies: [1, 2, 3] },
-        { id: 'bgsage', name: 'NeonGammon', available: true, plies: [1, 2] },
-      ],
-    }),
-  );
+  await mockEngineCatalog(page, () => [
+    { id: 'gnubg', name: 'GNUbg', available: true, plies: [1, 2, 3] },
+    { id: 'bgsage', name: 'NeonGammon', available: true, plies: [1, 2] },
+  ]);
   const created: unknown[] = [];
   await page.route('**/api/play/sessions', (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
