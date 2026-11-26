@@ -311,8 +311,8 @@ export default function Board({
           />
           {interaction && <BoardPlayTargets interaction={interaction} />}
           <PlayCube
-            transform={`translate(328,${cubeOwner === null ? 223 : cubeOwner === 0 ? 365 : 81})`}
-            bounds={{ x: 0, y: 0, width: 24, height: 24 }}
+            transform={`translate(325,${cubeOwner === null ? 220 : cubeOwner === 0 ? 362 : 78})`}
+            bounds={{ x: 0, y: 0, width: 30, height: 30 }}
             label={cubeLabel}
             interaction={interaction?.cube}
             value={displayedCube}

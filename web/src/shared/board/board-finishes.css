@@ -121,3 +121,15 @@
 .player-dot.piece-marker.white {
   background: var(--white);
 }
+
+.cube-numeral {
+  font-family: 'Avenir Next Condensed', 'Arial Narrow', sans-serif;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-weight: 600;
+  fill: #f5f4eb;
+}
+
+:is(.theme-forest, .theme-walnut, .theme-viridian, .theme-terra-rossa)
+  > .cube-numeral {
+  fill: #342b24;
+}

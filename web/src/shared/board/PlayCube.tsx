@@ -1,5 +1,12 @@
 import { cubeImage, type PieceSet } from './piece-artwork';
 
+// The recessed faces share one material image per set, at every cube value.
+const cubeBodies = import.meta.glob<string>('./cubes/*.webp', {
+  eager: true,
+  import: 'default',
+  query: '?url&no-inline',
+});
+
 export interface CubeInteraction {
   activate?: () => void;
   label: string;
@@ -28,6 +35,10 @@ export default function PlayCube({
   onError?: () => void;
 }) {
   const face = cubeImage(artwork.archive, value, owner, pending);
+  const number = String(value === 1 ? 64 : value);
+  const body =
+    cubeBodies[`./cubes/${artwork.id}.webp`] ??
+    cubeBodies['./cubes/slate.webp'];
   return (
     <g
       transform={transform}
@@ -59,27 +70,19 @@ export default function PlayCube({
         ) : (
           <svg
             {...bounds}
-            viewBox="0 0 24 24"
+            viewBox="0 0 100 100"
             className={`theme-${artwork.id}`}
           >
-            <rect
-              x=".5"
-              y=".5"
-              width="23"
-              height="23"
-              rx="3"
-              fill="var(--white)"
-              stroke="var(--black)"
-            />
+            <image href={body} width="100" height="100" onError={onError} />
             <text
-              x="12"
-              y="16.5"
+              className="cube-numeral"
+              x="50"
+              y="49"
+              dominantBaseline="central"
               textAnchor="middle"
-              fontSize={value >= 100 ? 9 : 13}
-              fill="var(--black)"
-              fontWeight="600"
+              fontSize={Math.min(62, 144 / number.length)}
             >
-              {value === 1 ? '64' : value}
+              {number}
             </text>
           </svg>
         )}

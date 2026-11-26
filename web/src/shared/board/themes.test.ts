@@ -53,9 +53,9 @@ it('fits five separate checkers on points, bars and off trays and keeps a clear 
             point === -1 || point === 25 || (point >= 1 && point <= 12);
           const top = stack.y - (bottom ? 4 * stack.step : 0);
           const end = top + stack.height + 4 * stack.step;
-          expect(stack.step - stack.height).toBeGreaterThan(
-            stack.height * 0.03,
-          );
+          const gap = stack.step - stack.height;
+          expect(gap).toBeGreaterThan(0);
+          expect(gap / stack.height).toBeLessThanOrEqual(0.015);
           expect(top).toBeGreaterThan(0);
           expect(end).toBeLessThan(height);
           if (bottom) expect(top).toBeGreaterThan(height * 0.54);

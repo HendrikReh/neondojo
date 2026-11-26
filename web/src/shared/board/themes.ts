@@ -61,6 +61,10 @@ export const pointColumns = [
   })),
 ];
 
+// X22 stacks sit almost edge to edge. Keep a hairline between checker slots
+// at every board scale, including when a different piece set is selected.
+const checkerGapRatio = 0.01;
+
 export function stackGeometry(
   theme: BgBlitzTheme,
   image: ThemeImage,
@@ -73,10 +77,9 @@ export function stackGeometry(
   const inset = theme.background.width * 0.028 + theme.checkerOffsetY;
   // Leave the middle lane free for dice and the centered cube. Size the
   // checker once for five separated slots, even when only one is occupied.
-  const gap = image.height * 0.05;
   const height = Math.min(
     image.height,
-    (theme.background.height * 0.45 - inset - 4 * gap) / 5,
+    (theme.background.height * 0.45 - inset) / (5 + 4 * checkerGapRatio),
   );
   const width = (image.width * height) / image.height;
   return {
@@ -84,13 +87,13 @@ export function stackGeometry(
     y: bottom ? theme.background.height - inset - height : inset,
     width,
     height,
-    step: height + gap,
+    step: height * (1 + checkerGapRatio),
     visible: Math.min(5, Math.abs(count)),
     total: Math.abs(count),
   };
 }
 
-export const nativeCheckerSize = 32;
+const nativeCheckerSize = 34;
 
 export function nativePointX(index: number) {
   return 40 + index * 51 + (index >= 6 ? 28 : 0);
@@ -120,7 +123,7 @@ export function pointStackGeometry(
     y: bottom ? 470 - 41 - nativeCheckerSize : 41,
     width: nativeCheckerSize,
     height: nativeCheckerSize,
-    step: nativeCheckerSize + 3,
+    step: nativeCheckerSize * (1 + checkerGapRatio),
     visible: Math.min(5, Math.abs(count)),
     total: Math.abs(count),
     bottom,

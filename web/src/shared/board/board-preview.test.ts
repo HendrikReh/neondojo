@@ -2,6 +2,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import Board from './Board';
+import PlayCube from './PlayCube';
 import { I18nProvider } from '../i18n/i18n';
 import { moveArrowGeometry } from './MoveArrows';
 import { projectMove, type BoardView } from './move-preview';
@@ -48,6 +49,33 @@ const render = (
       }),
     }),
   );
+
+test('each built-in cube uses its own body and labels centered, offered and high-value faces', () => {
+  for (const { id } of builtInThemes) {
+    for (const [value, owner, pending, numeral] of [
+      [1, null, false, '64'],
+      [2, null, true, '2'],
+      [128, 1, false, '128'],
+    ] as const) {
+      const html = renderToStaticMarkup(
+        createElement(
+          'svg',
+          null,
+          createElement(PlayCube, {
+            label: 'Doubling cube',
+            artwork: { id },
+            value,
+            owner,
+            pending,
+            bounds: { x: 0, y: 0, width: 30, height: 30 },
+          }),
+        ),
+      );
+      expect(html).toContain(`/cubes/${id}.webp`);
+      expect(html).toContain(`>${numeral}</text>`);
+    }
+  }
+});
 
 test('retains the existing board when no preview props are supplied', () => {
   const html = render(position(), 'forest');
