@@ -6,7 +6,7 @@ use super::{
 use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    engine::{Engine, GnubgMoveFilter, resolve_binary},
+    engine::{Engine, GnubgMoveFilter, resolve_binary_async},
     engines::EngineId,
     store,
 };
@@ -102,6 +102,12 @@ fn compatible(run: &BenchmarkRun, machine: &Machine, move_filter: Option<GnubgMo
         && (average - expected_average).abs() <= expected_average.abs() * 1e-9
 }
 
+async fn legacy_game_in_scope(sgf: String, game_no: i32) -> anyhow::Result<bool> {
+    let count =
+        tokio::task::spawn_blocking(move || crate::match_analysis::game_count(&sgf)).await??;
+    Ok((1..=count).contains(&game_no))
+}
+
 #[utoipa::path(get,path="/api/matches/{id}/analysis/estimate",params(("id"=Uuid,Path),EstimateQuery),responses((status=200,body=AnalysisTimeEstimate),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
 async fn estimate(
     State(state): State<AppState>,
@@ -139,13 +145,13 @@ async fn estimate(
         ));
     };
     if let Some(game_no) = query.game_no {
-        let mut games: Vec<i32> =
+        let games: Vec<i32> =
             sqlx::query_scalar("SELECT game_no FROM match_games WHERE match_uuid=$1")
                 .bind(id)
                 .fetch_all(&state.pool)
                 .await
                 .map_err(anyhow::Error::from)?;
-        if games.is_empty() {
+        let in_scope = if games.is_empty() {
             // Legacy matches may not have a catalog yet. Read their SGF tree
             // count without invoking the metadata-backfilling store helper.
             let sgf: Option<String> = sqlx::query_scalar("SELECT sgf FROM matches WHERE id=$1")
@@ -154,9 +160,11 @@ async fn estimate(
                 .await
                 .map_err(anyhow::Error::from)?;
             let sgf = sgf.ok_or_else(ApiError::missing)?;
-            games = (1..=crate::match_analysis::game_count(&sgf)?).collect();
-        }
-        if !games.contains(&game_no) {
+            legacy_game_in_scope(sgf, game_no).await?
+        } else {
+            games.contains(&game_no)
+        };
+        if !in_scope {
             return Err(ApiError::invalid("game_no is outside this match"));
         }
     }
@@ -195,8 +203,9 @@ async fn estimate(
                 // Starting a worker here would replace the cached one and, at
                 // 4-ply, run an evaluation longer than this read may take; the
                 // worker rechecks the installation when the analysis starts.
-                std::path::Path::new(engine.binary())
-                    .is_file()
+                tokio::fs::metadata(engine.binary())
+                    .await
+                    .is_ok_and(|metadata| metadata.is_file())
                     .then(|| engine.saved_version().map(str::to_owned))
                     .flatten()
                     .map(|v| (engine.binary().to_owned(), v))
@@ -205,7 +214,7 @@ async fn estimate(
             }
         }
         EngineId::Gnubg => {
-            if let Ok(path) = resolve_binary(&binary) {
+            if let Ok(path) = resolve_binary_async(&binary).await {
                 let version = match running_engine_version(&state.pool, &path).await? {
                     Some(version) => Some(version),
                     None => tokio::time::timeout(
@@ -304,6 +313,26 @@ mod tests {
     use http_body_util::BodyExt;
     use std::os::unix::fs::PermissionsExt;
     use tower::ServiceExt;
+
+    #[test]
+    fn legacy_game_validation_yields_while_sgf_parsing_is_queued() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .max_blocking_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
+        runtime.block_on(async {
+            let (release, wait) = tokio::sync::oneshot::channel::<()>();
+            let blocker = tokio::task::spawn_blocking(move || wait.blocking_recv());
+            let scope = legacy_game_in_scope("(;GM[6])(;GM[6])".into(), 2);
+            tokio::pin!(scope);
+            assert!(futures_util::poll!(&mut scope).is_pending());
+            release.send(()).unwrap();
+            blocker.await.unwrap().unwrap();
+            assert!(scope.await.unwrap());
+            assert!(!legacy_game_in_scope("(;GM[6])".into(), 2).await.unwrap());
+        });
+    }
 
     async fn get_estimate(state: &AppState, id: Uuid) -> serde_json::Value {
         let response = crate::api::router(state.clone())

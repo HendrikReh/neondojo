@@ -1,7 +1,7 @@
 //! Retain GNUbg for one atomic play action chain or one seeded duel game.
 use super::{NativeRequest, NativeSnapshot, engine_match::GameDice};
 use crate::{
-    engine::{Engine, Installation},
+    engine::{Engine, EngineWorkspace, Installation},
     engine_process::terminate_and_reap,
 };
 use anyhow::{Context, Result, ensure};
@@ -16,7 +16,7 @@ const FRAME_LIMIT: usize = 65536;
 const TIMEOUT: Duration = Duration::from_secs(180);
 
 pub(super) struct RulesProcess {
-    directory: tempfile::TempDir,
+    directory: EngineWorkspace,
     engine: Engine,
     /// Checked before startup and again before commit.
     installation: Installation,
@@ -52,7 +52,7 @@ impl RulesProcess {
         sgf: Option<&str>,
         dice: Option<&GameDice>,
     ) -> Result<Self> {
-        let directory = tempfile::tempdir()?;
+        let directory = EngineWorkspace::new().await?;
         let command = "load python rules_worker.py\n";
         let (commands, threads, action_limit) = if let Some(dice) = dice {
             tokio::fs::write(directory.path().join("dice.txt"), dice.rng_file()?).await?;
@@ -327,32 +327,58 @@ time.sleep(60)
         .expect("Rule child must be killed and reaped");
     }
 
+    async fn assert_workspace_removed(path: &std::path::Path) {
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while tokio::fs::try_exists(path).await.unwrap() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("engine workspace must be removed");
+    }
+
     #[tokio::test]
     async fn invalid_frames_discard_and_reap_rule_process() {
         for mode in ["wrong", "oversize", "malformed", "exit"] {
             let (directory, engine) = fake(mode);
             crate::engine::with_shared_access(async {
                 let process = RulesProcess::start(&engine, None).await.unwrap();
+                let workspace = process.directory.path().to_owned();
                 assert!(process.execute(&request()).await.is_err(), "{mode}");
                 assert_reaped(&directory).await;
+                assert_workspace_removed(&workspace).await;
             })
             .await;
         }
     }
 
-    #[tokio::test]
-    async fn cancelled_request_discards_and_reaps_rule_process() {
+    #[test]
+    fn cancelled_request_discards_and_reaps_rule_process() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .max_blocking_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
         let (directory, engine) = fake("wait");
-        crate::engine::with_shared_access(async {
+        runtime.block_on(crate::engine::with_shared_access(async {
             let process = RulesProcess::start(&engine, None).await.unwrap();
+            let workspace = process.directory.path().to_owned();
+            let (release, wait) = tokio::sync::oneshot::channel::<()>();
+            let blocker = tokio::task::spawn_blocking(move || wait.blocking_recv());
             assert!(
                 tokio::time::timeout(Duration::from_millis(100), process.execute(&request()))
                     .await
                     .is_err()
             );
             assert_reaped(&directory).await;
-        })
-        .await;
+            assert!(
+                workspace.is_dir(),
+                "cancellation removed the workspace on the async worker"
+            );
+            release.send(()).unwrap();
+            blocker.await.unwrap().unwrap();
+            assert_workspace_removed(&workspace).await;
+        }));
     }
 
     #[tokio::test]
@@ -437,6 +463,7 @@ time.sleep(60)
                     .await
                     .unwrap();
                 }
+                let workspace = process.directory.path().to_owned();
                 match (process.finish().await, expected_error) {
                     (Err(error), Some(expected)) => {
                         assert!(error.to_string().contains(expected), "{mode}: {error:#}")
@@ -445,6 +472,7 @@ time.sleep(60)
                     (result, _) => panic!("{mode}: unexpected shutdown result {result:?}"),
                 }
                 assert_reaped(&directory).await;
+                assert_workspace_removed(&workspace).await;
             })
             .await;
         }

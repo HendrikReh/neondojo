@@ -7,7 +7,9 @@ use utoipa::ToSchema;
 
 pub(crate) mod cpu;
 mod installation;
+mod workspace;
 pub(crate) use installation::Installation;
+pub(crate) use workspace::EngineWorkspace;
 
 // Every application-created engine subprocess shares this gate. The benchmark
 // owns the writer for its entire run; its task-local scope avoids recursive reads.
@@ -579,7 +581,7 @@ impl Engine {
     }
 
     pub(crate) async fn max_parallel_threads(&self, cpu_threads: i32) -> Result<i32> {
-        let temp = tempfile::tempdir()?;
+        let temp = EngineWorkspace::new().await?;
         let commands = format!("set threads {cpu_threads}\nshow threads\n");
         let output = self
             .run_with_timeout(temp.path(), &commands, Duration::from_secs(5))
@@ -590,7 +592,7 @@ impl Engine {
     }
 
     pub async fn normalize_mat(&self, bytes: &[u8]) -> Result<String> {
-        let temp = tempfile::tempdir()?;
+        let temp = EngineWorkspace::new().await?;
         tokio::fs::write(
             temp.path().join("input.mat"),
             normalize_mat_resignations(bytes)?,
@@ -659,7 +661,7 @@ impl Engine {
             .unwrap_or(10);
         let hint = format!("hint {count}\nsave game hint.sgf\n");
         commands.push_str(&hint);
-        let temp = tempfile::tempdir()?;
+        let temp = EngineWorkspace::new().await?;
         let output = self.run(temp.path(), &commands).await?;
         let engine = output
             .lines()
@@ -743,7 +745,7 @@ impl Engine {
                 commands.push_str(&format!("hint {count}\nsave game hint-{index}.sgf\n"));
             }
         }
-        let temp = tempfile::tempdir()?;
+        let temp = EngineWorkspace::new().await?;
         let (finished, mut progress) = tokio::sync::watch::channel(0);
         let mut roll_output = RollProgress::default();
         let last_in_flight = rolls.len() - 1;
@@ -832,7 +834,7 @@ impl Engine {
         let mut commands = decision_hint_commands(position_id, match_id, plies)?;
         self.configure_checker_rules(&mut commands);
         commands.push_str("hint 10000\nsave game hint.sgf\n");
-        let directory = tempfile::tempdir()?;
+        let directory = EngineWorkspace::new().await?;
         let output = self
             .run_with_timeout(directory.path(), &commands, Duration::from_secs(180))
             .await?;
@@ -863,7 +865,7 @@ impl Engine {
         plies: i32,
     ) -> Result<(String, i32, CubeEquities)> {
         let commands = decision_hint_commands(position_id, match_id, plies)? + "hint 10000\n";
-        let directory = tempfile::tempdir()?;
+        let directory = EngineWorkspace::new().await?;
         let output = self.run(directory.path(), &commands).await?;
         let engine = output
             .lines()

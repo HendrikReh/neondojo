@@ -1,5 +1,6 @@
 //! Persisted human decision checkpoints and presentation policies.
 use super::*;
+use crate::engine::EngineWorkspace;
 
 #[derive(
     Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema, sqlx::Type,
@@ -353,7 +354,7 @@ pub(super) async fn analyze_decision(
         }
         crate::engines::AnalysisEngine::Gnubg(engine) => engine,
     };
-    let directory = tempfile::tempdir()?;
+    let directory = EngineWorkspace::new().await?;
     let mut commands = crate::engine::decision_hint_commands(
         &session.position.position_id,
         &session.position.gnubg_match_id,
