@@ -26,24 +26,42 @@
   width: 30px;
   height: 30px;
 }
-.app-tabs {
+.app-header-navigation {
   display: flex;
+  align-items: center;
   gap: 20px;
   flex: 1;
-  flex-wrap: wrap;
 }
 .app-header-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
 }
-.documentation-link {
-  align-self: center;
-  color: var(--ui-accent);
-  font-size: var(--font-size-body);
+.app-help {
+  position: relative;
 }
-.documentation-link:hover {
-  text-decoration: underline;
+.app-help > summary {
+  cursor: pointer;
+}
+.app-help-links {
+  position: absolute;
+  inset-block-start: calc(100% + 4px);
+  inset-inline-end: 0;
+  z-index: 30;
+  width: max-content;
+  padding: 4px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  box-shadow: 0 8px 24px var(--ui-shadow);
+}
+.app-help-links a {
+  display: block;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+.app-help-links a:is(:hover, :focus-visible) {
+  background: var(--ui-surface-alt);
 }
 .settings-trigger {
   display: flex;
@@ -568,7 +586,7 @@
     font-size: var(--font-size-meta);
     padding: 8px;
   }
-  .app-tabs {
+  .app-header-navigation {
     flex-basis: 100%;
     order: 3;
   }

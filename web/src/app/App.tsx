@@ -41,6 +41,7 @@ import { useGameNavigation } from './useGameNavigation';
 import { useJobs } from '../shared/jobs/useJobs';
 import { useBackgroundJobs } from './useBackgroundJobs';
 import { useI18n } from '../shared/i18n/i18n';
+import { useDetailsDismiss } from '../shared/hooks/useDetailsDismiss';
 import { useWorkspaceText } from '../shared/i18n/workspace-messages';
 import {
   decodeBulkAnalysisSession,
@@ -121,6 +122,7 @@ const views: View[] = [
 ];
 export default function App() {
   useButtonShortcuts();
+  const helpMenu = useDetailsDismiss();
   const [positionScope, setPositionScope] = useState<'saved' | 'all'>('saved');
   // The decision search stays mounted after its first visit, so its filters
   // and results survive a switch to the saved positions and back.
@@ -507,35 +509,60 @@ export default function App() {
           />
           <span>NeonDojo</span>
         </a>
-        <nav
-          className="app-tabs text-navigation"
-          role="tablist"
-          aria-label={w('navigation')}
-        >
-          {views.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              id={`workspace-tab-${tab}`}
-              aria-controls={`workspace-panel-${tab}`}
-              aria-selected={view === tab}
-              tabIndex={
-                view === tab || (view === 'home' && tab === views[0]) ? 0 : -1
-              }
-              ref={(el) => {
-                tabs.current[tab] = el;
-              }}
-              onKeyDown={(event) => tabKey(event, tab)}
-              onClick={() => {
-                cancelRestoration();
-                setView(tab);
-              }}
-            >
-              {w(tab)}
-            </button>
-          ))}
-        </nav>
+        <div className="app-header-navigation">
+          <nav
+            className="app-tabs text-navigation"
+            role="tablist"
+            aria-label={w('navigation')}
+          >
+            {views.map((tab) => (
+              <button
+                key={tab}
+                type="button"
+                role="tab"
+                id={`workspace-tab-${tab}`}
+                aria-controls={`workspace-panel-${tab}`}
+                aria-selected={view === tab}
+                tabIndex={
+                  view === tab || (view === 'home' && tab === views[0]) ? 0 : -1
+                }
+                ref={(el) => {
+                  tabs.current[tab] = el;
+                }}
+                onKeyDown={(event) => tabKey(event, tab)}
+                onClick={() => {
+                  cancelRestoration();
+                  setView(tab);
+                }}
+              >
+                {w(tab)}
+              </button>
+            ))}
+          </nav>
+          <details
+            className="app-help text-navigation"
+            ref={helpMenu.ref}
+            onKeyDown={helpMenu.onKeyDown}
+          >
+            <summary>{t('app.help')}</summary>
+            <div className="app-help-links">
+              <a
+                href="https://hendrikreh.github.io/neondojo/user-guide/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t('app.neondojoManual')}
+              </a>
+              <a
+                href="https://hendrikreh.github.io/neongammon/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t('app.neongammonManual')}
+              </a>
+            </div>
+          </details>
+        </div>
         <div className="app-header-actions">
           <ProfileSelector
             onManage={() => {
@@ -553,22 +580,6 @@ export default function App() {
             label={w('settings')}
             compact
           ></ActionButton>
-          <a
-            className="documentation-link"
-            href="https://hendrikreh.github.io/neondojo/user-guide/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t('app.neondojoManual')}
-          </a>
-          <a
-            className="documentation-link"
-            href="https://hendrikreh.github.io/neongammon/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t('app.neongammonManual')}
-          </a>
         </div>
         <MatchImportInputs importer={importer} />
       </header>

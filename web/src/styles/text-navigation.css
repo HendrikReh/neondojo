@@ -17,7 +17,7 @@
   align-items: stretch;
   gap: 8px;
 }
-.app-shell .text-navigation > button {
+.app-shell .text-navigation > :is(button, summary) {
   flex: 0 1 auto;
   border: 0;
   border-bottom: 2px solid transparent;
@@ -32,7 +32,7 @@
   line-height: 1.5;
   text-align: left;
 }
-.app-shell .text-navigation > button:hover:not(:disabled) {
+.app-shell .text-navigation > :is(button, summary):hover:not(:disabled) {
   background: transparent;
   color: var(--ui-accent);
   border-bottom-color: var(--ui-border-strong);
@@ -58,7 +58,7 @@
   border-bottom-color: var(--ui-accent);
   font-weight: var(--font-weight-semibold);
 }
-.app-shell .text-navigation > button:focus-visible {
+.app-shell .text-navigation > :is(button, summary):focus-visible {
   outline: 2px solid var(--ui-accent);
   outline-offset: 4px;
 }

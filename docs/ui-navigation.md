@@ -26,6 +26,9 @@ The header orders its workspaces as Playing, Analysis, Study, Positions,
 Match database, Player database, and Extras. Rendering and keyboard navigation
 share the `views` list in `web/src/app/App.tsx`: Left/Right move through it and
 wrap, and Home/End select the first and last workspace.
+The **Help** dropdown follows **Extras** and contains the two manual links.
+Tab reaches **Help** from the selected workspace tab. Enter opens the dropdown
+and Escape closes it and returns focus to **Help**.
 
 The shared rules live in `web/src/styles/text-navigation.css`, the last stylesheet in
 `web/src/styles/stylesheets.ts`. Local CSS manages surrounding layout and should not reintroduce filled
