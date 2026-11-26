@@ -12,9 +12,9 @@ theme:
   favicon: assets/neondojo-logo.svg
 
 nav:
-  - Documentation: index.md
-  - User guide: user-guide/README.md
+  - NeonDojo manual: index.md
   - NeonGammon manual: https://hendrikreh.github.io/neongammon/
+  - User guide: user-guide/README.md
   - Feature reference:
       - Playing: reference/playing.md
       - Analysis: reference/analysis.md
