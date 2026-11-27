@@ -1,3 +1,4 @@
+import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { useConfiguration } from '../configuration/ConfigurationProvider';
@@ -93,9 +94,7 @@ export default function ProfileSelector({
   const warnings = warningsDismissed ? [] : config.initializationWarnings;
   const headerError = !pending ? actionError : undefined;
   const noticeCount =
-    warnings.length +
-    config.availabilityIssues.length +
-    (headerError ? 1 : 0);
+    warnings.length + config.availabilityIssues.length + (headerError ? 1 : 0);
   // A failed switch answers the user's action, so its notice opens.
   useEffect(() => {
     if (headerError && notices.ref.current) notices.ref.current.open = true;
@@ -105,13 +104,19 @@ export default function ProfileSelector({
       <div className="profile-selector">
         {config.error ? (
           <>
-            <span role="alert">
-              {errors.message(config.error)}
-            </span>
-            <button type="button" onClick={() => void config.refresh()}>
-              {t('retry')}
-            </button>
-            <button type="button" onClick={onManage}>{t('manage')}</button>
+            <span role="alert">{errors.message(config.error)}</span>
+            <ActionButton
+              icon="refresh"
+              label={t('retry')}
+              type="button"
+              onClick={() => void config.refresh()}
+            />
+            <ActionButton
+              icon="settings"
+              label={t('manage')}
+              type="button"
+              onClick={onManage}
+            />
           </>
         ) : (
           <span role="status">{t('loading')}</span>
@@ -138,9 +143,12 @@ export default function ProfileSelector({
       </Tooltip>
       {config.status === 'saving' && <small role="status">{t('saving')}</small>}
       {(config.status === 'error' || config.status === 'conflict') && (
-        <button type="button" onClick={onManage}>
-          {t('failed')}
-        </button>
+        <ActionButton
+          icon="warning"
+          label={t('failed')}
+          type="button"
+          onClick={onManage}
+        />
       )}
       {noticeCount > 0 && (
         <details
@@ -167,12 +175,12 @@ export default function ProfileSelector({
                 {warnings.map((warning, index) => (
                   <p key={index}>{errors.issue(warning)}</p>
                 ))}
-                <button
+                <ActionButton
+                  icon="confirm"
+                  label={t('acknowledge')}
                   type="button"
                   onClick={() => setWarningsDismissed(true)}
-                >
-                  {t('acknowledge')}
-                </button>
+                />
               </div>
             )}
             {config.availabilityIssues.length > 0 && (
@@ -201,38 +209,38 @@ export default function ProfileSelector({
           onKeyDown={key}
         >
           {config.profiles.map((profile) => (
-            <button
+            <ActionButton
               role="menuitemradio"
+              icon="settings"
+              label={profile.name}
               aria-checked={profile.id === config.activeProfile?.id}
               key={profile.id}
               type="button"
               onClick={() => select(profile)}
-            >
-              {profile.name}
-            </button>
+            />
           ))}
           {config.dirty && (
-            <button
+            <ActionButton
+              icon="view"
+              label={t('showChanges')}
               role="menuitem"
               type="button"
               onClick={() => {
                 close();
                 setChangesOpen(true);
               }}
-            >
-              {t('showChanges')}
-            </button>
+            />
           )}
-          <button
+          <ActionButton
+            icon="settings"
+            label={t('manage')}
             role="menuitem"
             type="button"
             onClick={() => {
               close();
               onManage();
             }}
-          >
-            {t('manage')}
-          </button>
+          />
         </div>
       )}
       {changesOpen &&
@@ -251,11 +259,13 @@ export default function ProfileSelector({
           onCancel={() => setPending(undefined)}
           choices={[
             {
+              icon: 'save',
               label: t('saveSwitch'),
               primary: true,
               action: () => void perform(pending, 'save_current'),
             },
             {
+              icon: 'settings',
               label: t('manage'),
               action: () => {
                 setPending(undefined);
@@ -263,6 +273,7 @@ export default function ProfileSelector({
               },
             },
             {
+              icon: 'clear',
               label: t('discardSwitch'),
               action: () => void perform(pending),
             },

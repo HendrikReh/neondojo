@@ -1,8 +1,17 @@
+import ActionButton from '../../shared/ui/ActionButton';
+import type { ActionIconName } from '../../shared/ui/action-icons';
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
 import { useProfileText } from './profile-messages';
 import { useConfigurationErrors } from './configuration-error-messages';
+
+export type ProfileActionChoice = {
+  icon: ActionIconName;
+  label: string;
+  action: () => void;
+  primary?: boolean;
+};
 
 export default function ProfileActionDialog({
   title,
@@ -18,7 +27,7 @@ export default function ProfileActionDialog({
   message: string;
   children?: ReactNode;
   /** A primary choice is the recommended answer. */
-  choices: { label: string; action: () => void; primary?: boolean }[];
+  choices: ProfileActionChoice[];
   onCancel: () => void;
   busy?: boolean;
   lockScroll?: boolean;
@@ -51,19 +60,23 @@ export default function ProfileActionDialog({
       )}
       <div className="profile-actions">
         {choices.map((choice) => (
-          <button
+          <ActionButton
+            icon={choice.icon}
+            label={choice.label}
             key={choice.label}
             type="button"
             className={choice.primary ? 'primary' : undefined}
             disabled={busy}
             onClick={choice.action}
-          >
-            {choice.label}
-          </button>
+          />
         ))}
-        <button type="button" disabled={busy} onClick={onCancel}>
-          {t('cancel')}
-        </button>
+        <ActionButton
+          icon="cancel"
+          label={t('cancel')}
+          type="button"
+          disabled={busy}
+          onClick={onCancel}
+        />
       </div>
     </LibraryDialog>,
     document.body,

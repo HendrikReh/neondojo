@@ -403,7 +403,6 @@ export default function MatchDatabase({
   const selection = selectedRows.map(
     (match) => visibleRows.get(libraryRowKey(match)) ?? match,
   );
-  const hasSelection = selected.size > 0;
   const selectionIsCurrent = matchResultScope === matchScope;
   return (
     <section className="match-database" aria-label={w('database')}>
@@ -628,7 +627,6 @@ export default function MatchDatabase({
             }
             onClear={() => setSelectedRows([])}
           />
-          {hasSelection && <p className="fineprint">{l('batchLimit')}</p>}
           {result && (
             <LibraryActionResult result={result} names={resultNames} />
           )}
@@ -655,26 +653,26 @@ export default function MatchDatabase({
                 <div className="library-empty">
                   <p role="status">{l('noMatches')}</p>
                   {hasFilters && (
-                    <button
+                    <ActionButton
                       type="button"
+                      icon="clear"
+                      label={l('clearFilters')}
                       onClick={() => {
                         filterToggle.current?.focus();
                         setFilters(emptyFilters());
                       }}
-                    >
-                      {l('clearFilters')}
-                    </button>
+                    />
                   )}
                   {databaseId && (
-                    <button
+                    <ActionButton
                       type="button"
+                      icon="search"
+                      label={l('searchAllDatabases')}
                       onClick={() => {
                         filterToggle.current?.focus();
                         changeDatabase('');
                       }}
-                    >
-                      {l('searchAllDatabases')}
-                    </button>
+                    />
                   )}
                 </div>
               )}

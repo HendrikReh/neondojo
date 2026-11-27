@@ -274,9 +274,16 @@
   background: var(--ui-surface);
   border-color: var(--ui-border);
 }
-.library-batch-bar strong {
-  font-size: var(--font-size-table);
+.library-batch-summary {
+  display: grid;
   margin-right: auto;
+}
+.library-batch-summary strong {
+  font-size: var(--font-size-table);
+}
+.library-batch-summary small {
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
 }
 /* Single-match, batch and destructive actions form separate sections. */
 .library-batch-group {

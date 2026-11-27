@@ -92,7 +92,8 @@
 .profile-notices-panel p {
   margin: 0 0 0.3rem;
 }
-.profile-menu button {
+.profile-menu .action-button {
+  justify-content: start;
   text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
@@ -133,9 +134,11 @@
   max-height: 10rem;
   overflow: auto;
 }
-.profile-list > button {
+.profile-list > .action-button {
+  justify-content: start;
   text-align: left;
   overflow-wrap: anywhere;
+  white-space: normal;
 }
 .profile-list [aria-pressed='true'] {
   border-color: var(--ui-accent);

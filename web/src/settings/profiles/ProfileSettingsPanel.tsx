@@ -11,7 +11,9 @@ import {
 import { useProfileText } from './profile-messages';
 import { useI18n } from '../../shared/i18n/i18n';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
-import ProfileActionDialog from './ProfileActionDialog';
+import ProfileActionDialog, {
+  type ProfileActionChoice,
+} from './ProfileActionDialog';
 import ProfileSummary from './ProfileSummary';
 import { profileChangeRows } from './profile-changes';
 import './profiles.css';
@@ -74,9 +76,16 @@ export default function ProfileSettingsPanel() {
     return report ? (
       <div>
         <p role="alert">{errors.message(report)}</p>
-        <button type="button" onClick={() => void config.refresh()}>{t('retry')}</button>
+        <ActionButton
+          icon="refresh"
+          label={t('retry')}
+          type="button"
+          onClick={() => void config.refresh()}
+        />
       </div>
-    ) : <p role="status">{t('loading')}</p>;
+    ) : (
+      <p role="status">{t('loading')}</p>
+    );
   const active = selected.id === activeProfile.id;
   const changeCount = profileChangeRows(
     activeProfile.configuration,
@@ -91,7 +100,7 @@ export default function ProfileSettingsPanel() {
     {
       title: string;
       message: string;
-      choices: { label: string; action: () => void; primary?: boolean }[];
+      choices: ProfileActionChoice[];
     }
   > = {
     switch: {
@@ -99,12 +108,14 @@ export default function ProfileSettingsPanel() {
       message: t('switchMessage', { name: selected.name }),
       choices: [
         {
+          icon: 'save',
           label: t('saveSwitch'),
           primary: true,
           action: () =>
             void run(() => config.activateProfile(selected, 'save_current')),
         },
         {
+          icon: 'clear',
           label: t('discardSwitch'),
           action: () =>
             void run(() => config.activateProfile(selected, 'keep')),
@@ -116,6 +127,7 @@ export default function ProfileSettingsPanel() {
       message: t('overwriteMessage', { name: selected.name }),
       choices: [
         {
+          icon: 'save',
           label: t('overwrite'),
           action: () => void run(() => config.overwriteProfile(selected)),
         },
@@ -126,6 +138,7 @@ export default function ProfileSettingsPanel() {
       message: t('deleteMessage', { name: selected.name }),
       choices: [
         {
+          icon: 'delete',
           label: t('delete'),
           action: () => void run(() => config.deleteProfile(selected)),
         },
@@ -136,6 +149,7 @@ export default function ProfileSettingsPanel() {
       message: t('discardMessage', { name: activeProfile.name }),
       choices: [
         {
+          icon: 'undo',
           label: t('restoreSaved'),
           action: () => void run(() => config.restoreProfile(activeProfile)),
         },
@@ -146,6 +160,7 @@ export default function ProfileSettingsPanel() {
       message: t('reloadConfirm'),
       choices: [
         {
+          icon: 'clear',
           label: t('discard'),
           action: () => void run(() => config.reloadServer()),
         },
@@ -178,28 +193,34 @@ export default function ProfileSettingsPanel() {
         <div role="alert" className="profile-conflict">
           <p>{t('conflict')}</p>
           <div className="profile-actions">
-            <button
+            <ActionButton
+              icon="refresh"
+              label={t('reloadServer')}
               type="button"
               disabled={config.busy}
               onClick={() => setDialog('reload')}
-            >
-              {t('reloadServer')}
-            </button>
-            <button
+            />
+            <ActionButton
+              icon="save"
+              label={t('saveConflict')}
               type="button"
               disabled={config.busy}
               onClick={() => setNameAction({ kind: 'recover' })}
-            >
-              {t('saveConflict')}
-            </button>
+            />
           </div>
         </div>
       )}
       <div className="profile-list" role="list" aria-label={t('profiles')}>
         {config.profiles.map((profile) => (
-          <button
+          <ActionButton
             key={profile.id}
             type="button"
+            icon="view"
+            label={
+              profile.id === activeProfile.id
+                ? `${profile.name} · ${t('active')}`
+                : profile.name
+            }
             disabled={config.busy}
             aria-pressed={profile.id === selected.id}
             onClick={() => {
@@ -214,7 +235,7 @@ export default function ProfileSettingsPanel() {
                 {dateFormat.format(new Date(profile.updated_at))}
               </time>
             )}
-          </button>
+          </ActionButton>
         ))}
       </div>
       <div className="profile-actions profile-settings-actions">
@@ -306,13 +327,13 @@ export default function ProfileSettingsPanel() {
             </ul>
           )}
           {config.status === 'error' && (
-            <button
+            <ActionButton
+              icon="refresh"
+              label={t('retry')}
               type="button"
               disabled={config.busy}
               onClick={() => void run(() => config.flush())}
-            >
-              {t('retry')}
-            </button>
+            />
           )}
         </div>
       )}
@@ -445,9 +466,13 @@ function ProfileNameDialog({
           </p>
         )}
         <div className="library-dialog-actions">
-          <button type="button" onClick={onClose} disabled={busy}>
-            {t('cancel')}
-          </button>
+          <ActionButton
+            icon="cancel"
+            label={t('cancel')}
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+          />
           <ActionButton
             type="submit"
             icon="save"

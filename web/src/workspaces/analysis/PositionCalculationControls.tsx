@@ -74,9 +74,12 @@ export default function PositionCalculationControls({
                 onCalculationStarted?.();
               }}
             />
-            <button type="button" onClick={closeSettings}>
-              {library('cancel')}
-            </button>
+            <ActionButton
+              icon="cancel"
+              label={library('cancel')}
+              type="button"
+              onClick={closeSettings}
+            />
           </div>
         </LibraryDialog>
       )}

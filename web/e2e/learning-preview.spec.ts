@@ -80,6 +80,16 @@ test('flashcard browsing previews the selected question without changing learnin
     .getByRole('tab', { name: 'Flashcards & Anki', exact: true })
     .click();
   const study = page.getByRole('region', { name: 'Study', exact: true });
+  const moveHint = study.getByText(
+    'Choose the source deck under “Choose deck”.',
+    {
+      exact: true,
+    },
+  );
+  const interfaceFont = await page
+    .locator('.app-shell')
+    .evaluate((shell) => getComputedStyle(shell).fontFamily);
+  await expect(moveHint).toHaveCSS('font-family', interfaceFont);
   await study
     .getByLabel('Choose deck', { exact: true })
     .selectOption(decks[0].id);

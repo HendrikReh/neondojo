@@ -1402,7 +1402,7 @@ progress::-webkit-progress-value {
   padding: 10px;
   border-bottom: 1px solid var(--ui-border);
 }
-.learning-card-list small {
+.learning-card-list td small {
   display: block;
   font-family: var(--font-mono);
   font-size: var(--font-size-micro);

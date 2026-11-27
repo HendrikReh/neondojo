@@ -411,7 +411,10 @@ test('keeps selection actions visible with wide saved columns', async ({
   const wrapper = page.locator('.database-table-wrap');
   await wrapper.evaluate((element) => (element.scrollLeft = 0));
   const row = table.locator('tbody tr').first();
+  const firstRowTop = (await row.boundingBox())?.y;
   await row.getByRole('checkbox').check();
+  await expect(batch).toContainText('1 match selected');
+  expect((await row.boundingBox())?.y).toBe(firstRowTop);
   for (const action of [
     batch.getByRole('button', { name: 'Open match', exact: true }),
     batch.getByRole('button', { name: 'Edit match details', exact: true }),

@@ -119,14 +119,14 @@ export default function ProfileChangesDialog({
                 disabled={config.busy || config.status === 'conflict'}
                 onClick={() => void restoreAll()}
               />
-              <button
+              <ActionButton
+                icon="cancel"
+                label={t('cancel')}
                 ref={cancelButton}
                 type="button"
                 disabled={config.busy}
                 onClick={cancelAll}
-              >
-                {t('cancel')}
-              </button>
+              />
             </div>
           </section>
         ) : (

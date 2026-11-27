@@ -6,8 +6,12 @@ import type { Deck } from './learning-api';
 import { useLearningText } from './learning-messages';
 
 export default function CreateDeckForm({
+  id,
+  hidden,
   onCreated,
 }: {
+  id?: string;
+  hidden?: boolean;
   onCreated: (deck: Deck) => void;
 }) {
   const t = useLearningText();
@@ -43,6 +47,8 @@ export default function CreateDeckForm({
   }
   return (
     <form
+      id={id}
+      hidden={hidden}
       className="create-deck"
       onSubmit={(e) => {
         e.preventDefault();

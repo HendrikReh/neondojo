@@ -3,6 +3,7 @@ import type { components } from '../../generated-api';
 import { request } from '../../shared/http/api';
 import { useI18n } from '../../shared/i18n/i18n';
 import ActionButton from '../../shared/ui/ActionButton';
+import type { Deck } from '../study/flashcards/learning-api';
 import CreateDeckForm from '../study/flashcards/CreateDeckForm';
 import { DeckDialog } from '../study/flashcards/DeckLibraryDialogs';
 import { savedDeck, useDecks } from '../study/flashcards/useDecks';
@@ -15,7 +16,7 @@ type MistakeReference = components['schemas']['MistakeReference'];
 export type DecisionDeckOutcome = {
   /** Identifies what was added: one decision or the shown page. */
   key: string;
-  deck: string;
+  deck: Pick<Deck, 'id' | 'name'>;
   result: AddDecisionsResult;
 };
 
@@ -51,7 +52,7 @@ export default function DecisionDeckAction({
     <>
       <ActionButton
         type="button"
-        icon="cards"
+        icon="deck"
         label={text}
         tooltip={tooltip}
         compact={compact}
@@ -81,8 +82,10 @@ export default function DecisionDeckAction({
 /** What the deck received and its new card count. */
 export function DecisionDeckStatus({
   outcome,
+  onStudy,
 }: {
   outcome: DecisionDeckOutcome;
+  onStudy: (deckId: string) => void;
 }) {
   const p = usePositionText();
   const t = useDecisionSearchText();
@@ -99,9 +102,20 @@ export function DecisionDeckStatus({
           unavailable: count('unavailable') + count('not_found'),
         });
   return (
-    <p className="decision-deck-outcome" role="status">
-      {summary} · {outcome.deck} · {p('deckCount', { count: total })}
-    </p>
+    <div className="decision-deck-outcome">
+      <span role="status">
+        {summary} · {outcome.deck.name} · {p('deckCount', { count: total })}
+      </span>
+      {total > 0 && (
+        <ActionButton
+          type="button"
+          icon="cards"
+          label={p('study')}
+          tooltip={outcome.deck.name}
+          onClick={() => onStudy(outcome.deck.id)}
+        />
+      )}
+    </div>
   );
 }
 
@@ -136,7 +150,10 @@ function DecisionDeckDialog({
   references: MistakeReference[];
   revision: number;
   onClose: () => void;
-  onAdded: (deck: string, result: AddDecisionsResult) => void;
+  onAdded: (
+    deck: DecisionDeckOutcome['deck'],
+    result: AddDecisionsResult,
+  ) => void;
   onDeckCreated: () => void;
 }) {
   const p = usePositionText();
@@ -170,7 +187,7 @@ function DecisionDeckDialog({
           } satisfies components['schemas']['AddDecisions']),
         },
       );
-      if (live.current) onAdded(chosen.name, result);
+      if (live.current) onAdded({ id: chosen.id, name: chosen.name }, result);
     } catch (error) {
       if (live.current) setError(error);
     } finally {
