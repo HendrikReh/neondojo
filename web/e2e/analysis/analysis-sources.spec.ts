@@ -395,6 +395,45 @@ test('a late imported source response cannot replace a newer position', async ({
   await expect(page.locator('.board-heading')).toContainText('Move 2');
 });
 
+test('opening-book lookups settle without repeating while a position is open', async ({
+  page,
+}) => {
+  await seedLocale(page);
+  const bookRequests: string[] = [];
+  const serverErrors: string[] = [];
+  page.on('request', (request) => {
+    const { pathname } = new URL(request.url());
+    if (/^\/api\/positions\/[^/]+\/opening-book$/.test(pathname))
+      bookRequests.push(request.url());
+  });
+  page.on('response', (response) => {
+    if (response.status() >= 500)
+      serverErrors.push(`${response.status()} ${response.url()}`);
+  });
+  await page.goto('/');
+  const firstLookup = page.waitForResponse(
+    (response) =>
+      /^\/api\/positions\/[^/]+\/opening-book$/.test(
+        new URL(response.url()).pathname,
+      ) && response.status() === 200,
+  );
+  await page.getByLabel('Match file', { exact: true }).setInputFiles({
+    name: 'stable-book-lookup.sgf',
+    mimeType: 'application/octet-stream',
+    buffer: Buffer.from(
+      `(;GM[6]PW[StableBook ${crypto.randomUUID()}]PB[Opponent]MI[length:7][ws:0][bs:0];W[31hefe])`,
+    ),
+  });
+  await firstLookup;
+  await openBook(page);
+  await expect(page.locator('.source-analysis:visible')).toContainText(
+    'BackgammonDB',
+  );
+  await page.waitForTimeout(500);
+  expect(bookRequests.length).toBeLessThanOrEqual(4);
+  expect(serverErrors).toEqual([]);
+});
+
 async function selectImported(page: import('@playwright/test').Page) {
   const match = page.locator('.analysis-heading[data-match-id]');
   await expect(match).toBeVisible();

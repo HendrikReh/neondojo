@@ -166,9 +166,10 @@ export default function App() {
     setLocale(current.general.locale);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirmed?.general.locale, setLocale]);
+  const { bumpBookRevision } = nav;
   useEffect(() => {
-    if (bookConfigurationKey !== undefined) nav.bumpBookRevision();
-  }, [bookConfigurationKey, nav]);
+    if (bookConfigurationKey !== undefined) bumpBookRevision();
+  }, [bookConfigurationKey, bumpBookRevision]);
   useEffect(() => {
     Object.values(jobs.jobs).forEach(track);
   }, [jobs.jobs, track]);
