@@ -3,6 +3,7 @@ pub mod api;
 mod async_temp_dir;
 mod backgammon;
 pub mod cube_context;
+mod database_pool;
 pub mod engine;
 pub mod engines;
 pub mod game_plan;
@@ -71,6 +72,7 @@ mod engine_process;
 
 pub mod review_decisions;
 
+pub mod runtime;
 pub mod schema_migrations;
 
 pub mod analysis_catalog;
