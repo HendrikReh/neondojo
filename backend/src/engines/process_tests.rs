@@ -257,6 +257,75 @@ async fn duel_game_verifies_both_profiles_and_reaps_workers_on_failure_or_cancel
 }
 
 #[tokio::test]
+async fn duel_workers_reuse_across_swapped_series_matches_and_shutdown_cleanly() {
+    let a = FakeWorker::new("batch_costed");
+    let mut b = FakeWorker::new("batch_costed");
+    b.profile.plies = 3;
+    let workers = DuelWorkers::new([Some(&a.profile), Some(&b.profile)]);
+    let checker = json!({"operation":"checker", "force_board":vec![0;26]});
+    let cube = json!({"operation":"cube", "decision_only":true});
+    for swapped in [false, true, false, true] {
+        let mut game = workers.begin_game_sides(swapped).await.unwrap();
+        // Side 0 plays checker, side 1 evaluates cube. When swapped, side 0 is `b` and side 1 is `a`.
+        game.for_side(0)
+            .unwrap()
+            .request_costed(checker.clone(), Duration::from_secs(5))
+            .await
+            .unwrap();
+        game.for_side(1)
+            .unwrap()
+            .request_costed(cube.clone(), Duration::from_secs(5))
+            .await
+            .unwrap();
+        game.finish().await.unwrap();
+    }
+    let a_pid = a.pid();
+    let b_pid = b.pid();
+    workers.shutdown().await.unwrap();
+    assert_reaped(&a_pid).await;
+    assert_reaped(&b_pid).await;
+    assert_eq!(
+        std::fs::read_to_string(a.directory.path().join("operations")).unwrap(),
+        "initialize\nbegin_batch\nchecker\nend_batch\nbegin_batch\ncube\nend_batch\nbegin_batch\nchecker\nend_batch\nbegin_batch\ncube\nend_batch\n"
+    );
+    assert_eq!(
+        std::fs::read_to_string(b.directory.path().join("operations")).unwrap(),
+        "initialize\nbegin_batch\ncube\nend_batch\nbegin_batch\nchecker\nend_batch\nbegin_batch\ncube\nend_batch\nbegin_batch\nchecker\nend_batch\n"
+    );
+}
+
+#[tokio::test]
+async fn shutdown_workers_drains_and_reaps_cached_slots() {
+    let _serial = TEST_LOCK.lock().await;
+    let general = FakeWorker::new("healthy");
+    let play = FakeWorker::new("healthy");
+    let interactive = FakeWorker::new("healthy");
+    let identity = json!({"operation":"identity"});
+    for (slot, fake) in [
+        (Slot::General, &general),
+        (Slot::Play, &play),
+        (Slot::Interactive, &interactive),
+    ] {
+        super::request(
+            &fake.profile,
+            identity.clone(),
+            Duration::from_secs(5),
+            slot,
+        )
+        .await
+        .unwrap();
+    }
+    let pids = [general.pid(), play.pid(), interactive.pid()];
+    shutdown_workers().await;
+    assert!(GENERAL.lock().await.is_none());
+    assert!(PLAY.lock().await.is_none());
+    assert!(INTERACTIVE.lock().await.is_none());
+    for pid in pids {
+        assert_reaped(&pid).await;
+    }
+}
+
+#[tokio::test]
 async fn ordinary_requests_cannot_cache_worker_with_open_batch() {
     let _serial = TEST_LOCK.lock().await;
     let fake = FakeWorker::new("batch_healthy");

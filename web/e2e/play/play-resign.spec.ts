@@ -1,3 +1,4 @@
+import { fulfillError, fulfillPlaySession } from '../helpers/api-fixtures';
 import { openWorkspace } from '../helpers/navigation';
 import { test, expect } from '../helpers/test';
 import { botDice, doubleCube, resignGame } from '../helpers/play-board-actions';
@@ -54,30 +55,28 @@ test('a selected resignation submits exactly one versioned action and shows nati
   const { saved, writes } = await historyFixture(page);
   await page.route(`**/api/play/sessions/${id}/actions`, async (route) => {
     writes.push(route.request().postDataJSON());
-    await route.fulfill({
-      json: {
-        ...saved,
-        version: 8,
-        phase: 'game_over',
-        winner: 1,
-        scores: [0, 2],
-        legal_moves: [],
-        pending_decision: null,
-        game_results: [
-          {
-            game_no: 1,
-            history_index: 2,
-            result: {
-              winner: 1,
-              points: 2,
-              cube: 1,
-              multiplier: 2,
-              reason: 'resignation',
-              scores_after: [0, 2],
-            },
+    await fulfillPlaySession(route, {
+      ...saved,
+      version: 8,
+      phase: 'game_over',
+      winner: 1,
+      scores: [0, 2],
+      legal_moves: [],
+      pending_decision: null,
+      game_results: [
+        {
+          game_no: 1,
+          history_index: 2,
+          result: {
+            winner: 1,
+            points: 2,
+            cube: 1,
+            multiplier: 2,
+            reason: 'resignation',
+            scores_after: [0, 2],
           },
-        ],
-      },
+        },
+      ],
     });
   });
   await resignGame(page).click();
@@ -104,13 +103,11 @@ test('a declined offer keeps the selected level, error and unconfirmed turn unti
   await point(13).click();
   await page.route(`**/api/play/sessions/${id}/actions`, async (route) => {
     writes.push(route.request().postDataJSON());
-    await route.fulfill({
-      status: 422,
-      json: {
-        error:
-          'The bot declined this resignation. Choose a higher level or continue playing; the saved game is unchanged',
-      },
-    });
+    await fulfillError(
+      route,
+      'The bot declined this resignation. Choose a higher level or continue playing; the saved game is unchanged',
+      422,
+    );
   });
   await resignGame(page).click();
   const dialog = page.getByRole('dialog', {

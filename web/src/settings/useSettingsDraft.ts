@@ -38,7 +38,11 @@ import {
   type EngineInfo,
 } from './settings-api';
 import { useSettingsText } from './settings-messages';
-import { saveTheme } from './ui-preferences';
+import {
+  saveArchiveThemesPreloadHint,
+  saveTheme,
+  usesArchiveTheme,
+} from './ui-preferences';
 import type { UiAppearance } from './appearance/ui-appearance';
 import { useVirtualPlayerText } from '../workspaces/players/virtual-player-messages';
 import { useMyPlayerProfileDraft } from './MyPlayerProfileSetting';
@@ -470,6 +474,7 @@ export function useSettingsDraft({
     } = savedPreferences;
     const { theme: savedTheme } = savedBoard;
     saveTheme(savedTheme);
+    saveArchiveThemesPreloadHint(usesArchiveTheme(savedBoard));
     savePlaySounds(savedSounds);
     saveLocale(savedLocale);
     setDraftBoard(savedBoard);

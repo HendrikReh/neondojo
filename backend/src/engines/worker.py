@@ -98,18 +98,26 @@ class Runtime:
         expected = profile.get('artifact_fingerprint')
         if expected and expected != self.identity['artifact_fingerprint']:
             raise ValueError('NeonGammon assets changed since submission; restore the saved installation')
-        # Cubeless money duels use Sage's cubeless checker path, which evaluates
-        # serially and searches only its filtered top candidates at full depth.
-        self.analyzer = neongammon.BgBotAnalyzer(eval_level=f"{profile['plies']}ply", cubeful=not self.cubeless,
-                                             parallel_threads=profile['threads'])
+        # Cubeless 1-ply evaluates serially; cubeless 2..4-ply runs native
+        # multi-ply search with parallel_evaluate=True and searches its
+        # filtered top candidates at full depth. Wrap construction and the
+        # startup check so both native strategy creation and checker_play
+        # report their configured thread budgets.
+        def build_and_check():
+            self.analyzer = neongammon.BgBotAnalyzer(
+                eval_level=f"{profile['plies']}ply", cubeful=not self.cubeless,
+                parallel_threads=profile['threads'])
+            return self.analyzer.checker_play(list(neongammon.STARTING_BOARD), 3, 1, beaver=False)
+
+        opening, observed = integrity['observe_thread_budgets'](neongammon, build_and_check)
         self.models = None
         if self.release['shared_models']:
             self.models = neongammon.BatchModels.from_analyzer(self.analyzer)
         self.policy_analyzers[profile['plies']] = self.analyzer
-        # Exercise the real candidate path and observe its configured budgets.
-        opening, observed = integrity['observe_thread_budgets'](
-            neongammon, lambda: self.analyzer.checker_play(list(neongammon.STARTING_BOARD), 3, 1, beaver=False))
-        serial = self.cubeless or profile['plies'] == 1 and getattr(neongammon.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
+        serial = (self.cubeless and profile['plies'] == 1) or (
+            not self.cubeless and profile['plies'] == 1
+            and getattr(neongammon.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
+        )
         integrity['validate_thread_budget'](profile['threads'], observed, serial=serial)
         if not opening.moves:
             raise ValueError('NeonGammon capability check returned no candidates')
@@ -316,15 +324,19 @@ class Runtime:
         if (self.cubeless or self.profile['plies'] not in allowed_plies
                 or type(seed) is not int or not 0 <= seed < 2**64):
             raise ValueError('Invalid opponent policy request')
-        policy = self.opponent_policy(difficulty, seed)
+        release = getattr(self, 'release', None) or {}
         if request['operation'] == 'opponent_checker':
             dice = checker_dice(request)
-            if self.profile['plies'] == 3 and not (getattr(self, 'release', None) or {}).get('shared_models', False):
+            if self.profile['plies'] == 3 and not release.get('shared_models', False):
+                if not release.get('presets', False):
+                    raise ValueError('NeonGammon difficulty presets require NeonGammon 3.1.0 or newer')
                 # Pre-3.2.0 wheels construct a 2-ply DifficultyPolicy without analyzer injection.
                 selected = self.analyzer.checker_play(before, *dice, **kwargs).moves[0].board
             else:
+                policy = self.opponent_policy(difficulty, seed)
                 selected = policy.select_checker_move(before, *dice, **kwargs)
             return board(selected)
+        policy = self.opponent_policy(difficulty, seed)
         decision = policy.cube_decision(before, **kwargs)
         return {'should_double': decision.should_double, 'should_take': decision.should_take}
 

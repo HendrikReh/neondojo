@@ -151,6 +151,7 @@ async fn serve(
     }
     background_tasks.close();
     background_tasks.wait().await;
+    crate::engines::shutdown_workers().await;
     pool.close().await;
     result
 }

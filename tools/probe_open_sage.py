@@ -73,12 +73,14 @@ def validate_thread_budget(requested, observed, *, serial=False):
 def observe_thread_budgets(sage, call):
     """Run ``call`` and record every thread budget the analyzer hands out.
 
-    NeonGammon bounds its work in two places: Python candidate pools
-    (``ThreadPoolExecutor(max_workers=...)``) and, from 3.0.0, the native N-ply
-    checker routine ``bgbot_cpp.checker_play_nply(n_threads=...)``. Both
-    observers delegate unchanged to the real implementation; they neither alter
-    budgets nor substitute any engine computation. Returns the call's result
-    and the observed budgets.
+    NeonGammon bounds its work in three places: Python candidate pools
+    (``ThreadPoolExecutor(max_workers=...)``), the native cubeful N-ply
+    checker routine ``bgbot_cpp.checker_play_nply(n_threads=...)``, and the
+    native cubeless N-ply strategy constructor
+    ``bgbot_cpp.create_multipy_from_base(..., parallel_evaluate=..., parallel_threads=...)``.
+    All observers delegate unchanged to the real implementation; they neither
+    alter budgets nor substitute any engine computation. Returns the call's
+    result and the observed budgets.
     """
     from concurrent.futures import ThreadPoolExecutor
     from contextlib import ExitStack
@@ -90,6 +92,7 @@ def observe_thread_budgets(sage, call):
         module = sage.cubeful
     native = module.bgbot_cpp
     checker_play_nply = native.checker_play_nply
+    create_multipy_from_base = getattr(native, 'create_multipy_from_base', None)
     observed = []
 
     def observe_pool(*args, **kwargs):
@@ -100,9 +103,18 @@ def observe_thread_budgets(sage, call):
         observed.append(kwargs.get('n_threads'))
         return checker_play_nply(*args, **kwargs)
 
+    def observe_multipy(*args, **kwargs):
+        parallel_evaluate = kwargs['parallel_evaluate'] if 'parallel_evaluate' in kwargs else (args[2] if len(args) > 2 else True)
+        if parallel_evaluate:
+            threads = kwargs['parallel_threads'] if 'parallel_threads' in kwargs else (args[3] if len(args) > 3 else None)
+            observed.append(threads)
+        return create_multipy_from_base(*args, **kwargs)
+
     with ExitStack() as stack:
         stack.enter_context(patch.object(module, 'ThreadPoolExecutor', side_effect=observe_pool))
         stack.enter_context(patch.object(native, 'checker_play_nply', side_effect=observe_native))
+        if callable(create_multipy_from_base):
+            stack.enter_context(patch.object(native, 'create_multipy_from_base', side_effect=observe_multipy))
         result = call()
     return result, observed
 

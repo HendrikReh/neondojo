@@ -1,3 +1,4 @@
+import { fulfillPlaySession } from '../helpers/api-fixtures';
 import { openWorkspace } from '../helpers/navigation';
 import { test, expect } from '../helpers/test';
 import { playMenu } from '../helpers/play-board-actions';
@@ -21,7 +22,7 @@ test('forfeit confirmation preserves a draft on cancel and records a match loss 
       winner: 1,
       legal_moves: [],
     });
-    return route.fulfill({ json: saved });
+    return fulfillPlaySession(route, saved);
   });
   await page.reload();
   await openWorkspace(page, 'play');

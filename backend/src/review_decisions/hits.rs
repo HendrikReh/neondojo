@@ -1,7 +1,47 @@
 use super::*;
+use std::collections::BTreeSet;
+use std::sync::Mutex;
+
+const MAX_QUEUED_HIT_SETS: usize = 128;
+
+/// Bounded in-memory queue of `(match_id, analysis_id)` review hit sets that
+/// read-only GET requests found missing or stale. `browse_indexes::worker`
+/// drains and builds them outside HTTP GET transactions.
+#[derive(Default)]
+pub(crate) struct HitRefreshQueue {
+    pending: Mutex<BTreeSet<(Uuid, String)>>,
+}
+
+impl HitRefreshQueue {
+    pub(crate) fn enqueue(&self, match_id: Uuid, analysis_id: &str) {
+        let mut pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if pending.len() < MAX_QUEUED_HIT_SETS {
+            pending.insert((match_id, analysis_id.to_owned()));
+        }
+    }
+
+    pub(crate) fn take_batch(&self, limit: usize) -> Vec<(Uuid, String)> {
+        let mut pending = self
+            .pending
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut batch = Vec::with_capacity(limit.min(pending.len()));
+        for _ in 0..limit {
+            let Some(item) = pending.pop_first() else {
+                break;
+            };
+            batch.push(item);
+        }
+        batch
+    }
+}
 
 /// Saved data a hit set was built from: projection version, analysis, source
-/// revision and catalog state, and the analysis rows and checkpoints.
+/// revision and catalog state, 0089 analysis revision tokens, and per-game
+/// cube rules.
 pub(super) async fn hits_fingerprint(
     connection: &mut sqlx::PgConnection,
     match_id: Uuid,
@@ -11,12 +51,16 @@ pub(super) async fn hits_fingerprint(
     Ok(sqlx::query_scalar(
         "SELECT concat_ws('|', $3::text, m.source_revision::text, m.format,
                 m.moves_cataloged::text, m.imported_analysis_loaded::text,
-                (SELECT count(*)::text||':'||coalesce(sum(a.id),0)::text
-                 FROM move_analyses a WHERE a.job_id=$2),
-                (SELECT count(*)::text||':'||coalesce(sum(c.game_no),0)::text
-                 FROM match_analysis_games c WHERE c.job_id=$2),
-                (SELECT count(*)::text FROM imported_analyses i WHERE i.match_uuid=m.id))
-         FROM matches m WHERE m.id=$1",
+                coalesce(n.revision, '0:0'),
+                coalesce(i.revision, ''),
+                coalesce((SELECT string_agg(
+                    g.game_no::text || ':' || coalesce(g.cube_enabled::text, 'null'),
+                    ',' ORDER BY g.game_no
+                ) FROM match_games g WHERE g.match_uuid = m.id), ''))
+         FROM matches m
+         LEFT JOIN native_analysis_revisions n ON n.job_id = $2
+         LEFT JOIN imported_analysis_revisions i ON i.match_id = m.id
+         WHERE m.id = $1",
     )
     .bind(match_id)
     .bind(job_id)
@@ -24,6 +68,69 @@ pub(super) async fn hits_fingerprint(
     .fetch_one(connection)
     .await
     .map_err(anyhow::Error::from)?)
+}
+
+/// Refresh one `(match_id, analysis_id)` review hit set outside a GET request.
+/// Returns `Ok(false)` when the match or analysis no longer exists or is uncataloged.
+pub async fn refresh_hits(
+    pool: &sqlx::PgPool,
+    match_id: Uuid,
+    analysis_id: &str,
+) -> ApiResult<bool> {
+    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
+    let row: Option<(MatchFormat, bool, bool)> = sqlx::query_as(
+        "SELECT format,moves_cataloged,imported_analysis_loaded FROM matches WHERE id=$1",
+    )
+    .bind(match_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let Some((format, moves_cataloged, imported_loaded)) = row else {
+        return Ok(false);
+    };
+    if !moves_cataloged || !imported_loaded {
+        return Ok(false);
+    }
+    let selected =
+        match crate::analysis_catalog::resolve_selection_on(&mut tx, match_id, Some(analysis_id))
+            .await
+        {
+            Ok(Some(selected)) => selected,
+            Ok(None) | Err(_) => return Ok(false),
+        };
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    let (job, imported) = match selected {
+        crate::analysis_catalog::SelectedAnalysis::Job(job) => {
+            if job.kind == "analysis" {
+                return Ok(false);
+            }
+            (Some(job), false)
+        }
+        crate::analysis_catalog::SelectedAnalysis::Imported { .. } => (None, true),
+    };
+    build_hits(
+        pool,
+        match_id,
+        analysis_id,
+        job.as_deref(),
+        imported,
+        format,
+    )
+    .await?;
+    Ok(true)
+}
+
+pub(crate) async fn drain_hit_queue(state: &AppState) -> ApiResult<bool> {
+    let batch = state.review_hit_queue.take_batch(8);
+    if batch.is_empty() {
+        return Ok(false);
+    }
+    for (match_id, analysis_id) in &batch {
+        if let Err(error) = refresh_hits(&state.pool, *match_id, analysis_id).await {
+            tracing::warn!(%match_id, %analysis_id, error = %error.1.error, "Failed to refresh review hit set");
+        }
+    }
+    Ok(batch.len() == 8)
 }
 
 /// One validated decision of a hit set, in review order.

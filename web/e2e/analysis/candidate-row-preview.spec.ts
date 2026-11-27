@@ -1,4 +1,6 @@
 import { DESKTOP_VIEWPORTS } from '../helpers/navigation';
+import type { components } from '../../src/generated-api';
+import { fulfillPositionAnalysisResult } from '../helpers/api-fixtures';
 import { openPositionCalculation } from '../helpers/analysis-controls';
 import { closeSettings } from '../helpers/settings-actions';
 import { test, expect } from '../helpers/test';
@@ -194,16 +196,17 @@ for (const source of ['engine', 'file', 'book'] as const)
     await page.route(
       `**/api/positions/${positionId}/analysis-result?*`,
       (route) =>
-        route.fulfill({
-          json: {
-            analysis_id: entry.id,
-            position_id: positionId,
-            engine: entry.engine,
-            depth: entry.depth,
-            records: source === 'file' ? records : [],
-            decision: null,
-            analysis: source === 'file' ? null : analysis,
-          },
+        fulfillPositionAnalysisResult(route, {
+          analysis_id: entry.id,
+          position_id: positionId,
+          engine: entry.engine,
+          depth: entry.depth,
+          records:
+            source === 'file'
+              ? (records as components['schemas']['ImportedAnalysisRecord'][])
+              : [],
+          decision: null,
+          analysis: source === 'file' ? null : analysis,
         }),
     );
     await page.route(`**/api/positions/${positionId}/opening-book`, (r) =>

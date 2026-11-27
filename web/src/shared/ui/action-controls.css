@@ -151,3 +151,33 @@ a.action-button--compact {
   border-color: transparent;
   background: transparent;
 }
+/* Shared sortable table headings: reveal sort direction on hover/focus or when active. */
+.library-sort-heading .action-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--ui-muted);
+}
+.library-sort-heading button[aria-pressed='false'] .action-icon {
+  visibility: hidden;
+}
+.library-sort-heading button:is(:hover, :focus-visible) .action-icon {
+  visibility: visible;
+}
+.library-sort-heading button[aria-pressed='true'] {
+  color: var(--ui-accent);
+}
+.library-sort-heading button[aria-pressed='true'] .action-icon {
+  color: inherit;
+  visibility: visible;
+}
+/* Dense table selection checkboxes expose an accessible >= 28x28 hit area. */
+.table-checkbox-target {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  cursor: pointer;
+}

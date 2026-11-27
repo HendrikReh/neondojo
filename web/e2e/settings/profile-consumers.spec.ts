@@ -3,7 +3,7 @@ import {
   databaseMatchFixture,
 } from '../helpers/match-fixtures';
 import { gotoWorkspace, openWorkspace } from '../helpers/navigation';
-import { fulfillJson } from '../helpers/api-fixtures';
+import { fulfillDecks, fulfillJson } from '../helpers/api-fixtures';
 import { backendTest as test, expect, type Page } from '../helpers/test';
 import { profileBackend, secondProfileId } from '../helpers/profile-backend';
 import {
@@ -84,24 +84,24 @@ async function fixture(
     }),
   );
   await page.route('**/api/decks', (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: deckA,
-          name: 'Race practice',
-          card_count: 1,
-          due_count: 1,
-          version: 0,
-        },
-        {
-          id: deckB,
-          name: 'Cube practice',
-          card_count: 1,
-          due_count: 1,
-          version: 0,
-        },
-      ],
-    }),
+    fulfillDecks(route, [
+      {
+        id: deckA,
+        name: 'Race practice',
+        card_count: 1,
+        due_count: 1,
+        version: 0,
+        created_at: '2026-11-09T00:00:00Z',
+      },
+      {
+        id: deckB,
+        name: 'Cube practice',
+        card_count: 1,
+        due_count: 1,
+        version: 0,
+        created_at: '2026-11-09T00:00:00Z',
+      },
+    ]),
   );
   await page.route(/\/api\/(?:cards|decks\/[^/]+\/cards)\?/, (route) =>
     route.fulfill({ json: { items: [], total: 0, next_cursor: null } }),

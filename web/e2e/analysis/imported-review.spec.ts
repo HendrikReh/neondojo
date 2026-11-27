@@ -1,4 +1,5 @@
 import { DESKTOP_VIEWPORTS, seedLocale } from '../helpers/navigation';
+import { fulfillPositionAnalysisResult } from '../helpers/api-fixtures';
 import { expect, test } from '../helpers/test';
 
 test('all-games Cube review wraps across games', async ({ page }) => {
@@ -139,7 +140,7 @@ test('imported decisions work in error navigation without a local job', async ({
     }),
   );
   await page.route('**/api/positions/*/analysis-result?*', (route) =>
-    route.fulfill({ json: null }),
+    fulfillPositionAnalysisResult(route, null),
   );
   await page.route('**/api/positions/*/jobs?*', (route) =>
     route.fulfill({ json: [] }),

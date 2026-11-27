@@ -1,4 +1,10 @@
 import {
+  fulfillDecks,
+  fulfillMistakeAttempt,
+  fulfillMistakePractice,
+  fulfillMistakes,
+} from '../helpers/api-fixtures';
+import {
   DESKTOP_VIEWPORTS,
   gotoWorkspace,
   seedLocale,
@@ -63,6 +69,8 @@ const list = (groups: MistakeGroup[]) => ({
   groups,
   analyzed_matches: 3,
   analyzed_decisions: 124,
+  player_matches: 3,
+  unanalyzed_matches: 0,
 });
 
 async function openOverview(page: Page) {
@@ -93,9 +101,10 @@ test('the recommendation starts the highest-ranked mistake group and returns foc
   );
   await page.route(/\/api\/study\/mistakes\?/, (route) => {
     const player = new URL(route.request().url()).searchParams.get('player');
-    return route.fulfill({
-      json: list(player === 'Alice' ? [checker, small, cube] : []),
-    });
+    return fulfillMistakes(
+      route,
+      list(player === 'Alice' ? [checker, small, cube] : []),
+    );
   });
 
   const reference = { job_id: 'job', game_no: 1, decision_no: 1 };
@@ -105,34 +114,32 @@ test('the recommendation starts the highest-ranked mistake group and returns foc
       game_plan: 'priming',
       mistake_kind: 'missed_double',
     });
-    return route.fulfill({
-      json: {
-        items: [
-          {
-            reference,
-            kind: 'cube_offer',
-            players,
-            engine: 'GNUbg',
-            plies: 3,
-            position: {
-              id: 'position',
-              match_uuid: 'match',
-              ordinal: 1,
-              game_no: 1,
-              ply: 1,
-              player: 0,
-              dice: [0, 0],
-              board: [
-                0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5,
-                0, 0, 0, 0, 2, 0,
-              ],
-              position_id: '4HPwATDgc/ABMA',
-              gnubg_match_id: 'cIkAAAAAAAAA',
-              notation: '',
-            },
+    return fulfillMistakePractice(route, {
+      items: [
+        {
+          reference,
+          kind: 'cube_offer',
+          players,
+          engine: 'GNUbg',
+          plies: 3,
+          position: {
+            id: 'position',
+            match_uuid: 'match',
+            ordinal: 1,
+            game_no: 1,
+            ply: 1,
+            player: 0,
+            dice: [0, 0],
+            board: [
+              0, -2, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -5, 5, 0, 0, 0, -3, 0, -5, 0,
+              0, 0, 0, 2, 0,
+            ],
+            position_id: '4HPwATDgc/ABMA',
+            gnubg_match_id: 'cIkAAAAAAAAA',
+            notation: '',
           },
-        ],
-      },
+        },
+      ],
     });
   });
   await page.route('**/api/study/mistakes/attempt', (route) => {
@@ -140,24 +147,22 @@ test('the recommendation starts the highest-ranked mistake group and returns foc
       reference,
       answer: { kind: 'cube_offer', action: 'double' },
     });
-    return route.fulfill({
-      json: {
-        original: {
-          best: 'double',
-          played: 'no double',
-          equity_loss: 0.125,
-          engine: 'GNUbg',
-          plies: 3,
-        },
-        evaluation: {
-          verdict: 'best',
-          chosen: 'double',
-          best: 'double',
-          chosen_equity: 0.125,
-          best_equity: 0.125,
-          equity_loss: 0,
-          provenance: { kind: 'recomputed', engine: 'GNUbg', plies: 3 },
-        },
+    return fulfillMistakeAttempt(route, {
+      original: {
+        best: 'double',
+        played: 'no double',
+        equity_loss: 0.125,
+        engine: 'GNUbg',
+        plies: 3,
+      },
+      evaluation: {
+        verdict: 'best',
+        chosen: 'double',
+        best: 'double',
+        chosen_equity: 0.125,
+        best_equity: 0.125,
+        equity_loss: 0,
+        provenance: { kind: 'recomputed', engine: 'GNUbg', plies: 3 },
       },
     });
   });
@@ -271,7 +276,7 @@ test('refreshes when the next card becomes due while the overview stays open', a
     }),
   );
   await page.route(/\/api\/study\/mistakes\?/, (route) =>
-    route.fulfill({ json: { ...list([]), players: [] } }),
+    fulfillMistakes(route, { ...list([]), players: [] }),
   );
   const overview = await openOverview(page);
   const cards = overview.getByRole('region', { name: 'Due flashcards' });
@@ -306,20 +311,19 @@ test('retries due counts independently and handles a removed recommended deck', 
       : route.fulfill({ status: 503, json: { error: 'Counts unavailable' } }),
   );
   await page.route(/\/api\/study\/mistakes\?/, (route) =>
-    route.fulfill({ json: list([cube]) }),
+    fulfillMistakes(route, list([cube])),
   );
   await page.route('**/api/decks', (route) =>
-    route.fulfill({
-      json: [
-        {
-          id: existing,
-          name: 'Existing',
-          card_count: 2,
-          due_count: 1,
-          version: 0,
-        },
-      ],
-    }),
+    fulfillDecks(route, [
+      {
+        id: existing,
+        name: 'Existing',
+        card_count: 2,
+        due_count: 1,
+        version: 0,
+        created_at: '2026-11-09T00:00:00Z',
+      },
+    ]),
   );
   let releaseNext = () => {};
   const pendingNext = new Promise<void>((resolve) => {
@@ -388,6 +392,7 @@ test('refreshes the deck list when the recommended deck disappears before the qu
     card_count: 1,
     due_count: 1,
     version: 0,
+    created_at: '2026-11-09T00:00:00Z',
   };
   let removed = false;
   await page.route('**/api/study/learning-summary', (route) =>
@@ -401,7 +406,7 @@ test('refreshes the deck list when the recommended deck disappears before the qu
     }),
   );
   await page.route('**/api/decks', (route) =>
-    route.fulfill({ json: removed ? [] : [deck] }),
+    fulfillDecks(route, removed ? [] : [deck]),
   );
   await page.route(`**/api/decks/${deck.id}/next`, (route) => {
     removed = true;
@@ -437,9 +442,8 @@ test('ignores a superseded player response even after reselecting that player', 
     const player = new URL(route.request().url()).searchParams.get('player');
     if (player === 'Alice' && ++aliceRequests === 1) {
       await oldAlice;
-      await route.fulfill({ json: list([checker]) }).catch(() => {});
-    } else
-      await route.fulfill({ json: list(player === 'Alice' ? [cube] : []) });
+      await fulfillMistakes(route, list([checker])).catch(() => {});
+    } else await fulfillMistakes(route, list(player === 'Alice' ? [cube] : []));
   });
   const overview = await openOverview(page);
   const player = overview.getByRole('combobox', { name: 'Player' });
@@ -491,7 +495,7 @@ test('shows today as due reviews plus allowed new cards and saves the daily limi
     return route.fulfill({ json: body });
   });
   await page.route(/\/api\/study\/mistakes\?/, (route) =>
-    route.fulfill({ json: { ...list([]), players: [] } }),
+    fulfillMistakes(route, { ...list([]), players: [] }),
   );
   const overview = await openOverview(page);
   const cards = overview.getByRole('region', { name: 'Due flashcards' });

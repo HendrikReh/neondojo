@@ -3,6 +3,30 @@ use crate::backgammon::ids::{Field, MatchId};
 use anyhow::{Context as _, Result, ensure};
 use serde::Serialize;
 
+/// The match equity tables in the supported NeonGammon wheels cover up to 25-away.
+pub(crate) const MAX_AWAY: i32 = 25;
+
+pub(crate) fn ensure_supported_away(away1: i32, away2: i32) -> Result<()> {
+    ensure!(
+        away1.max(away2) <= MAX_AWAY,
+        "NeonGammon cannot evaluate {away1}-away vs {away2}-away (supported up to {MAX_AWAY}-away per player)"
+    );
+    Ok(())
+}
+
+pub(crate) fn validate_match_id_away(match_id: &str) -> Result<()> {
+    let id = MatchId::decode(match_id).context("Invalid GNUbg Match ID")?;
+    let length = id.get(Field::LENGTH);
+    if length > 0 {
+        let player = id.get(Field::ON_ROLL);
+        let scores = [id.get(Field::SCORE_0), id.get(Field::SCORE_1)];
+        let away1 = length - scores[player as usize];
+        let away2 = length - scores[(1 - player) as usize];
+        ensure_supported_away(away1, away2)?;
+    }
+    Ok(())
+}
+
 #[derive(Debug, Serialize)]
 pub(super) struct Context {
     pub cube_value: i32,
@@ -39,6 +63,17 @@ impl Context {
             length == 0 || scores.iter().all(|score| *score < length),
             "Match has already ended"
         );
+        let away1 = if length > 0 {
+            length - scores[player as usize]
+        } else {
+            0
+        };
+        let away2 = if length > 0 {
+            length - scores[(1 - player) as usize]
+        } else {
+            0
+        };
+        ensure_supported_away(away1, away2)?;
         let dice = [id.get(Field::DIE_0), id.get(Field::DIE_1)];
         ensure!(dice.iter().all(|die| *die <= 6), "Invalid Match ID dice");
         Ok(Self {
@@ -50,16 +85,8 @@ impl Context {
             } else {
                 "opponent"
             },
-            away1: if length > 0 {
-                length - scores[player as usize]
-            } else {
-                0
-            },
-            away2: if length > 0 {
-                length - scores[(1 - player) as usize]
-            } else {
-                0
-            },
+            away1,
+            away2,
             is_crawford: id.get(Field::CRAWFORD) == 1,
             jacoby: length == 0 && id.get(Field::NO_JACOBY) == 0,
             player,
@@ -164,5 +191,39 @@ mod tests {
         assert!(context.pending_double);
         assert_eq!(context.away1, 4);
         assert_eq!(context.cube_owner, "player");
+    }
+
+    #[test]
+    fn rejects_away_scores_above_25_and_accepts_up_to_25_and_money() {
+        for (length, scores, player, expected_ok) in [
+            (0, [0, 0], 0, true),
+            (25, [0, 0], 0, true),
+            (31, [6, 6], 0, true),
+            (31, [6, 6], 1, true),
+            (31, [5, 6], 0, false),
+            (31, [5, 6], 1, false),
+            (31, [6, 5], 0, false),
+            (31, [5, 5], 0, false),
+        ] {
+            let mid = ids::match_id(length, scores, 1, 3, false, false, player, [3, 1]);
+            let decoded = Context::decode(&mid);
+            let away_check = validate_match_id_away(&mid);
+            assert_eq!(
+                decoded.is_ok(),
+                expected_ok,
+                "length={length} scores={scores:?} player={player}: {decoded:?}"
+            );
+            assert_eq!(
+                away_check.is_ok(),
+                expected_ok,
+                "length={length} scores={scores:?} player={player}: {away_check:?}"
+            );
+            if !expected_ok {
+                assert!(
+                    decoded.unwrap_err().to_string().contains("25-away"),
+                    "expected 25-away message"
+                );
+            }
+        }
     }
 }

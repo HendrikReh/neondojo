@@ -50,9 +50,13 @@ pub(super) async fn create_job(
             "Depth is not verified for the selected engine",
         ));
     }
-    store::get_position(&state.pool, request.position_id)
+    let position = store::get_position(&state.pool, request.position_id)
         .await?
         .ok_or_else(ApiError::missing)?;
+    if snapshot.provider() == Some(crate::engines::EngineId::NeonGammon) {
+        crate::engines::validate_match_id_away(&position.gnubg_match_id)
+            .map_err(|e| ApiError::invalid(format!("{e:#}")))?;
+    }
     let job = store::create_job_with_snapshot(
         &state.pool,
         request.position_id,

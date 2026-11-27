@@ -136,7 +136,7 @@ async fn entry_on(
         .bind(match_id).bind(analysis_id).fetch_optional(connection).await.map_err(anyhow::Error::from)?)
 }
 
-#[utoipa::path(get, path="/api/matches/{id}/analyses", params(("id"=Uuid,Path),AnalysisCatalogQuery),responses((status=200,body=AnalysisCatalogPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Analysis catalog")]
+#[utoipa::path(get, path="/api/matches/{id}/analyses", params(("id"=Uuid,Path),AnalysisCatalogQuery),responses((status=200,body=AnalysisCatalogPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Analysis catalog")]
 async fn catalog(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -146,18 +146,21 @@ async fn catalog(
     if !(1..=100).contains(&limit) {
         return Err(ApiError::invalid("limit must be between 1 and 100"));
     }
-    crate::play::require_review_available(&state.pool, id).await?;
-    if !crate::imported_analysis::ensure_catalog(&state.pool, id).await? {
-        return Err(ApiError::missing());
-    }
     let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     crate::play::require_review_available_on(&mut *tx, id).await?;
-    let revision: i64 = sqlx::query_scalar("SELECT source_revision FROM matches WHERE id=$1")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?
-        .ok_or_else(ApiError::missing)?;
+    let (revision, imported_loaded): (i64, bool) =
+        sqlx::query_as("SELECT source_revision,imported_analysis_loaded FROM matches WHERE id=$1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?
+            .ok_or_else(ApiError::missing)?;
+    if !imported_loaded {
+        return Err(crate::browse_indexes::preparing(
+            &state,
+            "Imported analysis",
+        ));
+    }
     if let Some(position) = query.position_id {
         let belongs: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM positions WHERE id=$1 AND match_uuid=$2)",

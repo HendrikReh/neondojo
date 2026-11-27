@@ -19,7 +19,9 @@ use uuid::Uuid;
 mod hits;
 mod projection;
 mod routes;
+pub use hits::refresh_hits;
 use hits::*;
+pub(crate) use hits::{HitRefreshQueue, drain_hit_queue};
 use projection::*;
 pub use routes::{ReviewDoc, routes};
 
@@ -72,8 +74,9 @@ const REVIEW_SQL: &str = r#"
     "#;
 
 const SCAN_LIMIT: i64 = 512;
-/// Bump when `project` accepts or rejects other rows or derives another loss.
-const HITS_VERSION: i32 = 2;
+/// Bump when `project` accepts or rejects other rows, derives another loss, or
+/// changes the `hits_fingerprint` representation.
+const HITS_VERSION: i32 = 3;
 /// Numbered pages up to this size use the narrow hit set.
 const HIT_PAGE_LIMIT: i64 = 100;
 
@@ -164,28 +167,20 @@ pub(crate) async fn load_review(
     id: Uuid,
     query: ReviewQuery,
 ) -> ApiResult<ReviewDecisionPage> {
-    load_review_bounded(state, id, query, 100, true).await
-}
-
-/// Batch consumers reuse the same projection under one read snapshot.
-pub(crate) async fn load_all_review(
-    state: &AppState,
-    id: Uuid,
-    analysis_id: &str,
-    game_no: Option<i32>,
-    kind: Option<String>,
-) -> ApiResult<Vec<ReviewDecision>> {
-    let query = all_review_query(analysis_id, game_no, kind);
-    review_bounds(&query, ALL_REVIEW_MAX)?;
-    prepare_review(&state.pool, id).await?;
+    let (limit, offset) = review_bounds(&query, 100)?;
     let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
-    let items = read_all_review(&mut tx, id, &query).await?;
+    require_cataloged_on(state, &mut tx, id).await?;
+    let (page, stale_analysis) = read_review(&mut tx, id, &query, limit, offset, true).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(items)
+    if let Some(analysis_id) = stale_analysis {
+        state.review_hit_queue.enqueue(id, &analysis_id);
+        state.browse_wake.notify_one();
+    }
+    Ok(page)
 }
 
 /// Batch consumers reuse the same projection inside the caller's read-only
-/// snapshot. Call [`prepare_review`] before opening that snapshot.
+/// snapshot. Callers must ensure the match's catalogs are ready first.
 pub(crate) async fn load_all_review_on(
     connection: &mut PgConnection,
     id: Uuid,
@@ -218,10 +213,7 @@ async fn read_all_review(
     query: &ReviewQuery,
 ) -> ApiResult<Vec<ReviewDecision>> {
     let (limit, offset) = review_bounds(query, ALL_REVIEW_MAX)?;
-    let page = match read_review(connection, id, query, limit, offset, false).await? {
-        ReviewRead::Page(page) => page,
-        ReviewRead::StaleHits(_) => unreachable!("hit sets are only rebuilt on request"),
-    };
+    let (page, _) = read_review(connection, id, query, limit, offset, false).await?;
     if page.total.is_some_and(|total| total > ALL_REVIEW_MAX) {
         return Err(ApiError::invalid(
             "Analysis exceeds supported decision count",
@@ -230,14 +222,29 @@ async fn read_all_review(
     Ok(page.items)
 }
 
-/// Writes the lazily built catalogs a review reads. They cannot be built inside
-/// the read-only snapshot that serves the review itself.
-pub(crate) async fn prepare_review(pool: &sqlx::PgPool, id: Uuid) -> ApiResult<()> {
-    crate::play::require_review_available(pool, id).await?;
-    if !crate::move_catalog::ensure_catalog(pool, id).await?
-        || !crate::imported_analysis::ensure_catalog(pool, id).await?
-    {
+/// Read-only check that the match exists, is reviewable, and has its move and
+/// imported-analysis catalogs populated. Wakes `browse_indexes::worker` and
+/// returns `503 index_preparing` for uncataloged legacy matches.
+pub(crate) async fn require_cataloged_on(
+    state: &AppState,
+    connection: &mut PgConnection,
+    id: Uuid,
+) -> ApiResult<()> {
+    crate::play::require_review_available_on(&mut *connection, id).await?;
+    let flags: Option<(bool, bool)> =
+        sqlx::query_as("SELECT moves_cataloged,imported_analysis_loaded FROM matches WHERE id=$1")
+            .bind(id)
+            .fetch_optional(&mut *connection)
+            .await
+            .map_err(anyhow::Error::from)?;
+    let Some((moves_cataloged, imported_loaded)) = flags else {
         return Err(ApiError::missing());
+    };
+    if !moves_cataloged || !imported_loaded {
+        return Err(crate::browse_indexes::preparing(
+            state,
+            "The match analysis catalog",
+        ));
     }
     Ok(())
 }
@@ -258,51 +265,6 @@ fn review_bounds(query: &ReviewQuery, max_limit: i64) -> ApiResult<(i64, Option<
     }
     let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
     Ok((limit, offset))
-}
-
-async fn load_review_bounded(
-    state: &AppState,
-    id: Uuid,
-    query: ReviewQuery,
-    max_limit: i64,
-    rebuild: bool,
-) -> ApiResult<ReviewDecisionPage> {
-    let (limit, offset) = review_bounds(&query, max_limit)?;
-    prepare_review(&state.pool, id).await?;
-    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
-    match read_review(&mut tx, id, &query, limit, offset, rebuild).await? {
-        ReviewRead::Page(page) => {
-            tx.commit().await.map_err(anyhow::Error::from)?;
-            Ok(page)
-        }
-        ReviewRead::StaleHits(stale) => {
-            // Build outside this read-only snapshot, then answer from a new one.
-            tx.rollback().await.map_err(anyhow::Error::from)?;
-            build_hits(
-                &state.pool,
-                id,
-                &stale.analysis_id,
-                stale.job.as_deref(),
-                stale.imported,
-                stale.format,
-            )
-            .await?;
-            Box::pin(load_review_bounded(state, id, query, max_limit, false)).await
-        }
-    }
-}
-
-enum ReviewRead {
-    Page(ReviewDecisionPage),
-    StaleHits(StaleHits),
-}
-
-/// The stored hit set no longer matches this analysis; rebuild it first.
-struct StaleHits {
-    analysis_id: String,
-    job: Option<Box<Job>>,
-    imported: bool,
-    format: MatchFormat,
 }
 
 struct ReviewScope {
@@ -486,6 +448,12 @@ async fn load_single_position_review(
     })
 }
 
+enum HitPageLookup {
+    Hit(ReviewDecisionPage),
+    Stale(String),
+    Skip,
+}
+
 async fn try_load_hit_page(
     tx: &mut PgConnection,
     id: Uuid,
@@ -493,10 +461,10 @@ async fn try_load_hit_page(
     resolved: &ReviewScope,
     offset: i64,
     limit: i64,
-    rebuild: bool,
-) -> ApiResult<Option<ReviewRead>> {
+    track_stale: bool,
+) -> ApiResult<HitPageLookup> {
     let Some(analysis_id) = resolved.analysis_id.as_deref() else {
-        return Ok(None);
+        return Ok(HitPageLookup::Skip);
     };
     let job_id = resolved.job.as_ref().map(|j| j.id);
     let current = hits_fingerprint(&mut *tx, id, analysis_id, job_id).await?;
@@ -523,17 +491,14 @@ async fn try_load_hit_page(
             limit,
         };
         if let Some(page) = page.load(&mut *tx).await? {
-            return Ok(Some(ReviewRead::Page(page)));
+            return Ok(HitPageLookup::Hit(page));
         }
-    } else if rebuild {
-        return Ok(Some(ReviewRead::StaleHits(StaleHits {
-            analysis_id: analysis_id.to_owned(),
-            job: resolved.job.clone(),
-            imported: resolved.imported,
-            format: resolved.format,
-        })));
     }
-    Ok(None)
+    if track_stale {
+        Ok(HitPageLookup::Stale(analysis_id.to_owned()))
+    } else {
+        Ok(HitPageLookup::Skip)
+    }
 }
 
 async fn scan_review_pages(
@@ -632,8 +597,8 @@ async fn read_review(
     query: &ReviewQuery,
     limit: i64,
     offset: Option<i64>,
-    rebuild: bool,
-) -> ApiResult<ReviewRead> {
+    track_stale: bool,
+) -> ApiResult<(ReviewDecisionPage, Option<String>)> {
     let resolved = resolve_review_scope(&mut *tx, id, query).await?;
     let cursor = decode_review_cursor(query.after.as_deref(), &resolved.scope)?;
     if let Some(job) = resolved.job.as_ref().filter(|j| j.kind == "analysis") {
@@ -647,20 +612,24 @@ async fn read_review(
             offset,
         )
         .await?;
-        return Ok(ReviewRead::Page(page));
+        return Ok((page, None));
     }
     // Numbered pages count and select in the narrow hit set under this read
-    // snapshot and project only their own decisions. Cursor pages and batch
-    // consumers scan the analysis below.
+    // snapshot and project only their own decisions. When the hit set is absent
+    // or stale, answer from the same read-only snapshot via scan and let the
+    // background worker rebuild the hit set outside the GET request.
+    let mut stale = None;
     if let Some(offset) = offset
         && limit <= HIT_PAGE_LIMIT
-        && let Some(hit_read) =
-            try_load_hit_page(&mut *tx, id, query, &resolved, offset, limit, rebuild).await?
     {
-        return Ok(hit_read);
+        match try_load_hit_page(&mut *tx, id, query, &resolved, offset, limit, track_stale).await? {
+            HitPageLookup::Hit(page) => return Ok((page, None)),
+            HitPageLookup::Stale(analysis_id) => stale = Some(analysis_id),
+            HitPageLookup::Skip => {}
+        }
     }
     let page = scan_review_pages(&mut *tx, id, query, &resolved, cursor, limit, offset).await?;
-    Ok(ReviewRead::Page(page))
+    Ok((page, stale))
 }
 
 #[cfg(test)]

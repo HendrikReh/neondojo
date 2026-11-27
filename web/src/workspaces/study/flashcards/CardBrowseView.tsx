@@ -116,9 +116,16 @@ export default function CardBrowseView({
     <>
       <CardSearchControls
         filters={draftFilters}
+        applied={filters}
+        busy={loading}
         onChange={onDraftFiltersChange}
         onSearch={() => onApplyFilters(normalizeCardFilters(draftFilters))}
         onClear={() => onClearFilters(emptyCardFilters())}
+        onRemoveFilter={(key) => {
+          const next = normalizeCardFilters({ ...filters, [key]: '' });
+          onDraftFiltersChange({ ...draftFilters, [key]: '' });
+          onApplyFilters(next);
+        }}
       >
         {deckSelector}
       </CardSearchControls>
@@ -161,11 +168,7 @@ export default function CardBrowseView({
       <details className="learning-extras">
         <summary>{practiceT('studyTools')}</summary>
         <TransferPractice onStart={onStartTransferPractice} />
-        <CardTopics
-          filters={filters}
-          deck={deckId}
-          onSelect={onSelectTopic}
-        />
+        <CardTopics filters={filters} deck={deckId} onSelect={onSelectTopic} />
       </details>
       <LearningCardBrowser
         key={listKey}

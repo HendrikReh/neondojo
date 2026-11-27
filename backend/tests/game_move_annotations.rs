@@ -296,11 +296,36 @@ async fn checker_move_notes_use_the_existing_position_annotation(pool: PgPool) {
 #[sqlx::test(migrations = "./migrations")]
 async fn legacy_catalog_backfills_once_under_concurrent_requests(pool: PgPool) {
     let (app, id) = setup(&pool).await;
+    sqlx::query("DELETE FROM match_moves WHERE match_uuid=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("DELETE FROM match_games WHERE match_uuid=$1")
         .bind(id)
         .execute(&pool)
         .await
         .unwrap();
+    sqlx::query("UPDATE matches SET moves_cataloged=false WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, preparing) = call(
+        app.clone(),
+        "GET",
+        &format!("/api/matches/{id}/games/1/decisions"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 503, "{preparing}");
+    assert_eq!(preparing["code"], "index_preparing");
+    let (a, b) = tokio::join!(
+        neondojo::move_catalog::ensure_catalog(&pool, id),
+        neondojo::move_catalog::ensure_catalog(&pool, id)
+    );
+    assert!(a.unwrap());
+    assert!(b.unwrap());
     let (first, second) = tokio::join!(catalog(app.clone(), id, 1), catalog(app.clone(), id, 1));
     assert_eq!(first, second);
     let complete: bool = sqlx::query_scalar("SELECT moves_cataloged FROM matches WHERE id=$1")

@@ -36,17 +36,12 @@ pub struct SelectedPositionAnalysis {
     pub analysis: Option<Analysis>,
 }
 
-#[utoipa::path(get,path="/api/positions/{id}/analysis-result",params(("id"=Uuid,Path),PositionResultQuery),responses((status=200,body=Option<SelectedPositionAnalysis>),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Analysis catalog")]
+#[utoipa::path(get,path="/api/positions/{id}/analysis-result",params(("id"=Uuid,Path),PositionResultQuery),responses((status=200,body=Option<SelectedPositionAnalysis>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Analysis catalog")]
 pub(super) async fn position_result(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Query(query): Query<PositionResultQuery>,
 ) -> ApiResult<Json<Option<SelectedPositionAnalysis>>> {
-    let position = crate::store::get_position(&state.pool, id)
-        .await?
-        .ok_or_else(ApiError::missing)?;
-    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
-    crate::imported_analysis::ensure_catalog(&state.pool, position.match_uuid).await?;
     let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     let position: Position = sqlx::query_as("SELECT * FROM positions WHERE id=$1")
         .bind(id)
@@ -54,6 +49,20 @@ pub(super) async fn position_result(
         .await
         .map_err(anyhow::Error::from)?
         .ok_or_else(ApiError::missing)?;
+    crate::play::require_review_available_on(&mut *tx, position.match_uuid).await?;
+    let imported_loaded: bool =
+        sqlx::query_scalar("SELECT imported_analysis_loaded FROM matches WHERE id=$1")
+            .bind(position.match_uuid)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?
+            .ok_or_else(ApiError::missing)?;
+    if !imported_loaded {
+        return Err(crate::browse_indexes::preparing(
+            &state,
+            "Imported analysis",
+        ));
+    }
     let Some(selected) =
         resolve_selection_on(&mut tx, position.match_uuid, query.analysis_id.as_deref()).await?
     else {

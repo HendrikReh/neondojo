@@ -1,3 +1,11 @@
+import {
+  fulfillDecks,
+  fulfillError,
+  fulfillMistakeAnswer,
+  fulfillMistakeAttempt,
+  fulfillMistakePractice,
+  fulfillMistakes,
+} from '../helpers/api-fixtures';
 import { databaseFixture } from '../helpers/match-fixtures';
 import {
   DESKTOP_VIEWPORTS,
@@ -33,8 +41,8 @@ const question = (n: number) => ({
   plies: 3,
 });
 const group = {
-  game_plan: 'priming',
-  mistake_kind: 'checker',
+  game_plan: 'priming' as const,
+  mistake_kind: 'checker' as const,
   count: 3,
   match_count: 2,
   total_loss: 0.36,
@@ -43,6 +51,7 @@ const group = {
     error_rate: 0.5,
     loss_per_100: 6,
     small_sample: true,
+    trend: null,
   },
 };
 const result = {
@@ -50,6 +59,8 @@ const result = {
   groups: [group],
   analyzed_decisions: 22,
   analyzed_matches: 2,
+  player_matches: 2,
+  unanalyzed_matches: 0,
 };
 const answer = {
   best: '13/10 6/5',
@@ -63,7 +74,7 @@ async function open(page: Page, locale = 'en') {
     (locale) => localStorage.setItem('neondojo.locale', locale),
     locale,
   );
-  await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
+  await page.route('**/api/decks', (r) => fulfillDecks(r, []));
   await page.route('**/api/databases', (r) => r.fulfill({ json: [database] }));
   await page.goto('/');
   await page
@@ -84,13 +95,11 @@ async function open(page: Page, locale = 'en') {
 }
 async function list(page: Page) {
   await page.route('**/api/study/mistakes?*', (r) =>
-    r.fulfill({
-      json: {
-        ...result,
-        groups: new URL(r.request().url()).searchParams.has('player')
-          ? [group]
-          : [],
-      },
+    fulfillMistakes(r, {
+      ...result,
+      groups: new URL(r.request().url()).searchParams.has('player')
+        ? [group]
+        : [],
     }),
   );
 }
@@ -135,7 +144,7 @@ test('checks checker moves, cube offers and cube replies in the practice dialog'
     },
   ];
   await page.route('**/api/study/mistakes/practice', (r) =>
-    r.fulfill({ json: { items: cases.map((c) => c.item) } }),
+    fulfillMistakePractice(r, { items: cases.map((c) => c.item) }),
   );
   let attempts = 0;
   await page.route('**/api/study/mistakes/attempt', async (r) => {
@@ -144,17 +153,15 @@ test('checks checker moves, cube offers and cube replies in the practice dialog'
       reference: entry.item.reference,
       answer: entry.submitted,
     });
-    await r.fulfill({
-      json: {
-        original: answer,
-        evaluation: {
-          verdict: 'error',
-          ...entry.evaluated,
-          chosen_equity: 0,
-          best_equity: 0.125,
-          equity_loss: 0.125,
-          provenance: { kind: 'recomputed', engine: 'GNUbg', plies: 3 },
-        },
+    await fulfillMistakeAttempt(r, {
+      original: answer,
+      evaluation: {
+        verdict: 'error',
+        ...entry.evaluated,
+        chosen_equity: 0,
+        best_equity: 0.125,
+        equity_loss: 0.125,
+        provenance: { kind: 'recomputed', engine: 'GNUbg', plies: 3 },
       },
     });
   });
@@ -249,13 +256,11 @@ test('both cube response groups open a round with correct takes and passes', asy
     },
   ] as const;
   await page.route('**/api/study/mistakes?*', (route) =>
-    route.fulfill({
-      json: {
-        ...result,
-        groups: new URL(route.request().url()).searchParams.has('player')
-          ? rounds.map(({ kind }) => ({ ...group, mistake_kind: kind }))
-          : [],
-      },
+    fulfillMistakes(route, {
+      ...result,
+      groups: new URL(route.request().url()).searchParams.has('player')
+        ? rounds.map(({ kind }) => ({ ...group, mistake_kind: kind }))
+        : [],
     }),
   );
   const items = [1, 2].map((n) => ({
@@ -271,7 +276,7 @@ test('both cube response groups open a round with correct takes and passes', asy
       game_plan: 'priming',
       mistake_kind: rounds[roundIndex].kind,
     });
-    return route.fulfill({ json: { items } });
+    return fulfillMistakePractice(route, { items });
   });
   await page.route('**/api/study/mistakes/attempt', (route) => {
     const { action, played, loss } = rounds[roundIndex].decisions[answerIndex];
@@ -280,18 +285,16 @@ test('both cube response groups open a round with correct takes and passes', asy
       answer: { kind: 'cube_response', action },
     });
     const bestEquity = action === 'take' ? -0.75 : -1;
-    return route.fulfill({
-      json: {
-        original: { ...answer, best: action, played, equity_loss: loss },
-        evaluation: {
-          verdict: 'best',
-          chosen: action,
-          best: action,
-          chosen_equity: bestEquity,
-          best_equity: bestEquity,
-          equity_loss: 0,
-          provenance: { kind: 'stored', engine: 'GNUbg', plies: 3 },
-        },
+    return fulfillMistakeAttempt(route, {
+      original: { ...answer, best: action, played, equity_loss: loss },
+      evaluation: {
+        verdict: 'best',
+        chosen: action,
+        best: action,
+        chosen_equity: bestEquity,
+        best_equity: bestEquity,
+        equity_loss: 0,
+        provenance: { kind: 'stored', engine: 'GNUbg', plies: 3 },
       },
     });
   });
@@ -339,7 +342,7 @@ test('imported practice keeps original depth, uses imported references and hides
   const importedQuestion = (
     id: string,
     engine: string,
-    source: string,
+    source: 'xg' | 'bgblitz',
     depth: string | null,
   ) => ({
     ...question(1),
@@ -351,27 +354,23 @@ test('imported practice keeps original depth, uses imported references and hides
     method: source === 'xg' ? 'rollout' : null,
   });
   await page.route('**/api/study/mistakes/practice', (r) =>
-    r.fulfill({
-      json: {
-        items: [
-          importedQuestion('xg-record', 'eXtreme Gammon', 'xg', 'XGRoller++'),
-          importedQuestion('bgf-record', 'BGBlitz source', 'bgblitz', null),
-        ],
-      },
+    fulfillMistakePractice(r, {
+      items: [
+        importedQuestion('xg-record', 'eXtreme Gammon', 'xg', 'XGRoller++'),
+        importedQuestion('bgf-record', 'BGBlitz source', 'bgblitz', null),
+      ],
     }),
   );
   const references: unknown[] = [];
   await page.route('**/api/study/mistakes/reveal', (r) => {
     references.push(r.request().postDataJSON());
-    return r.fulfill({
-      json: {
-        ...answer,
-        engine: 'eXtreme Gammon',
-        source: 'xg',
-        depth: 'XGRoller++',
-        method: 'rollout',
-        plies: null,
-      },
+    return fulfillMistakeAnswer(r, {
+      ...answer,
+      engine: 'eXtreme Gammon',
+      source: 'xg',
+      depth: 'XGRoller++',
+      method: 'rollout',
+      plies: null,
     });
   });
   await open(page);
@@ -433,12 +432,12 @@ test('requires an exact player, filters groups and reveals saved answers only on
   let practiceBody: unknown;
   await page.route('**/api/study/mistakes/practice', (r) => {
     practiceBody = r.request().postDataJSON();
-    return r.fulfill({ json: { items: [question(1), question(2)] } });
+    return fulfillMistakePractice(r, { items: [question(1), question(2)] });
   });
   let reveals = 0;
   await page.route('**/api/study/mistakes/reveal', (r) => {
     reveals++;
-    return r.fulfill({ json: answer });
+    return fulfillMistakeAnswer(r, answer);
   });
   await open(page);
   const panel = page.getByRole('region', {
@@ -521,14 +520,12 @@ test('list, practice and reveal support retry; closing cancels a late answer and
     failPractice = true,
     failReveal = true;
   await page.route('**/api/study/mistakes?*', (r) =>
-    failList
-      ? r.fulfill({ status: 503, json: { error: 'Unavailable' } })
-      : r.fulfill({ json: result }),
+    failList ? fulfillError(r, 'Unavailable', 503) : fulfillMistakes(r, result),
   );
   await page.route('**/api/study/mistakes/practice', (r) =>
     failPractice
-      ? r.fulfill({ status: 503, json: { error: 'Unavailable' } })
-      : r.fulfill({ json: { items: [question(1), question(2)] } }),
+      ? fulfillError(r, 'Unavailable', 503)
+      : fulfillMistakePractice(r, { items: [question(1), question(2)] }),
   );
   let release = () => {};
   let delayed = false;
@@ -539,8 +536,8 @@ test('list, practice and reveal support retry; closing cancels a late answer and
     if (delayed) await pending;
     await (
       failReveal
-        ? r.fulfill({ status: 503, json: { error: 'Unavailable' } })
-        : r.fulfill({ json: answer })
+        ? fulfillError(r, 'Unavailable', 503)
+        : fulfillMistakeAnswer(r, answer)
     ).catch(() => {});
   });
   await open(page);
@@ -596,11 +593,10 @@ test('late lists cannot replace a newer player and empty groups are honest', asy
   await page.route('**/api/study/mistakes?*', async (r) => {
     const player = new URL(r.request().url()).searchParams.get('player');
     if (player === 'Alice') await pending;
-    await r
-      .fulfill({
-        json: { ...result, groups: player === 'Alice' ? [group] : [] },
-      })
-      .catch(() => {});
+    await fulfillMistakes(r, {
+      ...result,
+      groups: player === 'Alice' ? [group] : [],
+    }).catch(() => {});
   });
   await open(page);
   const panel = page.getByRole('region', {
@@ -638,17 +634,13 @@ test('Next ignores a late reveal and leaving Study cancels pending practice', as
   await page.route('**/api/study/mistakes/practice', async (r) => {
     const delayed = delayPractice;
     if (delayed) await pendingPractice;
-    await r
-      .fulfill({
-        json: {
-          items: delayed ? [question(99)] : [question(1), question(2)],
-        },
-      })
-      .catch(() => {});
+    await fulfillMistakePractice(r, {
+      items: delayed ? [question(99)] : [question(1), question(2)],
+    }).catch(() => {});
   });
   await page.route('**/api/study/mistakes/reveal', async (r) => {
     await pendingReveal;
-    await r.fulfill({ json: answer }).catch(() => {});
+    await fulfillMistakeAnswer(r, answer).catch(() => {});
   });
   await open(page);
   const panel = page.getByRole('region', {
@@ -696,7 +688,7 @@ test('position search exposes the same game plan labels and sends the chosen opt
   page,
 }) => {
   await seedLocale(page);
-  await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
+  await page.route('**/api/decks', (r) => fulfillDecks(r, []));
   await page.route('**/api/databases', (r) => r.fulfill({ json: [] }));
   await page.route('**/api/position-filters', (r) => r.fulfill({ json: [] }));
   const definitions: Record<string, unknown>[] = [];
@@ -741,7 +733,7 @@ for (const [locale, title] of [
     await page.setViewportSize({ width: 390, height: 844 });
     await list(page);
     await page.route('**/api/study/mistakes/practice', (r) =>
-      r.fulfill({ json: { items: [question(1)] } }),
+      fulfillMistakePractice(r, { items: [question(1)] }),
     );
     await open(page, locale);
     const panel = page.getByRole('region', { name: title, exact: true });
@@ -794,16 +786,19 @@ test('a player unavailable in the selected database resets explicitly, and inval
   await page.route('**/api/study/mistakes?*', (r) => {
     const url = new URL(r.request().url());
     calls.push(url);
-    return r.fulfill({
-      json: url.searchParams.has('database_id')
+    return fulfillMistakes(
+      r,
+      url.searchParams.has('database_id')
         ? {
             players: ['Bob'],
             groups: [],
             analyzed_decisions: 0,
             analyzed_matches: 0,
+            player_matches: 0,
+            unanalyzed_matches: 0,
           }
         : { ...result, groups: url.searchParams.has('player') ? [group] : [] },
-    });
+    );
   });
   await open(page);
   const panel = page.getByRole('region', {
@@ -840,20 +835,18 @@ test('practice shows original match length and money-game Jacoby rules before re
   // Jacoby respectively. Board scores alone cannot distinguish these contexts.
   const contexts = ['cIngAAAAAAAE', 'cIkAAAAAAAAA', 'cIkAAAAAAAAE'];
   await page.route('**/api/study/mistakes/practice', (route) =>
-    route.fulfill({
-      json: {
-        items: contexts.map((gnubg_match_id, index) => ({
-          ...question(index + 1),
-          kind: 'cube_offer',
-          position: { ...position, gnubg_match_id, dice: [] },
-        })),
-      },
+    fulfillMistakePractice(route, {
+      items: contexts.map((gnubg_match_id, index) => ({
+        ...question(index + 1),
+        kind: 'cube_offer',
+        position: { ...position, gnubg_match_id, dice: [] },
+      })),
     }),
   );
   let reveals = 0;
   await page.route('**/api/study/mistakes/reveal', (route) => {
     reveals++;
-    return route.fulfill({ json: answer });
+    return fulfillMistakeAnswer(route, answer);
   });
   await open(page);
   const panel = page.getByRole('region', {
@@ -885,37 +878,33 @@ test('a cube question is answered by keyboard and explains score, outcomes and t
 }) => {
   await list(page);
   await page.route('**/api/study/mistakes/practice', (route) =>
-    route.fulfill({
-      json: {
-        items: [1, 2].map((n) => ({
-          ...question(n),
-          kind: 'cube_offer',
-          position: { ...position, gnubg_match_id: 'cIngAAAAAAAE', dice: [] },
-        })),
-      },
+    fulfillMistakePractice(route, {
+      items: [1, 2].map((n) => ({
+        ...question(n),
+        kind: 'cube_offer',
+        position: { ...position, gnubg_match_id: 'cIngAAAAAAAE', dice: [] },
+      })),
     }),
   );
   const attempts: unknown[] = [];
   await page.route('**/api/study/mistakes/attempt', (route) => {
     attempts.push(route.request().postDataJSON().answer);
-    return route.fulfill({
-      json: {
-        original: { ...answer, best: 'double', played: 'no double' },
-        evaluation: {
-          verdict: 'best',
-          chosen: 'double',
-          best: 'double',
-          chosen_equity: 0.9,
-          best_equity: 0.9,
-          equity_loss: 0,
-          provenance: { kind: 'stored', engine: 'gnubg', plies: 3 },
-          cube_evaluation: {
-            unit: 'cubeful',
-            no_double: 0.7,
-            double_take: 0.9,
-            double_pass: 1,
-            probabilities: [0.74, 0.3, 0.01, 0.26, 0.05, 0],
-          },
+    return fulfillMistakeAttempt(route, {
+      original: { ...answer, best: 'double', played: 'no double' },
+      evaluation: {
+        verdict: 'best',
+        chosen: 'double',
+        best: 'double',
+        chosen_equity: 0.9,
+        best_equity: 0.9,
+        equity_loss: 0,
+        provenance: { kind: 'stored', engine: 'gnubg', plies: 3 },
+        cube_evaluation: {
+          unit: 'cubeful',
+          no_double: 0.7,
+          double_take: 0.9,
+          double_pass: 1,
+          probabilities: [0.74, 0.3, 0.01, 0.26, 0.05, 0],
         },
       },
     });
@@ -971,14 +960,15 @@ test('the independent-play choice filters the statistics and practice and is sha
   await page.route('**/api/study/mistakes?*', (r) => {
     const params = new URL(r.request().url()).searchParams;
     if (params.has('player')) queries.push(params.get('independent_only'));
-    return r.fulfill({
-      json: { ...result, groups: params.has('player') ? [group] : [] },
+    return fulfillMistakes(r, {
+      ...result,
+      groups: params.has('player') ? [group] : [],
     });
   });
   let practiceBody: Record<string, unknown> | undefined;
   await page.route('**/api/study/mistakes/practice', (r) => {
     practiceBody = r.request().postDataJSON();
-    return r.fulfill({ json: { items: [question(1)] } });
+    return fulfillMistakePractice(r, { items: [question(1)] });
   });
   await open(page);
   const mistakes = page.locator('#study-panel-mistakes');
@@ -1024,7 +1014,7 @@ test('the loss threshold uses the app language decimal separator', async ({
   const calls: URL[] = [];
   await page.route('**/api/study/mistakes?*', (r) => {
     calls.push(new URL(r.request().url()));
-    return r.fulfill({ json: { ...result, groups: [] } });
+    return fulfillMistakes(r, { ...result, groups: [] });
   });
   await open(page, 'de');
   const loss = page.getByRole('spinbutton', {

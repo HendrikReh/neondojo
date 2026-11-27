@@ -304,7 +304,7 @@ impl<'a> VerifiedBatch<'a> {
     }
 }
 
-/// Each running duel owns its workers for one match (or money block). Equal
+/// Each running duel owns its workers across a series (or single match). Equal
 /// immutable profiles share one worker, including a single integrity boundary.
 pub(crate) struct DuelWorkers<'a> {
     profiles: [Option<&'a SageSnapshot>; 2],
@@ -319,7 +319,12 @@ impl<'a> DuelWorkers<'a> {
         }
     }
 
+    #[cfg(test)]
     pub(crate) async fn begin_game(&self) -> Result<DuelBatches<'_>> {
+        self.begin_game_sides(false).await
+    }
+
+    pub(crate) async fn begin_game_sides(&self, swapped: bool) -> Result<DuelBatches<'_>> {
         let shared = self.profiles[0].is_some() && self.profiles[0] == self.profiles[1];
         let mut batches = [None, None];
         for (side, &profile) in self.profiles.iter().enumerate() {
@@ -329,19 +334,43 @@ impl<'a> DuelWorkers<'a> {
                 batches[side] = Some(VerifiedBatch::begin_in(&self.slots[side], profile).await?);
             }
         }
-        Ok(DuelBatches { batches, shared })
+        Ok(DuelBatches {
+            batches,
+            shared,
+            swapped,
+        })
+    }
+
+    pub(crate) async fn shutdown(self) -> Result<()> {
+        for slot in self.slots {
+            if let Some(worker) = slot.into_inner() {
+                worker.shutdown().await?;
+            }
+        }
+        Ok(())
     }
 }
 
 pub(crate) struct DuelBatches<'a> {
     batches: [Option<VerifiedBatch<'a>>; 2],
     shared: bool,
+    swapped: bool,
 }
 
 impl<'a> DuelBatches<'a> {
     pub(crate) fn for_side(&mut self, side: usize) -> Result<&mut VerifiedBatch<'a>> {
-        self.batches[if self.shared { 0 } else { side }]
-            .as_mut()
+        let index = if self.shared {
+            0
+        } else if self.swapped {
+            1usize
+                .checked_sub(side)
+                .context("Invalid NeonGammon duel side")?
+        } else {
+            side
+        };
+        self.batches
+            .get_mut(index)
+            .and_then(Option::as_mut)
             .context("Missing verified NeonGammon duel worker")
     }
 
@@ -350,6 +379,25 @@ impl<'a> DuelBatches<'a> {
             batch.finish().await?;
         }
         Ok(())
+    }
+}
+
+/// Terminate and reap cached process-global NeonGammon workers started on the
+/// current Tokio runtime so embedded restarts leave no idle Python sidecars.
+pub(crate) async fn shutdown_workers() {
+    let current = tokio::runtime::Handle::current().id();
+    for slot in [&GENERAL, &PLAY, &INTERACTIVE] {
+        let mut guard = slot.lock().await;
+        if guard
+            .as_ref()
+            .is_some_and(|worker| worker.runtime_id == current)
+            && let Some(worker) = guard.take()
+        {
+            drop(guard);
+            if let Err(error) = worker.shutdown().await {
+                tracing::warn!(%error, "Failed to shut down cached NeonGammon worker");
+            }
+        }
     }
 }
 

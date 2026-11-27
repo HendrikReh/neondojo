@@ -363,13 +363,14 @@ pub(crate) const TOP_TWO_PROFILE_ERROR: &str = "Top-2 play requires NeonGammon 2
 pub(crate) fn supports_top_two(engine: &str, plies: i32) -> bool {
     EngineId::parse(engine).is_some_and(|engine| engine.supports_top_two(plies))
 }
-fn validate_threads(engine: EngineId, threads: Option<i32>) -> ApiResult<()> {
+async fn validate_threads(engine: EngineId, threads: Option<i32>) -> ApiResult<()> {
     let Some(threads) = threads else {
         return Ok(());
     };
     let minimum = engine.min_threads();
     let engine = engine.id();
-    let maximum = crate::configuration::available_cpu_threads()
+    let maximum = crate::engine::host_parallel_threads()
+        .await
         .filter(|&maximum| maximum >= minimum)
         .ok_or_else(|| {
             ApiError::invalid(format!(
@@ -516,7 +517,7 @@ async fn put_settings(
         ),
     ] {
         if proposed != saved {
-            validate_threads(engine, proposed)?;
+            validate_threads(engine, proposed).await?;
         }
     }
     // Validate before the compare-and-swap. No partial changes are ever persisted,
@@ -622,7 +623,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             .filter(|&depth| depth != 1)
             .collect()
     };
-    let cpu_threads = crate::configuration::available_cpu_threads();
+    let cpu_threads = crate::engine::host_parallel_threads().await;
     let gnubg_parallel_limit = if !running
         && version.is_some()
         && let Some(cpu_threads) = cpu_threads
@@ -665,7 +666,7 @@ async fn check_engine(
     Json(request): Json<EngineCheckRequest>,
 ) -> ApiResult<Json<EngineCheckResponse>> {
     validate_path(&request.path)?;
-    validate_threads(EngineId::Gnubg, request.threads)?;
+    validate_threads(EngineId::Gnubg, request.threads).await?;
     let version = Engine::new(request.path)
         .with_threads(request.threads)
         .check_installation()

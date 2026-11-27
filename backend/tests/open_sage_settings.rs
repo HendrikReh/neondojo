@@ -558,3 +558,105 @@ async fn fork_depths_are_pinned_in_sessions_duels_and_benchmarks(pool: PgPool) {
         .unwrap();
     assert_eq!(status, "completed");
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn api_rejects_neongammon_submissions_above_25_away_with_422(pool: PgPool) {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let fake_python = dir.path().join("fake-python");
+    let fingerprint = "b".repeat(64);
+    let script = format!(
+        r#"#!/usr/bin/env python3
+import json, sys
+for line in sys.stdin:
+    req = json.loads(line)
+    if req["operation"] == "initialize":
+        print(json.dumps({{"id": req["id"], "result": {{"package_version": "3.2.2", "artifact_fingerprint": "{fingerprint}"}}}}), flush=True)
+"#
+    );
+    std::fs::write(&fake_python, script).unwrap();
+    std::fs::set_permissions(&fake_python, std::fs::Permissions::from_mode(0o700)).unwrap();
+    let snapshot = neondojo::engines::SageSnapshot {
+        python: fake_python.to_string_lossy().into_owned(),
+        package_version: "3.2.2".into(),
+        artifact_fingerprint: fingerprint,
+        threads: 4,
+        plies: 2,
+        adapter_version: 1,
+        one_ply_verified: true,
+        cubeless: false,
+    };
+    sqlx::query(
+        "UPDATE engine_installations SET version=1,python_path=$1,snapshot=$2 WHERE engine_id='bgsage'",
+    )
+    .bind(&snapshot.python)
+    .bind(sqlx::types::Json(&snapshot))
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let source = concat!(
+        "(;GM[6]MI[length:31][ws:5][bs:5]RE[W+1R];W[31hefe])",
+        "(;GM[6]MI[length:31][ws:6][bs:6];W[31hefe])",
+    );
+    let imported = neondojo::store::import_match(
+        &pool,
+        "long-match.sgf",
+        "sgf",
+        source.as_bytes(),
+        source,
+        &neondojo::import::parse_sgf(source).unwrap(),
+    )
+    .await
+    .unwrap();
+    let match_id = imported.r#match.id;
+    let positions: Vec<(uuid::Uuid, i32)> =
+        sqlx::query_as("SELECT id,game_no FROM positions WHERE match_uuid=$1 ORDER BY ordinal")
+            .bind(match_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    let app = api::router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+
+    // Position job on game 1 (26-away vs 26-away) is rejected with 422.
+    let (status, rejected_pos) = call(
+        app.clone(),
+        "POST",
+        "/api/jobs",
+        json!({"position_id": positions[0].0, "kind": "analysis", "engine_id": "bgsage", "plies": 2}),
+    )
+    .await;
+    assert_eq!(status, 422, "{rejected_pos}");
+    assert!(rejected_pos["error"].as_str().unwrap().contains("25-away"));
+
+    // Position job on game 2 (25-away vs 25-away) is accepted.
+    let (status, accepted_pos) = call(
+        app.clone(),
+        "POST",
+        "/api/jobs",
+        json!({"position_id": positions[1].0, "kind": "analysis", "engine_id": "bgsage", "plies": 2}),
+    )
+    .await;
+    assert_eq!(status, 202, "{accepted_pos}");
+
+    // Whole-match and game-1 analysis submissions are rejected with 422.
+    let analysis_uri = format!("/api/matches/{match_id}/analysis");
+    for body in [
+        json!({"engine_id": "bgsage", "plies": 2}),
+        json!({"game_no": 1, "engine_id": "bgsage", "plies": 2}),
+    ] {
+        let (status, rejected) = call(app.clone(), "POST", &analysis_uri, body).await;
+        assert_eq!(status, 422, "{rejected}");
+        assert!(rejected["error"].as_str().unwrap().contains("25-away"));
+    }
+
+    // Scoped game-2 analysis (25-away vs 25-away) is accepted.
+    let (status, accepted_game) = call(
+        app,
+        "POST",
+        &analysis_uri,
+        json!({"game_no": 2, "engine_id": "bgsage", "plies": 2}),
+    )
+    .await;
+    assert_eq!(status, 202, "{accepted_game}");
+}

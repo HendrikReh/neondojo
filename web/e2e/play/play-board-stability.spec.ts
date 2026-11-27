@@ -1,3 +1,4 @@
+import { fulfillPlaySession } from '../helpers/api-fixtures';
 import { closeSettings } from '../helpers/settings-actions';
 import { test, expect } from '../helpers/test';
 import {
@@ -51,7 +52,7 @@ for (const { width, height, human, locale } of [
         Object.assign(saved, { version: 9, phase: 'move' });
         saved.position.dice = [3, 1];
       }
-      await route.fulfill({ json: saved });
+      await fulfillPlaySession(route, saved);
     });
     await page.reload();
     await page.locator('#workspace-tab-play').click();

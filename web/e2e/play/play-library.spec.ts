@@ -1,5 +1,9 @@
 import { seedLocale } from '../helpers/navigation';
-import { fulfillJson, fulfillJsonList } from '../helpers/api-fixtures';
+import {
+  fulfillError,
+  fulfillJson,
+  fulfillJsonList,
+} from '../helpers/api-fixtures';
 import type { components } from '../../src/generated-api';
 import { databaseMatchFixture } from '../helpers/match-fixtures';
 import { playSessionFixture } from '../helpers/play-session-fixture';
@@ -184,10 +188,7 @@ for (const retry of [false, true])
     }, other);
     await page.route(`**/api/play/sessions/${other}`, async (route) => {
       if (retry && ++reads === 1) {
-        await route.fulfill({
-          status: 503,
-          json: { error: 'Read temporarily failed' },
-        });
+        await fulfillError(route, 'Read temporarily failed', 503);
         return;
       }
       await gate;

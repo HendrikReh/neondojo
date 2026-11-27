@@ -1,5 +1,11 @@
 import { seedLocale } from '../helpers/navigation';
-import { mockEngineCatalog } from '../helpers/api-fixtures';
+import type { components } from '../../src/generated-api';
+import {
+  fulfillAnalysisEstimate,
+  fulfillError,
+  fulfillMalformedJson,
+  mockEngineCatalog,
+} from '../helpers/api-fixtures';
 import {
   openFullMatchAnalysis,
   openMatchAnalysisOptions,
@@ -38,7 +44,10 @@ test.afterEach(async ({ page }, testInfo) => {
   );
 });
 const estimate = (p: Page) => p.locator('.analysis-time-estimate');
-function result(url: string, ms = 40_000) {
+function result(
+  url: string,
+  ms = 40_000,
+): components['schemas']['AnalysisTimeEstimate'] {
   const u = new URL(url);
   return {
     match_id: u.pathname.split('/')[3],
@@ -203,7 +212,7 @@ test('shows benchmark basis before any job and follows game, scope and depth', a
   });
   await page.route('**/api/matches/*/analysis/estimate?*', (r) => {
     requests.push(r.request().url());
-    return r.fulfill({ json: result(r.request().url()) });
+    return fulfillAnalysisEstimate(r, result(r.request().url()));
   });
   await openMatch(page);
   await openMatchAnalysisOptions(page);
@@ -269,13 +278,14 @@ test('invalidates immediately and ignores late depth responses', async ({
     if (new URL(r.request().url()).searchParams.get('plies') === '4') {
       held = true;
       await gate;
-      await r
-        .fulfill({ json: result(r.request().url(), 180_000) })
-        .catch(() => {});
+      await fulfillAnalysisEstimate(
+        r,
+        result(r.request().url(), 180_000),
+      ).catch(() => {});
       finished();
       return;
     }
-    return r.fulfill({ json: result(r.request().url()) });
+    return fulfillAnalysisEstimate(r, result(r.request().url()));
   });
   await openMatch(page);
   await openMatchAnalysisOptions(page);
@@ -312,15 +322,13 @@ for (const reason of [
   }) => {
     await page.route('**/api/matches/*/analysis/estimate?*', (r) =>
       reason === 'network'
-        ? r.fulfill({ status: 503, json: { error: 'offline' } })
-        : r.fulfill({
-            json: {
-              ...result(r.request().url()),
-              estimated_ms: null,
-              position_count: reason === 'no_checker_moves' ? 0 : 1000,
-              unavailable_reason: reason,
-              benchmark: null,
-            },
+        ? fulfillError(r, 'offline', 503)
+        : fulfillAnalysisEstimate(r, {
+            ...result(r.request().url()),
+            estimated_ms: null,
+            position_count: reason === 'no_checker_moves' ? 0 : 1000,
+            unavailable_reason: reason,
+            benchmark: null,
           }),
     );
     await openMatch(page, 'de');
@@ -349,9 +357,10 @@ test('retains the estimate when confirmed settings change only appearance', asyn
   let calls = 0;
   await page.route('**/api/matches/*/analysis/estimate?*', (r) => {
     calls++;
-    return r.fulfill({
-      json: result(r.request().url(), calls === 1 ? 40_000 : 80_000),
-    });
+    return fulfillAnalysisEstimate(
+      r,
+      result(r.request().url(), calls === 1 ? 40_000 : 80_000),
+    );
   });
   await openMatch(page);
   await openMatchAnalysisOptions(page);
@@ -376,7 +385,8 @@ async function mountEstimateHarness(page: Page) {
   );
   await page.goto('/');
   await page.evaluate(async () => {
-    const { React: react, createRoot } = await import('/e2e/helpers/react-fixture.ts');
+    const { React: react, createRoot } =
+      await import('/e2e/helpers/react-fixture.ts');
     const { ConfigurationStore } =
       await import('/src/settings/configuration/configuration-store.ts');
     const { ConfigurationProvider, useConfirmedConfiguration } =
@@ -500,9 +510,10 @@ test('estimates use confirmed settings while an edit is still pending', async ({
   let calls = 0;
   await page.route('**/api/matches/fixture/analysis/estimate?*', (route) => {
     calls++;
-    return route.fulfill({
-      json: result(route.request().url(), calls === 1 ? 40_000 : 80_000),
-    });
+    return fulfillAnalysisEstimate(
+      route,
+      result(route.request().url(), calls === 1 ? 40_000 : 80_000),
+    );
   });
   await mountEstimateHarness(page);
   await expect(estimate(page)).toContainText('approx. 40s');
@@ -524,9 +535,10 @@ test('invalidates when installation changes while depth stays the same', async (
   let calls = 0;
   await page.route('**/api/matches/fixture/analysis/estimate?*', (route) => {
     calls++;
-    return route.fulfill({
-      json: result(route.request().url(), calls === 1 ? 40_000 : 120_000),
-    });
+    return fulfillAnalysisEstimate(
+      route,
+      result(route.request().url(), calls === 1 ? 40_000 : 120_000),
+    );
   });
   await mountEstimateHarness(page);
   await expect(estimate(page)).toContainText('approx. 40s');
@@ -541,7 +553,7 @@ test('hides pre-start estimate during submission and queued engine work', async 
   page,
 }) => {
   await page.route('**/api/matches/*/analysis/estimate?*', (route) =>
-    route.fulfill({ json: result(route.request().url()) }),
+    fulfillAnalysisEstimate(route, result(route.request().url())),
   );
   const match = await openMatch(page);
   await openMatchAnalysisOptions(page);
@@ -616,11 +628,9 @@ test('refreshes when mutable match gains moves at the same match, game and depth
   let calls = 0;
   await page.route('**/api/matches/fixture/analysis/estimate?*', (route) => {
     calls++;
-    return route.fulfill({
-      json: {
-        ...result(route.request().url(), calls === 1 ? 40_000 : 80_000),
-        position_count: calls === 1 ? 1000 : 1002,
-      },
+    return fulfillAnalysisEstimate(route, {
+      ...result(route.request().url(), calls === 1 ? 40_000 : 80_000),
+      position_count: calls === 1 ? 1000 : 1002,
     });
   });
   await mountEstimateHarness(page);
@@ -653,7 +663,7 @@ for (const malformed of ['date', 'reason'] as const) {
               benchmark: null,
               unavailable_reason: 'unexpected_server_reason',
             };
-      return route.fulfill({ json: invalid });
+      return fulfillMalformedJson(route, invalid);
     });
     await openMatch(page);
     await openMatchAnalysisOptions(page);

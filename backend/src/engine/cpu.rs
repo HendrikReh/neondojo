@@ -84,9 +84,12 @@ impl HostCpuBudget {
         })
     }
 
-    #[cfg(test)]
     pub(crate) fn capacity(&self) -> u32 {
         self.capacity
+    }
+
+    pub(crate) async fn host_parallel_threads() -> Option<i32> {
+        i32::try_from(Self::host().await.capacity()).ok()
     }
 }
 

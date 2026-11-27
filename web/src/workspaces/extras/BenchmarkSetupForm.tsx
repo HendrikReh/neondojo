@@ -1,6 +1,7 @@
 import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
 import { useState } from 'react';
 import ActionButton from '../../shared/ui/ActionButton';
+import { useRovingTabs } from '../../shared/ui/TabList';
 import {
   ANALYSIS_PLIES,
   PLAY_PLIES,
@@ -89,6 +90,11 @@ export default function BenchmarkSetupForm({
     : playFallback;
 
   const play = mode === 'play';
+  const modeNav = useRovingTabs<'analysis' | 'play'>({
+    items: ['analysis', 'play'],
+    active: mode,
+    onSelect: onModeChange,
+  });
   const canStartAnalysis =
     canStart &&
     referenceError === undefined &&
@@ -126,16 +132,20 @@ export default function BenchmarkSetupForm({
         aria-label={t('mode')}
       >
         <button
+          ref={modeNav.getTabRef('analysis')}
           type="button"
           aria-pressed={!play}
           onClick={() => onModeChange('analysis')}
+          onKeyDown={(event) => modeNav.onKeyDown(event, 'analysis')}
         >
           {t('matchAnalysis')}
         </button>
         <button
+          ref={modeNav.getTabRef('play')}
           type="button"
           aria-pressed={play}
           onClick={() => onModeChange('play')}
+          onKeyDown={(event) => modeNav.onKeyDown(event, 'play')}
         >
           {t('playLatency')}
         </button>

@@ -1,3 +1,8 @@
+import {
+  fulfillDecks,
+  fulfillPlaySession,
+  fulfillStudyReportPage,
+} from '../helpers/api-fixtures';
 import { openWorkspace, seedStorage } from '../helpers/navigation';
 import {
   initialBoard,
@@ -134,17 +139,17 @@ async function setup(
     theme: 'forest',
     playSessionId: id,
   });
-  await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
+  await page.route('**/api/decks', (r) => fulfillDecks(r, []));
   await page.route('**/api/study/reports?group_by=session', (r) =>
-    r.fulfill({ json: { items: [moneySummary()], next_cursor: null } }),
+    fulfillStudyReportPage(r, { items: [moneySummary()], next_cursor: null }),
   );
   // Study keeps the review dialog for money games; point matches open a
   // dedicated report view.
   await page.route(`**/api/study/reports/${id}`, (r) =>
-    r.fulfill({ json: { ...data.session, match_length: 0 } }),
+    fulfillPlaySession(r, { ...data.session, match_length: 0 }),
   );
   await page.route(`**/api/play/sessions/${id}`, (r) =>
-    r.fulfill({ json: data.session }),
+    fulfillPlaySession(r, data.session),
   );
   await page.route(`**/api/play/sessions/${id}/history?*`, (r) => {
     reads++;

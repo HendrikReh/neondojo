@@ -201,10 +201,15 @@ class ProbeTests(unittest.TestCase):
             def __init__(self, max_workers=None):
                 self.max_workers = max_workers
 
-        native = SimpleNamespace(checker_play_nply=checker_play_nply)
+        native = SimpleNamespace(
+            checker_play_nply=checker_play_nply,
+            create_multipy_from_base=lambda *args, **kwargs: 'multipy',
+        )
         module = SimpleNamespace(bgbot_cpp=native, ThreadPoolExecutor=Pool)
         def analysis():
             module.ThreadPoolExecutor(max_workers=3)
+            native.create_multipy_from_base('base', n_plies=2, parallel_evaluate=True, parallel_threads=2)
+            native.create_multipy_from_base('base', n_plies=2, parallel_evaluate=False, parallel_threads=0)
             return native.checker_play_nply([0] * 26, 3, 1, n_threads=4)
 
         for sage in (
@@ -215,7 +220,7 @@ class ProbeTests(unittest.TestCase):
                 calls.clear()
                 result, observed = probe.observe_thread_budgets(sage, analysis)
                 self.assertEqual(result, ['native result'])
-                self.assertEqual(observed, [3, 4])
+                self.assertEqual(observed, [3, 2, 4])
                 self.assertEqual(calls, [{'n_threads': 4}])
                 self.assertIs(module.ThreadPoolExecutor, Pool)
                 self.assertIs(native.checker_play_nply, checker_play_nply)

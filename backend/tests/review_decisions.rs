@@ -624,9 +624,29 @@ async fn numbered_pages_follow_the_cursor_order_for_every_filter(pool: PgPool) {
     .unwrap()
     .r#match
     .id;
-    let app = app(&pool);
+    let state = neondojo::api::AppState::new(
+        pool.clone(),
+        neondojo::engine::Engine::new("/unavailable".into()),
+    );
+    let app = neondojo::api::router(state.clone());
     let base = format!("/api/matches/{id}/review-decisions?analysis_id=imported:{id}");
+    // Numbered pages answer directly from the read-only snapshot without writing during GET.
     assert_eq!(assert_numbered_pages_match_cursor(&app, &base).await, 738);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM review_hit_sets WHERE match_id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0,
+        "GET /review-decisions must never write review_hit_sets synchronously"
+    );
+    // The background worker drains the queued hit-set refresh outside GET.
+    let mut cursor = neondojo::browse_indexes::BackfillCursor::default();
+    while neondojo::browse_indexes::backfill_state_batch(&state, &mut cursor)
+        .await
+        .unwrap_or_else(|e| panic!("backfill failed: {e:?}"))
+    {}
     let built: String = sqlx::query_scalar(
         "SELECT indexed_at::text FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
     )
@@ -778,5 +798,152 @@ async fn imported_nocube_gnubg_checker_rows_cover_the_game(pool: PgPool) {
     assert_eq!(data["summary"]["analyzed_moves"], 2);
     for player in data["summary"]["players"].as_array().unwrap() {
         assert_eq!(player["cube_decisions"], 0);
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn review_hit_sets_fingerprint_tracks_0089_revisions_and_game_cube_enabled(pool: PgPool) {
+    let (id, _) = imported(&pool).await;
+    sqlx::query("INSERT INTO imported_analyses(match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data) SELECT match_uuid,position_uuid,2,game_no,source_move_no,'cube',(data - 'gnubg_match_id') || $2 FROM imported_analyses WHERE match_uuid=$1 AND game_no=1")
+        .bind(id)
+        .bind(json!({"kind":"cube","played":"no double","dice":[0,0],"candidates":[],"cube":{"equity_kind":"cubeful","perspective":"doubler","no_double":0.4,"double_take":0.6,"double_pass":1.0}}))
+        .execute(&pool)
+        .await
+        .unwrap();
+    let analysis_id = format!("imported:{id}");
+    assert!(
+        neondojo::review_decisions::refresh_hits(&pool, id, &analysis_id)
+            .await
+            .unwrap()
+    );
+    let router = app(&pool);
+    let uri = format!(
+        "/api/matches/{id}/review-decisions?analysis_id={analysis_id}&kind=cube&page=1&limit=10"
+    );
+    let (status, before) = call(&router, "GET", &uri, Value::Null).await;
+    assert_eq!(status, 200, "{before}");
+    assert_eq!(before["total"], 1);
+    // Flipping match_games.cube_enabled does NOT drop review_hit_sets via trigger,
+    // so hits_fingerprint must detect the rule change directly and never serve stale hits.
+    sqlx::query("UPDATE match_games SET cube_enabled=false WHERE match_uuid=$1 AND game_no=1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM review_hit_sets WHERE match_id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let (status, after_cube_rule) = call(&router, "GET", &uri, Value::Null).await;
+    assert_eq!(status, 200, "{after_cube_rule}");
+    assert_eq!(after_cube_rule["total"], 0);
+    assert_eq!(after_cube_rule["items"], json!([]));
+
+    // Restoring cube_enabled and advancing imported_analysis_revisions invalidates
+    // the hit set through the shared 0089 revision token even if the row stays present.
+    sqlx::query("UPDATE match_games SET cube_enabled=true WHERE match_uuid=$1 AND game_no=1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    neondojo::review_decisions::refresh_hits(&pool, id, &analysis_id)
+        .await
+        .unwrap();
+    let fp_before: String = sqlx::query_scalar(
+        "SELECT fingerprint FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
+    )
+    .bind(id)
+    .bind(&analysis_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    sqlx::query("UPDATE imported_analysis_revisions SET revision='tx:synthetic' WHERE match_id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    neondojo::review_decisions::refresh_hits(&pool, id, &analysis_id)
+        .await
+        .unwrap();
+    let fp_after: String = sqlx::query_scalar(
+        "SELECT fingerprint FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
+    )
+    .bind(id)
+    .bind(&analysis_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_ne!(fp_before, fp_after);
+    assert!(fp_after.contains("tx:synthetic"), "{fp_after}");
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn match_inspection_gets_are_read_only_for_uncataloged_legacy_matches(pool: PgPool) {
+    let bytes = include_bytes!("fixtures/WC2014.xg");
+    let sgf = import::xg_to_sgf(bytes).unwrap();
+    let id = store::import_match(
+        &pool,
+        "WC2014.xg",
+        "xg",
+        bytes,
+        &sgf,
+        &import::parse_sgf(&sgf).unwrap(),
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    sqlx::query("DELETE FROM imported_analyses WHERE match_uuid=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("DELETE FROM match_moves WHERE match_uuid=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query(
+        "UPDATE matches SET moves_cataloged=false,imported_analysis_loaded=false WHERE id=$1",
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let router = app(&pool);
+    for path in [
+        format!("/api/matches/{id}/review-decisions?page=1&limit=10"),
+        format!("/api/matches/{id}/analysis-statistics"),
+        format!("/api/matches/{id}/analyses"),
+        format!("/api/matches/{id}/imported-analysis"),
+    ] {
+        let (status, body) = call(&router, "GET", &path, Value::Null).await;
+        assert_eq!(status, 503, "{path}: {body}");
+        assert_eq!(body["code"], "index_preparing", "{path}: {body}");
+    }
+    let flags: (bool, bool) =
+        sqlx::query_as("SELECT moves_cataloged,imported_analysis_loaded FROM matches WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(flags, (false, false), "GETs must not backfill legacy rows");
+    let mut cursor = neondojo::browse_indexes::BackfillCursor::default();
+    while neondojo::browse_indexes::backfill_batch(&pool, &mut cursor)
+        .await
+        .unwrap_or_else(|e| panic!("backfill failed: {e:?}"))
+    {}
+    for path in [
+        format!("/api/matches/{id}/review-decisions?page=1&limit=10"),
+        format!("/api/matches/{id}/analysis-statistics"),
+        format!("/api/matches/{id}/analyses"),
+        format!("/api/matches/{id}/imported-analysis"),
+    ] {
+        let (status, body) = call(&router, "GET", &path, Value::Null).await;
+        assert_eq!(status, 200, "{path}: {body}");
     }
 }

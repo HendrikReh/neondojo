@@ -210,9 +210,13 @@ export default function MatchAnalysisDialog({
           disabled={!analysisConfigured || !!active || submitting}
           onClick={() => void run(plies)}
         />
-        <button type="button" disabled={submitting} onClick={onClose}>
-          {library('close')}
-        </button>
+        <ActionButton
+          icon="close"
+          label={library('close')}
+          type="button"
+          disabled={submitting}
+          onClick={onClose}
+        />
       </div>
     </LibraryDialog>
   );

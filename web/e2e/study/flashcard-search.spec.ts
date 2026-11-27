@@ -1,3 +1,4 @@
+import { fulfillDecks } from '../helpers/api-fixtures';
 import {
   DESKTOP_VIEWPORTS,
   gotoWorkspace,
@@ -58,8 +59,9 @@ async function setup(page: Page, singleDeck = false) {
     localStorage.setItem('neondojo.deck', '__all__');
   });
   await page.route('**/api/decks', (route) =>
-    route.fulfill({
-      json: [
+    fulfillDecks(
+      route,
+      [
         {
           id: deckA,
           name: 'Prime',
@@ -77,7 +79,7 @@ async function setup(page: Page, singleDeck = false) {
           created_at: '2026-01-01T00:00:00Z',
         },
       ].filter((deck) => !singleDeck || deck.id === deckB),
-    }),
+    ),
   );
   const respond = async (
     route: Parameters<Parameters<Page['route']>[1]>[0],
@@ -745,9 +747,24 @@ test('flashcard search uses the position search layout and page controls', async
   await expect(chooser).toHaveValue('__all__');
   await expect(
     form
-      .locator('.position-filter-footer')
+      .locator('.position-filter-toolbar')
+      .getByRole('button', { name: 'Clear filters' }),
+  ).toHaveCount(0);
+  await form.getByLabel('Search text', { exact: true }).fill('Ada');
+  await expect(
+    form
+      .locator('.position-filter-toolbar')
       .getByRole('button', { name: 'Clear filters' }),
   ).toBeVisible();
+  await form
+    .locator('.position-filter-toolbar')
+    .getByRole('button', { name: 'Clear filters' })
+    .click();
+  await expect(
+    form
+      .locator('.position-filter-toolbar')
+      .getByRole('button', { name: 'Clear filters' }),
+  ).toHaveCount(0);
   await expect(
     pagination.getByRole('button', { name: 'Previous page' }),
   ).toBeDisabled();

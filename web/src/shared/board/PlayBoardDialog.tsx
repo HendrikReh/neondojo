@@ -1,6 +1,11 @@
 import ActionIcon from '../ui/action-icons';
 import ActionButton from '../ui/ActionButton';
 import {
+  isBackdropPointerEvent,
+  restoreDialogFocus,
+  trapTabKey,
+} from '../ui/ModalDialog';
+import {
   useEffect,
   useCallback,
   useId,
@@ -44,6 +49,7 @@ export default function PlayBoardDialog({
   const titleId = useId();
   const t = usePlayText();
   const manualCenter = useRef<Center | null>(null);
+  const backdropPress = useRef(false);
   const drag = useRef<{
     pointerId: number;
     offsetX: number;
@@ -77,6 +83,12 @@ export default function PlayBoardDialog({
     const element = dialog.current;
     const board = anchor?.current?.querySelector('.board') ?? anchor?.current;
     if (!element) return;
+    const previous =
+      modal || focusOnOpen
+        ? document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null
+        : null;
     if (modal) element.showModal();
     // show() would move the focus; the attribute opens without focusing.
     else element.open = true;
@@ -102,13 +114,9 @@ export default function PlayBoardDialog({
       window.removeEventListener('resize', position);
       window.removeEventListener('scroll', position, true);
       element.close();
-      const target = returnFocus?.current;
-      if (
-        target?.isConnected &&
-        target.checkVisibility() &&
-        !target.matches(':disabled')
-      )
-        target.focus({ preventScroll: true });
+      restoreDialogFocus(returnFocus?.current, () => previous, {
+        preventScroll: true,
+      });
     };
     // The dialog opens once; its modality and initial focus are fixed then.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,6 +129,32 @@ export default function PlayBoardDialog({
       aria-modal={modal}
       aria-labelledby={titleId}
       aria-busy={busy}
+      onPointerDown={(event) => {
+        backdropPress.current =
+          modal &&
+          Boolean(onClose) &&
+          event.button === 0 &&
+          isBackdropPointerEvent({
+            target: event.target,
+            currentTarget: event.currentTarget,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            detail: 1,
+          });
+      }}
+      onClick={(event) => {
+        const startedOnBackdrop = backdropPress.current;
+        backdropPress.current = false;
+        if (
+          modal &&
+          startedOnBackdrop &&
+          onClose &&
+          !busy &&
+          isBackdropPointerEvent(event)
+        ) {
+          onClose();
+        }
+      }}
       onCancel={(event) => {
         event.preventDefault();
         onClose?.();
@@ -134,32 +168,12 @@ export default function PlayBoardDialog({
           return;
         }
         if (event.key !== 'Tab' || !modal) return;
-        const items = Array.from(
-          event.currentTarget.querySelectorAll<HTMLElement>(
-            'button, a[href], input, select, textarea, summary, [tabindex]',
-          ),
-        ).filter(
-          (item) =>
-            item.tabIndex >= 0 &&
-            !item.matches(':disabled') &&
-            item.checkVisibility(),
+        trapTabKey(
+          event,
+          event.currentTarget,
+          document.activeElement,
+          title.current,
         );
-        const first = items[0],
-          last = items.at(-1);
-        if (!first) {
-          event.preventDefault();
-          title.current?.focus();
-        } else if (
-          event.shiftKey &&
-          (document.activeElement === first ||
-            document.activeElement === title.current)
-        ) {
-          event.preventDefault();
-          last?.focus();
-        } else if (!event.shiftKey && document.activeElement === last) {
-          event.preventDefault();
-          first.focus();
-        }
       }}
     >
       <div className="play-dialog-heading">

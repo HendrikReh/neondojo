@@ -316,21 +316,23 @@ export default function LibraryTable({
                 <Fragment key={key}>{heading(key, label)}</Fragment>
               ))}
             <th scope="col" data-column="select">
-              <input
-                type="checkbox"
-                aria-label={l('selectAll')}
-                aria-describedby={
-                  occurrences && matches.length ? selectionHintId : undefined
-                }
-                checked={allOnPageSelected}
-                ref={(checkbox) => {
-                  if (checkbox)
-                    checkbox.indeterminate =
-                      someOnPageSelected && !allOnPageSelected;
-                }}
-                disabled={loading || !matches.length}
-                onChange={(e) => onSelect(matches, e.target.checked)}
-              />
+              <label className="table-checkbox-target">
+                <input
+                  type="checkbox"
+                  aria-label={l('selectAll')}
+                  aria-describedby={
+                    occurrences && matches.length ? selectionHintId : undefined
+                  }
+                  checked={allOnPageSelected}
+                  ref={(checkbox) => {
+                    if (checkbox)
+                      checkbox.indeterminate =
+                        someOnPageSelected && !allOnPageSelected;
+                  }}
+                  disabled={loading || !matches.length}
+                  onChange={(e) => onSelect(matches, e.target.checked)}
+                />
+              </label>
               {columns.handle('select', l('selection'))}
             </th>
             {dataColumns.map((id) => (
@@ -392,16 +394,21 @@ export default function LibraryTable({
                   </td>
                 </>
               )}
-              <td onClick={(e) => e.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  aria-label={l(m.occurrence ? 'selectMatch' : 'select', {
-                    name: m.display_name,
-                  })}
-                  checked={selected.has(m.id)}
-                  onChange={(e) => onSelect([m], e.target.checked)}
-                  disabled={selected.size >= 100 && !selected.has(m.id)}
-                />
+              <td
+                className="library-select-cell"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <label className="table-checkbox-target">
+                  <input
+                    type="checkbox"
+                    aria-label={l(m.occurrence ? 'selectMatch' : 'select', {
+                      name: m.display_name,
+                    })}
+                    checked={selected.has(m.id)}
+                    onChange={(e) => onSelect([m], e.target.checked)}
+                    disabled={selected.size >= 100 && !selected.has(m.id)}
+                  />
+                </label>
               </td>
               {dataColumns.map((id) => (
                 <Fragment key={id}>{bodyCells[id](m)}</Fragment>

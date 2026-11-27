@@ -1,3 +1,4 @@
+import { fulfillPlaySession } from '../helpers/api-fixtures';
 import { playDecisionFixture } from '../helpers/play-session-fixture';
 import { checkerPath } from '../helpers/play-turn-fixtures';
 import { test, expect, type Page } from '../helpers/test';
@@ -56,15 +57,13 @@ for (const config of [
     const { saved, writes } = await fixture(page, config.mode, config.human);
     await page.route(`**/api/play/sessions/${id}/actions`, (r) => {
       writes.push(r.request().postDataJSON());
-      return r.fulfill({
-        json: {
-          ...saved,
-          version: 8,
-          phase: 'roll',
-          can_double: true,
-          pending_decision: null,
-          position: { ...saved.position, dice: [] },
-        },
+      return fulfillPlaySession(r, {
+        ...saved,
+        version: 8,
+        phase: 'roll',
+        can_double: true,
+        pending_decision: null,
+        position: { ...saved.position, dice: [] },
       });
     });
     const coach = page.getByTestId('play-board-toolbar');
@@ -157,7 +156,7 @@ test('Tutor preview is hidden until Show solution and retry returns to the board
           : {}),
       },
     });
-    return r.fulfill({ json: saved });
+    return fulfillPlaySession(r, saved);
   });
   const dialog = page.getByRole('alertdialog', { name: 'Tutor', exact: true });
   await expect(dialog).toBeVisible();
@@ -217,8 +216,10 @@ test('switching revealed Coach feedback to Competition removes the preview', asy
       version: 7,
       play_mode: 'competition',
     });
-    return r.fulfill({
-      json: { ...saved, version: 8, play_mode: 'competition' },
+    return fulfillPlaySession(r, {
+      ...saved,
+      version: 8,
+      play_mode: 'competition',
     });
   });
   await page

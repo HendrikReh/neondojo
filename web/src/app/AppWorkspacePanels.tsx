@@ -3,6 +3,7 @@ import type { Job } from '../shared/http/api';
 import type { Theme } from '../shared/board/themes';
 import type { useJobs } from '../shared/jobs/useJobs';
 import { useWorkspaceText } from '../shared/i18n/workspace-messages';
+import { useRovingTabs } from '../shared/ui/TabList';
 import type { AppSettings } from '../settings/settings-api';
 import type { MatchAnalysisEngine } from '../workspaces/analysis/match/useMatchAnalysis';
 import type { LibraryMatch } from '../workspaces/library/library-api';
@@ -92,6 +93,14 @@ export default function AppWorkspacePanels({
 }) {
   const w = useWorkspaceText();
   const { view, navigation } = nav;
+  const positionScopeNav = useRovingTabs<'saved' | 'all'>({
+    items: ['saved', 'all'],
+    active: nav.similarTarget ? null : nav.positionScope,
+    onSelect: (scope) => {
+      nav.setSimilarTarget(undefined);
+      nav.setPositionScope(scope);
+    },
+  });
 
   return (
     <>
@@ -309,12 +318,14 @@ export default function AppWorkspacePanels({
           {(['saved', 'all'] as const).map((scope) => (
             <button
               key={scope}
+              ref={positionScopeNav.getTabRef(scope)}
               type="button"
               aria-pressed={!nav.similarTarget && nav.positionScope === scope}
               onClick={() => {
                 nav.setSimilarTarget(undefined);
                 nav.setPositionScope(scope);
               }}
+              onKeyDown={(event) => positionScopeNav.onKeyDown(event, scope)}
             >
               {w(scope)}
             </button>

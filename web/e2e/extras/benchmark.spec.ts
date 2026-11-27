@@ -1,12 +1,19 @@
 import { DESKTOP_VIEWPORTS, openWorkspace } from '../helpers/navigation';
+import type { components } from '../../src/generated-api';
 import {
+  fulfillBenchmarkHistory,
+  fulfillBenchmarkReference,
+  fulfillBenchmarkRun,
+  fulfillBenchmarkRuns,
+  fulfillBenchmarkStatus,
+  fulfillError,
   fulfillJson,
   mockSettings,
   mockEngineCatalog,
   settingsFixture,
 } from '../helpers/api-fixtures';
 import { expect, test, type Page } from '../helpers/test';
-const reference = {
+const reference: components['schemas']['BenchmarkReference'] = {
   id: 'wc2014-v1',
   version: 1,
   name: 'WC2014 – Yazawa / Mayfield',
@@ -14,14 +21,29 @@ const reference = {
   match_length: 11,
   total_games: 10,
   total_moves: 460,
-  protocol: { id: 'gnubg-match-v4-unlimited', game_timeout_seconds: null },
+  protocol: {
+    id: 'gnubg-match-v4-unlimited',
+    game_timeout_seconds: null,
+    cubeful: true,
+    deterministic: true,
+    noise: 0,
+    luck_analysis: false,
+    process_strategy: 'fresh-process-per-game',
+    timing_scope:
+      'sum-of-full-game-pipeline-including-cube-startup-load-and-parse',
+    move_filter: 'gnubg-startup-defaults',
+  },
 };
 const settings = {
   ...settingsFixture(),
   player_name: 'Player',
   play_plies: 2,
 };
-const run = (id: string, status = 'completed', plies = 1) => ({
+const run = (
+  id: string,
+  status = 'completed',
+  plies = 1,
+): components['schemas']['BenchmarkRun'] => ({
   id,
   status,
   plies,
@@ -46,6 +68,7 @@ const run = (id: string, status = 'completed', plies = 1) => ({
   total_elapsed_ms: status === 'completed' ? 60000 : null,
   average_move_ms: status === 'completed' ? 60000 / 460 : null,
   completed_games: status === 'completed' ? 10 : 3,
+  completed_turns: 0,
   analyzed_moves: status === 'completed' ? 460 : 130,
   error: status === 'failed' ? 'Engine version changed' : null,
 });
@@ -86,14 +109,12 @@ async function backend(page: Page, savedSettings = settings) {
   });
   await mockEngineCatalog(page);
   await page.route('**/api/benchmarks/status', (route) =>
-    route.fulfill({
-      json: {
-        active: runs.some((r) => ['queued', 'running'].includes(r.status)),
-      },
+    fulfillBenchmarkStatus(route, {
+      active: runs.some((r) => ['queued', 'running'].includes(r.status)),
     }),
   );
   await page.route('**/api/benchmarks/reference', (route) =>
-    route.fulfill({ json: reference }),
+    fulfillBenchmarkReference(route, reference),
   );
   await page.route('**/api/benchmarks', (route) => {
     if (route.request().method() === 'POST') {
@@ -103,34 +124,35 @@ async function backend(page: Page, savedSettings = settings) {
         run(`new-${ply}`, ply === body.plies[0] ? 'running' : 'queued', ply),
       );
       runs = [...created, ...runs];
-      return route.fulfill({ status: 202, json: created });
+      return fulfillBenchmarkRuns(route, created, 202);
     }
     reads++;
-    return route.fulfill({
-      json: {
-        runs,
-        active: runs.some((r) => ['queued', 'running'].includes(r.status)),
-      },
+    return fulfillBenchmarkHistory(route, {
+      runs,
+      active: runs.some((r) => ['queued', 'running'].includes(r.status)),
     });
   });
   await page.route('**/api/benchmarks/*/cancel', (route) => {
     const id = route.request().url().split('/').at(-2)!;
     cancels.push(id);
     runs = runs.map((r) => (r.id === id ? { ...r, status: 'cancelled' } : r));
-    return route.fulfill({ json: runs.find((r) => r.id === id) });
+    return fulfillBenchmarkRun(
+      route,
+      runs.find((r) => r.id === id)!,
+    );
   });
   await page.route('**/api/benchmarks/*', (route) => {
     if (route.request().method() !== 'DELETE') return route.fallback();
     const id = route.request().url().split('/').at(-1)!;
     deletes.push(id);
     const target = runs.find((r) => r.id === id);
-    if (!target)
-      return route.fulfill({ status: 404, json: { error: 'Not found' } });
+    if (!target) return fulfillError(route, 'Not found', 404);
     if (['queued', 'running'].includes(target.status))
-      return route.fulfill({
-        status: 409,
-        json: { error: 'Cancel the benchmark before deleting it' },
-      });
+      return fulfillError(
+        route,
+        'Cancel the benchmark before deleting it',
+        409,
+      );
     runs = runs.filter((r) => r.id !== id);
     return route.fulfill({ status: 204 });
   });
@@ -215,7 +237,7 @@ test('history sorts by every data column, including status', async ({
   ];
   await page.route('**/api/benchmarks', (route) =>
     route.request().method() === 'GET'
-      ? route.fulfill({ json: { active: false, runs: history } })
+      ? fulfillBenchmarkHistory(route, { active: false, runs: history })
       : route.fallback(),
   );
   await open(page);
@@ -372,15 +394,13 @@ test('play-turn latency starts independently and has its own history metric', as
       plies: 1,
     });
     playStarts++;
-    return route.fulfill({ status: 202, json: playRun });
+    return fulfillBenchmarkRun(route, playRun, 202);
   });
   await page.route('**/api/benchmarks', (route) =>
     route.request().method() === 'GET'
-      ? route.fulfill({
-          json: {
-            active: false,
-            runs: playStarts ? [playRun, run('analysis')] : [run('analysis')],
-          },
+      ? fulfillBenchmarkHistory(route, {
+          active: false,
+          runs: playStarts ? [playRun, run('analysis')] : [run('analysis')],
         })
       : route.fallback(),
   );
@@ -619,16 +639,14 @@ test('active history stays usable while engine catalog is blocked, then refreshe
     ];
   });
   await page.route('**/api/benchmarks', (route) =>
-    route.fulfill({
-      json: {
-        active,
-        runs: [
-          {
-            ...run('existing', active ? 'running' : 'completed'),
-            started_at: active ? null : '2026-11-10T12:01:00Z',
-          },
-        ],
-      },
+    fulfillBenchmarkHistory(route, {
+      active,
+      runs: [
+        {
+          ...run('existing', active ? 'running' : 'completed'),
+          started_at: active ? null : '2026-11-10T12:01:00Z',
+        },
+      ],
     }),
   );
   await openWithoutEngine();
@@ -661,11 +679,8 @@ test('failed starts show backend diagnostics and narrow view keeps actions reach
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/api/benchmarks', (route) =>
     route.request().method() === 'POST'
-      ? route.fulfill({
-          status: 409,
-          json: { error: 'Engine work is already queued' },
-        })
-      : route.fulfill({ json: { active: false, runs: [] } }),
+      ? fulfillError(route, 'Engine work is already queued', 409)
+      : fulfillBenchmarkHistory(route, { active: false, runs: [] }),
   );
   await open(page);
   await page
@@ -741,7 +756,7 @@ test('comparison identifies stored engine versions and measurement protocols', a
     })),
   );
   await page.route('**/api/benchmarks', (route) =>
-    route.fulfill({ json: { active: false, runs: completedRuns } }),
+    fulfillBenchmarkHistory(route, { active: false, runs: completedRuns }),
   );
   await open(page);
   const comparison = page.getByRole('region', {
@@ -777,7 +792,7 @@ test('the global benchmark status is read at start, on focus and only while a ru
   let reads = 0;
   await page.route('**/api/benchmarks/status', (route) => {
     reads++;
-    return route.fulfill({ json: { active } });
+    return fulfillBenchmarkStatus(route, { active });
   });
   await page.clock.install();
   await page.goto('/');

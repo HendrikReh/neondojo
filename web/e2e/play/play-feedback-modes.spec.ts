@@ -1,5 +1,10 @@
 import { gotoWorkspace, openWorkspace } from '../helpers/navigation';
-import { mockSettings, settingsFixture } from '../helpers/api-fixtures';
+import {
+  fulfillError,
+  fulfillPlaySession,
+  mockSettings,
+  settingsFixture,
+} from '../helpers/api-fixtures';
 import {
   mockPlaySession,
   playDecisionFixture,
@@ -187,28 +192,26 @@ test('Tutor restores a neutral warning and reveals only on request', async ({
       operation: 'reveal',
       decision_id: decision.id,
     });
-    await route.fulfill({
-      json: {
-        ...state,
-        version: 2,
-        pending_decision: {
-          ...decision,
-          revealed: true,
-          loss: 0.09,
-          first_loss: 0.09,
-          severity: 'bad',
-          first_severity: 'bad',
-          alternatives: [
-            {
-              action: 'move',
-              move_index: 0,
-              notation: '8/5 6/5',
-              loss: 0,
-              equity: 0.3,
-              probabilities: [0.6, 0.1, 0, 0.4, 0.1, 0],
-            },
-          ],
-        },
+    await fulfillPlaySession(route, {
+      ...state,
+      version: 2,
+      pending_decision: {
+        ...decision,
+        revealed: true,
+        loss: 0.09,
+        first_loss: 0.09,
+        severity: 'bad',
+        first_severity: 'bad',
+        alternatives: [
+          {
+            action: 'move',
+            move_index: 0,
+            notation: '8/5 6/5',
+            loss: 0,
+            equity: 0.3,
+            probabilities: [0.6, 0.1, 0, 0.4, 0.1, 0],
+          },
+        ],
       },
     });
   });
@@ -412,15 +415,13 @@ test('the dice resume a saved Coach move with its decision identity', async ({
       decision_id: decision.id,
     });
     submitted = true;
-    await route.fulfill({
-      json: {
-        ...state,
-        version: 2,
-        pending_decision: null,
-        phase: 'roll',
-        legal_moves: [],
-        history: [{ player: 0, dice: [3, 1], notation: '8/5 6/5' }],
-      },
+    await fulfillPlaySession(route, {
+      ...state,
+      version: 2,
+      pending_decision: null,
+      phase: 'roll',
+      legal_moves: [],
+      history: [{ player: 0, dice: [3, 1], notation: '8/5 6/5' }],
     });
   });
   expect(submitted).toBe(false);
@@ -448,15 +449,13 @@ for (const mode of ['coach', 'tutor'] as const) {
     const actions: unknown[] = [];
     await page.route(`**/api/play/sessions/${id}/actions`, async (route) => {
       actions.push(route.request().postDataJSON());
-      await route.fulfill({
-        json: {
-          ...state,
-          version: 2,
-          pending_decision: null,
-          phase: 'roll',
-          legal_moves: [],
-          history: [{ player: 0, dice: [3, 1], notation: '8/5 6/5' }],
-        },
+      await fulfillPlaySession(route, {
+        ...state,
+        version: 2,
+        pending_decision: null,
+        phase: 'roll',
+        legal_moves: [],
+        history: [{ player: 0, dice: [3, 1], notation: '8/5 6/5' }],
       });
     });
     const feedback = page.getByTestId('play-feedback');
@@ -497,21 +496,19 @@ test('requesting a hint preserves unconfirmed checker steps', async ({
     'true',
   );
   await page.route(`**/api/play/sessions/${id}/feedback`, (route) =>
-    route.fulfill({
-      json: {
-        ...state,
-        version: 2,
-        pending_decision: {
-          ...decision,
-          action: null,
-          move_index: null,
-          original_action: null,
-          original_move_index: null,
-          assisted: true,
-          revealed: true,
-          warning: false,
-          alternatives: [],
-        },
+    fulfillPlaySession(route, {
+      ...state,
+      version: 2,
+      pending_decision: {
+        ...decision,
+        action: null,
+        move_index: null,
+        original_action: null,
+        original_move_index: null,
+        assisted: true,
+        revealed: true,
+        warning: false,
+        alternatives: [],
       },
     }),
   );
@@ -565,7 +562,7 @@ test('startup restores a live Competition selection into Playing without an anal
     });
   });
   await page.route(`**/api/play/sessions/${id}`, (route) =>
-    route.fulfill({ json: saved('competition') }),
+    fulfillPlaySession(route, saved('competition')),
   );
   await page.goto('/');
   await expect(
@@ -596,7 +593,7 @@ test('a running match exposes its active mode and persists mode changes on reloa
       play_mode: 'coach',
       learning_used: true,
     });
-    await route.fulfill({ json: state });
+    await fulfillPlaySession(route, state);
   });
   const mode = heading.getByRole('combobox', {
     name: 'Change play mode',
@@ -628,14 +625,12 @@ test('switching pending feedback to Competition keeps a neutral explicit confirm
   });
   await resume(page, state);
   await page.route(`**/api/play/sessions/${id}/mode`, (route) =>
-    route.fulfill({
-      json: {
-        ...state,
-        version: 2,
-        play_mode: 'competition',
-        learning_used: true,
-        pending_decision: { ...decision, warning: false },
-      },
+    fulfillPlaySession(route, {
+      ...state,
+      version: 2,
+      play_mode: 'competition',
+      learning_used: true,
+      pending_decision: { ...decision, warning: false },
     }),
   );
   await page
@@ -705,8 +700,11 @@ test('mode switching preserves partial checker steps', async ({ page }) => {
   await resume(page, state);
   await page.locator('[data-play-point="8"]').click();
   await page.route(`**/api/play/sessions/${id}/mode`, (route) =>
-    route.fulfill({
-      json: { ...state, version: 2, play_mode: 'coach', learning_used: true },
+    fulfillPlaySession(route, {
+      ...state,
+      version: 2,
+      play_mode: 'coach',
+      learning_used: true,
     }),
   );
   await page
@@ -839,16 +837,14 @@ test('entering Competition synchronously discards cached linked analysis', async
     route.fulfill({ json: { items: [state.position], next_cursor: null } }),
   );
   await page.route(`**/api/play/sessions/${id}`, (route) =>
-    route.fulfill({ json: state }),
+    fulfillPlaySession(route, state),
   );
   await page.route(`**/api/play/sessions/${id}/mode`, (route) =>
-    route.fulfill({
-      json: {
-        ...state,
-        version: 2,
-        play_mode: 'competition',
-        learning_used: true,
-      },
+    fulfillPlaySession(route, {
+      ...state,
+      version: 2,
+      play_mode: 'competition',
+      learning_used: true,
     }),
   );
   await page.goto('/');
@@ -884,7 +880,7 @@ test('running Tutor threshold saves on blur without a button or duplicate writes
       tutor_threshold: 0.075,
     });
     Object.assign(state, { version: 2, tutor_threshold: 0.075 });
-    return route.fulfill({ json: state });
+    return fulfillPlaySession(route, state);
   });
   for (const invalid of ['0', '1.1', '']) {
     await threshold.fill(invalid);
@@ -926,13 +922,14 @@ test('failed automatic threshold saves retain the draft for retry on blur', asyn
     writes++;
     if (writes === 1) {
       await gate;
-      await route.fulfill({
-        status: 409,
-        json: { error: 'Session changed; reload before changing playing mode' },
-      });
+      await fulfillError(
+        route,
+        'Session changed; reload before changing playing mode',
+        409,
+      );
     } else {
       Object.assign(state, { version: 2, tutor_threshold: 0.09 });
-      await route.fulfill({ json: state });
+      await fulfillPlaySession(route, state);
     }
   });
   const status = page.locator('.play-threshold-control [role="status"]');
@@ -993,7 +990,7 @@ for (const locale of ['en', 'de'] as const) {
     await page.route(`**/api/play/sessions/${id}/mode`, async (route) => {
       await gate;
       Object.assign(state, { version: 2, tutor_threshold: 0.075 });
-      await route.fulfill({ json: state });
+      await fulfillPlaySession(route, state);
     });
     await threshold.fill('0.075');
     await threshold.press('Tab');

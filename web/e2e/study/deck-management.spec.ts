@@ -1,3 +1,4 @@
+import { fulfillDecks } from '../helpers/api-fixtures';
 import {
   DESKTOP_VIEWPORTS,
   gotoWorkspace,
@@ -14,6 +15,7 @@ const initial = () => [
     id: '11111111-1111-4111-8111-111111111111',
     name: 'Race practice',
     card_count: 2,
+    due_count: 0,
     version: 3,
     created_at: '2026-11-09T00:00:00Z',
   },
@@ -21,6 +23,7 @@ const initial = () => [
     id: '22222222-2222-4222-8222-222222222222',
     name: 'Cube practice',
     card_count: 0,
+    due_count: 0,
     version: 0,
     created_at: '2026-11-09T00:00:00Z',
   },
@@ -38,9 +41,7 @@ async function setup(page: Page) {
       '11111111-1111-4111-8111-111111111111',
     );
   });
-  await page.route('**/api/decks', (route) =>
-    route.fulfill({ json: state.decks }),
-  );
+  await page.route('**/api/decks', (route) => fulfillDecks(route, state.decks));
   await page.route('**/api/decks/*/cards?*', (route) =>
     route.fulfill({ json: { items: [], next_cursor: null } }),
   );

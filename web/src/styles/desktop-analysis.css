@@ -352,7 +352,9 @@
     box-shadow: inset 3px 0 var(--ui-bad-text);
   }
 
-  .analysis-workspace .moves-list button:is(.move-assessment-blunder, .move-assessment-very_bad) {
+  .analysis-workspace
+    .moves-list
+    button:is(.move-assessment-blunder, .move-assessment-very_bad) {
     background: var(--ui-danger-bg);
     box-shadow: inset 3px 0 var(--ui-danger-text);
   }
@@ -385,7 +387,9 @@
     font-weight: var(--font-weight-medium);
   }
 
-  .analysis-workspace :is(.move-assessment-blunder, .move-assessment-very_bad) .move-assessment-marker {
+  .analysis-workspace
+    :is(.move-assessment-blunder, .move-assessment-very_bad)
+    .move-assessment-marker {
     color: var(--ui-danger-text);
   }
 
@@ -472,7 +476,6 @@
     min-width: 0;
     overflow-wrap: anywhere;
   }
-
 
   .analysis-workspace .board-panel .board-navigation {
     gap: 8px;
@@ -562,13 +565,13 @@
 
   .analysis-workspace.analysis-overview
     .position-inspector
-    .candidate-comparison-table {
+    :is(.candidate-comparison-table, .position-comparison-table) {
     width: 100%;
   }
 
   .analysis-workspace.analysis-overview
     .position-inspector
-    .candidate-comparison-table
+    :is(.candidate-comparison-table, .position-comparison-table)
     :is(th, td) {
     padding: clamp(7px, 1cqi, 13px) clamp(5px, 1cqi, 13px);
     font-size: clamp(var(--font-size-body), 1.4cqi, 16px);
@@ -576,7 +579,8 @@
 
   .analysis-workspace.analysis-overview
     .position-inspector
-    .candidate-comparison-table
+    :is(.candidate-comparison-table, .position-comparison-table)
+    thead
     th {
     font-size: clamp(var(--font-size-table), 1.25cqi, 14px);
   }
@@ -602,7 +606,6 @@
     overflow-wrap: anywhere;
   }
 
-
   .analysis-workspace.analysis-overview .fineprint,
   .analysis-workspace.analysis-overview .source-attribution {
     margin: 7px 0;
@@ -619,7 +622,6 @@
   .analysis-workspace.analysis-overview .overview-evaluation {
     padding: 12px 14px;
   }
-
 }
 
 /* Statistics uses two summary columns whenever its pane is wide enough,
@@ -654,7 +656,10 @@
     font-size: var(--font-size-panel);
   }
 
-  .analysis-statistics .match-statistics .statistics-error-matrix .statistics-metric {
+  .analysis-statistics
+    .match-statistics
+    .statistics-error-matrix
+    .statistics-metric {
     min-height: 34px;
   }
 
@@ -700,7 +705,9 @@
     margin-block: 18px;
   }
 
-  .analysis-cards .add-cards :is(.learning-controls > label, .create-deck > input) {
+  .analysis-cards
+    .add-cards
+    :is(.learning-controls > label, .create-deck > input) {
     flex: 1 1 220px;
     min-inline-size: 0;
   }
@@ -715,7 +722,9 @@
     font-size: var(--font-size-panel);
   }
 
-  .analysis-cards .add-cards :is(select, input:not([type='checkbox']), .action-button) {
+  .analysis-cards
+    .add-cards
+    :is(select, input:not([type='checkbox']), .action-button) {
     min-block-size: 44px;
   }
 
