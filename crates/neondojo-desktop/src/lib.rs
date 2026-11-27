@@ -1,7 +1,9 @@
 //! NeonDojo native macOS desktop shell built on GPUI (`gpui-kit`).
 
+pub mod anki_webview;
 pub mod app_context;
 pub mod assets;
+pub mod events;
 pub mod i18n;
 pub mod keybindings;
 pub mod local_state;
@@ -11,6 +13,7 @@ pub mod shell;
 pub mod theme;
 pub mod tokio_bridge;
 pub mod ui;
+pub mod workspaces;
 
 use app_context::{DesktopAppContext, resolve_bootstrap_config};
 use assets::NeonAssets;
