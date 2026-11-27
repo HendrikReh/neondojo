@@ -98,6 +98,28 @@ async fn native_checker_cube_and_match_analysis() {
 }
 
 #[tokio::test]
+#[ignore = "requires a locked NeonGammon installation"]
+async fn native_long_match_evaluates_only_games_with_supported_away_scores() {
+    let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
+    let engine = SageEngine::new(SageEngine::probe(python, 2).await.unwrap()).unwrap();
+    let source = concat!(
+        "(;GM[6]MI[length:31][ws:5][bs:5]RE[W+1R];W[31hefe])",
+        "(;GM[6]MI[length:31][ws:6][bs:5]RE[B+1R];W[31hefe])",
+        "(;GM[6]MI[length:31][ws:6][bs:6];W[31hefe])",
+    );
+    let imported = neondojo::import::parse_sgf(source).unwrap();
+    assert_eq!(imported.match_length, 31);
+    assert_eq!(imported.games.len(), 3);
+    for (game, scores) in [(1, "26-away vs 26-away"), (2, "25-away vs 26-away")] {
+        let error = engine.analyze_game(source, game, 2).await.unwrap_err();
+        assert!(format!("{error:#}").contains(scores), "{error:#}");
+    }
+    let supported = engine.analyze_game(source, 3, 2).await.unwrap();
+    let equity = supported.decisions[0].played_equity.unwrap();
+    assert!(equity.is_finite() && equity.abs() > 0.001, "{equity}");
+}
+
+#[tokio::test]
 #[ignore = "requires locked native NeonGammon; no database"]
 async fn native_reference_game_five_full_coverage() {
     let python = std::env::var("NEONDOJO_SAGE_PYTHON").unwrap();
