@@ -84,6 +84,10 @@ def observe_thread_budgets(sage, call):
     from contextlib import ExitStack
     from unittest.mock import patch
     module = sage.analyzer
+    if not hasattr(module, 'bgbot_cpp'):
+        # Since 3.2.2, analyzer re-exports the public API and cubeful owns
+        # the checker implementation and the pool observation hook.
+        module = sage.cubeful
     native = module.bgbot_cpp
     checker_play_nply = native.checker_play_nply
     observed = []

@@ -203,19 +203,22 @@ class ProbeTests(unittest.TestCase):
 
         native = SimpleNamespace(checker_play_nply=checker_play_nply)
         module = SimpleNamespace(bgbot_cpp=native, ThreadPoolExecutor=Pool)
-        sage = SimpleNamespace(analyzer=module)
-
         def analysis():
             module.ThreadPoolExecutor(max_workers=3)
             return native.checker_play_nply([0] * 26, 3, 1, n_threads=4)
 
-        result, observed = probe.observe_thread_budgets(sage, analysis)
-        self.assertEqual(result, ['native result'])
-        self.assertEqual(observed, [3, 4])
-        self.assertEqual(calls, [{'n_threads': 4}])
-        # Both observers are removed again after the call.
-        self.assertIs(module.ThreadPoolExecutor, Pool)
-        self.assertIs(native.checker_play_nply, checker_play_nply)
+        for sage in (
+            SimpleNamespace(analyzer=module),
+            SimpleNamespace(analyzer=SimpleNamespace(), cubeful=module),
+        ):
+            with self.subTest(layout=vars(sage).keys()):
+                calls.clear()
+                result, observed = probe.observe_thread_budgets(sage, analysis)
+                self.assertEqual(result, ['native result'])
+                self.assertEqual(observed, [3, 4])
+                self.assertEqual(calls, [{'n_threads': 4}])
+                self.assertIs(module.ThreadPoolExecutor, Pool)
+                self.assertIs(native.checker_play_nply, checker_play_nply)
 
     def test_network_guard_denies_socket_connections(self):
         self.assertTrue(hasattr(probe, 'deny_network'), 'network guard missing')
