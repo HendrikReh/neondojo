@@ -1,4 +1,5 @@
 import { test, expect } from './test';
+import { fulfillJson } from './api-fixtures';
 import { profileBackend } from './profile-backend';
 import { defaultConfiguration } from '../src/settings/configuration/configuration-model';
 
@@ -445,6 +446,15 @@ test('a pre-filled player lists its decisions at once and hits join a deck one b
       ? route.fulfill({ json: [deck] })
       : route.fallback(),
   );
+  await page.route(`**/api/decks/${deck.id}/next`, (route) =>
+    fulfillJson<'NextCard'>(route, {
+      card: null,
+      counts: { total: deck.card_count, due: 0, new: 0 },
+    }),
+  );
+  await page.route(`**/api/decks/${deck.id}/cards?*`, (route) =>
+    fulfillJson<'CardPage'>(route, { items: [], total: 0 }),
+  );
   const added: unknown[] = [];
   await page.route(`**/api/decks/${deck.id}/decisions`, (route) => {
     if (route.request().method() !== 'POST') return route.fallback();
@@ -453,11 +463,12 @@ test('a pre-filled player lists its decisions at once and hits join a deck one b
     };
     added.push(body);
     const first = added.length === 1;
+    deck.card_count += 1;
     return route.fulfill({
       json: {
         added: 1,
         updated: 0,
-        total: first ? 4 : 5,
+        total: deck.card_count,
         items: body.decisions.map((reference, index) => ({
           reference,
           status: first || index === 1 ? 'added' : 'duplicate',
@@ -540,9 +551,12 @@ test('a pre-filled player lists its decisions at once and hits join a deck one b
   await expect(
     page.getByRole('tab', { name: 'Flashcards & Anki' }),
   ).toHaveAttribute('aria-selected', 'true');
+  const study = page.getByRole('region', { name: 'Study', exact: true });
   await expect(
-    page
-      .getByRole('region', { name: 'Study', exact: true })
-      .getByLabel('Choose deck'),
-  ).toHaveValue(deck.id);
+    study.getByText('No cards are due in this deck right now.', {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(study.getByLabel('Choose deck')).toHaveValue(deck.id);
+  await expect(study.getByRole('alert')).toHaveCount(0);
 });
