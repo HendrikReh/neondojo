@@ -34,6 +34,16 @@ class ProbeTests(unittest.TestCase):
         self.assertTrue(hasattr(probe, 'validate_probabilities'), 'probability validator missing')
         probe.validate_probabilities([0.6, 0.2, 0.03, 0.1, 0.01])
 
+    def test_float32_endpoint_roundoff_tolerance_and_strict_mode(self):
+        noisy = [1.0000000074505806, 0, 0, -7.450580596923828e-9, -7.450580596923828e-9]
+        self.assertEqual(probe.normalize_probabilities(noisy), [1.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        probe.validate_probabilities(noisy)
+        for values in ([1.000001, 0, 0, 0, 0], [.5, 0, 0, -.000001, 0]):
+            with self.subTest(values=values), self.assertRaises(probe.ProbeError):
+                probe.validate_probabilities(values)
+        with self.assertRaises(probe.ProbeError):
+            probe.validate_probabilities(noisy, epsilon=0)
+
     def test_rejects_nonfinite_and_inconsistent_probabilities(self):
         self.assertTrue(hasattr(probe, 'validate_probabilities'), 'probability validator missing')
         for values in ([float('nan'), 0, 0, 0, 0], [0.4, .5, 0, 0, 0], [.7, 0, 0, .4, 0], [.5, .1, .2, 0, 0], [.5, 0, 0, .1, .2], [1.1, 0, 0, 0, 0]):
@@ -132,6 +142,40 @@ class ProbeTests(unittest.TestCase):
         result = subprocess.run([sys.executable, SPEC.origin, '--help'], capture_output=True, text=True, timeout=15)
         self.assertEqual(result.returncode, 0)
         self.assertIn('--levels', result.stdout)
+        for level in ('1ply', '2ply', '3ply', '4ply'):
+            self.assertIn(level, result.stdout)
+        self.assertEqual(probe.SUPPORTED_LEVELS, ('1ply', '2ply', '3ply', '4ply'))
+        self.assertEqual(probe.DEFAULT_LEVELS, ('1ply', '2ply'))
+        self.assertEqual(probe.normalize_levels(None), ['1ply', '2ply'])
+        self.assertEqual(probe.normalize_levels(['3ply', '4ply', '3ply']), ['3ply', '4ply'])
+        with self.assertRaises(probe.ProbeError):
+            probe.normalize_levels(['5ply'])
+
+    def test_report_excluded_profiles_reflects_unrequested_supported_levels(self):
+        default_run = subprocess.run(
+            [sys.executable, '-S', SPEC.origin, '--worker', '--skip-platform-check'],
+            capture_output=True, text=True, timeout=15,
+        )
+        default_report = json.loads(default_run.stdout)
+        self.assertEqual(default_report['requested_levels'], ['1ply', '2ply'])
+        self.assertEqual(
+            default_report['excluded_profiles'],
+            {'3ply': 'Not requested in this probe run', '4ply': 'Not requested in this probe run'},
+        )
+        all_levels_run = subprocess.run(
+            [sys.executable, '-S', SPEC.origin, '--worker', '--skip-platform-check',
+             '--levels', '1ply', '2ply', '3ply', '4ply'],
+            capture_output=True, text=True, timeout=15,
+        )
+        all_report = json.loads(all_levels_run.stdout)
+        self.assertEqual(all_report['requested_levels'], ['1ply', '2ply', '3ply', '4ply'])
+        self.assertEqual(all_report['excluded_profiles'], {})
+
+    def test_verify_game_batches_reuses_single_threaded_math(self):
+        script = (Path(__file__).parent / 'open-sage/verify_game_batches.py').read_text()
+        self.assertIn('SINGLE_THREADED_MATH', script)
+        for key in probe.SINGLE_THREADED_MATH:
+            self.assertNotIn(key, script)
 
     def test_serial_capability_requires_zero_candidate_pools(self):
         probe.validate_thread_budget(2, [], serial=True)

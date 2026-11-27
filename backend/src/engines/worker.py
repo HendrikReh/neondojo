@@ -4,6 +4,7 @@ Rust injects the diagnostic probe module as ``integrity`` before calling main;
 its RECORD/asset validation is the single shared integrity implementation.
 """
 import hashlib
+import inspect
 import json
 import math
 import os
@@ -16,6 +17,7 @@ MAX_REQUEST = 262144
 MAX_RESPONSE = 2097152
 ADAPTER_VERSION = 1
 TOP_TWO_GAP = 0.010
+PROBABILITY_EPSILON = 1e-7
 
 
 def process_cpu_us():
@@ -33,7 +35,7 @@ def probabilities(values):
     # Native float32 accumulation can exceed exact probability endpoints by
     # ~7.45e-9 (WC2014 game 5 bearoff). Bound rounding below one float32 epsilon;
     # larger errors and inconsistent nesting still fail closed.
-    epsilon = 1e-7
+    epsilon = PROBABILITY_EPSILON
     if len(values) != 5 or not all(math.isfinite(x) and -epsilon <= x <= 1 + epsilon for x in values):
         raise ValueError('Invalid NeonGammon probabilities')
     w, wg, wb, lg, lb = [min(1.0, max(0.0, x)) for x in values]
@@ -106,7 +108,7 @@ class Runtime:
         if not opening.moves:
             raise ValueError('NeonGammon capability check returned no candidates')
         for move in opening.moves:
-            integrity['validate_result'](move)
+            integrity['validate_result'](move, probabilities)
         self.verify()
 
     def check_identity(self):
@@ -166,6 +168,12 @@ class Runtime:
             raise ValueError('NeonGammon omitted a promoted candidate')
         return sorted(scored, key=lambda move: (-move.equity, -move.cubeless_equity, move.board)), '3-ply'
 
+    def policy_analyzer(self, depth):
+        if depth not in self.policy_analyzers:
+            self.policy_analyzers[depth] = self.sage.BgBotAnalyzer(
+                eval_level=f'{depth}ply', models=self.models, parallel_threads=self.profile['threads'])
+        return self.policy_analyzers[depth]
+
     def opponent_policy(self, difficulty, seed):
         if not self.release['presets']:
             raise ValueError('NeonGammon difficulty presets require NeonGammon 3.1.0 or newer')
@@ -173,13 +181,22 @@ class Runtime:
             # Earlier releases expose the deterministic RNG seed only at construction.
             return self.sage.DifficultyPolicy(difficulty, seed=seed, parallel_threads=self.profile['threads'])
         if difficulty not in self.opponent_policies:
-            depth = 2 if difficulty == 'full_strength' else 1
-            if depth not in self.policy_analyzers:
-                self.policy_analyzers[depth] = self.sage.BgBotAnalyzer(
-                    eval_level=f'{depth}ply', models=self.models, parallel_threads=self.profile['threads'])
-            analyzer = self.policy_analyzers[depth]
+            checker_depth = self.profile['plies'] if difficulty == 'full_strength' else 1
+            cube_depth = 2 if difficulty == 'full_strength' else 1
+            checker_analyzer = self.policy_analyzer(checker_depth)
+            cube_analyzer = self.policy_analyzer(cube_depth)
+            try:
+                params = inspect.signature(self.sage.DifficultyPolicy).parameters
+            except (TypeError, ValueError):
+                params = ()
+            analyzer_kwarg = 'checker_analyzer' if 'checker_analyzer' in params else 'analyzer'
             self.opponent_policies[difficulty] = self.sage.DifficultyPolicy(
-                difficulty, analyzer=analyzer, cube_analyzer=analyzer, seed=seed, parallel_threads=self.profile['threads'])
+                difficulty,
+                **{analyzer_kwarg: checker_analyzer},
+                cube_analyzer=cube_analyzer,
+                seed=seed,
+                parallel_threads=self.profile['threads'],
+            )
         policy = self.opponent_policies[difficulty]
         policy.reseed(seed)
         return policy
@@ -270,95 +287,111 @@ class Runtime:
         return [self.checker_output(row, result) if checker else self.cube_output(result)
                 for row, result in zip(rows, native, strict=True)]
 
-    def dispatch(self, request):
-        operation = request['operation']
+    def handle_batch_boundary(self, operation):
         if operation == 'begin_batch':
             if self.batch_active:
                 raise ValueError('Integrity batch already active')
             self.verify_unchanged()
             self.batch_active = True
             return self.identity, None
-        if operation == 'end_batch':
-            if not self.batch_active:
-                raise ValueError('No active integrity batch')
-            self.verify_unchanged()
-            self.batch_active = False
-            return self.identity, None
+        if not self.batch_active:
+            raise ValueError('No active integrity batch')
+        self.verify_unchanged()
+        self.batch_active = False
+        return self.identity, None
+
+    def handle_opponent(self, request):
+        before = board(request['board'])
+        kwargs = cube_context(request)
+        difficulty, seed = request['difficulty'], request['seed']
+        # Older Full Strength sessions pin 2-ply for both decisions.
+        allowed_plies = (2, 3) if difficulty == 'full_strength' else (1,)
+        if (self.cubeless or self.profile['plies'] not in allowed_plies
+                or type(seed) is not int or not 0 <= seed < 2**64):
+            raise ValueError('Invalid opponent policy request')
+        policy = self.opponent_policy(difficulty, seed)
+        if request['operation'] == 'opponent_checker':
+            dice = checker_dice(request)
+            if self.profile['plies'] == 3 and not (getattr(self, 'release', None) or {}).get('shared_models', False):
+                # Pre-3.2.0 wheels construct a 2-ply DifficultyPolicy without analyzer injection.
+                selected = self.analyzer.checker_play(before, *dice, **kwargs).moves[0].board
+            else:
+                selected = policy.select_checker_move(before, *dice, **kwargs)
+            return board(selected)
+        decision = policy.cube_decision(before, **kwargs)
+        return {'should_double': decision.should_double, 'should_take': decision.should_take}
+
+    def handle_checker(self, request):
+        return self.checker_output(request, self.analyzer.checker_play(**self.checker_input(request)))
+
+    def handle_resignation(self, request):
+        before = board(request['board'])
+        kwargs = cube_context(request)
+        level = request['level']
+        if type(level) is not int or level not in (1, 2, 3):
+            raise ValueError('Invalid resignation level')
+        dice = request['dice']
+        if dice[0] and dice[1]:
+            continuation = self.analyzer.checker_play(before, *dice, **kwargs).moves[0].equity
+        else:
+            # Only the no-double equity matters; skip cube_action's probability search.
+            continuation = self.analyzer.cube_decision(before, **kwargs).equity_nd
+        # Independent terminal outcome for the offered single/gammon/
+        # backgammon. Sage performs its own match-equity conversion.
+        terminal = [0] * 26
+        terminal[25 if level == 3 else 6] = 1 if level == 1 else 15
+        offered = self.analyzer.post_move_analytics(
+            terminal, **{key: value for key, value in kwargs.items() if key != 'beaver'})
+        self.integrity['validate_result'](offered, probabilities)
+        if not math.isfinite(continuation):
+            raise ValueError('Invalid resignation continuation equity')
+        return {'accept': offered.cubeful_equity <= continuation + 1e-9,
+                'continuation': continuation, 'offered': offered.cubeful_equity}
+
+    def handle_cube(self, request):
+        before = board(request['board'])
+        kwargs = cube_context(request)
+        if self.cubeless:
+            raise ValueError('A cubeless NeonGammon profile makes no cube decisions')
+        decision_only = request.get('decision_only', False)
+        if type(decision_only) is not bool:
+            raise ValueError('Invalid cube decision scope')
+        if not decision_only:
+            return self.cube_output(self.analyzer.cube_action(before, **kwargs))
+        # Same equities as cube_action, without its second, cubeless
+        # search for probabilities the caller does not use.
+        result = self.analyzer.cube_decision(before, **kwargs)
+        equities = (result.equity_nd, result.equity_dt, result.equity_dp, result.optimal_equity)
+        if not all(math.isfinite(value) for value in equities):
+            raise ValueError(f'Invalid cube decision: board={before}, context={kwargs}')
+        if result.eval_level != f"{self.profile['plies']}-ply":
+            raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
+        return {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp}
+
+    def dispatch(self, request):
+        operation = request['operation']
+        if operation in ('begin_batch', 'end_batch'):
+            return self.handle_batch_boundary(operation)
         if self.batch_active and operation not in ('checker', 'cube', 'checker_batch', 'cube_batch_nply'):
             raise ValueError('Unsupported integrity batch operation')
         if not self.batch_active:
             self.verify_unchanged()
+        handlers = {
+            'checker_batch': self.evaluate_batch,
+            'cube_batch_nply': self.evaluate_batch,
+            'identity': lambda _: self.identity,
+            'opponent_checker': self.handle_opponent,
+            'opponent_cube': self.handle_opponent,
+            'checker': self.handle_checker,
+            'resignation': self.handle_resignation,
+            'cube': self.handle_cube,
+        }
+        handler = handlers.get(operation)
+        if handler is None:
+            raise ValueError('Unsupported sidecar operation')
         # Engine work only: integrity checks before and after stay outside.
         cpu_before, wall_before = process_cpu_us(), time.perf_counter_ns()
-        if operation in ('checker_batch', 'cube_batch_nply'):
-            result = self.evaluate_batch(request)
-        elif operation == 'identity':
-            result = self.identity
-        else:
-            before = board(request['board'])
-            kwargs = cube_context(request)
-            if operation in ('opponent_checker', 'opponent_cube'):
-                difficulty, seed = request['difficulty'], request['seed']
-                # Older Full Strength sessions pin 2-ply for both decisions.
-                allowed_plies = (2, 3) if difficulty == 'full_strength' else (1,)
-                if (self.cubeless or self.profile['plies'] not in allowed_plies
-                        or type(seed) is not int or not 0 <= seed < 2**64):
-                    raise ValueError('Invalid opponent policy request')
-                policy = self.opponent_policy(difficulty, seed)
-                if operation == 'opponent_checker':
-                    dice = checker_dice(request)
-                    if self.profile['plies'] == 3:
-                        # NeonDojo pins a deeper checker search for new Full Strength matches.
-                        selected = self.analyzer.checker_play(before, *dice, **kwargs).moves[0].board
-                    else:
-                        selected = policy.select_checker_move(before, *dice, **kwargs)
-                    result = board(selected)
-                else:
-                    decision = policy.cube_decision(before, **kwargs)
-                    result = {'should_double': decision.should_double, 'should_take': decision.should_take}
-            elif operation == 'checker':
-                result = self.checker_output(request, self.analyzer.checker_play(**self.checker_input(request)))
-            elif request['operation'] == 'resignation':
-                level = request['level']
-                if type(level) is not int or level not in (1, 2, 3):
-                    raise ValueError('Invalid resignation level')
-                dice = request['dice']
-                if dice[0] and dice[1]:
-                    continuation = self.analyzer.checker_play(before, *dice, **kwargs).moves[0].equity
-                else:
-                    # Only the no-double equity matters; skip cube_action's probability search.
-                    continuation = self.analyzer.cube_decision(before, **kwargs).equity_nd
-                # Independent terminal outcome for the offered single/gammon/
-                # backgammon. Sage performs its own match-equity conversion.
-                terminal = [0] * 26
-                terminal[25 if level == 3 else 6] = 1 if level == 1 else 15
-                offered = self.analyzer.post_move_analytics(terminal, **{key: value for key, value in kwargs.items() if key != 'beaver'})
-                self.integrity['validate_result'](offered, probabilities)
-                if not math.isfinite(continuation):
-                    raise ValueError('Invalid resignation continuation equity')
-                result = {'accept': offered.cubeful_equity <= continuation + 1e-9,
-                          'continuation': continuation, 'offered': offered.cubeful_equity}
-            elif request['operation'] == 'cube':
-                if self.cubeless:
-                    raise ValueError('A cubeless NeonGammon profile makes no cube decisions')
-                decision_only = request.get('decision_only', False)
-                if type(decision_only) is not bool:
-                    raise ValueError('Invalid cube decision scope')
-                depth = f"{self.profile['plies']}-ply"
-                if decision_only:
-                    # Same equities as cube_action, without its second, cubeless
-                    # search for probabilities the caller does not use.
-                    result = self.analyzer.cube_decision(before, **kwargs)
-                    equities = (result.equity_nd, result.equity_dt, result.equity_dp, result.optimal_equity)
-                    if not all(math.isfinite(value) for value in equities):
-                        raise ValueError(f'Invalid cube decision: board={before}, context={kwargs}')
-                    if result.eval_level != depth:
-                        raise ValueError('NeonGammon returned a cube evaluation below the requested depth')
-                    result = {'no_double': result.equity_nd, 'take': result.equity_dt, 'pass': result.equity_dp}
-                else:
-                    result = self.cube_output(self.analyzer.cube_action(before, **kwargs))
-            else:
-                raise ValueError('Unsupported sidecar operation')
+        result = handler(request)
         cost = {'cpu_us': process_cpu_us() - cpu_before,
                 'wall_us': (time.perf_counter_ns() - wall_before) // 1000}
         if not self.batch_active:

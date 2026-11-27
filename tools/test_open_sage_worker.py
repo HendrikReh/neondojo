@@ -68,6 +68,77 @@ class WorkerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 worker.probabilities(values)
 
+    def test_probability_validation_matches_probe_semantics(self):
+        spec = importlib.util.spec_from_file_location('sage_worker', PATH)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        self.assertEqual(worker.PROBABILITY_EPSILON, PROBE.PROBABILITY_EPSILON)
+        for values in ([.6, .2, .05, .1, .02],
+                       [1.0000000074505806, 0, 0, -7.450580596923828e-9, -7.450580596923828e-9]):
+            with self.subTest(values=values):
+                self.assertEqual(worker.probabilities(values), PROBE.normalize_probabilities(values))
+        for values in ([float('nan'), 0, 0, 0, 0], [1.000001, 0, 0, 0, 0], [.5, 0, 0, -.000001, 0], [.3, .4, .1, 0, 0]):
+            with self.subTest(values=values):
+                with self.assertRaises(ValueError):
+                    worker.probabilities(values)
+                with self.assertRaises(PROBE.ProbeError):
+                    PROBE.validate_probabilities(values)
+
+    def test_startup_self_check_validates_with_worker_probabilities(self):
+        spec = importlib.util.spec_from_file_location('sage_worker', PATH)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        noisy_move = SimpleNamespace(
+            board=[0] * 26, eval_level='2-ply', equity=0.1,
+            probs=SimpleNamespace(to_list=lambda: [1.0000000074505806, 0, 0, -7.450580596923828e-9, -7.450580596923828e-9]),
+        )
+
+        class FakeAnalyzer:
+            def __init__(self, **kwargs):
+                pass
+
+            def checker_play(self, *args, **kwargs):
+                return SimpleNamespace(moves=[noisy_move])
+
+            def cube_decision(self, *args, **kwargs):
+                pass
+
+        fake_sage = SimpleNamespace(
+            STARTING_BOARD=[0] * 26,
+            BgBotAnalyzer=FakeAnalyzer,
+            DifficultyPolicy=lambda *args, **kwargs: None,
+            BatchModels=SimpleNamespace(from_analyzer=lambda analyzer: object()),
+            analyzer=SimpleNamespace(SERIAL_CUBEFUL_1PLY=False),
+        )
+        validate_calls = []
+
+        def recording_validate_result(result, probability_validator=PROBE.validate_probabilities):
+            validate_calls.append(probability_validator)
+            return PROBE.validate_result(result, probability_validator)
+
+        version = PROBE.SUPPORTED_VERSIONS[-1]
+        manifest = dict(identity_sha256='orig', neongammon=version, numpy=PROBE.NUMPY_VERSION,
+                        production_model='stage11', strategy='backgame_pair_phased')
+        integrity = {
+            'RELEASES': PROBE.RELEASES,
+            'ProbeError': PROBE.ProbeError,
+            'deny_network': lambda: None,
+            'validate_platform': lambda *args: None,
+            'identity': lambda *args: dict(manifest),
+            'validate_versions': PROBE.validate_versions,
+            'observe_thread_budgets': lambda sage, call: (call(), [2]),
+            'validate_thread_budget': lambda *args, **kwargs: None,
+            'validate_result': recording_validate_result,
+            'locked_paths': lambda *args: ['locked'],
+            'stat_snapshot': lambda paths: ('snap',),
+        }
+        distribution = Mock()
+        distribution.read_text.return_value = 'RECORD'
+        with patch.dict(sys.modules, {'neongammon': fake_sage, 'bgbot_cpp': SimpleNamespace()}), \
+             patch('importlib.metadata.distribution', return_value=distribution):
+            worker.Runtime({'plies': 2, 'threads': 2}, integrity)
+        self.assertEqual(validate_calls, [worker.probabilities])
+
 class ProtocolTests(unittest.TestCase):
     def run_protocol(self, data):
         source = PATH.read_text() + """
@@ -425,6 +496,10 @@ class BatchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'already active'):
             self.runtime.dispatch({'operation': 'begin_batch'})
 
+    def test_unsupported_operation_raises_value_error(self):
+        with self.assertRaisesRegex(ValueError, 'Unsupported sidecar operation'):
+            self.runtime.dispatch({'operation': 'unknown_op'})
+
     def test_batch_cannot_bypass_normal_identity_request_checks(self):
         self.runtime.dispatch({'operation': 'begin_batch'})
         with self.assertRaisesRegex(ValueError, 'Unsupported integrity batch operation'):
@@ -642,6 +717,85 @@ class OpponentPolicyTests(unittest.TestCase):
         self.assertEqual(first.roll(), value)
         constructor.assert_called_once()
 
+    def test_full_strength_policy_wires_checker_and_cube_analyzers_across_signatures(self):
+        from random import Random
+        spec = importlib.util.spec_from_file_location('sage_worker', PATH)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+
+        def make_runtime(plies, policy_cls):
+            runtime = worker.Runtime.__new__(worker.Runtime)
+            runtime.profile = {'plies': plies, 'threads': 4}
+            runtime.release = PROBE.RELEASES['3.2.1']
+            runtime.models = object()
+            runtime.opponent_policies = {}
+            base = SimpleNamespace(depth=plies)
+            runtime.policy_analyzers = {plies: base}
+            created = []
+
+            def make_analyzer(eval_level, models, parallel_threads):
+                self.assertIs(models, runtime.models)
+                self.assertEqual(parallel_threads, 4)
+                created.append(eval_level)
+                return SimpleNamespace(depth=eval_level)
+
+            runtime.sage = SimpleNamespace(BgBotAnalyzer=make_analyzer, DifficultyPolicy=policy_cls)
+            return runtime, base, created
+
+        # 3.2.0 / 3.2.1 signature: (difficulty, *, seed=42, parallel_threads=1, analyzer=None, cube_analyzer=None)
+        seen_v321 = []
+
+        class Policy321:
+            def __init__(self, difficulty, *, seed=42, parallel_threads=1, analyzer=None, cube_analyzer=None):
+                seen_v321.append((difficulty, seed, parallel_threads, analyzer, cube_analyzer))
+                self.rng = Random(seed)
+
+            def reseed(self, seed):
+                self.rng.seed(seed)
+
+        runtime, base, created = make_runtime(3, Policy321)
+        runtime.opponent_policy('full_strength', 11)
+        self.assertEqual(created, ['2ply'])
+        self.assertEqual(len(seen_v321), 1)
+        self.assertIs(seen_v321[0][3], base)
+        self.assertIs(seen_v321[0][4], runtime.policy_analyzers[2])
+
+        # #103 signature: supports explicit checker_analyzer alongside cube_analyzer.
+        seen_new = []
+
+        class PolicyWithCheckerAnalyzer:
+            def __init__(self, difficulty, *, seed=42, parallel_threads=1,
+                         analyzer=None, checker_analyzer=None, cube_analyzer=None, models=None):
+                seen_new.append((difficulty, seed, parallel_threads, analyzer, checker_analyzer, cube_analyzer))
+                self.rng = Random(seed)
+
+            def reseed(self, seed):
+                self.rng.seed(seed)
+
+        runtime, base, created = make_runtime(3, PolicyWithCheckerAnalyzer)
+        runtime.opponent_policy('full_strength', 19)
+        self.assertEqual(created, ['2ply'])
+        self.assertEqual(len(seen_new), 1)
+        self.assertIsNone(seen_new[0][3])
+        self.assertIs(seen_new[0][4], base)
+        self.assertIs(seen_new[0][5], runtime.policy_analyzers[2])
+
+        # Legacy 2-ply Full Strength session reuses the 2-ply analyzer for both checker and cube.
+        seen_legacy_2ply = []
+
+        class Policy2Ply:
+            def __init__(self, difficulty, *, seed=42, parallel_threads=1, checker_analyzer=None, cube_analyzer=None):
+                seen_legacy_2ply.append((checker_analyzer, cube_analyzer))
+
+            def reseed(self, seed):
+                pass
+
+        runtime, base, created = make_runtime(2, Policy2Ply)
+        runtime.opponent_policy('full_strength', 23)
+        self.assertEqual(created, [])
+        self.assertIs(seen_legacy_2ply[0][0], base)
+        self.assertIs(seen_legacy_2ply[0][1], base)
+
     def test_opponent_requests_use_the_choice_from_the_preset(self):
         spec = importlib.util.spec_from_file_location('sage_worker', PATH)
         worker = importlib.util.module_from_spec(spec)
@@ -651,6 +805,7 @@ class OpponentPolicyTests(unittest.TestCase):
         runtime.batch_active = False
         runtime.cubeless = False
         runtime.profile = {'plies': 1, 'threads': 2}
+        runtime.release = PROBE.RELEASES['3.2.1']
         before = [0] * 26
         before[6], before[19] = 2, -2
         selected = [0] * 26
@@ -671,6 +826,8 @@ class OpponentPolicyTests(unittest.TestCase):
         policy.select_checker_move.assert_called_once_with(before, 3, 1, beaver=False, **context)
         policy.cube_decision.assert_called_once_with(before, beaver=False, **context)
 
+        # 3.2.0+ releases inject the 3-ply checker analyzer and 2-ply cube analyzer
+        # directly into DifficultyPolicy, so both operations delegate through policy.
         runtime.profile['plies'] = 3
         runtime.analyzer = SimpleNamespace(checker_play=Mock(return_value=SimpleNamespace(
             moves=[SimpleNamespace(board=selected)]
@@ -678,6 +835,19 @@ class OpponentPolicyTests(unittest.TestCase):
         policy.select_checker_move.reset_mock()
         policy.cube_decision.reset_mock()
         request['difficulty'] = 'full_strength'
+        checker, _ = runtime.dispatch(dict(request, operation='opponent_checker', dice=[3, 1]))
+        cube, _ = runtime.dispatch(dict(request, operation='opponent_cube'))
+        self.assertEqual(checker, selected)
+        self.assertEqual(cube, {'should_double': True, 'should_take': False})
+        policy.select_checker_move.assert_called_once_with(before, 3, 1, beaver=False, **context)
+        runtime.analyzer.checker_play.assert_not_called()
+        policy.cube_decision.assert_called_once_with(before, beaver=False, **context)
+
+        # Pre-3.2.0 releases cannot inject a 3-ply checker analyzer into DifficultyPolicy,
+        # so 3-ply Full Strength falls back to the worker's 3-ply analyzer for checker play.
+        runtime.release = PROBE.RELEASES['3.1.2']
+        policy.select_checker_move.reset_mock()
+        policy.cube_decision.reset_mock()
         checker, _ = runtime.dispatch(dict(request, operation='opponent_checker', dice=[3, 1]))
         cube, _ = runtime.dispatch(dict(request, operation='opponent_cube'))
         self.assertEqual(checker, selected)

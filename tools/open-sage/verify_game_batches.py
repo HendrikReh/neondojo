@@ -1,4 +1,5 @@
 """Opt-in scalar/batch parity check. Run with the locked NeonGammon interpreter."""
+import importlib.util
 import json
 import os
 import subprocess
@@ -11,7 +12,18 @@ import neongammon as ng
 
 
 ROOT = Path(__file__).resolve().parents[2]
-RELEASES = json.loads((ROOT / 'shared/neongammon-releases.json').read_text())
+PROBE_PATH = ROOT / 'tools/probe_open_sage.py'
+
+
+def _load_probe_module():
+    spec = importlib.util.spec_from_file_location('probe_open_sage', PROBE_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+PROBE = _load_probe_module()
+RELEASES = PROBE.RELEASES
 
 
 def fixture():
@@ -29,7 +41,7 @@ def fixture():
 
 
 def sidecar_replies(depth, identity, frames):
-    probe = (ROOT / 'tools/probe_open_sage.py').read_text()
+    probe = PROBE_PATH.read_text()
     worker = (ROOT / 'backend/src/engines/worker.py').read_text()
     source = (f"integrity = {{'__name__': 'neondojo_integrity', 'RELEASES': {RELEASES!r}}}\n"
               f"exec({probe!r}, integrity)\n{worker}\nmain(integrity)")
@@ -37,7 +49,7 @@ def sidecar_replies(depth, identity, frames):
     requests = [dict(operation='initialize', profile=profile), dict(operation='begin_batch'),
                 *frames, dict(operation='end_batch')]
     wire = ''.join(json.dumps(dict(request, id=i)) + '\n' for i, request in enumerate(requests, 1))
-    env = dict(os.environ, OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1', VECLIB_MAXIMUM_THREADS='1')
+    env = os.environ | PROBE.SINGLE_THREADED_MATH
     process = subprocess.run([sys.executable, '-I', '-u', '-c', source], input=wire, text=True,
                              capture_output=True, env=env, timeout=900, check=True)
     replies = [json.loads(line) for line in process.stdout.splitlines()]
