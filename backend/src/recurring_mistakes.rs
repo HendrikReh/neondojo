@@ -295,7 +295,7 @@ async fn list(
     let names = player_scope::names(&s.pool, &player).await?;
     let independent_only = q.independent_only.unwrap_or(false);
     let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
-    index::require_current(&mut tx, q.database_id, &names, independent_only).await?;
+    index::require_current(&s, &mut tx, q.database_id, &names, independent_only).await?;
     let (groups, decisions, matches) = index::groups(
         &mut tx,
         q.database_id,

@@ -117,6 +117,7 @@ pub(super) async fn transition(
         return Err(conflict("The paused library match is missing"));
     });
     tx.commit().await.map_err(anyhow::Error::from)?;
+    state.browse_wake.notify_one();
     session.version += 1;
     session.paused = pausing;
     let session = present_with_results(session, saved.sgf).await?;

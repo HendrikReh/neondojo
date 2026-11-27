@@ -204,7 +204,7 @@ pub(super) async fn start_session(
         .await
         .map_err(native_error)?;
     stage_opening(&mut session, false)?;
-    insert_saved_session(&state.pool, &mut session, &pinned_path).await?;
+    insert_saved_session(&state, &mut session, &pinned_path).await?;
     open_sage::schedule_warmup(&session, &state);
     Ok(session)
 }

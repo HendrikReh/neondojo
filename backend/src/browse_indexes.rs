@@ -9,7 +9,8 @@ use sqlx::PgPool;
 use std::time::Duration;
 use uuid::Uuid;
 
-pub(crate) fn preparing(name: &str) -> ApiError {
+pub(crate) fn preparing(state: &AppState, name: &str) -> ApiError {
+    state.browse_wake.notify_one();
     let mut error = crate::api::ErrorBody::from(format!(
         "{name} is being prepared in the background. Retry after indexing finishes."
     ));

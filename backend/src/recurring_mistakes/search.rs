@@ -397,7 +397,7 @@ pub(super) async fn search(
 ) -> ApiResult<Json<DecisionSearchPage>> {
     let search = Search::new(&s.pool, q).await?;
     let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
-    super::index::require_current(&mut tx, search.database(), search.player(), false).await?;
+    super::index::require_current(&s, &mut tx, search.database(), search.player(), false).await?;
     let (items, total) = search.read(&mut tx).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(DecisionSearchPage {

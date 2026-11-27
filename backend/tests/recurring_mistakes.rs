@@ -1991,3 +1991,368 @@ async fn decision_batch_reuses_one_native_replay_and_preserves_game_errors(pool:
         "the full source is needed once across selected games"
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn browse_worker_wakes_without_idle_poll_on_cancel_play_and_preparing_gets(pool: PgPool) {
+    use neondojo::{api, engine::Engine, play};
+    use std::time::Duration;
+
+    let match_id = source(&pool).await;
+    let position_id: Uuid =
+        sqlx::query_scalar("SELECT id FROM positions WHERE match_uuid=$1 ORDER BY ordinal LIMIT 1")
+            .bind(match_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let state = api::AppState::new(pool.clone(), Engine::new("/unavailable".into()));
+    let router = api::router(state.clone());
+
+    let (status, _) = call(
+        &router,
+        "PUT",
+        &format!("/api/positions/{position_id}/bookmark"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200);
+
+    // Seed a running match job with one checkpointed game and explicitly select it
+    // so cancelling it advances native_analysis_revisions in the match fingerprint.
+    let job_id = job(&pool, match_id, 2, None, &game1(0.15)).await;
+    sqlx::query("UPDATE jobs SET status='running', total_games=2 WHERE id=$1")
+        .bind(job_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO analysis_selections(match_id,analysis_id) VALUES($1,$2)")
+        .bind(match_id)
+        .bind(format!("job:{job_id}"))
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Seed an active point-match play session linked to a library match in Bot Matches.
+    let play_sgf = "(;GM[6]FF[4]PW[Alice]PB[GNUbg]MI[length:7][game:0][ws:0][bs:0];W[31hefe])";
+    let play_imported = import::parse_sgf(play_sgf).unwrap();
+    let play_match_id = store::import_match(
+        &pool,
+        "play-wake.sgf",
+        "sgf",
+        play_sgf.as_bytes(),
+        play_sgf,
+        &play_imported,
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    sqlx::query("UPDATE matches SET database_id=$2 WHERE id=$1")
+        .bind(play_match_id)
+        .bind(play::BOT_DATABASE_ID)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let session_id = Uuid::new_v4();
+    let play_state = json!({
+        "id": session_id,
+        "version": 4,
+        "human_player": 0,
+        "human_name": "Alice",
+        "match_length": 7,
+        "bearoff_direction": "right",
+        "engine": {"id": "gnubg", "version": "test", "plies": 1},
+        "position": {
+            "id": session_id,
+            "match_uuid": session_id,
+            "ordinal": 0,
+            "game_no": 1,
+            "ply": 1,
+            "player": 0,
+            "dice": [3, 1],
+            "board": vec![0; 26],
+            "position_id": "",
+            "gnubg_match_id": "",
+            "notation": ""
+        },
+        "phase": "move",
+        "can_double": false,
+        "legal_moves": [{"notation": "8/5 6/5", "steps": []}],
+        "history": [{"player": 0, "dice": [3, 1], "notation": "8/5 6/5"}],
+        "scores": [0, 0],
+        "game_no": 1,
+        "winner": null,
+        "library_match_id": play_match_id
+    });
+    sqlx::query(
+        "INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id,version,library_match_id,library_archived)
+         VALUES($1,$2,'/unavailable',$3,'',4,$4,true)",
+    )
+    .bind(session_id)
+    .bind(sqlx::types::Json(&play_state))
+    .bind(play_sgf)
+    .bind(play_match_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+
+    let worker = tokio::spawn(neondojo::browse_indexes::worker(state.clone()));
+
+    let wait_until = |label: &'static str,
+                      mut check: Box<
+        dyn FnMut() -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>> + Send,
+    >| async move {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if check().await {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!("timed out waiting for {label} (would stall for 60s idle poll)")
+        });
+    };
+
+    // Wait for the initial indexing pass to complete and enter its 60s idle sleep.
+    let pool_init = pool.clone();
+    wait_until(
+        "initial index build",
+        Box::new(move || {
+            let pool = pool_init.clone();
+            Box::pin(async move {
+                let decisions: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM decision_index_matches WHERE match_id=ANY($1)",
+                )
+                .bind(vec![match_id, play_match_id])
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                let plans: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM position_game_plans WHERE position_uuid=$1",
+                )
+                .bind(position_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+                decisions == 2 && plans == 1
+            })
+        }),
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // 1. Job cancellation wakes browse_wake without any GET request.
+    let before_cancel_fp: String =
+        sqlx::query_scalar("SELECT fingerprint FROM decision_index_matches WHERE match_id=$1")
+            .bind(match_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let (status, cancelled) = call(
+        &router,
+        "POST",
+        &format!("/api/jobs/{job_id}/cancel"),
+        Value::Null,
+    )
+    .await;
+    assert_eq!(status, 200, "{cancelled}");
+    let pool_cancel = pool.clone();
+    let fp_cancel = before_cancel_fp.clone();
+    wait_until(
+        "job cancellation wake",
+        Box::new(move || {
+            let pool = pool_cancel.clone();
+            let before = fp_cancel.clone();
+            Box::pin(async move {
+                let current: Option<String> = sqlx::query_scalar(
+                    "SELECT fingerprint FROM decision_index_matches WHERE match_id=$1",
+                )
+                .bind(match_id)
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
+                current.as_deref().is_some_and(|fp| fp != before)
+            })
+        }),
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // 2. Play pause and resume wake browse_wake without any GET request.
+    sqlx::query("DELETE FROM decision_index_matches WHERE match_id=$1")
+        .bind(match_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, paused) = call(
+        &router,
+        "POST",
+        &format!("/api/play/sessions/{session_id}/actions"),
+        json!({"action": "pause", "version": 4}),
+    )
+    .await;
+    assert_eq!(status, 200, "{paused}");
+    let pool_pause = pool.clone();
+    wait_until(
+        "play pause wake",
+        Box::new(move || {
+            let pool = pool_pause.clone();
+            Box::pin(async move {
+                sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM decision_index_matches WHERE match_id=$1)",
+                )
+                .bind(match_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+            })
+        }),
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    sqlx::query("DELETE FROM decision_index_matches WHERE match_id=$1")
+        .bind(match_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (status, resumed) = call(
+        &router,
+        "POST",
+        &format!("/api/play/sessions/{session_id}/actions"),
+        json!({"action": "resume", "version": 5}),
+    )
+    .await;
+    assert_eq!(status, 200, "{resumed}");
+    let pool_resume = pool.clone();
+    wait_until(
+        "play resume wake",
+        Box::new(move || {
+            let pool = pool_resume.clone();
+            Box::pin(async move {
+                sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM decision_index_matches WHERE match_id=$1)",
+                )
+                .bind(match_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+            })
+        }),
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // 3. Play forfeit (persist_session_with_report) wakes browse_wake and updates
+    // the linked play match's fingerprint without any GET request.
+    let before_forfeit_fp: String =
+        sqlx::query_scalar("SELECT fingerprint FROM decision_index_matches WHERE match_id=$1")
+            .bind(play_match_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let (status, forfeited) = call(
+        &router,
+        "POST",
+        &format!("/api/play/sessions/{session_id}/actions"),
+        json!({"action": "forfeit_match", "version": 6}),
+    )
+    .await;
+    assert_eq!(status, 200, "{forfeited}");
+    let pool_forfeit = pool.clone();
+    let fp_forfeit = before_forfeit_fp.clone();
+    wait_until(
+        "play forfeit wake",
+        Box::new(move || {
+            let pool = pool_forfeit.clone();
+            let before = fp_forfeit.clone();
+            Box::pin(async move {
+                let current: Option<String> = sqlx::query_scalar(
+                    "SELECT fingerprint FROM decision_index_matches WHERE match_id=$1",
+                )
+                .bind(play_match_id)
+                .fetch_optional(&pool)
+                .await
+                .unwrap();
+                current.as_deref().is_some_and(|fp| fp != before)
+            })
+        }),
+    )
+    .await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+
+    // 4. All three read-only GET 503 index_preparing paths wake browse_wake.
+    for (label, path) in [
+        (
+            "GET /api/study/mistakes 503 wake",
+            "/api/study/mistakes?player=Alice",
+        ),
+        (
+            "GET /api/study/decisions 503 wake",
+            "/api/study/decisions?player=Alice",
+        ),
+    ] {
+        sqlx::query("DELETE FROM decision_index_matches WHERE match_id=$1")
+            .bind(match_id)
+            .execute(&pool)
+            .await
+            .unwrap();
+        let (status, body) = call(&router, "GET", path, Value::Null).await;
+        assert_eq!(status, 503, "{label}: {body}");
+        assert_eq!(body["code"], "index_preparing");
+        let pool_get = pool.clone();
+        wait_until(
+            label,
+            Box::new(move || {
+                let pool = pool_get.clone();
+                Box::pin(async move {
+                    sqlx::query_scalar::<_, bool>(
+                        "SELECT EXISTS(SELECT 1 FROM decision_index_matches WHERE match_id=$1)",
+                    )
+                    .bind(match_id)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap()
+                })
+            }),
+        )
+        .await;
+        let (status, body) = call(&router, "GET", path, Value::Null).await;
+        assert_eq!(status, 200, "{label} retry: {body}");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    sqlx::query("DELETE FROM position_game_plans WHERE position_uuid=$1")
+        .bind(position_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let browser_path = "/api/position-browser?filters=%7B%22schema_version%22%3A1%2C%22game_plan%22%3A%22opening%22%7D";
+    let (status, body) = call(&router, "GET", browser_path, Value::Null).await;
+    assert_eq!(status, 503, "GET /api/position-browser 503 wake: {body}");
+    assert_eq!(body["code"], "index_preparing");
+    let pool_browser = pool.clone();
+    wait_until(
+        "GET /api/position-browser 503 wake",
+        Box::new(move || {
+            let pool = pool_browser.clone();
+            Box::pin(async move {
+                sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM position_game_plans WHERE position_uuid=$1)",
+                )
+                .bind(position_id)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+            })
+        }),
+    )
+    .await;
+    let (status, body) = call(&router, "GET", browser_path, Value::Null).await;
+    assert_eq!(status, 200, "GET /api/position-browser retry: {body}");
+
+    state.shutdown.cancel();
+    worker.await.unwrap();
+}
