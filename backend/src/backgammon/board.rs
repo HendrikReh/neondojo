@@ -18,14 +18,14 @@ pub(crate) fn initial_board() -> [i32; 26] {
 }
 
 pub(crate) fn valid_board(b: &[i32; 26]) -> Result<()> {
-    ensure!(b[0] <= 0 && b[25] >= 0, "SGF: invalid bar ownership");
+    ensure!(b[0] <= 0 && b[25] >= 0, "invalid bar ownership");
     ensure!(
         b.iter().map(|x| x.max(&0)).sum::<i32>() <= 15,
-        "SGF: more than 15 white checkers"
+        "more than 15 white checkers"
     );
     ensure!(
         b.iter().map(|x| (-x).max(0)).sum::<i32>() <= 15,
-        "SGF: more than 15 black checkers"
+        "more than 15 black checkers"
     );
     Ok(())
 }

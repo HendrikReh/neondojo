@@ -1,6 +1,6 @@
 //! Rendered Anki cards share the ordinary deck and review tables. Card faces and
 //! media are loaded separately from card lists and the learning queue.
-use super::*;
+use super::super::*;
 use crate::json_errors::Multipart;
 use anyhow::{Context, Result, ensure};
 use axum::extract::DefaultBodyLimit;
@@ -10,13 +10,12 @@ use std::{path::Path as FilePath, process::Stdio, time::Duration};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
 const MAX_UPLOAD: usize = 128 * 1024 * 1024;
-static PACKAGE_IMPORT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
 /// The payload `kind` of a rendered Anki card.
-pub(super) const KIND: &str = "anki";
+pub(in crate::learning) const KIND: &str = "anki";
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(super) struct AnkiCard {
+pub(in crate::learning) struct AnkiCard {
     pub kind: String,
     pub prompt: String,
 }
@@ -56,23 +55,28 @@ pub fn routes() -> Router<AppState> {
 }
 
 #[derive(Serialize, ToSchema)]
-pub(super) struct ImportedAnkiDeck {
+pub(in crate::learning) struct ImportedAnkiDeck {
     name: String,
     cards: usize,
 }
 
-#[utoipa::path(post,path="/api/study/anki-imports",request_body(content=super::anki_import::AnkiUpload,content_type="multipart/form-data"),
+#[utoipa::path(post,path="/api/study/anki-imports",request_body(content=super::import::AnkiUpload,content_type="multipart/form-data"),
     responses((status=201,body=Vec<ImportedAnkiDeck>),(status=413,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Learning")]
-pub(super) async fn upload(
+pub(in crate::learning) async fn upload(
     State(state): State<AppState>,
     Multipart(mut multipart): Multipart,
 ) -> ApiResult<(StatusCode, Json<Vec<ImportedAnkiDeck>>)> {
-    let _permit = PACKAGE_IMPORT.try_acquire().map_err(|_| {
-        ApiError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "An Anki package import is already running".into(),
-        )
-    })?;
+    let permit = state
+        .anki_limits
+        .package_import
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            ApiError(
+                StatusCode::TOO_MANY_REQUESTS,
+                "An Anki package import is already running".into(),
+            )
+        })?;
     let mut field = multipart
         .next_field()
         .await
@@ -102,9 +106,9 @@ pub(super) async fn upload(
     file.flush().await.map_err(anyhow::Error::from)?;
     drop(file);
     let inspected = package.clone();
-    let (directory, inspection) = tokio::task::spawn_blocking(move || {
+    let (directory, inspection, _permit) = tokio::task::spawn_blocking(move || {
         let result = inspect_archive(&inspected);
-        (directory, result)
+        (directory, result, permit)
     })
     .await
     .map_err(anyhow::Error::from)?;
@@ -117,7 +121,7 @@ pub(super) async fn upload(
     let mut renderer = tokio::process::Command::new(python)
         .arg("-I")
         .arg("-c")
-        .arg(include_str!("../../../tools/import_anki_flashcards.py"))
+        .arg(include_str!("../../../../tools/import_anki_flashcards.py"))
         .arg(&package)
         .arg("--render-to")
         .arg(&output)
@@ -209,7 +213,7 @@ fn inspect_archive_within(path: &FilePath, limit: u64) -> Result<()> {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum Side {
+pub(in crate::learning) enum Side {
     Front,
     Back,
 }
@@ -224,7 +228,7 @@ struct CardFace {
 
 #[utoipa::path(get, path="/api/cards/{id}/anki/{side}", params(("id"=Uuid,Path),("side"=String,Path)),
     responses((status=200, content_type="text/html", body=String), (status=404, body=ErrorBody)), tag="Learning")]
-pub(super) async fn face(
+pub(in crate::learning) async fn face(
     State(state): State<AppState>,
     Path((id, side)): Path<(Uuid, Side)>,
 ) -> ApiResult<Response> {
@@ -256,7 +260,7 @@ pub(super) async fn face(
 
 #[utoipa::path(get, path="/api/anki-media/{package}/{name}", params(("package"=String,Path),("name"=String,Path)),
     responses((status=200, description="Anki media bytes", body=Vec<u8>), (status=404, body=ErrorBody)), tag="Learning")]
-pub(super) async fn media(
+pub(in crate::learning) async fn media(
     State(state): State<AppState>,
     Path((package, name)): Path<(String, String)>,
 ) -> ApiResult<Response> {

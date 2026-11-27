@@ -280,9 +280,6 @@
 .play-history h3 {
   margin: 0;
 }
-.play-history .section-heading {
-  padding: 0 4px 10px;
-}
 .play-history .moves-list {
   display: block;
   flex: 1 1 auto;

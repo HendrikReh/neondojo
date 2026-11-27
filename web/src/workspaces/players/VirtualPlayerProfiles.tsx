@@ -276,7 +276,10 @@ export function VirtualPlayerCard({
                   <span className="virtual-player-count">
                     {v('matchCount', { count: member.match_count })}
                   </span>
-                  <button
+                  <ActionButton
+                    icon="delete"
+                    label={v('remove')}
+                    className="danger"
                     type="button"
                     disabled={busy}
                     aria-label={v('removeMember', {
@@ -284,9 +287,7 @@ export function VirtualPlayerCard({
                       group: details.name,
                     })}
                     onClick={() => void remove(member.id)}
-                  >
-                    {v('remove')}
-                  </button>
+                  />
                 </li>
               );
             })}
@@ -416,12 +417,20 @@ function VirtualPlayerNameDialog({
           </p>
         )}
         <div className="library-dialog-actions">
-          <button type="button" disabled={busy} onClick={onClose}>
-            {l('cancel')}
-          </button>
-          <button className="primary" disabled={busy || !valid}>
-            {profile ? v('save') : v('createAction')}
-          </button>
+          <ActionButton
+            icon="cancel"
+            label={l('cancel')}
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+          />
+          <ActionButton
+            type="submit"
+            icon={profile ? 'save' : 'add'}
+            label={profile ? v('save') : v('createAction')}
+            className="primary"
+            disabled={busy || !valid}
+          />
         </div>
       </form>
     </LibraryDialog>
@@ -452,10 +461,16 @@ function VirtualPlayerDeleteDialog({
       <p>{v('deleteHint', { name: profile.name })}</p>
       {error !== undefined && <p role="alert">{formatError(error)}</p>}
       <div className="library-dialog-actions">
-        <button type="button" disabled={busy} onClick={onClose}>
-          {l('cancel')}
-        </button>
-        <button
+        <ActionButton
+          icon="cancel"
+          label={l('cancel')}
+          type="button"
+          disabled={busy}
+          onClick={onClose}
+        />
+        <ActionButton
+          icon="delete"
+          label={v('deleteTitle')}
           type="button"
           className="danger"
           disabled={busy}
@@ -470,9 +485,7 @@ function VirtualPlayerDeleteDialog({
               setBusy(false);
             }
           }}
-        >
-          {v('deleteTitle')}
-        </button>
+        />
       </div>
     </LibraryDialog>
   );
@@ -549,7 +562,12 @@ function VirtualPlayerMemberDialog({
         {candidateError !== undefined ? (
           <p role="alert">
             {formatError(candidateError)}{' '}
-            <button onClick={retry}>{t('retry')}</button>
+            <ActionButton
+              type="button"
+              icon="refresh"
+              label={t('retry')}
+              onClick={retry}
+            />
           </p>
         ) : candidateId && !candidate ? (
           <p role="status">{t('loading')}</p>
@@ -581,10 +599,16 @@ function VirtualPlayerMemberDialog({
         )}
         {error !== undefined && <p role="alert">{formatError(error)}</p>}
         <div className="library-dialog-actions">
-          <button type="button" disabled={busy} onClick={onClose}>
-            {l('cancel')}
-          </button>
-          <button
+          <ActionButton
+            icon="cancel"
+            label={l('cancel')}
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+          />
+          <ActionButton
+            icon="add"
+            label={v('add')}
             type="button"
             className="primary"
             disabled={busy || !candidate || group != null}
@@ -605,9 +629,7 @@ function VirtualPlayerMemberDialog({
                 }
               }
             }}
-          >
-            {v('add')}
-          </button>
+          />
         </div>
       </div>
     </LibraryDialog>

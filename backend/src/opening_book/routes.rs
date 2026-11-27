@@ -27,7 +27,7 @@ pub(super) fn validate_path(path: &str) -> ApiResult<()> {
 pub(super) async fn get_settings(State(state): State<AppState>) -> ApiResult<Json<BookSettings>> {
     let config = load(&state.pool).await?;
     let status = status(&config).await;
-    let xg_status = crate::xg_book::status(&config.xg_path).await;
+    let xg_status = state.opening_books.xg.status(&config.xg_path).await;
     Ok(Json(BookSettings {
         config,
         status,
@@ -90,7 +90,7 @@ pub(super) async fn put_settings(
     .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     let status = status(&config).await;
-    let xg_status = crate::xg_book::status(&config.xg_path).await;
+    let xg_status = state.opening_books.xg.status(&config.xg_path).await;
     Ok(Json(BookSettings {
         config,
         status,
@@ -132,10 +132,11 @@ pub(super) async fn install_book(
 
 #[utoipa::path(post,path="/api/opening-book/xg/check",request_body=BookPathRequest,responses((status=200,body=crate::xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
 pub(super) async fn check_xg_book(
+    State(state): State<AppState>,
     Json(request): Json<BookPathRequest>,
 ) -> ApiResult<Json<crate::xg_book::XgBookStatus>> {
     validate_path(&request.path)?;
-    Ok(Json(crate::xg_book::status(&request.path).await))
+    Ok(Json(state.opening_books.xg.status(&request.path).await))
 }
 
 #[utoipa::path(post,path="/api/opening-book/xg/install",request_body=BookPathRequest,responses((status=200,body=crate::xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
@@ -146,7 +147,10 @@ pub(super) async fn install_xg_book(
     validate_path(&request.path)?;
     let config = load(&state.pool).await?;
     Ok(Json(
-        crate::xg_book::install_from_path(&config.xg_path, &request.path)
+        state
+            .opening_books
+            .xg
+            .install_from_path(&config.xg_path, &request.path)
             .await
             .map_err(|error| {
                 ApiError::invalid(format!("Cannot install XG opening book: {error:#}"))
@@ -164,9 +168,15 @@ pub(super) async fn position_book(
         .await?
         .ok_or_else(ApiError::missing)?;
     let config = load(&state.pool).await?;
-    let beaver = source_beaver_rule(&state.pool, &position).await?;
+    let beaver = state
+        .opening_books
+        .source_beaver_rule(&state.pool, &position)
+        .await?;
     Ok(Json(
-        lookup_with_rules(&config, &position, None, beaver).await?,
+        state
+            .opening_books
+            .lookup(&config, &position, None, beaver)
+            .await?,
     ))
 }
 

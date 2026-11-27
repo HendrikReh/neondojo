@@ -12,6 +12,14 @@
   line-height: 1.5;
   max-width: 85ch;
 }
+.unanalyzed-matches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
+}
 .recurring-filters {
   display: flex;
   flex-wrap: wrap;

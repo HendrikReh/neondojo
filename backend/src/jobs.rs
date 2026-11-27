@@ -169,8 +169,8 @@ pub(crate) async fn cancel(state: &AppState, id: Uuid) -> Result<Option<(bool, J
 pub async fn worker(state: AppState, stop: CancellationToken) {
     let mut running = JoinSet::new();
     let mut benchmark = None;
-    loop {
-        if let Err(error) = fill(&state, &mut running, &mut benchmark).await {
+    while !stop.is_cancelled() {
+        if let Err(error) = fill(&state, &stop, &mut running, &mut benchmark).await {
             tracing::error!(%error, "Job worker error");
         }
         tokio::select! {
@@ -202,6 +202,7 @@ pub async fn worker(state: AppState, stop: CancellationToken) {
 /// priority: while it is queued or running, no new analysis job starts.
 async fn fill(
     state: &AppState,
+    stop: &CancellationToken,
     running: &mut JoinSet<Result<bool>>,
     benchmark: &mut Option<tokio::task::Id>,
 ) -> Result<()> {
@@ -210,21 +211,26 @@ async fn fill(
     }
     let slots = crate::settings::load_analysis_job_slots(&state.pool).await?;
     if crate::benchmarks::needs_worker(&state.pool).await? {
-        if running.len() < slots
+        if !stop.is_cancelled()
+            && running.len() < slots
             && let Some(access) = state
                 .backup
                 .try_background(crate::database_backup::BackgroundWork::Benchmark)
         {
             let state = state.clone();
+            let stop = stop.clone();
             let task = running.spawn(async move {
                 let _access = access;
+                if stop.is_cancelled() {
+                    return Ok(false);
+                }
                 crate::benchmarks::run_one(&state).await
             });
             *benchmark = Some(task.id());
         }
         return Ok(());
     }
-    while running.len() < slots {
+    while !stop.is_cancelled() && running.len() < slots {
         // A restore drains these jobs: one claimed while it starts is stopped
         // when it registers.
         let Some(access) = state.backup.try_job() else {
@@ -555,6 +561,19 @@ mod tests {
             .fetch_one(pool)
             .await
             .unwrap()
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn stopped_worker_leaves_queued_jobs_unclaimed(pool: PgPool) {
+        let state = AppState::new(pool.clone(), crate::engine::Engine::new("/unused".into()));
+        let id = queued_position_job(&pool).await;
+        state.shutdown.cancel();
+        worker(state.clone(), state.shutdown.clone()).await;
+
+        let job = store::get_job(&pool, id).await.unwrap().unwrap();
+        assert_eq!(job.status, "queued");
+        assert_eq!(job.attempts, 0);
+        assert!(event_names(&pool, id).await.is_empty());
     }
 
     #[sqlx::test(migrations = "./migrations")]

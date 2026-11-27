@@ -1,3 +1,4 @@
+import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useState } from 'react';
 import { shortEngineVersion } from '../../shared/engine/engine-version';
 import EngineLabel from '../../shared/engine/EngineLabel';
@@ -179,14 +180,14 @@ export default function VersionInfo() {
         </details>
       )}
       <div className="version-info-actions">
-        <button
+        <ActionButton
+          icon="copy"
+          label={messages.copy}
           type="button"
           disabled={loading}
           aria-disabled={copyResult === 'copying' || undefined}
           onClick={() => void copyVersionInfo()}
-        >
-          {messages.copy}
-        </button>
+        />
         <p
           role="status"
           className={
@@ -199,7 +200,9 @@ export default function VersionInfo() {
       {(appVersion === null || engines === null) && (
         <div className="error">
           <p role="alert">{t('versions.error')}</p>
-          <button
+          <ActionButton
+            icon="refresh"
+            label={t('versions.retry')}
             type="button"
             onClick={() => {
               if (appVersion === null) {
@@ -211,9 +214,7 @@ export default function VersionInfo() {
                 setEnginesAttempt((current) => current + 1);
               }
             }}
-          >
-            {t('versions.retry')}
-          </button>
+          />
         </div>
       )}
     </section>

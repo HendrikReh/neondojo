@@ -18,7 +18,13 @@
 | [`web/src/`](../../web/src/)                                                                                             | React client, SVG board, and generated API types                    |
 | [`web/e2e/`](../../web/e2e/), [`web/playwright.setup.ts`](../../web/playwright.setup.ts) | Browser workflows; one isolated PostgreSQL database, backend and Vite server per Playwright worker ([`web/e2e/stack.ts`](../../web/e2e/stack.ts)) |
 
-The Rust backend runs independently of the browser. A future Tauri shell could start it as a sidecar and reuse the HTTP API.
+The Rust backend runs independently of the browser. The CLI starts it through
+[`neondojo::runtime::start`](../../backend/src/runtime.rs). A host embedding the
+runtime supplies database connection options and can bind to port zero, then
+use `RunningServer::local_addr()` to find the HTTP endpoint. Calling
+`RunningServer::shutdown().await` drains HTTP requests and background workers.
+Each running server owns its opening-book caches and its Study, Play, and Anki
+operation limits.
 
 ### Engine providers
 
@@ -50,7 +56,7 @@ Stored snapshots, settings and HTTP contracts keep the engine ID strings `gnubg`
 
 **Messages.** Each language has a [locale module](../../web/src/shared/i18n/locales/) with one dictionary per feature and an `app` dictionary for `useI18n().t`. The English module defines the key schema. The per-language `workspace-messages.ts` files own the shell’s tab and status labels. A feature exposes typed formatters through `defineMessages('feature-name')` in its own `*-messages.ts` module. A language switch keeps the current language visible until the new module has loaded. [Message tests](../../web/src/shared/i18n/messages.test.ts) exercise every key, placeholder and plural form in both languages.
 
-**Stylesheet order.** [`styles/stylesheets.ts`](../../web/src/styles/stylesheets.ts) imports every stylesheet in cascade order, and `main.tsx` imports it before any component. Components also import their own stylesheet, but those imports add nothing, so neither module order nor lazy loading changes which of two equally specific rules wins. The order reproduces the cascade from before lazy loading: `style.css` and the other global sheets still follow the component sheets, and many component rules rely on that. `stylesheets.test.ts` checks that every stylesheet is listed once. Moving a file in the list can change computed styles; compare them in every palette before and after such a change. Keep `/api/` out of module paths: the Vite dev server serves modules under `/src/…`, and browser tests intercept `**/api/**` as backend requests.
+**Stylesheet order.** [`styles/stylesheets.ts`](../../web/src/styles/stylesheets.ts) imports every stylesheet in cascade order, and `main.tsx` imports it before any component. Components also import their own stylesheet, but those imports add nothing, so neither module order nor lazy loading changes which of two equally specific rules wins. The manifest places `style.css` before component styles and loads desktop layout, typography and text navigation after them. `stylesheets.test.ts` checks that each stylesheet appears once and that the base stylesheet loads first. Compare computed styles in all six palettes before and after changing the order. Keep `/api/` out of module paths: the Vite dev server serves modules under `/src/…`, and browser tests intercept `**/api/**` as backend requests.
 
 ## Database schema
 

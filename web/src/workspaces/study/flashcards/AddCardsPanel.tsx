@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   useAnalysisErrorThresholds,
   useWorkspaceDefaults,
@@ -51,6 +51,9 @@ export function AddCardsPanel({
   const t = useLearningText();
   const practiceT = useCardPracticeText();
   const [newTags, setNewTags] = useState('');
+  const [creatingDeck, setCreatingDeck] = useState(false);
+  const createDeckId = useId();
+  const newDeckButton = useRef<HTMLButtonElement>(null);
   const { formatError, t: baseT } = useI18n();
   const { decks, error: deckError, addDeck, settled } = useDecks(revision);
   const [deckId, setDeckId] = useWorkspaceSession(
@@ -186,11 +189,24 @@ export function AddCardsPanel({
         >
           {t('addPosition')}
         </ActionButton>
+        <ActionButton
+          ref={newDeckButton}
+          type="button"
+          icon="add"
+          label={t('newDeck')}
+          aria-expanded={creatingDeck}
+          aria-controls={createDeckId}
+          onClick={() => setCreatingDeck(!creatingDeck)}
+        />
       </div>
       <CreateDeckForm
+        id={createDeckId}
+        hidden={!creatingDeck}
         onCreated={(deck) => {
           addDeck(deck);
           setDeckId(deck.id);
+          setCreatingDeck(false);
+          newDeckButton.current?.focus();
           onChanged();
         }}
       />

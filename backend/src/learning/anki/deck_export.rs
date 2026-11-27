@@ -1,18 +1,22 @@
-use super::*;
+use super::{super::*, apkg};
 
-pub(super) async fn build_deck_package(
+pub(in crate::learning) async fn build_deck_package(
     state: &AppState,
     id: Uuid,
     query: ExportQuery,
 ) -> ApiResult<Vec<u8>> {
-    static EXPORTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
     let locale = query.locale.unwrap_or(ConfigurationLocale::De);
-    let permit = EXPORTS.try_acquire().map_err(|_| {
-        ApiError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Two exports are already in progress".into(),
-        )
-    })?;
+    let permit = state
+        .anki_limits
+        .exports
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            ApiError(
+                StatusCode::TOO_MANY_REQUESTS,
+                "Two exports are already in progress".into(),
+            )
+        })?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     // Hold a shared deck lock so concurrent moves or duplicate cleanup cannot
     // change its membership between reading IDs and locking the export cards.

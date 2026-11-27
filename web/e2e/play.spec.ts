@@ -185,8 +185,13 @@ test('playing identifies each engine role and exposes only the supplied checker 
   await page.getByRole('tab', { name: 'Playing', exact: true }).click();
   const engines = page.locator('.play-match-engine');
   await expect(engines).toContainText('Bot engine · NeonGammon 3.0.0 2-ply');
-  await expect(engines).toContainText('Analysis engine · NeonGammon 3.0.0');
-  await expect(engines).toContainText('Rules engine · GNU Backgammon 1.08.003');
+  const details = engines.getByText('Engine details', { exact: true });
+  await details.focus();
+  const tooltip = page.getByRole('tooltip');
+  await expect(tooltip).toContainText('Analysis engine · NeonGammon 3.0.0');
+  await expect(tooltip).toContainText('Rules engine · GNU Backgammon 1.08.003');
+  await page.keyboard.press('Escape');
+  await expect(tooltip).toBeHidden();
   await expect(page.locator('[data-play-point="8"]')).toBeEnabled();
   await expect(page.locator('[data-play-point="6"]')).toBeDisabled();
 });

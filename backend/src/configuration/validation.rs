@@ -635,7 +635,7 @@ pub(crate) async fn resources(
         };
         let (bg, xg) = tokio::join!(
             crate::opening_book::status(&cfg),
-            crate::xg_book::status(&cfg.xg_path)
+            state.opening_books.xg.status(&cfg.xg_path)
         );
         let available = match cfg.provider.as_str() {
             "backgammondb" => bg.available,

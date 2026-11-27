@@ -176,6 +176,7 @@ export default function OpeningBookDialog({
           onCancel={() => setConfirmReload(false)}
           choices={[
             {
+              icon: 'clear',
               label: profileT('discard'),
               action: () => {
                 setBusy(true);

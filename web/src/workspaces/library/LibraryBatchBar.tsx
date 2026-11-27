@@ -65,9 +65,12 @@ export default function LibraryBatchBar({
       role="group"
       aria-label={l('actions')}
     >
-      <strong role="status">
-        {l('selectedMatches', { count: selection.length })}
-      </strong>
+      <div className="library-batch-summary">
+        <strong role="status">
+          {l('selectedMatches', { count: selection.length })}
+        </strong>
+        <small>{l('batchLimit')}</small>
+      </div>
       <div className="library-batch-group" data-group="single">
         <ActionButton
           type="button"

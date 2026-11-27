@@ -644,7 +644,7 @@ where
     F: FnOnce(AnalysisEngine, i32) -> Fut,
     Fut: std::future::Future<Output = Result<T>>,
 {
-    let _permit = practice::EVALUATION.try_lock().map_err(|_| {
+    let _permit = state.practice_evaluation.try_lock().map_err(|_| {
         ApiError(
             StatusCode::TOO_MANY_REQUESTS,
             "An exercise is already being evaluated; try again".into(),

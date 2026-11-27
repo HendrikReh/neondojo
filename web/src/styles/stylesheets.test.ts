@@ -40,6 +40,10 @@ it('lists every stylesheet a component imports', () => {
   expect(imported.filter((path) => !listed.includes(path))).toEqual([]);
 });
 
+it('loads the base stylesheet before component styles', () => {
+  expect(listed[0]).toBe('styles/style.css');
+});
+
 it('loads the stylesheets before any component', () => {
   const main = readFileSync(join(src, 'main.tsx'), 'utf8');
   const first = main.match(/^import [^;]+;$/m)?.[0];

@@ -591,6 +591,7 @@ async fn xg_provider_and_automatic_keep_references_separate_from_candidates() {
 async fn source_money_rules_are_explicit_and_unknown_mat_rules_miss(pool: sqlx::PgPool) {
     let sgf = "(;GM[6]RU[Jacoby];W[31hefe])";
     let parsed = crate::import::parse_sgf(sgf).unwrap();
+    let cache = LookupCache::default();
     for (format, expected) in [("sgf", Some(false)), ("bgf", Some(false)), ("mat", None)] {
         // Separate content hashes produce independent source rows.
         let content = format!("{format}:{sgf}");
@@ -602,7 +603,10 @@ async fn source_money_rules_are_explicit_and_unknown_mat_rules_miss(pool: sqlx::
             .await
             .unwrap();
         assert_eq!(
-            source_beaver_rule(&pool, &page.items[0]).await.unwrap(),
+            cache
+                .source_beaver_rule(&pool, &page.items[0])
+                .await
+                .unwrap(),
             expected
         );
     }

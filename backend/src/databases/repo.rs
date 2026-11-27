@@ -127,3 +127,182 @@ pub(super) async fn database_match(pool: &PgPool, id: Uuid) -> ApiResult<Databas
     .map_err(anyhow::Error::from)?
     .ok_or_else(ApiError::missing)
 }
+
+pub(super) async fn list_library_databases(pool: &PgPool) -> ApiResult<Vec<Database>> {
+    Ok(sqlx::query_as(&format!(
+        "{DB_SELECT} WHERE NOT d.collection_only ORDER BY is_default DESC,lower(name),id"
+    ))
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?)
+}
+
+async fn database_by_id(pool: &PgPool, id: Uuid) -> ApiResult<Database> {
+    Ok(sqlx::query_as(&format!("{DB_SELECT} WHERE d.id=$1"))
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .map_err(anyhow::Error::from)?)
+}
+
+pub(super) async fn insert_database(
+    pool: &PgPool,
+    name: &str,
+    description: &str,
+) -> ApiResult<Database> {
+    let id = Uuid::new_v4();
+    sqlx::query("INSERT INTO databases(id,name,description) VALUES($1,$2,$3)")
+        .bind(id)
+        .bind(name)
+        .bind(description)
+        .execute(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+    database_by_id(pool, id).await
+}
+
+pub(super) async fn write_database(
+    pool: &PgPool,
+    id: Uuid,
+    name: &str,
+    description: &str,
+    version: i64,
+) -> ApiResult<Database> {
+    let affected = sqlx::query(
+        "UPDATE databases SET name=$2,description=$3,version=version+1,updated_at=now()
+         WHERE id=$1 AND version=$4 AND NOT collection_only AND (NOT is_system OR name=$2)",
+    )
+    .bind(id)
+    .bind(name)
+    .bind(description)
+    .bind(version)
+    .execute(pool)
+    .await
+    .map_err(anyhow::Error::from)?
+    .rows_affected();
+    if affected == 0 {
+        let renamed_system: Option<bool> = sqlx::query_scalar(
+            "SELECT is_system AND name<>$2 FROM databases WHERE id=$1 AND NOT collection_only",
+        )
+        .bind(id)
+        .bind(name)
+        .fetch_optional(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+        return Err(match renamed_system {
+            Some(true) => conflict("System databases cannot be renamed"),
+            Some(false) => conflict("Database changed; reload before saving"),
+            None => ApiError::missing(),
+        });
+    }
+    database_by_id(pool, id).await
+}
+
+pub(super) async fn write_match_metadata(
+    pool: &PgPool,
+    id: Uuid,
+    w: MetadataWrite,
+) -> ApiResult<()> {
+    let affected = sqlx::query(
+        "UPDATE matches SET display_name=$2,played_on=$3,tournament=$4,round=$5,place=$6,
+             result_state=$7,white_score=$8,black_score=$9,metadata_version=metadata_version+1,
+             source_metadata_loaded=true,native_match_context_pending=false
+         WHERE id=$1 AND metadata_version=$10 AND NOT collection_only",
+    )
+    .bind(id)
+    .bind(w.display_name.trim())
+    .bind(w.played_on)
+    .bind(w.tournament)
+    .bind(w.round)
+    .bind(w.place)
+    .bind(w.result_state)
+    .bind(w.white_score)
+    .bind(w.black_score)
+    .bind(w.version)
+    .execute(pool)
+    .await
+    .map_err(anyhow::Error::from)?
+    .rows_affected();
+    if affected == 0 {
+        let exists: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM matches WHERE id=$1 AND NOT collection_only)",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+        return Err(if exists {
+            conflict("Metadata changed; reload before saving")
+        } else {
+            ApiError::missing()
+        });
+    }
+    Ok(())
+}
+
+type ExportFile = (Uuid, String, Vec<u8>);
+
+#[derive(sqlx::FromRow)]
+pub(super) struct XgSource {
+    pub(super) id: Uuid,
+    pub(super) filename: String,
+    pub(super) sgf: String,
+    pub(super) played_on: Option<NaiveDate>,
+    pub(super) tournament: Option<String>,
+    pub(super) round: Option<String>,
+    pub(super) place: Option<String>,
+}
+
+pub(super) enum ExportSources {
+    Files(Vec<ExportFile>),
+    Xg(Vec<XgSource>),
+}
+
+pub(super) async fn load_export_sources(
+    pool: &PgPool,
+    ids: &[Uuid],
+    format: ExportFormat,
+) -> ApiResult<ExportSources> {
+    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
+    let original = format == ExportFormat::Original;
+    let sizes: Vec<(Uuid, i64)> = sqlx::query_as(if original {
+        "SELECT id,octet_length(original)::bigint FROM matches WHERE id=ANY($1) AND NOT collection_only ORDER BY id FOR SHARE"
+    } else {
+        "SELECT id,octet_length(sgf)::bigint FROM matches WHERE id=ANY($1) AND NOT collection_only ORDER BY id FOR SHARE"
+    })
+    .bind(ids)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    if sizes.len() != ids.len() {
+        return Err(ApiError::missing());
+    }
+    if sizes.iter().map(|(_, bytes)| bytes).sum::<i64>() > MAX_EXPORT_BYTES {
+        return Err(ApiError::invalid("Export exceeds 64 MiB"));
+    }
+    let sources = if format == ExportFormat::Xg {
+        ExportSources::Xg(
+            sqlx::query_as(
+                "SELECT id,filename,sgf,played_on,tournament,round,place FROM matches WHERE id=ANY($1) ORDER BY id",
+            )
+            .bind(ids)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?,
+        )
+    } else {
+        ExportSources::Files(
+            sqlx::query_as(if original {
+                "SELECT id,filename,original FROM matches WHERE id=ANY($1) ORDER BY id"
+            } else {
+                "SELECT id,filename,convert_to(sgf,'UTF8') FROM matches WHERE id=ANY($1) ORDER BY id"
+            })
+            .bind(ids)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?,
+        )
+    };
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(sources)
+}

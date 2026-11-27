@@ -86,3 +86,58 @@ pub(super) async fn load_attempt_card(
     }
     Ok(row)
 }
+
+pub(super) async fn submit_card_attempt(
+    state: &AppState,
+    id: Uuid,
+    body: CardAttemptRequest,
+) -> ApiResult<AttemptedCard> {
+    let row = load_attempt_card(&state.pool, id, body.expected_version, false).await?;
+    if let Some(previous) = active_attempt(&state.pool, &row).await? {
+        // Recheck under the same lock used to finish a review. The card may
+        // have advanced since the preliminary lookup.
+        previous.confirm_request(&body)?;
+        let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+        let row = load_attempt_card(&mut *tx, id, body.expected_version, true).await?;
+        let result = attempted_card(&mut tx, &row, previous.into_data()).await?;
+        return Ok(result);
+    }
+    let Some(card) = row.decision() else {
+        return Err(ApiError::invalid("Reveal the Anki card before rating"));
+    };
+    crate::play::require_review_available(&state.pool, card.source.match_id).await?;
+    let evaluation = evaluate_card(state, card, &body.answer).await?;
+
+    // Evaluation can be slow. Serialize only the short write with reviews
+    // and card updates and verify the snapshot version again at that point.
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    let row = load_attempt_card(&mut *tx, id, body.expected_version, true).await?;
+    let attempt = if let Some(previous) = active_attempt(&mut *tx, &row).await? {
+        previous.confirm_request(&body)?;
+        previous.into_data()
+    } else {
+        crate::play::require_review_available_on(&mut *tx, card.source.match_id).await?;
+        let session_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO review_sessions(id,card_id,card_version,expires_at,attempt_request_id,attempt_input,attempt_result)
+             VALUES($1,$2,$3,now() + interval '1 day',$4,$5,$6)",
+        )
+        .bind(session_id)
+        .bind(id)
+        .bind(row.version)
+        .bind(body.request_id)
+        .bind(sqlx::types::Json(&body.answer))
+        .bind(sqlx::types::Json(&evaluation))
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+        AttemptData {
+            session_id,
+            submitted: body.answer,
+            evaluation,
+        }
+    };
+    let result = attempted_card(&mut tx, &row, attempt).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(result)
+}

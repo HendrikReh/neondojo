@@ -36,7 +36,7 @@ pub(crate) fn setup(node: &Node, board: &mut [i32; 26]) -> Result<()> {
             }
         }
     }
-    valid_board(board)
+    valid_board(board).context("SGF: invalid board setup")
 }
 
 /// Validate and apply one SGF checker play. Coordinates in SGF are absolute;
