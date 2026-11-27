@@ -19,6 +19,7 @@ import CardSuggestionsPanel from './CardSuggestionsPanel';
 import { isCollectionScope } from './card-search-api';
 import { useCardPracticeText } from './card-practice-messages';
 import CreateDeckForm from './CreateDeckForm';
+import DeckSelectField from './DeckSelectField';
 import { useLearningText } from './learning-messages';
 import { savedDeck, useDecks } from './useDecks';
 
@@ -161,26 +162,14 @@ export function AddCardsPanel({
       <h3>{t('addTitle')}</h3>
       <p>{t('addHint')}</p>
       <div className="learning-controls">
-        <label>
-          {t('chooseDeck')}{' '}
-          <select
-            aria-label={t('chooseDeck')}
-            value={selectedDeckId}
-            onChange={(e) => setDeckId(e.target.value)}
-            disabled={busy}
-          >
-            {!selectedDeckId && (
-              <option value="" disabled>
-                {t('chooseDeck')}
-              </option>
-            )}
-            {decks.map((deck) => (
-              <option value={deck.id} key={deck.id}>
-                {deck.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <DeckSelectField
+          decks={decks}
+          value={selectedDeckId}
+          onChange={setDeckId}
+          label={t('chooseDeck')}
+          disabled={busy}
+          placeholder={t('chooseDeck')}
+        />
         <ActionButton
           icon="add"
           label={t('addPosition')}

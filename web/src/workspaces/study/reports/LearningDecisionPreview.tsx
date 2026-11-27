@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Board from '../../../shared/board/Board';
+import { MovePreviewViewToggle } from '../../../shared/board/BoardViewToggle';
 import type { Position } from '../../../shared/http/api';
 import type { Theme } from '../../../shared/board/themes';
 import {
@@ -73,23 +74,11 @@ export default function LearningDecisionPreview({
       )}
       {!loading && !error && position && (
         <>
-          <div
-            className="board-view-buttons text-navigation text-navigation--compact"
-            role="group"
-            aria-label={review('views')}
-          >
-            {(['before', 'arrows', 'after'] as BoardView[]).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                aria-pressed={(projection?.ok ? view : 'before') === mode}
-                disabled={mode !== 'before' && !projection?.ok}
-                onClick={() => setView(mode)}
-              >
-                {review(mode)}
-              </button>
-            ))}
-          </div>
+          <MovePreviewViewToggle
+            value={view}
+            onChange={setView}
+            canPreview={Boolean(projection?.ok)}
+          />
           <div
             className="play-board learning-review-preview-board"
             data-preview-decision={entry.key}

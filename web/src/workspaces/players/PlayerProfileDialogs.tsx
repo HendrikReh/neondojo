@@ -1,5 +1,6 @@
 import ActionButton from '../../shared/ui/ActionButton';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useVersionedResource } from '../../shared/hooks/useVersionedResource';
 import { request } from '../../shared/http/api';
 import type { components } from '../../generated-api';
 import { useI18n } from '../../shared/i18n/i18n';
@@ -28,36 +29,11 @@ type PlayerWrite =
       body: Omit<Schema['PlayerMerge'], 'version'>;
     };
 
-export function usePlayerDetails(id?: string, revision = 0) {
-  const [details, setDetails] = useState<Details>();
-  const [failure, setFailure] = useState<{ id: string; error: unknown }>();
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    if (!id) return;
-    const abort = new AbortController();
-    setFailure(undefined);
-    request<Details>(`/players/${id}`, { signal: abort.signal }).then(
-      (row) => {
-        if (!abort.signal.aborted)
-          setDetails((previous) =>
-            previous?.id === id && previous.version > row.version
-              ? previous
-              : row,
-          );
-      },
-      (error: unknown) => {
-        if (!abort.signal.aborted) setFailure({ id, error });
-      },
-    );
-    return () => abort.abort();
-  }, [id, revision, attempt]);
+const loadPlayerDetails = (id: string, signal: AbortSignal) =>
+  request<Details>(`/players/${id}`, { signal });
 
-  return {
-    details: id && details?.id === id ? details : undefined,
-    setDetails,
-    error: failure?.id === id ? failure?.error : undefined,
-    retry: () => setAttempt((n) => n + 1),
-  };
+export function usePlayerDetails(id?: string, revision = 0) {
+  return useVersionedResource(id, loadPlayerDetails, revision);
 }
 
 function usePlayerWrite(profile: Details) {

@@ -1,4 +1,5 @@
 import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
+import { formatPly } from '../format/ply';
 
 /**
  * Every depth in NeonDojo uses the XG / NeonGammon convention for both
@@ -52,8 +53,8 @@ export function gnubgNativePlies(plies: number) {
  * users who know GNUbg's numbering see the same search, e.g. "3-ply (GNUbg 2-ply)".
  */
 export function depthLabel(plies: number, engine?: string) {
-  const depth = `${plies}-ply`;
+  const depth = formatPly(plies);
   return engine === 'gnubg'
-    ? `${depth} (GNUbg ${gnubgNativePlies(plies)}-ply)`
+    ? `${depth} (GNUbg ${formatPly(gnubgNativePlies(plies))})`
     : depth;
 }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsMounted } from '../hooks/useIsMounted';
 import { useLatest } from '../hooks/useLatest';
 import { request, terminal, mergeJob, jobEngine, type Job } from '../http/api';
 import { watchJob } from './job-watch';
@@ -40,13 +41,7 @@ export function useJobs(
   }>();
   const submissions = useRef(new Set<string>());
   const [pending, setPending] = useState<ReadonlySet<string>>(() => new Set());
-  const mounted = useRef(false);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  const mounted = useIsMounted();
   useEffect(() => {
     if (!positionId) return;
     const abort = new AbortController();

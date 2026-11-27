@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ActionButton from '../../../shared/ui/ActionButton';
+import { TabList } from '../../../shared/ui/TabList';
 import MatchAssessmentPanel from './MatchAssessmentPanel';
 import PlayLearningReview from './PlayLearningReview';
 import { loadStudyReport } from '../study-api';
@@ -28,12 +29,6 @@ export default function StudyMatchReport({
   const study = useStudyText();
   const { formatError } = useI18n();
   const heading = useRef<HTMLHeadingElement>(null);
-  const tabs = useRef<
-    Record<'assessment' | 'decisions', HTMLButtonElement | null>
-  >({
-    assessment: null,
-    decisions: null,
-  });
   const [tab, setTab] = useState<'assessment' | 'decisions'>(
     start ? 'assessment' : 'decisions',
   );
@@ -58,18 +53,6 @@ export default function StudyMatchReport({
       });
     return () => abort.abort();
   }, [reportId, revision]);
-
-  function navigate(event: KeyboardEvent<HTMLButtonElement>) {
-    let next: typeof tab;
-    if (event.key === 'Home') next = 'assessment';
-    else if (event.key === 'End') next = 'decisions';
-    else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
-      next = tab === 'assessment' ? 'decisions' : 'assessment';
-    else return;
-    event.preventDefault();
-    setTab(next);
-    tabs.current[next]?.focus();
-  }
 
   return (
     <section
@@ -109,30 +92,19 @@ export default function StudyMatchReport({
       {session && (
         <>
           {session.match_length > 0 && (
-            <nav
+            <TabList
+              as="nav"
               className="text-navigation study-match-report-tabs"
-              role="tablist"
-              aria-label={study('decisions')}
-            >
-              {(['assessment', 'decisions'] as const).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  id={`match-report-tab-${key}`}
-                  ref={(node) => {
-                    tabs.current[key] = node;
-                  }}
-                  aria-controls={`match-report-panel-${key}`}
-                  aria-selected={tab === key}
-                  tabIndex={tab === key ? 0 : -1}
-                  onKeyDown={navigate}
-                  onClick={() => setTab(key)}
-                >
-                  {key === 'assessment' ? t('tab') : study('decisions')}
-                </button>
-              ))}
-            </nav>
+              ariaLabel={study('decisions')}
+              active={tab}
+              onSelect={setTab}
+              tabs={(['assessment', 'decisions'] as const).map((key) => ({
+                value: key,
+                id: `match-report-tab-${key}`,
+                controls: `match-report-panel-${key}`,
+                label: key === 'assessment' ? t('tab') : study('decisions'),
+              }))}
+            />
           )}
           {session.match_length > 0 && (
             <div

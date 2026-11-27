@@ -3,6 +3,7 @@ import { useId } from 'react';
 import { engineDisplayName } from '../../shared/engine/engine-version';
 import { TOP_TWO_PLAY_STRENGTH } from '../../shared/engine/analysis-depth';
 import ActionButton from '../../shared/ui/ActionButton';
+import { formatPly } from '../../shared/format/ply';
 import { useI18n } from '../../shared/i18n/i18n';
 import {
   playStrengthLabel,
@@ -286,10 +287,11 @@ export default function PlaySetupForm({
               ? 'NeonGammon'
               : 'GNUbg'}{' '}
             ·{' '}
-            {confirmed?.analysis.plies ??
-              settings?.analysis_plies ??
-              defaultConfiguration.analysis.plies}
-            -ply
+            {formatPly(
+              confirmed?.analysis.plies ??
+                settings?.analysis_plies ??
+                defaultConfiguration.analysis.plies,
+            )}
             {' / '}
             {t('rulesEngine')} · GNUbg
           </span>

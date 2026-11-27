@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useId, useRef, useState, type ReactNode } from 'react';
 import ActionButton from '../../../shared/ui/ActionButton';
+import ModalDialog from '../../../shared/ui/ModalDialog';
 import SearchPagination from '../../../shared/ui/SearchPagination';
 import {
   lastSearchPage,
@@ -44,30 +45,16 @@ export function DeckDialog({
   className?: string;
   actions?: ReactNode;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
   const heading = useId();
   const t = useDeckManagementText();
-  useEffect(() => {
-    const element = dialog.current;
-    const trigger = document.activeElement;
-    element?.showModal();
-    if (focusCancel) cancel.current?.focus();
-    return () => {
-      element?.close();
-      if (trigger instanceof HTMLElement && trigger.isConnected)
-        trigger.focus();
-    };
-  }, []);
   return (
-    <dialog
-      ref={dialog}
+    <ModalDialog
       className={`deck-management-dialog${wide ? ' deck-library-dialog' : ''} ${className}`}
-      aria-labelledby={heading}
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!busy) close();
-      }}
+      ariaLabelledBy={heading}
+      busy={busy}
+      onCancel={close}
+      initialFocus={focusCancel ? cancel : 'auto'}
     >
       <h2 id={heading}>{title}</h2>
       {children}
@@ -83,7 +70,7 @@ export function DeckDialog({
         </ActionButton>
         {actions}
       </footer>
-    </dialog>
+    </ModalDialog>
   );
 }
 

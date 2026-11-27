@@ -1,5 +1,5 @@
-import { useRef, type KeyboardEvent } from 'react';
 import type { Match } from '../../shared/http/api';
+import { TabList } from '../../shared/ui/TabList';
 import BenchmarkWorkspace from './BenchmarkWorkspace';
 import { useBenchmarkText } from './benchmark-messages';
 import DatabaseBackupWorkspace from './DatabaseBackupWorkspace';
@@ -33,9 +33,6 @@ export default function ExtrasWorkspace({
 }) {
   const benchmark = useBenchmarkText();
   const { locale } = useI18n();
-  const tabs = useRef<Partial<Record<ExtrasTool, HTMLButtonElement | null>>>(
-    {},
-  );
   const labels = {
     benchmark: benchmark('benchmark'),
     matches: engineMatchText(locale, 'title'),
@@ -62,49 +59,21 @@ export default function ExtrasWorkspace({
     versions: visible && tool === 'versions' && <VersionInfo />,
   };
 
-  function navigate(
-    event: KeyboardEvent<HTMLButtonElement>,
-    current: ExtrasTool,
-  ) {
-    const index = tools.indexOf(current);
-    let next: number;
-    if (event.key === 'ArrowRight') next = (index + 1) % tools.length;
-    else if (event.key === 'ArrowLeft')
-      next = (index + tools.length - 1) % tools.length;
-    else if (event.key === 'Home') next = 0;
-    else if (event.key === 'End') next = tools.length - 1;
-    else return;
-    event.preventDefault();
-    setTool(tools[next]);
-    tabs.current[tools[next]]?.focus();
-  }
-
   return (
     <>
-      <nav
+      <TabList
+        as="nav"
         className="text-navigation extras-navigation"
-        role="tablist"
-        aria-label={benchmark('navigation')}
-      >
-        {tools.map((item) => (
-          <button
-            key={item}
-            type="button"
-            role="tab"
-            id={`extras-tab-${item}`}
-            aria-controls={`extras-panel-${item}`}
-            aria-selected={tool === item}
-            tabIndex={tool === item ? 0 : -1}
-            ref={(element) => {
-              tabs.current[item] = element;
-            }}
-            onClick={() => setTool(item)}
-            onKeyDown={(event) => navigate(event, item)}
-          >
-            {labels[item]}
-          </button>
-        ))}
-      </nav>
+        ariaLabel={benchmark('navigation')}
+        active={tool}
+        onSelect={setTool}
+        tabs={tools.map((item) => ({
+          value: item,
+          label: labels[item],
+          id: `extras-tab-${item}`,
+          controls: `extras-panel-${item}`,
+        }))}
+      />
       {tools.map((item) => (
         <div
           key={item}

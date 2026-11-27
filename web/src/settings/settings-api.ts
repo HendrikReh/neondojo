@@ -27,9 +27,7 @@ export type AppSettings = Omit<
 };
 export type EngineInfo = Schema['EngineInfo'] & { version: string | null };
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
+import { isRecord as isObject } from '../shared/http/guards';
 
 function isThreadLimit(value: unknown, engine: 'gnubg' | 'bgsage') {
   const { min } = configurationOptions.engine_threads[engine];

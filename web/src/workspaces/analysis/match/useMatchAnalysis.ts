@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useIsMounted } from '../../../shared/hooks/useIsMounted';
 import { useLatest } from '../../../shared/hooks/useLatest';
 import {
   jobEngine,
@@ -30,14 +31,8 @@ export function useMatchAnalysis(
   const [pending, setPending] = useState<string>();
   const [revision, setRevision] = useState(0);
   const currentScope = useLatest(scope);
-  const mounted = useRef(false);
+  const mounted = useIsMounted();
   const submission = useRef(0);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
 
   useEffect(() => {
     if (!enabled) return;

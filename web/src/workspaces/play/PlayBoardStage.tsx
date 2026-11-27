@@ -17,6 +17,52 @@ import type { PlayTurn } from './usePlayTurn';
 
 type Review = ReturnType<typeof usePlayReview>;
 
+export interface PlayBoardContext {
+  anchor: RefObject<HTMLDivElement | null>;
+  theme: Theme;
+  name: (player: number) => string;
+  paused: boolean;
+  frames: PlayFrames;
+  pendingRoll: PlayAction | null;
+  openingPhase: boolean;
+}
+
+export interface PlayBoardTurnState {
+  draft: PlayTurn;
+  /** The unconfirmed steps or those of the decision that waits for feedback. */
+  selectedSteps: CheckerStep[];
+  canMove: boolean;
+  canConfirm: boolean;
+  canPass: boolean;
+  /** Coach feedback on a pass waits to be continued. */
+  canContinuePass: boolean;
+  rollReady: boolean;
+  showActions: boolean;
+  doubleReasonId: string;
+  doubleUnavailableReason: string;
+  turnNotationId: string;
+}
+
+export interface PlayBoardCallbacks {
+  onRoll: () => void;
+  onDouble: () => void;
+  onConfirm: () => void;
+  onPass: () => void;
+  onContinue: () => void;
+}
+
+export interface PlayBoardStageProps {
+  session: PlaySession;
+  board: PlayBoardContext;
+  turn: PlayBoardTurnState;
+  review: Review;
+  callbacks: PlayBoardCallbacks;
+  /** Toolbars above the board. */
+  before: ReactNode;
+  /** Dialogs placed over the board. */
+  children: ReactNode;
+}
+
 /** Only checker moves have arrows; other turns show their result. */
 export const playHistoryView = ({ entry, view }: Review) =>
   entry?.kind !== 'checker' && view === 'arrows' ? 'after' : view;
@@ -41,66 +87,30 @@ function lastBotRoll(session: PlaySession) {
  * dice and the moving checkers, so the workspace around it does not.
  */
 export default function PlayBoardStage({
-  anchor,
   session,
-  theme,
-  name,
-  paused,
-  frames,
-  pendingRoll,
-  review,
+  board,
   turn,
-  selectedSteps,
-  canMove,
-  canConfirm,
-  canPass,
-  canContinuePass,
-  rollReady,
-  openingPhase,
-  showActions,
-  doubleReasonId,
-  doubleUnavailableReason,
-  turnNotationId,
+  review,
+  callbacks,
   before,
   children,
-  onRoll,
-  onDouble,
-  onConfirm,
-  onPass,
-  onContinue,
-}: {
-  anchor: RefObject<HTMLDivElement | null>;
-  session: PlaySession;
-  theme: Theme;
-  name: (player: number) => string;
-  paused: boolean;
-  frames: PlayFrames;
-  pendingRoll: PlayAction | null;
-  review: Review;
-  turn: PlayTurn;
-  /** The unconfirmed steps or those of the decision that waits for feedback. */
-  selectedSteps: CheckerStep[];
-  canMove: boolean;
-  canConfirm: boolean;
-  canPass: boolean;
-  /** Coach feedback on a pass waits to be continued. */
-  canContinuePass: boolean;
-  rollReady: boolean;
-  openingPhase: boolean;
-  showActions: boolean;
-  doubleReasonId: string;
-  doubleUnavailableReason: string;
-  turnNotationId: string;
-  /** Toolbars above the board. */
-  before: ReactNode;
-  /** Dialogs placed over the board. */
-  children: ReactNode;
-  onRoll: () => void;
-  onDouble: () => void;
-  onConfirm: () => void;
-  onPass: () => void;
-  onContinue: () => void;
-}) {
+}: PlayBoardStageProps) {
+  const { anchor, theme, name, paused, frames, pendingRoll, openingPhase } =
+    board;
+  const {
+    draft,
+    selectedSteps,
+    canMove,
+    canConfirm,
+    canPass,
+    canContinuePass,
+    rollReady,
+    showActions,
+    doubleReasonId,
+    doubleUnavailableReason,
+    turnNotationId,
+  } = turn;
+  const { onRoll, onDouble, onConfirm, onPass, onContinue } = callbacks;
   const t = usePlayText();
   const frame = usePlayFrame(frames);
   const waitingFaces = useRollingFaces(pendingRoll !== null);
@@ -116,7 +126,7 @@ export default function PlayBoardStage({
         ? waitingFaces
         : openingPhase
           ? []
-          : turn.dice;
+          : draft.dice;
   const historical = review.entry;
   const historyView = playHistoryView(review);
   const historicalPosition = historical
@@ -184,11 +194,11 @@ export default function PlayBoardStage({
         preview={historicalProjection}
         previewMode={historical ? historyView : undefined}
         interaction={{
-          enabled: turn.sources,
-          sources: turn.sources,
-          destinations: turn.destinations,
+          enabled: draft.sources,
+          sources: draft.sources,
+          destinations: draft.destinations,
           board: displayedBoard,
-          onHover: turn.hover,
+          onHover: draft.hover,
           cube: rollReady
             ? {
                 activate: mayDouble ? onDouble : undefined,
@@ -215,25 +225,25 @@ export default function PlayBoardStage({
                   unrolled: t('openingNotRolled'),
                 }
               : undefined,
-            canSwap: turn.canSwap,
+            canSwap: draft.canSwap,
             canConfirm,
             confirm: onConfirm,
             pass: canContinuePass ? onContinue : canPass ? onPass : undefined,
             descriptionId:
-              canConfirm && turn.steps.length > 0 ? turnNotationId : undefined,
+              canConfirm && draft.steps.length > 0 ? turnNotationId : undefined,
             rolling: Boolean(
               frame?.rolling ||
               pendingRoll === 'roll' ||
               pendingRoll === 'opening_roll',
             ),
-            swap: turn.swap,
+            swap: draft.swap,
             label:
               t(
                 previousRoll
                   ? 'roll'
                   : pendingRoll
                     ? 'rolling'
-                    : turn.forcedPass ||
+                    : draft.forcedPass ||
                         (mode === 'coach' && pending?.action === 'pass')
                       ? 'pass'
                       : canConfirm
@@ -247,13 +257,13 @@ export default function PlayBoardStage({
                 ? [false, false]
                 : previousRoll
                   ? [true, true]
-                  : turn.usedDice,
+                  : draft.usedDice,
             active:
-              frame || pendingRoll || !canMove || turn.completed
+              frame || pendingRoll || !canMove || draft.completed
                 ? null
-                : turn.usedDice.findIndex((used) => Number(used) < 1),
+                : draft.usedDice.findIndex((used) => Number(used) < 1),
           },
-          onPoint: turn.point,
+          onPoint: draft.point,
           label: (p) =>
             p === -1 || p === 26
               ? t('off') + ' · ' + name(p === -1 ? 0 : 1)

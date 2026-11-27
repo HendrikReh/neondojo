@@ -1,4 +1,6 @@
+import ActionButton from '../../shared/ui/ActionButton';
 import EngineLabel from '../../shared/engine/EngineLabel';
+import { formatPly } from '../../shared/format/ply';
 import { useI18n } from '../../shared/i18n/i18n';
 import Tooltip from '../../shared/ui/Tooltip';
 import { useSettingsText } from '../../settings/settings-messages';
@@ -29,8 +31,9 @@ export default function PlayMatchSummary({
   const rulesEngine =
     session.engine_snapshots?.rules.engine_version ??
     (session.engine.id === 'gnubg' ? session.engine.version : 'GNUbg');
-  const analysisPlies = formatNumber(
+  const analysisPlies = formatPly(
     session.analysis_plies ?? defaultConfiguration.analysis.plies,
+    formatNumber,
   );
   return (
     <div className="play-match-summary">
@@ -62,7 +65,7 @@ export default function PlayMatchSummary({
           className="engine-label-details"
           tabIndex={0}
           text={[
-            `${settingsT('analysisEngine')} · ${analysisEngine} · ${analysisPlies}-ply`,
+            `${settingsT('analysisEngine')} · ${analysisEngine} · ${analysisPlies}`,
             `${t('rulesEngine')} · ${rulesEngine}`,
           ].join('\n')}
         >
@@ -72,6 +75,42 @@ export default function PlayMatchSummary({
       <p className="play-match-status" role="status">
         {status}
       </p>
+    </div>
+  );
+}
+
+/** Inline winner banner shown when a finished game or match is viewed without a dialog. */
+export function PlayPostGameStatus({
+  session,
+  name,
+  busy,
+  onNextGame,
+}: {
+  session: PlaySession;
+  name: (player: number) => string;
+  busy: boolean;
+  onNextGame: () => void;
+}) {
+  const t = usePlayText();
+  return (
+    <div className="play-turn" aria-live="polite">
+      {session.winner != null && (
+        <p>
+          {t('winner')}: {name(session.winner)}
+        </p>
+      )}
+      {session.phase === 'game_over' && (
+        <div className="play-actions">
+          <ActionButton
+            disabled={busy}
+            onClick={onNextGame}
+            icon="new-game"
+            label={t('next_game')}
+          >
+            {t('next_game')}
+          </ActionButton>
+        </div>
+      )}
     </div>
   );
 }

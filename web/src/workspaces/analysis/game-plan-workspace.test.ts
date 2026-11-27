@@ -46,6 +46,8 @@ vi.mock('../../shared/i18n/i18n', () => ({
   }),
 }));
 import AnalysisWorkspace from './AnalysisWorkspace';
+import AnalysisBoardPane from './AnalysisBoardPane';
+import AnalysisInspectorPane from './AnalysisInspectorPane';
 import Board from '../../shared/board/Board';
 import BoardReviewControls from './BoardReviewControls';
 import AnalysisPanel from './AnalysisPanel';
@@ -57,6 +59,12 @@ type Element = ReactElement<Record<string, unknown>>;
 function elements(node: ReactNode): Element[] {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (!isValidElement<Record<string, unknown>>(node)) return [];
+  if (node.type === AnalysisBoardPane || node.type === AnalysisInspectorPane) {
+    const rendered = (node.type as (props: Record<string, unknown>) => ReactNode)(
+      node.props,
+    );
+    return [node, ...elements(rendered)];
+  }
   return [node, ...elements(node.props.children as ReactNode)];
 }
 function props(player: 0 | 1 = 0) {
@@ -130,23 +138,29 @@ function props(player: 0 | 1 = 0) {
       failure: undefined,
       run: async () => {},
     },
+    revisions: {
+      openingBook: 0,
+      bookmark: 0,
+      deck: 0,
+    },
+    engine: {
+      defaultPlies: 2,
+      configured: true,
+    },
+    callbacks: {
+      onDetail: noop,
+      onOpenDatabase: noop,
+      onTrackJob: noop,
+      onNotesSaved: noop,
+      onMoveNotes: noop,
+      onDeckChanged: noop,
+      onPosition: noop,
+      onBookmarkChanged: noop,
+    },
     theme: 'forest',
-    defaultPlies: 2,
-    openingBookRevision: 0,
-    configured: true,
     detail: 'overview',
-    onDetail: noop,
-    onOpenDatabase: noop,
-    onTrackJob: noop,
-    onNotesSaved: noop,
-    onMoveNotes: noop,
     notesSuspended: false,
-    deckRevision: 0,
-    onDeckChanged: noop,
-    onPosition: noop,
     welcome: null,
-    bookmarkRevision: 0,
-    onBookmarkChanged: noop,
   } satisfies Parameters<typeof AnalysisWorkspace>[0];
 }
 function render(input: Parameters<typeof AnalysisWorkspace>[0]) {
@@ -226,7 +240,12 @@ it('classifies successful selected candidates and falls back with the board on i
 });
 
 it('passes workspace visibility without depending on engine configuration or analysis availability', () => {
-  const input = { ...props(), active: false, configured: false };
+  const base = props();
+  const input = {
+    ...base,
+    active: false,
+    engine: { ...base.engine, configured: false },
+  };
   expect(panel(render(input)).props.active).toBe(false);
   expect(panel(render({ ...input, active: true })).props.active).toBe(true);
 });

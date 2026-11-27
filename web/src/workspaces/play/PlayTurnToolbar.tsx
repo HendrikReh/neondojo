@@ -7,34 +7,7 @@ import {
 import type { PlaySession } from './play-api';
 import { usePlayText } from './play-messages';
 
-/** The human's turn actions above the board: roll, pass or confirm, double, hint and undo. */
-export default function PlayTurnToolbar({
-  session,
-  heading,
-  beforeRoll,
-  forcedPass,
-  rollReady,
-  canPass,
-  canConfirm,
-  canMove,
-  pendingRoutineRoll,
-  competition,
-  hint,
-  busy,
-  steps,
-  complete,
-  missingCheckerPaths,
-  doubleReasonId,
-  doubleUnavailableReason,
-  notationId,
-  onRoll,
-  onPass,
-  onConfirm,
-  onDouble,
-  onUndo,
-  onRetry,
-}: {
-  session: PlaySession;
+export interface PlayTurnToolbarState {
   heading: 'yourTurn' | 'pass' | 'move';
   beforeRoll: boolean;
   forcedPass: boolean;
@@ -44,21 +17,58 @@ export default function PlayTurnToolbar({
   canMove: boolean;
   pendingRoutineRoll: boolean;
   competition: boolean;
-  hint: ReactNode;
   busy: boolean;
   steps: CheckerStepWithDie[];
   complete: boolean;
   missingCheckerPaths: boolean;
+}
+
+export interface PlayTurnToolbarLabels {
   doubleReasonId: string;
   doubleUnavailableReason: ReactNode;
   notationId: string;
+}
+
+export interface PlayTurnToolbarCallbacks {
   onRoll: () => void;
   onPass: () => void;
   onConfirm: () => void;
   onDouble: () => void;
   onUndo: () => void;
   onRetry: () => void;
+}
+
+/** The human's turn actions above the board: roll, pass or confirm, double, hint and undo. */
+export default function PlayTurnToolbar({
+  session,
+  state,
+  labels,
+  hint,
+  callbacks,
+}: {
+  session: PlaySession;
+  state: PlayTurnToolbarState;
+  labels: PlayTurnToolbarLabels;
+  hint: ReactNode;
+  callbacks: PlayTurnToolbarCallbacks;
 }) {
+  const {
+    heading,
+    beforeRoll,
+    forcedPass,
+    rollReady,
+    canPass,
+    canConfirm,
+    canMove,
+    pendingRoutineRoll,
+    competition,
+    busy,
+    steps,
+    complete,
+    missingCheckerPaths,
+  } = state;
+  const { doubleReasonId, doubleUnavailableReason, notationId } = labels;
+  const { onRoll, onPass, onConfirm, onDouble, onUndo, onRetry } = callbacks;
   const t = usePlayText();
   // Tells the player why only some checkers respond when the rules leave one play.
   const onlyMove =

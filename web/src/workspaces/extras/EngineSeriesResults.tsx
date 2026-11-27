@@ -1,5 +1,6 @@
 import ActionButton from '../../shared/ui/ActionButton';
 import EngineLabel from '../../shared/engine/EngineLabel';
+import { formatPly } from '../../shared/format/ply';
 import { useI18n } from '../../shared/i18n/i18n';
 import { formatBenchmarkDuration } from './benchmark-duration';
 import {
@@ -267,7 +268,7 @@ export default function EngineSeriesResults({
             details={engines.a.engine_version ?? profile(config.a)}
             tooltip={
               engines.a.engine_version
-                ? `${engines.a.engine_version} · ${formatNumber(config.a.plies)}-ply`
+                ? `${engines.a.engine_version} · ${formatPly(config.a.plies, formatNumber)}`
                 : undefined
             }
           />
@@ -278,7 +279,7 @@ export default function EngineSeriesResults({
             details={engines.b.engine_version ?? profile(config.b)}
             tooltip={
               engines.b.engine_version
-                ? `${engines.b.engine_version} · ${formatNumber(config.b.plies)}-ply`
+                ? `${engines.b.engine_version} · ${formatPly(config.b.plies, formatNumber)}`
                 : undefined
             }
           />

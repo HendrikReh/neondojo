@@ -36,8 +36,8 @@ export class ConfigurationConflict extends ConflictError {}
 export const isDecided = (error: unknown) =>
   error instanceof AppError && error.key !== 'error.network';
 
-const object = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === 'object' && !Array.isArray(v);
+import { isRecord as object } from '../../shared/http/guards';
+
 export function parseAvailability(value: unknown): {
   revision: number;
   valid: boolean;

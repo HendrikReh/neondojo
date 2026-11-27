@@ -44,6 +44,18 @@ a.action-button--compact {
   background: var(--ui-danger-bg);
   border-color: var(--ui-danger-text);
 }
+:is(.library-dialog, .benchmark-delete-confirm) .danger,
+:is(.library-dialog, .benchmark-delete-confirm)
+  .action-button.danger:not(:disabled),
+:is(.library-dialog, .benchmark-delete-confirm)
+  .action-button.danger:hover:not(:disabled),
+.action-button.danger--solid,
+.action-button.danger--solid:not(:disabled),
+.action-button.danger--solid:hover:not(:disabled) {
+  background: var(--ui-danger-button);
+  color: var(--ui-danger-button-text);
+  border-color: var(--ui-danger-button);
+}
 /* A shortcut is shown on its button, so nobody has to hover to learn it.
    The keycap follows the button's text color, so it reads on primary buttons
    too; the accessible name stays the label and aria-keyshortcuts names the
@@ -101,4 +113,37 @@ a.action-button--compact {
   overflow-wrap: anywhere;
   box-shadow: 0 5px 20px var(--ui-shadow);
   cursor: default;
+}
+/* Shared surface and transparent button rows for popover and dropdown action menus. */
+:is(
+  .action-menu,
+  .profile-settings-menu,
+  .play-menu,
+  .position-selection-menu,
+  .position-saved-menu,
+  .learning-anki-menu-items
+) {
+  padding: 6px;
+  border: 1px solid var(--ui-border);
+  border-radius: 8px;
+  background: var(--ui-surface);
+  color: var(--ui-text);
+  box-shadow: 0 8px 24px var(--ui-shadow);
+}
+:is(.action-menu, .profile-settings-menu, .play-menu):popover-open {
+  display: grid;
+  gap: 4px;
+}
+:is(
+    .action-menu,
+    .profile-settings-menu,
+    .play-menu,
+    .position-selection-menu,
+    .position-saved-menu,
+    .learning-anki-menu-items
+  )
+  .action-button {
+  justify-content: flex-start;
+  border-color: transparent;
+  background: transparent;
 }

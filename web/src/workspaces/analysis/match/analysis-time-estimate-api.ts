@@ -1,4 +1,10 @@
 import { request } from '../../../shared/http/api';
+import {
+  isNonEmptyString as nonempty,
+  isPositiveFinite as positive,
+  isRecord as object,
+  isSafeIntegerAtLeast as integer,
+} from '../../../shared/http/guards';
 import { isAnalysisDepth } from '../../../shared/engine/analysis-depth';
 
 import type { components } from '../../../generated-api';
@@ -25,15 +31,6 @@ export async function loadAnalysisTimeEstimate(
   );
   return parseEstimate(result);
 }
-
-const nonempty = (value: unknown): value is string =>
-  typeof value === 'string' && value.trim().length > 0;
-const object = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
-const positive = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isFinite(value) && value > 0;
-const integer = (value: unknown, minimum: number): value is number =>
-  typeof value === 'number' && Number.isSafeInteger(value) && value >= minimum;
 
 // This forecast is optional. A malformed successful response must become an
 // unavailable estimate before any metadata reaches date formatting or i18n.

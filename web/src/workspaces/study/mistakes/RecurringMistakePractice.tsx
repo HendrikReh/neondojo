@@ -1,6 +1,10 @@
 import { useCheckerTurns } from '../practice/useCheckerTurns';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import Board from '../../../shared/board/Board';
+import {
+  BoardViewToggle,
+  MovePreviewViewToggle,
+} from '../../../shared/board/BoardViewToggle';
 import CheckerPracticeBoard, {
   type CheckerDraft,
 } from '../practice/CheckerPracticeBoard';
@@ -279,42 +283,21 @@ function MistakeQuestion({
         chosenProjection?.ok &&
         bestProjection?.ok &&
         !chosenProjection.forced && (
-          <div
-            className="board-view-buttons text-navigation text-navigation--compact"
-            role="group"
-            aria-label={review('views')}
-          >
-            {(['chosen', 'best'] as const).map((choice) => (
-              <button
-                key={choice}
-                type="button"
-                aria-pressed={preview === choice}
-                onClick={() => setPreview(choice)}
-              >
-                {choice === 'chosen'
+          <BoardViewToggle
+            label={review('views')}
+            value={preview}
+            onChange={setPreview}
+            options={(['chosen', 'best'] as const).map((choice) => ({
+              value: choice,
+              label:
+                choice === 'chosen'
                   ? labels('practiceYourMove')
-                  : labels('practiceBestPlay')}
-              </button>
-            ))}
-          </div>
+                  : labels('practiceBestPlay'),
+            }))}
+          />
         )}
       {result && projection?.ok && (
-        <div
-          className="board-view-buttons text-navigation text-navigation--compact"
-          role="group"
-          aria-label={review('views')}
-        >
-          {(['before', 'arrows', 'after'] as BoardView[]).map((mode) => (
-            <button
-              key={mode}
-              type="button"
-              aria-pressed={view === mode}
-              onClick={() => setView(mode)}
-            >
-              {review(mode)}
-            </button>
-          ))}
-        </div>
+        <MovePreviewViewToggle value={view} onChange={setView} />
       )}
       {!result && item.kind === 'checker' ? (
         <CheckerPracticeBoard

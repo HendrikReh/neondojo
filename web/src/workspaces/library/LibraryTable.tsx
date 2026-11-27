@@ -69,8 +69,8 @@ export default function LibraryTable({
     columns.activeColumns.some((column) => column === id);
   const occurrenceNames = [
     ['occurrence_database', l('database')],
-    ['occurrence_game', l('occurrenceGame')],
-    ['occurrence_move', l('occurrenceMove')],
+    ['occurrence_game', l('game')],
+    ['occurrence_move', l('sourceMove')],
   ] as const;
   const heading = (
     key: LibrarySort & (LibraryColumn | OccurrenceColumn),
@@ -190,7 +190,7 @@ export default function LibraryTable({
     match_length: () => heading('match_length', l('length')),
     score: () => heading('score', l('result')),
     played_at: () => heading('played_at', l('played')),
-    created_at: () => heading('created_at', l('importedColumn'), l('imported')),
+    created_at: () => heading('created_at', l('imported'), l('imported')),
     tournament: () => heading('tournament', l('tournament')),
     position_count: () => heading('position_count', w('positions')),
     analysis_status: () => heading('analysis_status', l('analysis')),
@@ -285,7 +285,7 @@ export default function LibraryTable({
     <div className="match-list database-table-wrap">
       <table
         ref={columns.tableRef}
-        className={`database-table${columns.dragging ? ' library-table-resizing' : ''}`}
+        className={`database-table${columns.dragging ? ' resizing-table library-table-resizing' : ''}`}
         style={columns.tableStyle ?? { minWidth: columns.minimumWidth }}
       >
         <colgroup>

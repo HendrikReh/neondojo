@@ -41,7 +41,7 @@ it('lists every stylesheet a component imports', () => {
 });
 
 it('loads the base stylesheet before component styles', () => {
-  expect(listed[0]).toBe('styles/style.css');
+  expect(listed[0]).toBe('styles/base.css');
 });
 
 it('loads the stylesheets before any component', () => {

@@ -10,6 +10,7 @@ import Tooltip from '../../shared/ui/Tooltip';
 import { usePlayModeText } from './play-mode-messages';
 import GameResultSummary, { type PlayGameResult } from './GameResultSummary';
 import { shortEngineLabel } from '../../shared/engine/engine-version';
+import { formatPly } from '../../shared/format/ply';
 
 const isCheckerDecision = (decision: PlayDecision) =>
   decision.original_action === 'move' || decision.original_action === 'pass';
@@ -156,7 +157,7 @@ export default memo(function PlayHistory({
                           depth:
                             analysisPlies == null
                               ? undefined
-                              : `${analysisPlies}-ply`,
+                              : formatPly(analysisPlies),
                         }
                       : undefined
                   }

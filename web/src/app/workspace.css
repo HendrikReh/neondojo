@@ -269,8 +269,7 @@
 }
 .position-inspector .analysis-panel,
 .position-inspector .match-analysis,
-.position-inspector .annotation-panel,
-.position-inspector .add-cards-panel {
+.position-inspector .annotation-panel {
   padding: 0;
   margin: 0;
   border: 0;
@@ -331,12 +330,6 @@
 .position-inspector .match-analysis-summary article {
   padding: 12px;
 }
-.position-inspector .match-summary-numbers {
-  gap: 15px;
-}
-.position-inspector .match-summary-numbers b {
-  font-size: 21px;
-}
 .position-inspector .match-analysis-filters {
   gap: 9px;
 }
@@ -360,18 +353,6 @@
   grid-template-columns: 1fr;
 }
 .position-inspector .annotation-actions {
-  flex-wrap: wrap;
-}
-.position-inspector .learning-add {
-  padding: 0;
-  margin: 0;
-  border: 0;
-}
-.position-inspector .learning-add h3 {
-  font-size: var(--font-size-panel);
-}
-.position-inspector .learning-inline-form,
-.position-inspector .learning-add-controls {
   flex-wrap: wrap;
 }
 .position-inspector input,
@@ -471,9 +452,6 @@
   border: 0;
   box-shadow: none;
 }
-.match-database .match-meta {
-  margin-top: 5px;
-}
 .match-database .match-card small {
   margin-top: 5px;
   display: block;
@@ -490,32 +468,10 @@
 .database-table td:last-child {
   white-space: nowrap;
 }
-.database-details {
-  border: 1px solid var(--ui-border);
-  border-radius: 10px;
-  padding: 20px;
-  margin-top: 20px;
-  background: var(--ui-surface);
-}
-.database-details h2 {
-  font-size: var(--font-size-panel);
-}
-.database-details h3 {
-  font-size: var(--font-size-panel);
-  margin: 15px 0 10px;
-}
-.database-comment {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  margin: 14px 0;
-}
 @media (max-width: 1200px) {
   .app-header {
     gap: 16px;
     padding: 15px 20px;
-  }
-  .app-header-actions .app-import {
-    display: none;
   }
   .app-body {
     padding: 20px;
@@ -543,8 +499,7 @@
   .position-inspector {
     grid-column: 1/-1;
   }
-  .position-inspector .analysis-panel,
-  .position-inspector .learning-add {
+  .position-inspector .analysis-panel {
     max-width: none;
   }
   .position-inspector .match-analysis-summary {
@@ -644,12 +599,6 @@
   .position-inspector .match-analysis-summary {
     grid-template-columns: 1fr;
   }
-  .position-inspector .annotation-inline {
-    flex-wrap: wrap;
-  }
-  .position-inspector .annotation-inline input {
-    min-width: 0;
-  }
   .database-heading {
     align-items: flex-start;
     flex-wrap: wrap;
@@ -664,12 +613,6 @@
   .database-heading > button {
     font-size: var(--font-size-control);
     padding: 8px;
-  }
-  .database-details {
-    padding: 14px;
-  }
-  .database-details .section-heading {
-    align-items: flex-start;
   }
   .analysis-welcome {
     padding: 35px 15px;

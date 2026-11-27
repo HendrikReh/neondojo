@@ -1,5 +1,6 @@
 import ActionButton from '../../../shared/ui/ActionButton';
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { TabList } from '../../../shared/ui/TabList';
+import { useEffect, useId, useState } from 'react';
 import AnnotationPanel from './AnnotationPanel';
 import type { AnnotationKind } from './annotation-api';
 import { useAnnotationI18n } from './annotation-messages';
@@ -35,9 +36,6 @@ export default function NotesPanel({
   const { t, formatError } = useAnnotationI18n(),
     l = useLibraryText(),
     htmlId = useId();
-  const refs = useRef<
-    Partial<Record<AnnotationKind, HTMLButtonElement | null>>
-  >({});
   const [preferred, setPreferred] = useState<AnnotationKind>('position'),
     [catalog, setCatalog] = useState<GameDecisions>(),
     [error, setError] = useState<unknown>(),
@@ -99,51 +97,24 @@ export default function NotesPanel({
       : active === 'game'
         ? matchWarnings.filter((warning) => warning.game_no === gameNo)
         : [];
-  function navigate(
-    e: KeyboardEvent<HTMLButtonElement>,
-    current: AnnotationKind,
-  ) {
-    const index = available.indexOf(current as (typeof scopes)[number]);
-    let next: number;
-    if (e.key === 'ArrowLeft')
-      next = (index + available.length - 1) % available.length;
-    else if (e.key === 'ArrowRight') next = (index + 1) % available.length;
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = available.length - 1;
-    else return;
-    e.preventDefault();
-    setPreferred(available[next]);
-    refs.current[available[next]]?.focus();
-  }
   return (
     <div className="notes-panel">
-      <div
+      <TabList<(typeof scopes)[number]>
         className="notes-scope-tabs text-navigation text-navigation--compact"
-        role="tablist"
-        aria-label={t('scopeLabel')}
-      >
-        {scopes.map((scope) => (
-          <button
-            key={scope}
-            ref={(el) => {
-              refs.current[scope] = el;
-            }}
-            type="button"
-            role="tab"
-            id={`${htmlId}-${scope}-tab`}
-            aria-controls={`${htmlId}-${scope}-panel`}
-            aria-selected={active === scope}
-            tabIndex={active === scope ? 0 : -1}
-            disabled={!available.includes(scope)}
-            onClick={() => setPreferred(scope)}
-            onKeyDown={(e) => navigate(e, scope)}
-          >
-            {scope === 'game'
+        ariaLabel={t('scopeLabel')}
+        active={active as (typeof scopes)[number]}
+        onSelect={setPreferred}
+        tabs={scopes.map((scope) => ({
+          value: scope,
+          id: `${htmlId}-${scope}-tab`,
+          controls: `${htmlId}-${scope}-panel`,
+          disabled: !available.includes(scope),
+          label:
+            scope === 'game'
               ? l('game')
-              : t(scope === 'match' ? 'matchTab' : 'positionTab')}
-          </button>
-        ))}
-      </div>
+              : t(scope === 'match' ? 'match' : 'position'),
+        }))}
+      />
       {!!error && (
         <p role="alert" className="error">
           {formatError(error)}

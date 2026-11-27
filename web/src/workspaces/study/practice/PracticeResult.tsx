@@ -3,11 +3,12 @@ import CubeDecisionDetails from '../../../shared/review/CubeDecisionDetails';
 import MoveExplanation from '../../../shared/review/MoveExplanation';
 import type { ExplainedPosition } from '../../../shared/review/move-explanation';
 import EngineLabel from '../../../shared/engine/EngineLabel';
+import { formatPly } from '../../../shared/format/ply';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useLearningText } from '../flashcards/learning-messages';
 
 const verdictKeys = {
-  best: 'bestAnswer',
+  best: 'best',
   playable: 'verdictPlayable',
   error: 'verdictError',
   forced: 'verdictForced',
@@ -43,7 +44,7 @@ export default function PracticeResult({
           provenance.engine,
           provenance.plies == null
             ? null
-            : `${formatNumber(provenance.plies)}-ply`,
+            : formatPly(provenance.plies, formatNumber),
         ]
           .filter(Boolean)
           .join(' · ');

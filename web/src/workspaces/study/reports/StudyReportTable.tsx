@@ -1,6 +1,8 @@
 import type { StudyReportSummary } from '../study-api';
 import ActionButton from '../../../shared/ui/ActionButton';
 import { useI18n } from '../../../shared/i18n/i18n';
+import { dateTimeFormat } from '../../../shared/i18n/i18n-core';
+import { formatPly } from '../../../shared/format/ply';
 import { usePlayText } from '../../play/play-messages';
 import { useStudyText } from '../study-messages';
 import { isPlayMode, usePlayModeText } from '../../play/play-mode-messages';
@@ -56,10 +58,10 @@ export default function StudyReportTable({
             >
               <td>
                 <time dateTime={report.updated_at}>
-                  {new Date(report.updated_at).toLocaleString(locale, {
+                  {dateTimeFormat(locale, {
                     dateStyle: 'medium',
                     timeStyle: 'short',
-                  })}
+                  }).format(new Date(report.updated_at))}
                 </time>
               </td>
               <td>
@@ -81,7 +83,7 @@ export default function StudyReportTable({
                   : report.play_mode}
               </td>
               <td>{modeT(report.assisted ? 'assisted' : 'independent')}</td>
-              <td>{report.analysis_plies}-ply</td>
+              <td>{formatPly(report.analysis_plies, formatNumber)}</td>
               <td>
                 {report.first_attempt_rating == null
                   ? '—'

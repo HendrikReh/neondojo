@@ -5,6 +5,7 @@ import StudyMatchReport from './StudyMatchReport';
 import LearningReviewDialog from './LearningReviewDialog';
 import type { AssessmentEntry } from './match-assessment-api';
 import { useI18n } from '../../../shared/i18n/i18n';
+import { dateTimeFormat } from '../../../shared/i18n/i18n-core';
 import StudyReportTable from './StudyReportTable';
 import { groupStudyReports } from './study-report-groups';
 import {
@@ -231,10 +232,10 @@ export default function StudyReports({
                       </h2>
                       <p>
                         <time dateTime={report.created_at}>
-                          {new Date(report.created_at).toLocaleString(locale, {
+                          {dateTimeFormat(locale, {
                             dateStyle: 'medium',
                             timeStyle: 'short',
-                          })}
+                          }).format(new Date(report.created_at))}
                         </time>{' '}
                         · {t('gameReports')}: {group.reports.length}
                       </p>

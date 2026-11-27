@@ -9,12 +9,6 @@
 .analysis-source-tabs button:disabled {
   opacity: 0.45;
 }
-.analysis-source-tools {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  align-items: center;
-}
 .source-provenance {
   display: grid;
   gap: 5px;

@@ -9,7 +9,12 @@
 // stylesheets.test.ts checks that every stylesheet is listed exactly once.
 // ui-appearance.css is linked from index.html ahead of all of them.
 
-import './style.css';
+import './base.css';
+import '../shared/board/board.css';
+import '../shared/review/moves-panel.css';
+import '../workspaces/analysis/analysis-base.css';
+import '../workspaces/analysis/notes/annotations.css';
+import '../workspaces/study/flashcards/learning-base.css';
 import '../shared/ui/action-controls.css';
 import '../settings/profiles/profiles.css';
 import '../workspaces/extras/benchmark.css';

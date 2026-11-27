@@ -73,10 +73,10 @@ const scopeKeys: Record<
   PositionBrowserHit['notes'][number]['scope'],
   PositionMessageKey
 > = {
-  match: 'scopeMatch',
-  game: 'scopeGame',
+  match: 'groupMatch',
+  game: 'gameNumber',
   position: 'scopePosition',
-  move: 'scopeMove',
+  move: 'playedMove',
 };
 function HitNotes({ hit }: { hit: PositionBrowserHit }) {
   const p = usePositionText();
@@ -187,7 +187,7 @@ export function PositionBrowserResults({
     score: [{ key: 'score', label: p('score') }],
     cube: [{ key: 'cube', label: p('cubeShort'), name: p('cube') }],
     played_move: [{ key: 'played_move', label: p('playedMove') }],
-    loss: [{ key: 'loss', label: p('equityLoss'), name: p('nativeError') }],
+    loss: [{ key: 'loss', label: p('nativeError'), name: p('nativeError') }],
     decks: [{ key: 'decks', label: p('decks') }],
     notes: [
       { key: 'tags', label: l('tags') },

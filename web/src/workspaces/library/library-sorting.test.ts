@@ -21,19 +21,20 @@ it('exposes independent sort controls for every match data field, including nume
   const html = renderToStaticMarkup(
     createElement(I18nProvider, {
       children: createElement(MatchDatabase, {
-        revision: 0,
-        annotationRevision: 0,
-        databaseId: '',
         visible: true,
-        onDatabase: noop,
-        onOpen: noop,
-        onPosition: noop,
-        onAnnotation: noop,
-        onImport: noop,
-        onImportFolder: noop,
-        onAnalyzeMatches: noop,
         uploading: false,
-        onChanged: noop,
+        revisions: { library: 0, annotation: 0 },
+        context: { databaseId: '' },
+        callbacks: {
+          onDatabase: noop,
+          onOpen: noop,
+          onPosition: noop,
+          onAnnotation: noop,
+          onImport: noop,
+          onImportFolder: noop,
+          onAnalyzeMatches: noop,
+          onChanged: noop,
+        },
       }),
     }),
   );

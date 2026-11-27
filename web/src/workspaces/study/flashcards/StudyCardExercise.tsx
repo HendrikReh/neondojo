@@ -4,6 +4,8 @@ import ActionButton from '../../../shared/ui/ActionButton';
 import AnkiCardFace from './AnkiCardFace';
 import CardTagEditor from './CardTagEditor';
 import Board from '../../../shared/board/Board';
+import { BoardViewToggle } from '../../../shared/board/BoardViewToggle';
+import { formatPly } from '../../../shared/format/ply';
 import CheckerPracticeBoard, {
   type CheckerDraft,
 } from '../practice/CheckerPracticeBoard';
@@ -390,22 +392,15 @@ export function CardExercise({
               {chosenPreview?.ok &&
                 bestPreview?.ok &&
                 !chosenPreview.forced && (
-                  <div
-                    className="board-view-buttons text-navigation text-navigation--compact"
-                    role="group"
-                    aria-label={review('views')}
-                  >
-                    {(['chosen', 'best'] as const).map((choice) => (
-                      <button
-                        key={choice}
-                        type="button"
-                        aria-pressed={previewChoice === choice}
-                        onClick={() => setPreviewChoice(choice)}
-                      >
-                        {previewLabels[choice]}
-                      </button>
-                    ))}
-                  </div>
+                  <BoardViewToggle
+                    label={review('views')}
+                    value={previewChoice}
+                    onChange={setPreviewChoice}
+                    options={(['chosen', 'best'] as const).map((choice) => ({
+                      value: choice,
+                      label: previewLabels[choice],
+                    }))}
+                  />
                 )}
               <PracticeResult
                 evaluation={result}
@@ -468,7 +463,7 @@ function CardSolution({
           ? answer.solution.imported?.depth
             ? ` · ${answer.solution.imported.depth}`
             : ''
-          : ` · ${formatNumber(plies)}-ply`}
+          : ` · ${formatPly(plies, formatNumber)}`}
       </p>
       {!!candidates.length && (
         <table>

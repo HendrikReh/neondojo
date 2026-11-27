@@ -140,7 +140,7 @@ export default function AnnotationSearch({
           <input
             id={`${htmlId}-tag`}
             value={tag}
-            placeholder={t('exactTagPlaceholder')}
+            placeholder={t('tagPlaceholder')}
             onChange={(event) => {
               setTag(event.target.value);
               setValidation(null);

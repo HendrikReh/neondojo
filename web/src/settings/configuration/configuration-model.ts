@@ -220,8 +220,8 @@ export interface ConfigurationDifference {
   saved: unknown;
   current: unknown;
 }
-const object = (value: unknown): value is Record<string, unknown> =>
-  value !== null && typeof value === 'object' && !Array.isArray(value);
+import { isRecord as object } from '../../shared/http/guards';
+
 const invalid = (path: string): never => {
   throw new Error(`Invalid configuration: ${path}`);
 };
@@ -389,6 +389,7 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     !['asc', 'desc'].includes(c.library.direction)
   )
     invalid('library');
+  if ((c.library.sort as string) === 'match_no') c.library.sort = 'id';
   if (!librarySorts.includes(c.library.sort)) invalid('library.sort');
   strings(c.library.filters, Object.keys(emptyFilters()), 'library.filters');
   c.library.filters = normalizeLibraryFilters(c.library.filters);
@@ -503,7 +504,7 @@ export function normalizeConfiguration(value: unknown): ProfileConfiguration {
     invalid('learning.filters');
   c.learning.filters = normalizeCardFilters(c.learning.filters);
   if (
-    !['', 'checker', 'cube_offer', 'cube_response'].includes(
+    !['', 'checker', 'cube_offer', 'cube_response', 'anki'].includes(
       c.learning.filters.kind,
     ) ||
     !['', 'new', 'due', 'reviewed'].includes(c.learning.filters.status)

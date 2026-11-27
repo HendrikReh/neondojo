@@ -52,6 +52,10 @@ vi.mock('react', async (original) => ({
   },
 }));
 import LearningWorkspace from './LearningPanel';
+import CardBrowseView from './CardBrowseView';
+import CardReviewView from './CardReviewView';
+import LearningDialogs from './LearningDialogs';
+import LearningHeader from './LearningHeader';
 import { useDecks } from './useDecks';
 import ActionButton from '../../../shared/ui/ActionButton';
 import DeckSelector from './DeckSelector';
@@ -83,6 +87,14 @@ function elements(node: unknown): ReactElement<Record<string, any>>[] {
   if (!node || typeof node !== 'object') return [];
   if (Array.isArray(node)) return node.flatMap(elements);
   const element = node as ReactElement<Record<string, any>>;
+  if (
+    element.type === CardReviewView ||
+    element.type === CardBrowseView ||
+    element.type === LearningDialogs ||
+    element.type === LearningHeader
+  ) {
+    return [element, ...elements(element.type(element.props as never))];
+  }
   return [element, ...elements(element.props?.children)];
 }
 function commit() {

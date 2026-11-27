@@ -1,0 +1,242 @@
+.board-panel {
+  background: var(--ui-surface);
+  border: 1px solid var(--ui-border);
+  border-radius: 9px;
+  overflow: hidden;
+  padding: 16px 18px 0;
+  min-width: 0;
+}
+.board-heading {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--ui-muted);
+  margin-bottom: 9px;
+}
+.board-heading b {
+  margin: 0 7px;
+}
+.board-heading strong {
+  color: var(--ui-text);
+  font-weight: 500;
+}
+.theme-forest,
+.board-shell {
+  /* Point numbers sit on the dark board frame in light and dark mode alike. */
+  --board-point-number: #d6ddca;
+  --frame: #234b3d;
+  --felt: #e3dec7;
+  --bar: #234b3d;
+  --light: #c0c9a5;
+  --dark: #607e63;
+  --black: #284e3e;
+  --white: #f8f4e2;
+}
+.theme-walnut {
+  --frame: #573d2f;
+  --felt: #e3cda5;
+  --bar: #573d2f;
+  --light: #d4af78;
+  --dark: #955e40;
+  --black: #593d30;
+  --white: #fff2da;
+}
+.theme-slate {
+  --frame: #354855;
+  --felt: #d2dde0;
+  --bar: #354855;
+  --light: #b0c2c7;
+  --dark: #6a8b9a;
+  --black: #344c5c;
+  --white: #f1f8f8;
+}
+.board {
+  display: block;
+  width: 100%;
+  filter: drop-shadow(0 5px 6px #2e4c3214);
+  margin: 10px 0;
+}
+.board-frame {
+  fill: var(--frame);
+}
+.board-felt {
+  fill: var(--felt);
+}
+.board-bar {
+  fill: var(--bar);
+}
+.point-light {
+  fill: var(--light);
+}
+.point-dark {
+  fill: var(--dark);
+}
+.point-number {
+  fill: #d9e0c9;
+  font-size: 12px;
+  text-anchor: middle;
+  font-weight: 400;
+}
+.white-checker {
+  fill: var(--white);
+  stroke: #b4b4a0;
+  stroke-width: 1.5;
+}
+.black-checker {
+  fill: var(--black);
+  stroke: #1c362b;
+  stroke-width: 1.5;
+}
+.checker-ring {
+  fill: none;
+  stroke: #97ab7e;
+  stroke-width: 0.8;
+  opacity: 0.35;
+}
+.checker-count {
+  text-anchor: middle;
+  font-size: 15px;
+  font-weight: 600;
+}
+.on-white {
+  fill: #3e5849;
+}
+.on-black {
+  fill: #f4f3dc;
+}
+.player-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: var(--font-size-meta);
+  color: var(--ui-text);
+}
+.player-bar > span:first-child {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.player-bar > span:last-child {
+  font-size: var(--font-size-micro);
+  color: var(--ui-muted);
+}
+.player-bar b {
+  margin: 0 5px;
+}
+.player-dot {
+  display: inline-block;
+  border: 1px solid #acb9a2;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.player-dot.black {
+  background: #2c5143;
+  border-color: #2c5143;
+}
+.player-dot.white {
+  background: #f5f2e0;
+}
+.board-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-top: 18px;
+  padding: 12px 0;
+  border-top: 1px solid var(--ui-border);
+}
+.board-navigation button {
+  border: 1px solid var(--ui-border);
+  padding: 5px 12px;
+  font-size: 16px;
+}
+.board-navigation > span {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--ui-muted);
+  font-size: 10px;
+}
+.board-navigation strong {
+  font-size: 13px;
+  color: var(--ui-text);
+  font-weight: 550;
+}
+.board-navigation small {
+  font-size: 9px;
+}
+.position-code {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--ui-surface-alt);
+  margin: 0 -18px;
+  padding: 8px;
+  color: var(--ui-muted);
+  font-size: var(--font-size-micro);
+  letter-spacing: 1px;
+  border-top: 1px solid var(--ui-border);
+}
+.position-code code {
+  font-size: var(--font-size-micro);
+  color: var(--ui-muted);
+  letter-spacing: 0.6px;
+}
+.position-code button {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  font-size: var(--font-size-control);
+  line-height: 16px;
+}
+.board-loading {
+  min-height: 400px;
+  display: grid;
+  place-items: center;
+  color: var(--ui-muted);
+}
+.theme-player-checker {
+  width: 15px;
+  height: 15px;
+  vertical-align: middle;
+  margin-right: 5px;
+}
+.bgblitz-board {
+  border-radius: 5px;
+  background: #22362b;
+}
+.theme-load-error {
+  font-size: var(--font-size-table);
+  color: var(--ui-danger-text);
+}
+@media (max-width: 1150px) {
+  .board-panel {
+    padding: 12px 12px 0;
+  }
+  .position-code {
+    margin: 0 -12px;
+  }
+  .board-navigation > span {
+    gap: 7px;
+  }
+  .board-navigation small {
+    display: none;
+  }
+  .board-navigation strong {
+    font-size: 11px;
+  }
+}
+@media (max-width: 600px) {
+  .board-heading {
+    font-size: 9px;
+  }
+  .board-navigation strong {
+    font-size: 12px;
+  }
+  .board-navigation small {
+    display: block;
+  }
+}

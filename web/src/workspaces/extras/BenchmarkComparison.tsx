@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import EngineLabel from '../../shared/engine/EngineLabel';
+import { formatPly } from '../../shared/format/ply';
 import { useI18n } from '../../shared/i18n/i18n';
 import {
   benchmarkComparisons,
@@ -66,7 +67,7 @@ export default function BenchmarkComparison({
                       <small>{text('threads', { count: threads })}</small>
                     )}
                   </th>
-                  <td>{formatNumber(run.plies)}-ply</td>
+                  <td>{formatPly(run.plies, formatNumber)}</td>
                   <td className="benchmark-number benchmark-median">
                     {ms(median)}
                   </td>

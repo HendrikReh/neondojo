@@ -2,6 +2,7 @@ import type { Candidate, Position } from '../../../shared/http/api';
 import type { PositionAnalysisResult } from '../analysis-catalog-api';
 import type { SourceCandidate } from './source-analysis-api';
 import { projectMove } from '../../../shared/board/move-preview';
+import { formatPly } from '../../../shared/format/ply';
 
 export type CandidatePosition = Pick<
   Position,
@@ -61,7 +62,7 @@ export function nativeCheckerCandidates(
   return candidates.map((candidate) => ({
     ...candidate,
     equity_kind: result?.decision ? 'normalized_cubeful' : 'cubeful',
-    depth: candidate.plies == null ? null : `${candidate.plies}-ply`,
+    depth: candidate.plies == null ? null : formatPly(candidate.plies),
   }));
 }
 
