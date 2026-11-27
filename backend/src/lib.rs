@@ -3,6 +3,7 @@ pub mod api;
 mod async_temp_dir;
 mod backgammon;
 pub mod cube_context;
+mod cursor;
 mod database_pool;
 pub mod engine;
 pub mod engines;
@@ -37,7 +38,7 @@ pub mod opening_book;
 
 pub mod imported_analysis;
 
-pub mod xg_book;
+pub use crate::opening_book::xg_book;
 
 pub mod analysis_statistics;
 pub mod move_assessments;

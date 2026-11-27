@@ -101,25 +101,19 @@ pub(super) fn to_sage(absolute: &[i32; 26], player: i32) -> [i32; 26] {
 
 pub(super) fn from_sage(board: &[i32; 26], player: i32) -> Result<[i32; 26]> {
     ensure!(board[0] >= 0 && board[25] >= 0, "Invalid Sage bar signs");
-    ensure!(
-        board.iter().all(|n| (-15..=15).contains(n)),
-        "Invalid Sage checker count"
-    );
-    ensure!(
-        board[25] + board[1..25].iter().map(|n| (*n).max(0)).sum::<i32>() <= 15
-            && board[0] + board[1..25].iter().map(|n| (-*n).max(0)).sum::<i32>() <= 15,
-        "Too many Sage checkers"
-    );
     let mut absolute = [0; 26];
     for point in 1..25 {
         absolute[point] = if player == 0 {
             board[point]
         } else {
-            -board[25 - point]
+            board[25 - point]
+                .checked_neg()
+                .context("Invalid Sage checker count")?
         };
     }
     absolute[25] = if player == 0 { board[25] } else { board[0] };
     absolute[0] = if player == 0 { -board[0] } else { -board[25] };
+    crate::backgammon::board::validate(&absolute)?;
     Ok(absolute)
 }
 

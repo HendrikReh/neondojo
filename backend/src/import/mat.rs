@@ -10,7 +10,10 @@
 //! cell, has no result, and the next game starts from its own header. The
 //! original file stays unchanged; only the text given to GNUbg is shortened.
 
+mod gnubg;
 mod native;
+pub(crate) use gnubg::import_mat;
+pub use gnubg::normalize_mat;
 pub(crate) use native::{event_date, normalize_native_sgf};
 
 use crate::model::{ImportWarning, ImportWarningKind, MatchGame};

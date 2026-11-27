@@ -83,15 +83,7 @@ pub(super) async fn start(
         let valid = if q.kind == "checker" {
             crate::practice::validate_checker_context(&position).is_ok()
         } else {
-            crate::practice::cube_context(&position, q.kind == "cube_response").is_ok()
-                && (q.kind == "cube_response"
-                    || crate::match_analysis::cube_analysis_available(
-                        &position.board,
-                        &position.gnubg_match_id,
-                        position.player,
-                        position.cube_enabled != Some(false),
-                    )
-                    .unwrap_or(false))
+            crate::cube_context::is_cube_practice_eligible(&position, q.kind == "cube_response")
         };
         if valid {
             questions.push(content::match_card(

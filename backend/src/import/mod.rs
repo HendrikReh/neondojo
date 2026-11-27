@@ -4,7 +4,7 @@
 
 mod bgf;
 mod format;
-pub(crate) mod mat;
+pub mod mat;
 pub(crate) mod match_context;
 pub(crate) mod ogxm;
 pub(crate) mod sgf;

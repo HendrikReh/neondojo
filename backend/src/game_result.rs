@@ -1,6 +1,35 @@
 //! Results are a read-only explanation of source evidence, never a score authority.
 use crate::model::{GameResult, GameResultReason};
 
+/// Single (1), gammon (2), or backgammon (3) multiplier for a terminal board
+/// where `winner` (0 = White, 1 = Black) has borne off all checkers while the
+/// opponent still has checkers remaining.
+pub(crate) fn terminal_multiplier(
+    board: &[i32; 26],
+    winner: i32,
+    jacoby_suppressed: bool,
+) -> Option<i32> {
+    if !matches!(winner, 0 | 1) {
+        return None;
+    }
+    let white: i32 = board.iter().map(|n| (*n).max(0)).sum();
+    let black: i32 = board.iter().map(|n| (-*n).max(0)).sum();
+    let loser_count = match (winner, white, black) {
+        (0, 0, n) if n > 0 => n,
+        (1, n, 0) if n > 0 => n,
+        _ => return None,
+    };
+    if jacoby_suppressed || loser_count < 15 {
+        return Some(1);
+    }
+    let in_home_or_bar = if winner == 0 {
+        board[0] < 0 || board[1..=6].iter().any(|n| *n < 0)
+    } else {
+        board[25] > 0 || board[19..=24].iter().any(|n| *n > 0)
+    };
+    Some(if in_home_or_bar { 3 } else { 2 })
+}
+
 pub(crate) fn derive(
     board: &[i32; 26],
     cube: i32,
@@ -13,33 +42,14 @@ pub(crate) fn derive(
     let observed = if let Some(loser) = dropped_by {
         Some((1 - loser, 1, GameResultReason::Drop))
     } else if terminal_checker {
-        let white: i32 = board.iter().map(|n| (*n).max(0)).sum();
-        let black: i32 = board.iter().map(|n| (-*n).max(0)).sum();
-        let winner = match (white, black) {
-            (0, n) if n > 0 => Some(0),
-            (n, 0) if n > 0 => Some(1),
-            _ => None,
-        };
-        winner.map(|winner| {
-            let loser_count = if winner == 0 { black } else { white };
-            let in_home_or_bar = if winner == 0 {
-                board[0] < 0 || board[1..=6].iter().any(|n| *n < 0)
-            } else {
-                board[25] > 0 || board[19..=24].iter().any(|n| *n > 0)
-            };
-            let multiplier = if jacoby_suppressed || loser_count < 15 {
-                1
-            } else if in_home_or_bar {
-                3
-            } else {
-                2
-            };
+        [0, 1].into_iter().find_map(|winner| {
+            let multiplier = terminal_multiplier(board, winner, jacoby_suppressed)?;
             let reason = match multiplier {
                 3 => GameResultReason::Backgammon,
                 2 => GameResultReason::Gammon,
                 _ => GameResultReason::Single,
             };
-            (winner, multiplier, reason)
+            Some((winner, multiplier, reason))
         })
     } else {
         None

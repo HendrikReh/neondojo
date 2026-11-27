@@ -108,7 +108,7 @@ pub(super) async fn check_book(
             version: 0,
             provider: "backgammondb".into(),
             path: request.path,
-            xg_path: crate::xg_book::default_path(),
+            xg_path: xg_book::default_path(),
         })
         .await,
     ))
@@ -130,20 +130,20 @@ pub(super) async fn install_book(
     ))
 }
 
-#[utoipa::path(post,path="/api/opening-book/xg/check",request_body=BookPathRequest,responses((status=200,body=crate::xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
+#[utoipa::path(post,path="/api/opening-book/xg/check",request_body=BookPathRequest,responses((status=200,body=xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
 pub(super) async fn check_xg_book(
     State(state): State<AppState>,
     Json(request): Json<BookPathRequest>,
-) -> ApiResult<Json<crate::xg_book::XgBookStatus>> {
+) -> ApiResult<Json<xg_book::XgBookStatus>> {
     validate_path(&request.path)?;
     Ok(Json(state.opening_books.xg.status(&request.path).await))
 }
 
-#[utoipa::path(post,path="/api/opening-book/xg/install",request_body=BookPathRequest,responses((status=200,body=crate::xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
+#[utoipa::path(post,path="/api/opening-book/xg/install",request_body=BookPathRequest,responses((status=200,body=xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
 pub(super) async fn install_xg_book(
     State(state): State<AppState>,
     Json(request): Json<BookPathRequest>,
-) -> ApiResult<Json<crate::xg_book::XgBookStatus>> {
+) -> ApiResult<Json<xg_book::XgBookStatus>> {
     validate_path(&request.path)?;
     let config = load(&state.pool).await?;
     Ok(Json(
@@ -203,10 +203,10 @@ pub(super) async fn position_book(
         BookCube,
         BookCubeEquities,
         BookProvenance,
-        crate::xg_book::XgBookStatus,
-        crate::xg_book::XgPositionResult,
-        crate::xg_book::XgEvaluation,
-        crate::xg_book::XgRollout
+        xg_book::XgBookStatus,
+        xg_book::XgPositionResult,
+        xg_book::XgEvaluation,
+        xg_book::XgRollout
     ))
 )]
 pub struct OpeningBookDoc;

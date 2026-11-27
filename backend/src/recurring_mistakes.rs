@@ -4,12 +4,9 @@ use crate::player_scope;
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
     game_plan::GamePlan,
-    match_analysis::{Decision, cube_analysis_available},
+    match_analysis::Decision,
     model::Position,
-    practice::{
-        cube_context,
-        evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation},
-    },
+    practice::evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation},
 };
 use axum::{
     Router,
@@ -259,19 +256,10 @@ fn evaluation_position(question: &MistakePracticeQuestion) -> ApiResult<Cow<'_, 
 fn can_practice_correct_cube(row: &SourceDecision) -> bool {
     match correct_cube_opportunity(&row.decision) {
         Some(MistakeKind::PrematureDouble) => {
-            let p = &row.question.position;
-            cube_context(p, false).is_ok()
-                && cube_analysis_available(
-                    &p.board,
-                    &p.gnubg_match_id,
-                    p.player,
-                    p.cube_enabled != Some(false),
-                )
-                .unwrap_or(false)
+            crate::cube_context::is_cube_practice_eligible(&row.question.position, false)
         }
-        Some(MistakeKind::WrongTake | MistakeKind::WrongPass) => {
-            evaluation_position(&row.question).is_ok_and(|p| cube_context(&p, true).is_ok())
-        }
+        Some(MistakeKind::WrongTake | MistakeKind::WrongPass) => evaluation_position(&row.question)
+            .is_ok_and(|p| crate::cube_context::is_cube_practice_eligible(&p, true)),
         _ => false,
     }
 }
@@ -306,7 +294,7 @@ async fn list(
     };
     let names = player_scope::names(&s.pool, &player).await?;
     let independent_only = q.independent_only.unwrap_or(false);
-    let mut tx = source::read_snapshot(&s.pool).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
     index::require_current(&mut tx, q.database_id, &names, independent_only).await?;
     let (groups, decisions, matches) = index::groups(
         &mut tx,

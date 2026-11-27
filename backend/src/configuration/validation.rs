@@ -100,70 +100,82 @@ pub(super) fn upgrade_columns(config: &mut ProfileConfiguration) {
     }
 }
 
-pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfiguration> {
-    upgrade_columns(&mut config);
-    if config.schema_version != 1 {
+fn position_id(path: &str, value: &str) -> Result<()> {
+    if !value.is_empty() && !crate::engine::valid_id(value, 14) {
         return Err(ConfigurationError::invalid(
-            "schema_version",
-            "Expected schema version 1",
+            path,
+            "Expected 14-character GNUbg position ID",
         ));
     }
-    text(
-        "general.player_name",
-        &mut config.general.player_name,
-        120,
-        false,
-    )?;
-    if !config.analysis.error_thresholds.valid() {
+    Ok(())
+}
+
+fn normalize_tag(path: &str, value: &mut String) -> Result<()> {
+    *value = crate::annotations::normalize_tag(value)
+        .map_err(|error| ConfigurationError::invalid(path, error.1.error))?;
+    Ok(())
+}
+
+fn normalize_general(general: &ConfigurationGeneral) -> Result<()> {
+    if !crate::settings::valid_player_name(&general.player_name) {
+        return Err(ConfigurationError::invalid(
+            "general.player_name",
+            crate::settings::PLAYER_NAME_RULE,
+        ));
+    }
+    Ok(())
+}
+
+fn normalize_analysis(analysis: &ConfigurationAnalysis) -> Result<()> {
+    if !analysis.error_thresholds.valid() {
         return Err(ConfigurationError::invalid(
             "analysis.error_thresholds",
             "Error thresholds must increase strictly, be greater than zero, and be at most one",
         ));
     }
-    if !crate::engines::EngineId::from(&config.analysis.engine)
-        .depths("analysis")
-        .contains(&config.analysis.plies)
-    {
+    let engine = crate::engines::EngineId::from(&analysis.engine);
+    if !crate::settings::valid_engine_depth(engine.id(), "analysis", analysis.plies) {
         return Err(ConfigurationError::invalid(
             "analysis.plies",
             "Analysis depth is not verified for the selected engine",
         ));
     }
-    if !crate::engines::EngineId::from(&config.play.engine)
-        .depths("play")
-        .contains(&config.play.plies)
-    {
+    Ok(())
+}
+
+fn normalize_play(play: &ConfigurationPlay) -> Result<()> {
+    let engine = crate::engines::EngineId::from(&play.engine);
+    if !crate::settings::valid_engine_depth(engine.id(), "play", play.plies) {
         return Err(ConfigurationError::invalid(
             "play.plies",
             "Play depth is not verified for the selected engine",
         ));
     }
-    if config.play.top_two
-        && !crate::engines::EngineId::from(&config.play.engine).supports_top_two(config.play.plies)
-    {
+    if play.top_two && !crate::settings::supports_top_two(engine.id(), play.plies) {
         return Err(ConfigurationError::invalid(
             "play.top_two",
             crate::settings::TOP_TWO_PROFILE_ERROR,
         ));
     }
-    if !(0..=1).contains(&config.play.human_player) || !(0..=25).contains(&config.play.match_length)
+    if !crate::settings::valid_human_player(play.human_player)
+        || !crate::settings::valid_play_match_length(play.match_length)
     {
         return Err(ConfigurationError::invalid(
             "play.match_length",
-            "Human player must be 0 or 1 and match length 0 (money game) or 1..25",
+            crate::settings::PLAY_MATCH_LENGTH_RULE,
         ));
     }
-    if !config.play.tutor_threshold.is_finite()
-        || config.play.tutor_threshold <= 0.0
-        || config.play.tutor_threshold > 1.0
-    {
+    if !crate::settings::valid_tutor_threshold(play.tutor_threshold) {
         return Err(ConfigurationError::invalid(
             "play.tutor_threshold",
-            "Threshold must be greater than zero and at most one",
+            crate::settings::TUTOR_THRESHOLD_RULE,
         ));
     }
+    Ok(())
+}
+
+fn normalize_appearance(appearance: &ConfigurationAppearance) -> Result<()> {
     let options = &*super::OPTIONS;
-    let appearance = &config.appearance;
     let board_themes = options["board_themes"]
         .as_array()
         .expect("embedded board themes");
@@ -197,23 +209,23 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
     for (path, width) in [
         (
             "appearance.analysis_board_width",
-            config.appearance.analysis_board_width,
+            appearance.analysis_board_width,
         ),
         (
             "appearance.analysis_overview_board_width",
-            config.appearance.analysis_overview_board_width,
+            appearance.analysis_overview_board_width,
         ),
         (
             "appearance.analysis_errors_board_width",
-            config.appearance.analysis_errors_board_width,
+            appearance.analysis_errors_board_width,
         ),
         (
             "appearance.analysis_statistics_board_width",
-            config.appearance.analysis_statistics_board_width,
+            appearance.analysis_statistics_board_width,
         ),
         (
             "appearance.analysis_notes_board_width",
-            config.appearance.analysis_notes_board_width,
+            appearance.analysis_notes_board_width,
         ),
     ] {
         if width.is_some_and(|width| !(min..=max).contains(&i64::from(width))) {
@@ -223,9 +235,13 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             ));
         }
     }
+    Ok(())
+}
+
+fn normalize_opening_book(book: &ConfigurationBook) -> Result<()> {
     for (name, value) in [
-        ("opening_book.path", &config.opening_book.path),
-        ("opening_book.xg_path", &config.opening_book.xg_path),
+        ("opening_book.path", &book.path),
+        ("opening_book.xg_path", &book.xg_path),
     ] {
         if value.is_empty()
             || value.len() > 4096
@@ -238,65 +254,41 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             ));
         }
     }
-    if !config.library.database_id.is_empty()
-        && Uuid::parse_str(&config.library.database_id).is_err()
-    {
+    Ok(())
+}
+
+fn normalize_library(library: &mut ConfigurationLibrary) -> Result<()> {
+    if !library.database_id.is_empty() && Uuid::parse_str(&library.database_id).is_err() {
         return Err(ConfigurationError::invalid(
             "library.database_id",
             "Expected a database UUID",
         ));
     }
-    choice(
-        "library.sort",
-        &config.library.sort,
-        &[
-            "occurrence_database",
-            "occurrence_game",
-            "occurrence_move",
-            "id",
-            "name",
-            "white",
-            "white_pr",
-            "black",
-            "black_pr",
-            "match_length",
-            "result",
-            "score",
-            "played_at",
-            "created_at",
-            "tournament",
-            "format",
-            "position_count",
-            "analysis_status",
-            "tags",
-            "comment",
-        ],
-    )?;
+    if crate::databases::sort_spec(&library.sort).is_none() {
+        return Err(ConfigurationError::invalid(
+            "library.sort",
+            "Unsupported value",
+        ));
+    }
     let all: std::collections::BTreeSet<_> = LIBRARY_COLUMNS
         .iter()
         .map(|(id, _)| id.to_string())
         .collect();
-    let order: std::collections::BTreeSet<_> =
-        config.library.column_order.iter().cloned().collect();
-    if order != all || config.library.column_order.len() != all.len() {
+    let order: std::collections::BTreeSet<_> = library.column_order.iter().cloned().collect();
+    if order != all || library.column_order.len() != all.len() {
         return Err(ConfigurationError::invalid(
             "library.column_order",
             "Column order must contain every data column exactly once",
         ));
     }
-    let shown: std::collections::BTreeSet<_> =
-        config.library.visible_columns.iter().cloned().collect();
-    if shown.is_empty()
-        || !shown.is_subset(&all)
-        || shown.len() != config.library.visible_columns.len()
-    {
+    let shown: std::collections::BTreeSet<_> = library.visible_columns.iter().cloned().collect();
+    if shown.is_empty() || !shown.is_subset(&all) || shown.len() != library.visible_columns.len() {
         return Err(ConfigurationError::invalid(
             "library.visible_columns",
             "At least one known data column is required, without duplicates",
         ));
     }
-    config.library.visible_columns = config
-        .library
+    library.visible_columns = library
         .column_order
         .iter()
         .filter(|id| shown.contains(*id))
@@ -312,49 +304,20 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
     ]);
     widths(
         "library.column_widths",
-        &config.library.column_widths,
+        &library.column_widths,
         &library_widths,
     )?;
-    widths(
-        "positions.column_widths",
-        &config.positions.column_widths,
-        POSITION_COLUMNS,
-    )?;
-    let position_columns = POSITION_COLUMNS
-        .iter()
-        .map(|&(id, _)| id)
-        .filter(|id| !matches!(*id, "select" | "actions" | "played_move"));
-    let shown: std::collections::BTreeSet<_> = config
-        .positions
-        .visible_columns
-        .iter()
-        .map(String::as_str)
-        .collect();
-    let canonical: Vec<_> = position_columns
-        .filter(|id| shown.contains(id))
-        .map(str::to_owned)
-        .collect();
-    if canonical.is_empty() || canonical.len() != config.positions.visible_columns.len() {
-        return Err(ConfigurationError::invalid(
-            "positions.visible_columns",
-            "At least one known data column is required, without duplicates",
-        ));
-    }
-    config.positions.visible_columns = canonical;
-    let f = &mut config.library.filters;
-    f.tag = f
-        .tag
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase();
+    normalize_library_filters(&mut library.filters)
+}
+
+fn normalize_library_filters(f: &mut ConfigurationLibraryFilters) -> Result<()> {
+    normalize_tag("library.filters.tag", &mut f.tag)?;
     for (key, value, max) in [
         ("q", &mut f.q, 240),
         ("player", &mut f.player, 240),
         ("date_from", &mut f.date_from, 10),
         ("date_to", &mut f.date_to, 10),
         ("date_field", &mut f.date_field, 16),
-        ("tag", &mut f.tag, 64),
         ("comment", &mut f.comment, 240),
         ("position_id", &mut f.position_id, 14),
         ("tournament", &mut f.tournament, 240),
@@ -362,34 +325,28 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
         ("match_name", &mut f.match_name, 240),
         ("match_type", &mut f.match_type, 32),
         ("result", &mut f.result, 32),
-        ("match_points_min", &mut f.match_points_min, 8),
-        ("match_points_max", &mut f.match_points_max, 8),
+        ("match_points_min", &mut f.match_points_min, 10),
+        ("match_points_max", &mut f.match_points_max, 10),
     ] {
         text(&format!("library.filters.{key}"), value, max, true)?;
     }
     choice(
         "library.filters.date_field",
         &f.date_field,
-        &["played", "imported"],
+        crate::databases::DATE_FIELDS,
     )?;
-    choice(
-        "library.filters.match_type",
-        &f.match_type,
-        &["", "match", "money"],
-    )?;
-    choice(
-        "library.filters.result",
-        &f.result,
-        &[
-            "",
-            "completed",
-            "ongoing",
-            "unknown",
-            "white_won",
-            "black_won",
-            "draw",
-        ],
-    )?;
+    if !f.match_type.is_empty() && !crate::databases::MATCH_TYPES.contains(&f.match_type.as_str()) {
+        return Err(ConfigurationError::invalid(
+            "library.filters.match_type",
+            "Unsupported value",
+        ));
+    }
+    if !f.result.is_empty() && !crate::databases::RESULT_STATES.contains(&f.result.as_str()) {
+        return Err(ConfigurationError::invalid(
+            "library.filters.result",
+            "Unsupported value",
+        ));
+    }
     for (key, value) in [("date_from", &f.date_from), ("date_to", &f.date_to)] {
         if !value.is_empty() && chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_err() {
             return Err(ConfigurationError::invalid(
@@ -404,79 +361,101 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             "Date range is reversed",
         ));
     }
-    let bounds: std::result::Result<Vec<_>, _> = [&f.match_points_min, &f.match_points_max]
-        .iter()
-        .map(|value| {
-            if value.is_empty() {
-                Ok(None)
-            } else {
-                value.parse::<i32>().map(Some)
-            }
-        })
-        .collect();
-    let bounds = bounds.map_err(|_| {
-        ConfigurationError::invalid(
-            "library.filters.match_points_min",
-            "Expected integer bounds",
-        )
-    })?;
-    if bounds.iter().flatten().any(|n| !(0..=32767).contains(n))
-        || bounds[0].zip(bounds[1]).is_some_and(|(a, b)| a > b)
-    {
+    let parse_points = |value: &str| -> Result<Option<i32>> {
+        if value.is_empty() {
+            Ok(None)
+        } else {
+            value.parse::<i32>().map(Some).map_err(|_| {
+                ConfigurationError::invalid(
+                    "library.filters.match_points_min",
+                    "Expected integer bounds",
+                )
+            })
+        }
+    };
+    let min_points = parse_points(&f.match_points_min)?;
+    let max_points = parse_points(&f.match_points_max)?;
+    if !crate::databases::valid_match_points_range(min_points, max_points) {
         return Err(ConfigurationError::invalid(
             "library.filters.match_points_min",
             "Invalid match points range",
         ));
     }
-    config.positions.definition = config
-        .positions
+    position_id("library.filters.position_id", &f.position_id)
+}
+
+fn normalize_positions(positions: &mut ConfigurationPositions) -> Result<()> {
+    widths(
+        "positions.column_widths",
+        &positions.column_widths,
+        POSITION_COLUMNS,
+    )?;
+    let position_columns = POSITION_COLUMNS
+        .iter()
+        .map(|&(id, _)| id)
+        .filter(|id| !matches!(*id, "select" | "actions" | "played_move"));
+    let shown: std::collections::BTreeSet<_> = positions
+        .visible_columns
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let canonical: Vec<_> = position_columns
+        .filter(|id| shown.contains(id))
+        .map(str::to_owned)
+        .collect();
+    if canonical.is_empty() || canonical.len() != positions.visible_columns.len() {
+        return Err(ConfigurationError::invalid(
+            "positions.visible_columns",
+            "At least one known data column is required, without duplicates",
+        ));
+    }
+    positions.visible_columns = canonical;
+    positions.definition = positions
         .definition
+        .clone()
         .validate()
         .map_err(|e| ConfigurationError::invalid("positions.definition", e.1.error))?;
-    let f = &mut config.learning.filters;
-    choice(
-        "learning.filters.game_plan",
-        &f.game_plan,
-        &[
-            "",
-            "opening",
-            "pure_race",
-            "racing",
-            "attacking",
-            "priming",
-            "anchoring",
-        ],
-    )?;
+    Ok(())
+}
+
+fn normalize_learning(learning: &mut ConfigurationLearning) -> Result<()> {
+    let f = &mut learning.filters;
+    if !f.game_plan.is_empty() && crate::game_plan::GamePlan::parse(&f.game_plan).is_none() {
+        return Err(ConfigurationError::invalid(
+            "learning.filters.game_plan",
+            "Unsupported value",
+        ));
+    }
+    normalize_tag("learning.filters.tag", &mut f.tag)?;
     for (key, value, max) in [
         ("q", &mut f.q, 200),
         ("player", &mut f.player, 240),
-        ("tag", &mut f.tag, 64),
         ("topics", &mut f.topics, 650),
         ("comment", &mut f.comment, 200),
         ("position_id", &mut f.position_id, 14),
     ] {
         text(&format!("learning.filters.{key}"), value, max, true)?;
     }
-    choice(
-        "learning.filters.kind",
-        &f.kind,
-        &["", "checker", "cube_offer", "cube_response"],
-    )?;
-    f.tag = f.tag.to_lowercase();
-    choice(
-        "learning.filters.status",
-        &f.status,
-        &["", "new", "due", "reviewed"],
-    )?;
-    if !config.learning.is_collection_scope() && Uuid::parse_str(&config.learning.deck_id).is_err()
-    {
+    if !f.kind.is_empty() && crate::learning::CardKind::parse(&f.kind).is_none() {
+        return Err(ConfigurationError::invalid(
+            "learning.filters.kind",
+            "Unsupported value",
+        ));
+    }
+    if !f.status.is_empty() && crate::learning::CardReviewState::parse(&f.status).is_none() {
+        return Err(ConfigurationError::invalid(
+            "learning.filters.status",
+            "Unsupported value",
+        ));
+    }
+    position_id("learning.filters.position_id", &f.position_id)?;
+    if !learning.is_collection_scope() && Uuid::parse_str(&learning.deck_id).is_err() {
         return Err(ConfigurationError::invalid(
             "learning.deck_id",
             "Expected a deck UUID or a collection scope",
         ));
     }
-    if !config.learning.generation.min_loss.is_finite() || config.learning.generation.min_loss < 0.0
-    {
+    if !learning.generation.min_loss.is_finite() || learning.generation.min_loss < 0.0 {
         return Err(ConfigurationError::invalid(
             "learning.generation.min_loss",
             "Loss must be finite and nonnegative",
@@ -484,24 +463,21 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
     }
     text(
         "learning.generation.player",
-        &mut config.learning.generation.player,
+        &mut learning.generation.player,
         240,
         true,
     )?;
     choice(
         "learning.generation.player",
-        &config.learning.generation.player,
+        &learning.generation.player,
         &["", "0", "1"],
-    )?;
-    if let Some(f) = &mut config.annotations.filters {
-        f.tag = f
-            .tag
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .to_lowercase();
+    )
+}
+
+fn normalize_annotations(annotations: &mut ConfigurationAnnotations) -> Result<()> {
+    if let Some(f) = &mut annotations.filters {
+        normalize_tag("annotations.filters.tag", &mut f.tag)?;
         text("annotations.filters.q", &mut f.q, 200, true)?;
-        text("annotations.filters.tag", &mut f.tag, 64, true)?;
         choice(
             "annotations.filters.kind",
             &f.kind,
@@ -523,39 +499,41 @@ pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfi
             ));
         }
     }
-    choice("review.player", &config.review.player, &["", "0", "1"])?;
+    Ok(())
+}
+
+fn normalize_review(review: &ConfigurationReview) -> Result<()> {
+    choice("review.player", &review.player, &["", "0", "1"])?;
     choice(
         "review.kind",
-        &config.review.kind,
+        &review.kind,
         &["", "checker", "cube", "cube_offer", "cube_response"],
     )?;
     choice(
         "review.severity",
-        &config.review.severity,
+        &review.severity,
         &["", "none", "doubtful", "bad", "blunder", "very_bad"],
-    )?;
-    for (path, value) in [
-        (
-            "library.filters.position_id",
-            &config.library.filters.position_id,
-        ),
-        (
-            "learning.filters.position_id",
-            &config.learning.filters.position_id,
-        ),
-    ] {
-        if !value.is_empty()
-            && (value.len() != 14
-                || !value
-                    .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || b"+/".contains(&c)))
-        {
-            return Err(ConfigurationError::invalid(
-                path,
-                "Expected 14-character GNUbg position ID",
-            ));
-        }
+    )
+}
+
+pub(crate) fn normalize(mut config: ProfileConfiguration) -> Result<ProfileConfiguration> {
+    upgrade_columns(&mut config);
+    if config.schema_version != 1 {
+        return Err(ConfigurationError::invalid(
+            "schema_version",
+            "Expected schema version 1",
+        ));
     }
+    normalize_general(&config.general)?;
+    normalize_analysis(&config.analysis)?;
+    normalize_play(&config.play)?;
+    normalize_appearance(&config.appearance)?;
+    normalize_opening_book(&config.opening_book)?;
+    normalize_library(&mut config.library)?;
+    normalize_positions(&mut config.positions)?;
+    normalize_learning(&mut config.learning)?;
+    normalize_annotations(&mut config.annotations)?;
+    normalize_review(&config.review)?;
     Ok(config)
 }
 

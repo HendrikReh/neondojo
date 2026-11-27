@@ -888,3 +888,113 @@ async fn cards_move_and_duplicates_can_be_resolved_without_changing_keeper_progr
             .any(|c| c["id"] == shared_id && c["review_count"] == 1)
     );
 }
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cubeful_and_nocube_cards_are_not_grouped_as_duplicates_and_nocube_duplicates_resolve(
+    pool: PgPool,
+) {
+    let positions = positions(&pool).await;
+    let app = app(&pool);
+    let deck = create(&app, "Cube rules").await;
+    let deck_id = Uuid::parse_str(deck["id"].as_str().unwrap()).unwrap();
+    add(&app, &deck, &[positions[0].id]).await;
+
+    let (_, listed_cards) = call(
+        &app,
+        "GET",
+        &format!("/api/decks/{deck_id}/cards"),
+        Value::Null,
+    )
+    .await;
+    let cubeful = &listed_cards["items"][0];
+    let cubeful_id = Uuid::parse_str(cubeful["id"].as_str().unwrap()).unwrap();
+
+    // Add a NoCube card for the exact same position_id, gnubg_match_id and kind.
+    let nocube_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO learning_cards(id,signature,payload)
+         SELECT $1, signature || ':nocube', jsonb_set(payload, '{position,cube_enabled}', 'false'::jsonb, true)
+         FROM learning_cards WHERE id=$2",
+    )
+    .bind(nocube_id)
+    .bind(cubeful_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO deck_cards(deck_id,card_id) VALUES($1,$2)")
+        .bind(deck_id)
+        .bind(nocube_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Cubeful and NoCube cards have distinct identities and must not be grouped as duplicates.
+    let (status, duplicates) = call(&app, "GET", "/api/cards/duplicates?page=1", Value::Null).await;
+    assert_eq!(status, 200, "{duplicates}");
+    assert_eq!(duplicates["total"], 0, "{duplicates}");
+    assert!(duplicates["items"].as_array().unwrap().is_empty());
+
+    // Attempting to resolve a cubeful card against a NoCube card is rejected with 422.
+    let (status, error) = call(
+        &app,
+        "POST",
+        "/api/cards/duplicates/resolve",
+        json!({"keep_id": cubeful_id, "keep_version": 0, "delete_id": nocube_id, "delete_version": 0}),
+    )
+    .await;
+    assert_eq!(status, 422, "{error}");
+
+    // Insert a real duplicate of the NoCube card with a noncanonical legacy signature.
+    let nocube_dup_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO learning_cards(id,signature,payload)
+         SELECT $1, 'legacy nocube duplicate', payload FROM learning_cards WHERE id=$2",
+    )
+    .bind(nocube_dup_id)
+    .bind(nocube_id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    sqlx::query("INSERT INTO deck_cards(deck_id,card_id) VALUES($1,$2)")
+        .bind(deck_id)
+        .bind(nocube_dup_id)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let (status, duplicates) = call(&app, "GET", "/api/cards/duplicates?page=1", Value::Null).await;
+    assert_eq!(status, 200, "{duplicates}");
+    assert_eq!(duplicates["total"], 2, "{duplicates}");
+    let entries = duplicates["items"].as_array().unwrap();
+    assert_eq!(entries.len(), 2);
+    assert!(
+        entries
+            .iter()
+            .all(|entry| entry["card"]["id"] != json!(cubeful_id))
+    );
+    let key = entries[0]["duplicate_key"].as_str().unwrap();
+    assert!(key.ends_with(":nocube"), "expected :nocube key, got {key}");
+    assert_eq!(duplicates["peers"][key].as_array().unwrap().len(), 2);
+
+    // Resolving the two NoCube duplicates succeeds and preserves the canonical :nocube signature.
+    let (status, resolved) = call(
+        &app,
+        "POST",
+        "/api/cards/duplicates/resolve",
+        json!({"keep_id": nocube_dup_id, "keep_version": 0, "delete_id": nocube_id, "delete_version": 0}),
+    )
+    .await;
+    assert_eq!((status, resolved), (204, Value::Null));
+    let kept_signature: String =
+        sqlx::query_scalar("SELECT signature FROM learning_cards WHERE id=$1")
+            .bind(nocube_dup_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(kept_signature, key);
+
+    let (status, after) = call(&app, "GET", "/api/cards/duplicates?page=1", Value::Null).await;
+    assert_eq!(status, 200, "{after}");
+    assert_eq!(after["total"], 0, "{after}");
+    assert!(after["items"].as_array().unwrap().is_empty());
+}

@@ -70,18 +70,13 @@ fn source(session: &PlaySession, sgf: &str) -> String {
     super::forfeit::annotate(session, source)
 }
 
-// GNUbg 1.05.002 loses SETBOARD's fPlayer on export and writes PL[W]
-// even for Black. Archive a strict, interoperable SGF rather than requiring
-// every ordinary library consumer to know this native exporter quirk.
-pub(super) fn normalize_native_setup_turn(source: String) -> Result<String> {
-    let mut trees = crate::import::sgf::parse_trees(&source)?;
-    let mut changed = false;
-    for nodes in &mut trees {
-        for index in 0..nodes.len() {
-            if !["AE", "AW", "AB"]
-                .iter()
-                .any(|key| nodes[index].contains_key(*key))
-            {
+fn setup_turn_patches(
+    trees: &[Vec<crate::import::sgf::Node>],
+) -> Vec<(usize, usize, &'static str)> {
+    let mut patches = Vec::new();
+    for (tree_index, nodes) in trees.iter().enumerate() {
+        for (index, node) in nodes.iter().enumerate() {
+            if !["AE", "AW", "AB"].iter().any(|key| node.contains_key(*key)) {
                 continue;
             }
             let player = nodes[index..].iter().find_map(|node| {
@@ -94,28 +89,70 @@ pub(super) fn normalize_native_setup_turn(source: String) -> Result<String> {
                 }
             });
             if let Some(player) = player
-                && nodes[index]
+                && node
                     .get("PL")
                     .and_then(|value| value.first())
                     .map(String::as_str)
                     != Some(player)
             {
-                nodes[index].insert("PL".into(), vec![player.into()]);
-                changed = true;
+                patches.push((tree_index, index, player));
             }
         }
     }
-    if !changed {
+    patches
+}
+
+fn apply_setup_turn_patches(
+    trees: &mut [Vec<crate::import::sgf::Node>],
+    patches: Vec<(usize, usize, &'static str)>,
+) {
+    for (tree_index, node_index, player) in patches {
+        trees[tree_index][node_index].insert("PL".into(), vec![player.into()]);
+    }
+}
+
+// GNUbg 1.05.002 loses SETBOARD's fPlayer on export and writes PL[W]
+// even for Black. Archive a strict, interoperable SGF rather than requiring
+// every ordinary library consumer to know this native exporter quirk.
+pub(super) fn normalize_native_setup_turn(source: String) -> Result<String> {
+    let mut trees = crate::import::sgf::parse_trees(&source)?;
+    let patches = setup_turn_patches(&trees);
+    if patches.is_empty() {
         return Ok(source);
     }
-    let (_, native_context) = crate::import::sgf::parse_native_sgf_with_context(&source)?;
-    let output = crate::import::sgf::serialize_trees(&trees);
-    let (_, strict_context) = crate::import::sgf::parse_sgf_with_context(&output)?;
+    let (_, native_context) = crate::import::sgf::replay_trees(&trees, true, None)?;
+    apply_setup_turn_patches(&mut trees, patches);
+    let (_, strict_context) = crate::import::sgf::replay_trees(&trees, false, None)?;
     ensure!(
         native_context == strict_context,
         "Native setup normalization changed a decision context"
     );
-    Ok(output)
+    Ok(crate::import::sgf::serialize_trees(&trees))
+}
+
+/// Parses `source` once, fixes GNUbg 1.05.002's `SETBOARD` `PL[W]` quirk when
+/// present (verifying decision-context equivalence), and returns both the
+/// normalized SGF and the replayed match.
+pub(super) fn normalize_and_replay_native(
+    source: String,
+    native_setup_turn: bool,
+    source_moves: Option<&mut Vec<crate::import::sgf::SourceMove>>,
+) -> Result<(String, crate::import::ImportedMatch)> {
+    let mut trees = crate::import::sgf::parse_trees(&source)?;
+    let patches = setup_turn_patches(&trees);
+    if patches.is_empty() {
+        let (imported, _) =
+            crate::import::sgf::replay_trees(&trees, native_setup_turn, source_moves)?;
+        return Ok((source, imported));
+    }
+    let (_, native_context) = crate::import::sgf::replay_trees(&trees, true, None)?;
+    apply_setup_turn_patches(&mut trees, patches);
+    let (imported, strict_context) = crate::import::sgf::replay_trees(&trees, false, source_moves)?;
+    ensure!(
+        native_context == strict_context,
+        "Native setup normalization changed a decision context"
+    );
+    Ok((crate::import::sgf::serialize_trees(&trees), imported))
 }
 
 pub(super) enum ArchiveTarget {
@@ -133,8 +170,7 @@ pub(super) async fn sync(
     // worker while the caller's transaction is open.
     let source = source(session, sgf);
     let (sgf, imported, hash) = tokio::task::spawn_blocking(move || {
-        let sgf = normalize_native_setup_turn(source)?;
-        let (imported, _) = crate::import::sgf::parse_sgf_with_context(&sgf)?;
+        let (sgf, imported) = normalize_and_replay_native(source, false, None)?;
         let hash = format!("{:x}", Sha256::digest(sgf.as_bytes()));
         anyhow::Ok((sgf, imported, hash))
     })

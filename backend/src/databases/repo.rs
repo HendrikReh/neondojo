@@ -1,22 +1,46 @@
 use super::*;
 
+pub(crate) async fn library_database_exists<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    id: Uuid,
+) -> ApiResult<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
+    )
+    .bind(id)
+    .fetch_one(db)
+    .await
+    .map_err(anyhow::Error::from)?)
+}
+
+pub(crate) async fn require_library_database<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    id: Uuid,
+) -> ApiResult<()> {
+    if !library_database_exists(db, id).await? {
+        return Err(ApiError::missing());
+    }
+    Ok(())
+}
+
+pub(crate) async fn require_library_database_invalid<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    id: Uuid,
+    message: &str,
+) -> ApiResult<()> {
+    if !library_database_exists(db, id).await? {
+        return Err(ApiError::invalid(message));
+    }
+    Ok(())
+}
+
 pub(crate) async fn require_library_destination(pool: &PgPool, id: Uuid) -> ApiResult<()> {
     if id == PAUSED_MATCHES_DATABASE_ID {
         return Err(conflict(
             "Only paused sessions can be added to Paused Matches",
         ));
     }
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
-    )
-    .bind(id)
-    .fetch_one(pool)
-    .await
-    .map_err(anyhow::Error::from)?;
-    if !exists {
-        return Err(ApiError::missing());
-    }
-    Ok(())
+    require_library_database(pool, id).await
 }
 
 #[derive(Clone, Copy)]

@@ -56,6 +56,48 @@ type CheckerChoice = (
     Option<EngineCost>,
 );
 
+fn legal_move_boards(
+    board: &[i32],
+    player: i32,
+    dice: &[i32],
+    legal_moves: &[super::PlayMove],
+) -> Result<Vec<(usize, [i32; 26])>> {
+    legal_moves
+        .iter()
+        .enumerate()
+        .map(|(index, choice)| {
+            Ok((
+                index,
+                super::native_move_board(board, player, dice, choice)?,
+            ))
+        })
+        .collect()
+}
+
+/// Match `target` against `entries` by exact board equality, falling back to a
+/// terminal bear-off entry when `target` also bears off all of `player`'s
+/// checkers (NeonGammon can stop at a winning bear-off before using all
+/// playable dice).
+fn match_sage_board<'a, T>(
+    entries: &'a [T],
+    board_of: impl Fn(&T) -> &[i32; 26],
+    target: &[i32; 26],
+    player: i32,
+) -> Option<&'a T> {
+    entries
+        .iter()
+        .find(|entry| board_of(entry) == target)
+        .or_else(|| {
+            all_borne_off(target, player)
+                .then(|| {
+                    entries
+                        .iter()
+                        .find(|entry| all_borne_off(board_of(entry), player))
+                })
+                .flatten()
+        })
+}
+
 async fn chosen_move(
     bot: &SageEngine,
     snapshot: &NativeSnapshot,
@@ -84,42 +126,59 @@ async fn chosen_move(
         );
         return Ok((None, candidates, cost));
     }
-    let mut legal = HashMap::new();
-    for choice in &snapshot.legal_moves {
-        let board =
-            super::native_move_board(&snapshot.board, snapshot.player, &snapshot.dice, choice)?;
-        if board == best.board {
-            return Ok((Some(choice.notation.clone()), candidates, cost));
-        }
-        legal.entry(board).or_insert(choice.notation.as_str());
+    let legal = legal_move_boards(
+        &snapshot.board,
+        snapshot.player,
+        &snapshot.dice,
+        &snapshot.legal_moves,
+    )?;
+    let &(matched_index, matched_board) =
+        match_sage_board(&legal, |(_, board)| board, &best.board, snapshot.player).ok_or_else(
+            || {
+                anyhow::anyhow!(
+                    "NeonGammon best move is absent from GNUbg legal results for {} (player {}, dice {:?}): best {:?} -> {:?}; GNUbg has {} candidates",
+                    snapshot.native_id,
+                    snapshot.player,
+                    snapshot.dice,
+                    best.notation,
+                    best.board,
+                    legal.len()
+                )
+            },
+        )?;
+    if matched_board == best.board {
+        return Ok((
+            Some(snapshot.legal_moves[matched_index].notation.clone()),
+            candidates,
+            cost,
+        ));
     }
-
-    // Sage can stop at a winning bear-off before using all playable dice.
-    // Use its highest-ranked native candidate only for this terminal discrepancy.
-    let bore_off =
-        |candidate: &SageCheckerCandidate| all_borne_off(&candidate.board, snapshot.player);
+    // Sage stopped at a winning bear-off before using all playable dice.
+    // Prefer its highest-ranked exact legal winning candidate when present;
+    // otherwise align the winning best candidate with the matched legal move.
+    let legal_by_board: HashMap<[i32; 26], &str> = legal
+        .iter()
+        .map(|&(index, board)| (board, snapshot.legal_moves[index].notation.as_str()))
+        .collect();
     let first_legal = candidates
         .iter()
-        .find(|candidate| legal.contains_key(&candidate.board));
-    ensure!(
-        bore_off(best) && first_legal.is_some_and(bore_off),
-        "NeonGammon best move is absent from GNUbg legal results for {} (player {}, dice {:?}): best {:?} -> {:?}; GNUbg has {} candidates",
-        snapshot.native_id,
-        snapshot.player,
-        snapshot.dice,
-        best.notation,
-        best.board,
-        legal.len()
-    );
-    // The first retained candidate and its notation must describe the played board.
-    candidates.retain_mut(|candidate| {
-        let Some(&notation) = legal.get(&candidate.board) else {
-            return false;
-        };
-        candidate.notation = notation.to_owned();
-        true
-    });
-    Ok((Some(candidates[0].notation.clone()), candidates, cost))
+        .find(|candidate| legal_by_board.contains_key(&candidate.board));
+    if first_legal.is_some_and(|candidate| all_borne_off(&candidate.board, snapshot.player)) {
+        // The first retained candidate and its notation must describe the played board.
+        candidates.retain_mut(|candidate| {
+            let Some(&notation) = legal_by_board.get(&candidate.board) else {
+                return false;
+            };
+            candidate.notation = notation.to_owned();
+            true
+        });
+        return Ok((Some(candidates[0].notation.clone()), candidates, cost));
+    }
+    let notation = snapshot.legal_moves[matched_index].notation.clone();
+    candidates[0].board = matched_board;
+    candidates[0].notation = notation.clone();
+    candidates.truncate(1);
+    Ok((Some(notation), candidates, cost))
 }
 
 pub(super) struct ChosenAction {
@@ -206,28 +265,16 @@ async fn choose_difficulty(
             let chosen = bot
                 .opponent_checker_board(position, context, difficulty, seed)
                 .await?;
-            let mut winning = None;
-            for choice in &snapshot.legal_moves {
-                let board = super::native_move_board(
-                    &snapshot.board,
-                    snapshot.player,
-                    &snapshot.dice,
-                    choice,
-                )?;
-                if chosen == board {
-                    return Ok(("move", Some(choice.notation.clone())));
-                }
-                if winning.is_none() && all_borne_off(&board, snapshot.player) {
-                    winning = Some(choice);
-                }
-            }
-            // A terminal NeonGammon play can stop before using all playable dice.
-            if let Some(choice) = winning
-                && all_borne_off(&chosen, snapshot.player)
-            {
-                return Ok(("move", Some(choice.notation.clone())));
-            }
-            anyhow::bail!("NeonGammon opponent selected an illegal checker board");
+            let legal = legal_move_boards(
+                &snapshot.board,
+                snapshot.player,
+                &snapshot.dice,
+                &snapshot.legal_moves,
+            )?;
+            let &(index, _) =
+                match_sage_board(&legal, |(_, board)| board, &chosen, snapshot.player)
+                    .context("NeonGammon opponent selected an illegal checker board")?;
+            return Ok(("move", Some(snapshot.legal_moves[index].notation.clone())));
         }
         PlayPhase::Roll if !snapshot.can_double => "roll",
         PlayPhase::Roll => {
@@ -392,6 +439,50 @@ pub(super) async fn benchmark_checker_turn(
     .await
 }
 
+fn checker_alternatives(
+    session: &PlaySession,
+    candidates: &[SageCheckerCandidate],
+) -> Result<Vec<PlayAlternative>> {
+    let best = candidates
+        .first()
+        .context("NeonGammon omitted best checker move")?
+        .equity;
+    if session.legal_moves.is_empty() {
+        ensure!(
+            candidates.len() == 1 && candidates[0].notation == "Cannot move",
+            "NeonGammon omitted forced pass"
+        );
+        return Ok(vec![super::feedback::forced_pass_alternative()]);
+    }
+    let legal = legal_move_boards(
+        &session.position.board,
+        session.position.player,
+        &session.position.dice,
+        &session.legal_moves,
+    )?;
+    let mut alternatives = Vec::with_capacity(legal.len());
+    for (index, after) in legal {
+        let candidate = match_sage_board(
+            candidates,
+            |candidate| &candidate.board,
+            &after,
+            session.position.player,
+        )
+        .context("NeonGammon omitted a legal checker result")?;
+        alternatives.push(PlayAlternative {
+            rating_decisions: 0,
+            action: "move".into(),
+            move_index: Some(index),
+            notation: session.legal_moves[index].notation.clone(),
+            loss: crate::match_analysis::normalized_loss(candidate.equity, best),
+            equity: Some(candidate.equity),
+            probabilities: Some(candidate.probabilities.clone()),
+        });
+    }
+    alternatives.sort_by(|a, b| a.loss.total_cmp(&b.loss));
+    Ok(alternatives)
+}
+
 /// NeonGammon feedback alternatives. `rating_decisions` stays 0: it only
 /// corrects GNUbg's native game statistics (unforced moves, close cube
 /// decisions) for first attempts, and NeonGammon game analysis has no such
@@ -407,49 +498,7 @@ pub(super) async fn alternatives(
                 &session.position.gnubg_match_id,
             )
             .await?;
-        let best = candidates
-            .first()
-            .context("NeonGammon omitted best checker move")?
-            .equity;
-        if session.legal_moves.is_empty() {
-            ensure!(
-                candidates.len() == 1 && candidates[0].notation == "Cannot move",
-                "NeonGammon omitted forced pass"
-            );
-            return Ok(vec![PlayAlternative {
-                rating_decisions: 0,
-                action: "pass".into(),
-                move_index: None,
-                notation: "pass".into(),
-                loss: 0.0,
-                equity: None,
-                probabilities: None,
-            }]);
-        }
-        let mut alternatives = Vec::new();
-        for (index, choice) in session.legal_moves.iter().enumerate() {
-            let after = super::native_move_board(
-                &session.position.board,
-                session.position.player,
-                &session.position.dice,
-                choice,
-            )?;
-            let candidate = candidates
-                .iter()
-                .find(|candidate| candidate.board == after)
-                .context("NeonGammon omitted a legal checker result")?;
-            alternatives.push(PlayAlternative {
-                rating_decisions: 0,
-                action: "move".into(),
-                move_index: Some(index),
-                notation: choice.notation.clone(),
-                loss: crate::match_analysis::normalized_loss(candidate.equity, best),
-                equity: Some(candidate.equity),
-                probabilities: Some(candidate.probabilities.clone()),
-            });
-        }
-        alternatives.sort_by(|a, b| a.loss.total_cmp(&b.loss));
-        return Ok(alternatives);
+        return checker_alternatives(session, &candidates);
     }
     let cube = engine
         .cube(
@@ -457,45 +506,101 @@ pub(super) async fn alternatives(
             &session.position.gnubg_match_id,
         )
         .await?;
-    let response = matches!(session.phase, PlayPhase::DoubleResponse);
-    let values = if response {
-        [("take", -cube.take), ("drop", -cube.pass)]
-    } else {
-        [
-            ("roll", cube.no_double),
-            ("double", cube.take.min(cube.pass)),
-        ]
-    };
-    let probabilities = if response {
-        [&cube.probabilities[3..6], &cube.probabilities[0..3]].concat()
-    } else {
-        cube.probabilities
-    };
-    let best = values
-        .iter()
-        .map(|(_, equity)| *equity)
-        .fold(f64::NEG_INFINITY, f64::max);
-    Ok(values
-        .into_iter()
-        .map(|(action, equity)| PlayAlternative {
-            rating_decisions: 0,
-            action: action.into(),
-            move_index: None,
-            notation: if action == "roll" {
-                "No double".into()
-            } else {
-                action.into()
-            },
-            loss: crate::match_analysis::normalized_loss(equity, best),
-            equity: Some(equity),
-            probabilities: Some(probabilities.clone()),
-        })
-        .collect())
+    let probabilities: [f64; 6] = cube
+        .probabilities
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("NeonGammon cube probabilities must have 6 values"))?;
+    Ok(super::feedback::cube_alternatives(
+        &session.phase,
+        cube.no_double,
+        cube.take,
+        cube.pass,
+        probabilities,
+        |_| 0,
+    ))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_bearoff_hint_matches_early_stop_sage_candidate() {
+        use super::super::{PlayMove, PlayStep};
+        use uuid::Uuid;
+
+        // White has one checker on 3; Black has a blot on 1 and 14 checkers on 24.
+        // With 5-2, GNUbg requires using both dice (3/1* 1/off, hitting the blot to bar),
+        // while NeonGammon may stop early on 3/off leaving Black's blot on point 1.
+        let mut before = [0; 26];
+        before[1] = -1;
+        before[3] = 1;
+        before[24] = -14;
+
+        let mut sage_early_stop = before;
+        sage_early_stop[3] = 0;
+
+        let mut session: PlaySession = serde_json::from_value(serde_json::json!({
+            "id": Uuid::new_v4(),
+            "version": 0,
+            "human_player": 0,
+            "human_name": "Human",
+            "match_length": 0,
+            "bearoff_direction": "right",
+            "engine": {"id": "bgsage", "version": "test", "plies": 2},
+            "position": {
+                "id": Uuid::new_v4(),
+                "match_uuid": Uuid::new_v4(),
+                "ordinal": 0,
+                "game_no": 1,
+                "ply": 1,
+                "player": 0,
+                "dice": [5, 2],
+                "board": before.to_vec(),
+                "position_id": "",
+                "gnubg_match_id": "",
+                "notation": ""
+            },
+            "phase": "move",
+            "can_double": false,
+            "legal_moves": [],
+            "history": [],
+            "scores": [0, 0],
+            "game_no": 1,
+            "winner": null
+        }))
+        .unwrap();
+        session.legal_moves = vec![PlayMove {
+            notation: "3/1* 1/off".into(),
+            steps: vec![PlayStep { from: 3, to: 1 }, PlayStep { from: 1, to: -1 }],
+        }];
+
+        let candidates = vec![SageCheckerCandidate {
+            board: sage_early_stop,
+            notation: "3/off".into(),
+            equity: 1.0,
+            probabilities: vec![1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        }];
+        let alts = checker_alternatives(&session, &candidates).unwrap();
+        assert_eq!(alts.len(), 1);
+        assert_eq!(alts[0].notation, "3/1* 1/off");
+        assert_eq!(alts[0].move_index, Some(0));
+        assert_eq!(alts[0].loss, 0.0);
+        assert_eq!(alts[0].equity, Some(1.0));
+
+        // A non-terminal missing move must still be rejected.
+        let mut non_terminal = before;
+        non_terminal[3] = 0;
+        non_terminal[1] = 1;
+        non_terminal[0] = -1;
+        let missing = vec![SageCheckerCandidate {
+            board: non_terminal,
+            notation: "3/1*".into(),
+            equity: 0.5,
+            probabilities: vec![0.7, 0.0, 0.0, 0.3, 0.0, 0.0],
+        }];
+        assert!(checker_alternatives(&session, &missing).is_err());
+    }
 
     #[tokio::test]
     #[ignore = "requires locked NeonGammon; no database"]

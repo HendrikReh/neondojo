@@ -247,11 +247,12 @@ impl Search {
             .flatten()
             .any(|away| !(1..=64).contains(&away))
             || q.cube_value
-                .is_some_and(|value| !(1..=4096).contains(&value) || value.count_ones() != 1)
+                .is_some_and(|value| !crate::backgammon::board::is_valid_cube_value(value))
         {
-            return Err(ApiError::invalid(
-                "Away scores must be 1 to 64 and the cube value a power of two up to 4096",
-            ));
+            return Err(ApiError::invalid(format!(
+                "Away scores must be 1 to 64 and the cube value a power of two up to {}",
+                crate::backgammon::board::MAX_CUBE_VALUE
+            )));
         }
         let limit = q.limit.unwrap_or(DEFAULT_LIMIT);
         let page = q.page.unwrap_or(1);
@@ -395,7 +396,7 @@ pub(super) async fn search(
     Query(q): Query<DecisionSearchQuery>,
 ) -> ApiResult<Json<DecisionSearchPage>> {
     let search = Search::new(&s.pool, q).await?;
-    let mut tx = super::source::read_snapshot(&s.pool).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
     super::index::require_current(&mut tx, search.database(), search.player(), false).await?;
     let (items, total) = search.read(&mut tx).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
@@ -479,7 +480,9 @@ mod tests {
         add_decision(&pool, id, 0, 0.1).await;
         for scope in [None, Some(database)] {
             let search = search(scope, 1);
-            let mut tx = ok(super::super::source::read_snapshot(&pool).await);
+            let mut tx = crate::database_pool::begin_read_snapshot(&pool)
+                .await
+                .unwrap();
             let before = ok(search.read(&mut tx).await);
             assert_eq!(before.1, 1);
             // A rebuild publishes a larger loss between the total and the page.
@@ -487,7 +490,9 @@ mod tests {
             let during = ok(search.read(&mut tx).await);
             assert_eq!(during, before, "the snapshot must hide the new decision");
             tx.commit().await.unwrap();
-            let mut tx = ok(super::super::source::read_snapshot(&pool).await);
+            let mut tx = crate::database_pool::begin_read_snapshot(&pool)
+                .await
+                .unwrap();
             let after = ok(search.read(&mut tx).await);
             assert_eq!(after.1, 2);
             assert_eq!(after.0, vec![serde_json::json!({"seq": 1})]);

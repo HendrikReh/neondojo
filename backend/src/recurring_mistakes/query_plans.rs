@@ -40,7 +40,7 @@ pub async fn decision_search(pool: &PgPool, query: &str) -> ApiResult<Vec<(&'sta
         .await
         .map_err(anyhow::Error::from)?;
     plans.push(("candidates", plan));
-    let mut tx = super::source::read_snapshot(pool).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
     let count = format!("{EXPLAIN}{}", search.count_sql());
     let plan = search
         .bind(sqlx::query_scalar(&count))

@@ -1,6 +1,7 @@
 //! SGF: the text format (`parser`), the validated replay of a match
 //! (`replay`) and the foreign evaluations a conversion keeps (`retained`).
 
+pub(crate) mod coord;
 mod parser;
 mod replay;
 mod retained;
@@ -11,7 +12,7 @@ pub use replay::parse_sgf;
 pub(crate) use replay::{
     GameContext, SourceMove, parse_importable_sgf_with_context, parse_native_sgf_source_moves,
     parse_native_sgf_with_context, parse_sgf_events, parse_sgf_source_moves,
-    parse_sgf_with_context, play, setup,
+    parse_sgf_with_context, play, replay_trees, setup,
 };
 pub(crate) use retained::{decode_retained_analysis, encode_retained_analysis};
 

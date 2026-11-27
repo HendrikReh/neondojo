@@ -234,7 +234,7 @@ async fn bot_library_preserves_identity_management_and_detaches_deleted_matches(
     assert_eq!(metadata["display_name"], "My named match");
     assert!(metadata["analysis_status"].is_null(), "{metadata}");
     assert!(
-        neondojo::store::latest_match_job(&pool, match_id)
+        neondojo::store::latest_match_job_scoped(&pool, match_id, None, None)
             .await
             .unwrap()
             .is_none()

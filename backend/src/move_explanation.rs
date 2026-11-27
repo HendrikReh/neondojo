@@ -5,6 +5,7 @@
 //! engine's equities remain the measure of which play is better.
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::backgammon::board::{has_contact, local_board, pip_counts, validate};
 use crate::json_errors::Json;
 use crate::move_assessments::after_checker_play;
 use axum::{Router, routing::post};
@@ -18,32 +19,25 @@ struct View {
     opponent: [i32; 25],
     /// Opponent checkers on the bar; they enter on the mover's home board.
     opponent_bar: i32,
-    own_bar: i32,
 }
 
-fn view(board: &[i32; 26], player: i32) -> View {
+fn view_from_local(local: &[i32; 26]) -> View {
     let mut own = [0; 25];
     let mut opponent = [0; 25];
     for point in 1..=24 {
-        let count = if player == 0 {
-            board[point]
-        } else {
-            -board[25 - point]
-        };
-        own[point] = count.max(0);
-        opponent[point] = (-count).max(0);
+        own[point] = local[point].max(0);
+        opponent[point] = (-local[point]).max(0);
     }
-    let (own_bar, opponent_bar) = if player == 0 {
-        (board[25], -board[0])
-    } else {
-        (-board[0], board[25])
-    };
     View {
         own,
         opponent,
-        opponent_bar: opponent_bar.max(0),
-        own_bar: own_bar.max(0),
+        opponent_bar: (-local[0]).max(0),
     }
+}
+
+#[cfg(test)]
+fn view(board: &[i32; 26], player: i32) -> View {
+    view_from_local(&local_board(board, player))
 }
 
 /// True if the opponent can hit the blot on `blot` with some order and choice
@@ -150,7 +144,8 @@ pub struct PlayFacts {
 }
 
 fn facts(board: &[i32; 26], player: i32) -> PlayFacts {
-    let view = view(board, player);
+    let local = local_board(board, player);
+    let view = view_from_local(&local);
     let held = |point: usize| view.own[point] >= 2;
     let mut longest = 0;
     let mut run = 0;
@@ -165,18 +160,8 @@ fn facts(board: &[i32; 26], player: i32) -> PlayFacts {
             .collect()
     };
     let (hitting_rolls, hit_pips) = hitting_rolls(&view);
-    // The opponent moves upward, so its rearmost checker has the lowest point.
-    let rearmost_own = if view.own_bar > 0 {
-        25
-    } else {
-        (1..=24).rev().find(|p| view.own[*p] > 0).unwrap_or(0)
-    };
-    let rearmost_opponent = if view.opponent_bar > 0 {
-        0
-    } else {
-        (1..=24).find(|p| view.opponent[*p] > 0).unwrap_or(25)
-    };
-    let contact = rearmost_opponent < rearmost_own;
+    let contact = has_contact(&local);
+    let [pips, opponent_pips] = pip_counts(&local);
     PlayFacts {
         blots: point_numbers(&|point| view.own[point] == 1),
         hitting_rolls,
@@ -191,11 +176,8 @@ fn facts(board: &[i32; 26], player: i32) -> PlayFacts {
         home_points: (1..=6).filter(|point| held(*point)).count() as i32,
         longest_prime: longest,
         opponent_on_bar: view.opponent_bar,
-        pips: (1..=24).map(|p| p as i32 * view.own[p]).sum::<i32>() + 25 * view.own_bar,
-        opponent_pips: (1..=24)
-            .map(|p| (25 - p as i32) * view.opponent[p])
-            .sum::<i32>()
-            + 25 * view.opponent_bar,
+        pips,
+        opponent_pips,
     }
 }
 
@@ -230,7 +212,7 @@ pub fn explain(request: &MoveExplanationRequest) -> Result<MoveExplanation, &'st
     if request.dice.iter().any(|die| !(1..=6).contains(die)) {
         return Err("dice must be between 1 and 6");
     }
-    crate::game_plan::classify(&request.board).map_err(|_| "Invalid board")?;
+    validate(&request.board).map_err(|_| "Invalid board")?;
     let after = |notation: &str| {
         after_checker_play(request.board, request.player, request.dice, notation)
             .ok_or("A play is not legal checker notation for this board and roll")

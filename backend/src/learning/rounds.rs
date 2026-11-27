@@ -105,10 +105,6 @@ pub(super) async fn start(
     }
     search::prepare_game_plans(&state.pool, &filters).await?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET LOCAL jit=off")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
     if let Some(deck) = filters.deck_id {
         require_deck(&mut *tx, deck).await?;
     }

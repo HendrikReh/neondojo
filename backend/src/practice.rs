@@ -120,9 +120,7 @@ pub(crate) fn cube_context(position: &Position, response: bool) -> Result<CubeCo
     ensure!(
         position.dice == [0, 0]
             && (!response || (id.get(Field::DIE_0) == 0 && id.get(Field::DIE_1) == 0))
-            && !crawford
-            && cube < 32768
-            && (owner == 3 || owner == doubler),
+            && id.can_double(doubler),
         "Stored position does not permit this cube decision"
     );
     let board = position
@@ -223,6 +221,34 @@ pub(crate) mod tests {
         p.gnubg_match_id = ids::match_id(7, [6, 3], 1, -1, true, false, 1, [0, 0]);
         assert!(cube_context(&p, false).is_err());
         assert!(cube_context(&p, true).is_err());
+    }
+
+    #[test]
+    fn cube_context_rejects_dead_cube_offers_and_responses() {
+        // Post-Crawford at 6-2 in a 7-point match: White (player 0) is 1-away (dead 1-cube),
+        // while Black (player 1) is 5-away and can still offer a double.
+        let mut white_offer = position(0, [0, 0]);
+        white_offer.gnubg_match_id = ids::match_id(7, [6, 2], 1, -1, false, false, 0, [0, 0]);
+        assert!(cube_context(&white_offer, false).is_err());
+
+        let mut black_offer = position(1, [0, 0]);
+        black_offer.gnubg_match_id = ids::match_id(7, [6, 2], 1, -1, false, false, 1, [0, 0]);
+        assert!(cube_context(&black_offer, false).is_ok());
+
+        // Black responding to an impossible White double at 6-2 (1-away) must be rejected.
+        let mut black_response = position(1, [0, 0]);
+        black_response.gnubg_match_id = ids::match_id(7, [6, 2], 1, -1, false, false, 1, [0, 0]);
+        assert!(cube_context(&black_response, true).is_err());
+
+        // 5-2 in a 7-point match with a 2-cube owned by White: dead cube (5 + 2 == 7).
+        let mut dead_two_offer = position(0, [0, 0]);
+        dead_two_offer.gnubg_match_id = ids::match_id(7, [5, 2], 2, 0, false, false, 0, [0, 0]);
+        assert!(cube_context(&dead_two_offer, false).is_err());
+
+        let mut dead_two_response = position(1, [0, 0]);
+        dead_two_response.gnubg_match_id =
+            ids::with_offer_from(&dead_two_offer.gnubg_match_id, 0).unwrap();
+        assert!(cube_context(&dead_two_response, true).is_err());
     }
 
     #[test]

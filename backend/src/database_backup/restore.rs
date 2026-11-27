@@ -163,7 +163,7 @@ async fn preserve_host_settings(connection: &mut PgConnection, binary: &str) -> 
              xg_path=COALESCE(NULLIF((SELECT xg_path FROM backup_local_book),''),$2)",
     )
     .bind(crate::opening_book::default_path())
-    .bind(crate::xg_book::default_path())
+    .bind(crate::opening_book::xg_book::default_path())
     .execute(&mut *connection)
     .await?;
     // The configuration owns the book choice and the settings table repeats

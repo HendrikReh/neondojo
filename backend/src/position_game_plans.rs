@@ -46,10 +46,7 @@ pub(crate) async fn refresh(conn: &mut PgConnection, position: Option<Uuid>) -> 
     let values: Vec<_> = rows
         .into_iter()
         .map(|(id, board, player)| {
-            let plan = <&[i32; 26]>::try_from(board.as_slice())
-                .ok()
-                .and_then(|b| game_plan::classify(b).ok())
-                .map(|p| label(if player == 0 { p.white } else { p.black }));
+            let plan = game_plan::classify_for_player(&board, player).map(label);
             (id, plan)
         })
         .collect();

@@ -1,5 +1,8 @@
 //! Optional native MAT regression coverage without a database or private fixtures.
-use neondojo::{engine::Engine, import::parse_sgf};
+use neondojo::{
+    engine::Engine,
+    import::{mat::normalize_mat, parse_sgf},
+};
 use std::path::{Path, PathBuf};
 
 #[tokio::test]
@@ -32,8 +35,7 @@ async fn local_mat_corpus_normalizes_to_strictly_replayable_sgf() {
     let mut failures = Vec::new();
     for path in files {
         let bytes = std::fs::read(&path).unwrap();
-        let imported = match engine
-            .normalize_mat(&bytes)
+        let imported = match normalize_mat(&engine, &bytes)
             .await
             .and_then(|sgf| parse_sgf(&sgf))
         {

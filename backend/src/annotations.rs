@@ -134,6 +134,62 @@ pub fn routes() -> Router<AppState> {
 }
 
 const ANNOTATION_COLUMNS: &str = "id,target_kind,target_id,tags,comment,version,updated_at";
+pub(crate) const MAX_TAGS: usize = 30;
+/// Joins an `annotations` row (`a`) to every target table that resolves back to
+/// its owning `match_uuid`.
+pub(crate) const ANNOTATION_MATCH_JOIN_SQL: &str = "annotations a LEFT JOIN positions p ON p.id=a.position_uuid LEFT JOIN match_games g ON g.id=a.game_uuid LEFT JOIN match_moves mv ON mv.id=a.move_uuid";
+/// Owning `match_uuid` expression for [`ANNOTATION_MATCH_JOIN_SQL`].
+pub(crate) const ANNOTATION_MATCH_UUID_EXPR: &str =
+    "coalesce(a.match_uuid,p.match_uuid,g.match_uuid,mv.match_uuid)";
+/// Subquery `FROM … WHERE` joining `annotations` (`n`) to an outer `matches m`.
+pub(crate) const MATCH_ANNOTATION_EXISTS_FROM: &str = "FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id";
+
+/// Applies normalized add/remove tag edits to a match-level annotation within
+/// an open transaction, enforcing [`MAX_TAGS`].
+pub(crate) async fn update_match_tags(
+    tx: &mut sqlx::Transaction<'_, Postgres>,
+    match_id: Uuid,
+    add_tags: &[String],
+    remove_tags: &[String],
+) -> ApiResult<Result<(), &'static str>> {
+    let old: Option<(Uuid, Vec<String>)> =
+        sqlx::query_as("SELECT id,tags FROM annotations WHERE match_uuid=$1 FOR UPDATE")
+            .bind(match_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    let mut tags = old
+        .as_ref()
+        .map(|(_, tags)| tags.iter().cloned().collect::<BTreeSet<_>>())
+        .unwrap_or_default();
+    for tag in remove_tags {
+        tags.remove(tag);
+    }
+    tags.extend(add_tags.iter().cloned());
+    if tags.len() > MAX_TAGS {
+        return Ok(Err("At most 30 tags per match"));
+    }
+    let tags = tags.into_iter().collect::<Vec<_>>();
+    if let Some((note_id, _)) = old {
+        sqlx::query(
+            "UPDATE annotations SET tags=$2,version=version+1,updated_at=now() WHERE id=$1",
+        )
+        .bind(note_id)
+        .bind(tags)
+        .execute(&mut **tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    } else {
+        sqlx::query("INSERT INTO annotations(id,match_uuid,tags,version) VALUES($1,$2,$3,1)")
+            .bind(Uuid::new_v4())
+            .bind(match_id)
+            .bind(tags)
+            .execute(&mut **tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    }
+    Ok(Ok(()))
+}
 
 async fn target_exists(pool: &PgPool, kind: AnnotationKind, id: Uuid) -> Result<bool> {
     let sql = match kind {
@@ -276,7 +332,7 @@ fn validate_update(mut update: AnnotationUpdate) -> ApiResult<AnnotationUpdate> 
             tags.insert(normalized);
         }
     }
-    if tags.len() > 30 {
+    if tags.len() > MAX_TAGS {
         return Err(ApiError::invalid("At most 30 tags are allowed"));
     }
     update.tags = tags.into_iter().collect();
@@ -404,9 +460,11 @@ async fn search_annotations(
     if offset.is_some() {
         sql.push("WITH filtered AS NOT MATERIALIZED (");
     }
-    sql.push(
-        "SELECT a.id,a.target_kind,a.target_id,m.id AS match_uuid,m.filename,m.white,m.black,coalesce(p.game_no,g.game_no,mv.game_no) AS game_no,coalesce(p.ply,mv.move_no) AS ply,a.tags,left(a.comment,300) AS comment_excerpt,a.updated_at FROM annotations a LEFT JOIN positions p ON p.id=a.position_uuid LEFT JOIN match_games g ON g.id=a.game_uuid LEFT JOIN match_moves mv ON mv.id=a.move_uuid JOIN matches m ON m.id=coalesce(a.match_uuid,p.match_uuid,g.match_uuid,mv.match_uuid) WHERE true",
-    );
+    sql.push("SELECT a.id,a.target_kind,a.target_id,m.id AS match_uuid,m.filename,m.white,m.black,coalesce(p.game_no,g.game_no,mv.game_no) AS game_no,coalesce(p.ply,mv.move_no) AS ply,a.tags,left(a.comment,300) AS comment_excerpt,a.updated_at FROM ")
+        .push(ANNOTATION_MATCH_JOIN_SQL)
+        .push(" JOIN matches m ON m.id=")
+        .push(ANNOTATION_MATCH_UUID_EXPR)
+        .push(" WHERE true");
     if !q.is_empty() {
         sql.push(" AND a.search_text LIKE ")
             .push_bind(literal_pattern(q));
@@ -470,7 +528,9 @@ async fn tags(
 ) -> ApiResult<Json<Vec<String>>> {
     let q = normalize_tag(query.q.as_deref().unwrap_or(""))?;
     let limit = limit(query.limit)?;
-    let tags = sqlx::query_scalar("SELECT DISTINCT tag FROM annotations a LEFT JOIN positions p ON p.id=a.position_uuid LEFT JOIN match_games g ON g.id=a.game_uuid LEFT JOIN match_moves mv ON mv.id=a.move_uuid JOIN matches m ON m.id=coalesce(a.match_uuid,p.match_uuid,g.match_uuid,mv.match_uuid) CROSS JOIN LATERAL unnest(a.tags) AS tag WHERE tag LIKE $1 AND ($3::uuid IS NULL OR m.database_id=$3) ORDER BY tag LIMIT $2")
+    let tags = sqlx::query_scalar(&format!(
+        "SELECT DISTINCT tag FROM {ANNOTATION_MATCH_JOIN_SQL} JOIN matches m ON m.id={ANNOTATION_MATCH_UUID_EXPR} CROSS JOIN LATERAL unnest(a.tags) AS tag WHERE tag LIKE $1 AND ($3::uuid IS NULL OR m.database_id=$3) ORDER BY tag LIMIT $2"
+    ))
         .bind(literal_pattern(&q)).bind(limit).bind(query.database_id).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
     Ok(Json(tags))
 }

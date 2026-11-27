@@ -188,7 +188,7 @@ async fn read_for_index(
     id: Uuid,
 ) -> ApiResult<Option<(Candidate, source::SavedDecisions)>> {
     super::imported::catalog_legacy(pool, None, Some(id), None).await?;
-    let mut tx = source::read_snapshot(pool).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
     // The fingerprint and decisions must describe the same selection even
     // when the displayed analysis changes temporarily during a rebuild.
     let Some(candidate) = candidate_on(&mut tx, id)

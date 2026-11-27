@@ -155,10 +155,9 @@ pub(super) fn parse_source_game(
         .trees
         .get(usize::try_from(game_no - 1)?)
         .context("Game number outside match")?;
-    let (native_match, native_contexts) =
-        crate::import::sgf::parse_native_sgf_with_context(native)?;
-    let native_positions = native_match.positions;
     let native = parse_trees(native)?;
+    let (native_match, native_contexts) = crate::import::sgf::replay_trees(&native, true, None)?;
+    let native_positions = native_match.positions;
     ensure!(native.len() == 1, "GNUbg did not export exactly one game");
     let source_moves = moves(selected)?;
     let native_moves = moves(&native[0])?;

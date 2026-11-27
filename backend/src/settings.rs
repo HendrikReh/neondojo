@@ -241,10 +241,7 @@ pub(crate) async fn load_play_settings(
     state: &AppState,
 ) -> anyhow::Result<(AppSettings, crate::configuration::ErrorThresholds)> {
     ensure_settings(state).await?;
-    let mut tx = state.pool.begin().await?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     let settings = sqlx::query_as("SELECT * FROM app_settings WHERE singleton=true")
         .fetch_one(&mut *tx)
         .await?;
@@ -389,17 +386,34 @@ fn validate_threads(engine: EngineId, threads: Option<i32>) -> ApiResult<()> {
 
 pub(crate) const PLAYER_NAME_RULE: &str =
     "Player name must be at most 120 characters and contain no control characters";
+pub(crate) const PLAY_MATCH_LENGTH_RULE: &str =
+    "Human player must be 0 or 1 and match length 0 (money game) or 1..25";
+pub(crate) const TUTOR_THRESHOLD_RULE: &str = "Threshold must be greater than zero and at most one";
 
 /// The one rule for a stored or per-match human player name.
 pub(crate) fn valid_player_name(name: &str) -> bool {
     name.chars().count() <= 120 && !name.chars().any(char::is_control)
 }
 
+pub(crate) fn valid_human_player(player: i32) -> bool {
+    (0..=1).contains(&player)
+}
+
+pub(crate) fn valid_play_match_length(match_length: i32) -> bool {
+    (0..=25).contains(&match_length)
+}
+
+pub(crate) fn valid_tutor_threshold(threshold: f64) -> bool {
+    threshold.is_finite() && 0.0 < threshold && threshold <= 1.0
+}
+
+pub(crate) fn valid_engine_depth(engine: &str, purpose: &str, plies: i32) -> bool {
+    crate::engines::EngineId::parse(engine)
+        .is_some_and(|provider| provider.depths(purpose).contains(&plies))
+}
+
 fn validate(settings: &AppSettings) -> ApiResult<()> {
-    if !(settings.tutor_threshold.is_finite()
-        && 0.0 < settings.tutor_threshold
-        && settings.tutor_threshold <= 1.0)
-    {
+    if !valid_tutor_threshold(settings.tutor_threshold) {
         return Err(ApiError::invalid(
             "tutor_threshold must be greater than 0 and at most 1",
         ));
@@ -421,7 +435,7 @@ fn validate(settings: &AppSettings) -> ApiResult<()> {
         ),
         (&settings.play_engine, "play", settings.play_plies),
     ] {
-        if !crate::configuration::engine_depths(id, purpose).contains(&plies) {
+        if !valid_engine_depth(id, purpose, plies) {
             return Err(ApiError::invalid(
                 "Engine or depth is not verified for this purpose",
             ));

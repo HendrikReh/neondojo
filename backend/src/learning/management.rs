@@ -326,11 +326,7 @@ pub(super) async fn duplicates(
 ) -> ApiResult<Json<DuplicatePage>> {
     const LIMIT: usize = 50;
     let offset = crate::search::page_offset(query.page, query.after.is_some(), LIMIT as i64)?;
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     #[derive(FromRow)]
     struct Entry {
         #[sqlx(flatten)]
@@ -338,16 +334,23 @@ pub(super) async fn duplicates(
         identity: Option<String>,
         copies: i64,
     }
-    const IDENTITIES: &str = "WITH identities AS (
-             SELECT id, (payload#>>'{position,position_id}') || ':' ||
-                        (payload#>>'{position,gnubg_match_id}') || ':' ||
-                        (payload->>'kind') AS identity
+    const IDENTITIES: &str = concat!(
+        "WITH identities AS (
+             SELECT id, ",
+        card_signature_sql!(
+            "(payload#>>'{position,position_id}')",
+            "(payload#>>'{position,gnubg_match_id}')",
+            "(payload->>'kind')",
+            "payload#>>'{position,cube_enabled}'='false'"
+        ),
+        " AS identity
              FROM learning_cards
          ), copies AS (
              SELECT identity, count(*) AS copies
              FROM identities WHERE identity IS NOT NULL
              GROUP BY identity HAVING count(*) > 1
-         )";
+         )"
+    );
     const MATCHING: &str = "FROM identities i LEFT JOIN copies USING (identity)
          WHERE copies.copies IS NOT NULL OR EXISTS (
              SELECT 1 FROM deck_cards WHERE card_id=i.id OFFSET 1

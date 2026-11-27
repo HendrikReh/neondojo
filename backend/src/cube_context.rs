@@ -124,6 +124,28 @@ pub struct CubeContext {
     pub take_point: Option<TakePoint>,
 }
 
+pub(crate) fn decision_question_kind(kind: &str, played: &str) -> &'static str {
+    if kind == "checker" {
+        "checker"
+    } else if matches!(played, "take" | "drop") {
+        "cube_response"
+    } else {
+        "cube_offer"
+    }
+}
+
+pub(crate) fn is_cube_practice_eligible(position: &crate::model::Position, response: bool) -> bool {
+    crate::practice::cube_context(position, response).is_ok()
+        && (response
+            || crate::match_analysis::cube_analysis_available(
+                &position.board,
+                &position.gnubg_match_id,
+                position.player,
+                position.cube_enabled != Some(false),
+            )
+            .unwrap_or(false))
+}
+
 pub fn cube_context(match_id: &str, doubler: i32) -> Result<CubeContext, String> {
     if !(0..=1).contains(&doubler) {
         return Err("doubler must be 0 (White) or 1 (Black)".into());
@@ -144,21 +166,18 @@ pub fn cube_context(match_id: &str, doubler: i32) -> Result<CubeContext, String>
     }
     let away = (match_length > 0).then(|| scores.map(|score| match_length - score));
     let post_crawford = !crawford && away.is_some_and(|away| away.contains(&1));
-    let may_double = !crawford && cube_owner.is_none_or(|owner| owner == doubler);
-    let take_point = if !may_double {
+    let take_point = if !id.can_double(doubler) {
         None
     } else if let Some(away) = away {
         let taker = usize::try_from(1 - doubler).map_err(|_| "Invalid doubler")?;
         let doubler = usize::try_from(doubler).map_err(|_| "Invalid doubler")?;
-        // A double is dead once the cube already covers the doubler's needs.
-        (cube_value < away[doubler])
-            .then(|| match_take_point([away[taker], away[doubler]], cube_value, post_crawford))
-            .flatten()
-            .map(|value| TakePoint {
+        match_take_point([away[taker], away[doubler]], cube_value, post_crawford).map(|value| {
+            TakePoint {
                 value,
                 basis: TakePointBasis::MatchEquityTable,
                 table: Some(table().name.clone()),
-            })
+            }
+        })
     } else {
         Some(TakePoint {
             value: 0.25,

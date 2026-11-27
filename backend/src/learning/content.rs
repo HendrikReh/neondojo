@@ -285,13 +285,8 @@ fn imported_card(
         format,
         cube_enabled,
     )?;
-    let kind = if record.kind == "checker" {
-        "checker"
-    } else if matches!(projected.decision.played.as_str(), "take" | "drop") {
-        "cube_response"
-    } else {
-        "cube_offer"
-    };
+    let kind =
+        crate::cube_context::decision_question_kind(&record.kind, &projected.decision.played);
     Some(CardContent {
         kind: kind.into(),
         prompt: prompt(kind).into(),
@@ -461,13 +456,7 @@ fn decision_card(
     plies: i32,
     d: Decision,
 ) -> anyhow::Result<CardContent> {
-    let kind = if d.kind == "checker" {
-        "checker"
-    } else if matches!(d.played.as_str(), "take" | "drop") {
-        "cube_response"
-    } else {
-        "cube_offer"
-    };
+    let kind = crate::cube_context::decision_question_kind(&d.kind, &d.played);
     let board = decode_board(position_id, match_state_id)?;
     let original_player = ids::on_roll(match_state_id).context("Invalid GNU ID length")?;
     ensure!(

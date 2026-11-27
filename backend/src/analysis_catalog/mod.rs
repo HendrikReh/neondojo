@@ -15,7 +15,6 @@ use axum::{
     http::StatusCode,
     routing::{delete, get, put},
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgConnection};
@@ -151,11 +150,7 @@ async fn catalog(
     if !crate::imported_analysis::ensure_catalog(&state.pool, id).await? {
         return Err(ApiError::missing());
     }
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     crate::play::require_review_available_on(&mut *tx, id).await?;
     let revision: i64 = sqlx::query_scalar("SELECT source_revision FROM matches WHERE id=$1")
         .bind(id)
@@ -180,11 +175,11 @@ async fn catalog(
         .cursor
         .as_deref()
         .map(|encoded| {
-            let bytes = URL_SAFE_NO_PAD
-                .decode(encoded)
-                .map_err(|_| ApiError::invalid("Invalid catalog cursor"))?;
-            let cursor: Cursor = serde_json::from_slice(&bytes)
-                .map_err(|_| ApiError::invalid("Invalid catalog cursor"))?;
+            let cursor: Cursor = crate::cursor::decode(
+                encoded,
+                crate::cursor::DEFAULT_MAX_LEN,
+                "Invalid catalog cursor",
+            )?;
             if cursor.match_id != id
                 || cursor.position_id != query.position_id
                 || cursor.revision != revision
@@ -221,17 +216,15 @@ async fn catalog(
         items
             .last()
             .map(|last| {
-                serde_json::to_vec(&Cursor {
+                crate::cursor::encode(&Cursor {
                     match_id: id,
                     position_id: query.position_id,
                     revision,
                     created_at: last.created_at,
                     id: last.id.clone(),
                 })
-                .map(|v| URL_SAFE_NO_PAD.encode(v))
             })
-            .transpose()
-            .map_err(anyhow::Error::from)?
+            .transpose()?
     } else {
         None
     };

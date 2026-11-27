@@ -1,6 +1,8 @@
 //! Reader for the official public-domain XG opening position database.
 //! Format and attribution terms: https://www.extremegammon.com/GetOb.aspx.
 
+use super::CanonicalKey;
+use crate::backgammon::board::{is_valid_cube_value, validate_active};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -61,7 +63,7 @@ pub struct XgPositionResult {
 }
 
 pub fn default_path() -> String {
-    std::path::Path::new(&crate::opening_book::default_path())
+    std::path::Path::new(&super::default_path())
         .with_file_name("OpeningbookV2.ob")
         .to_string_lossy()
         .into_owned()
@@ -124,13 +126,23 @@ impl Cache {
             },
         }
     }
+
     pub(crate) async fn lookup(
         &self,
         path: &str,
         position: &crate::model::Position,
         beaver: Option<bool>,
     ) -> Result<Option<XgPositionResult>> {
-        let position = position.clone();
+        let canonical = CanonicalKey::from_position(position)?;
+        self.lookup_canonical(path, canonical, beaver).await
+    }
+
+    pub(super) async fn lookup_canonical(
+        &self,
+        path: &str,
+        canonical: CanonicalKey,
+        beaver: Option<bool>,
+    ) -> Result<Option<XgPositionResult>> {
         let path = if path.is_empty() {
             default_path()
         } else {
@@ -138,7 +150,7 @@ impl Cache {
         };
         let cache = self.clone();
         tokio::task::spawn_blocking(move || {
-            let (key, position_key) = Key::from_position(&position, beaver)?;
+            let (key, position_key) = Key::from_canonical(&canonical, beaver)?;
             let book = cache.load(&path)?;
             Ok(book.result(&key, position_key))
         })
@@ -170,7 +182,7 @@ impl Cache {
             let parent = destination
                 .parent()
                 .context("Invalid XG destination directory")?;
-            crate::opening_book::install_validated_copy(source, destination, parent, |path| {
+            super::install_validated_copy(source, destination, parent, |path| {
                 cache.load(path.to_str().context("Invalid temporary XG path")?)?;
                 Ok(())
             })?;
@@ -195,58 +207,36 @@ struct Key {
     crawford: bool,
 }
 impl Key {
+    fn from_canonical(canonical: &CanonicalKey, beaver: Option<bool>) -> Result<(Self, String)> {
+        ensure!(
+            !canonical.is_money() || beaver.is_some(),
+            "Money-game beaver rule is not recorded; no XG book context assumed"
+        );
+        let beaver = canonical.is_money() && beaver == Some(true);
+        let away = if canonical.is_money() {
+            [-1, -1]
+        } else {
+            canonical.away()
+        };
+        let key = Self {
+            board: canonical.board_i8(),
+            cube: 1i32 << canonical.cube_exp,
+            owner: canonical.xg_owner,
+            away,
+            jacoby: canonical.is_jacoby(),
+            beaver,
+            crawford: canonical.is_crawford(),
+        };
+        Ok((key, canonical.xg_position_key(beaver)))
+    }
+
+    #[cfg(test)]
     fn from_position(
         position: &crate::model::Position,
         beaver: Option<bool>,
     ) -> Result<(Self, String)> {
-        use crate::backgammon::ids::{Field, MatchId};
-        let (canonical, _) = crate::opening_book::canonical_keys(position)?;
-        let mut parts: Vec<String> = canonical.split(':').map(str::to_owned).collect();
-        let length = parts[8].parse::<i32>()?;
-        ensure!(
-            length > 0 || beaver.is_some(),
-            "Money-game beaver rule is not recorded; no XG book context assumed"
-        );
-        let beaver = length == 0 && beaver == Some(true);
-        let jacoby = length == 0 && parts[7] == "1";
-        let away = if length == 0 {
-            [-1, -1]
-        } else {
-            [
-                length - parts[5].parse::<i32>()?,
-                length - parts[6].parse::<i32>()?,
-            ]
-        };
-        let cube_exp = MatchId::decode(&position.gnubg_match_id)
-            .context("Invalid GNUbg Match ID")?
-            .get(Field::CUBE_LOG2);
-        let cube = 1i32 << cube_exp;
-        let board: Vec<i8> = parts[0]
-            .bytes()
-            .map(|byte| match byte {
-                b'A'..=b'O' => (byte - b'A' + 1) as i8,
-                b'a'..=b'o' => -((byte - b'a' + 1) as i8),
-                _ => 0,
-            })
-            .collect();
-        let key = Self {
-            board: board
-                .try_into()
-                .map_err(|_| anyhow::anyhow!("Invalid XG board"))?,
-            cube,
-            owner: parts[2].parse()?,
-            away,
-            jacoby,
-            beaver,
-            crawford: length > 0 && parts[7] == "1",
-        };
-        // Keep the actual cube and beaver flag, which the BGDB key normalizes.
-        parts[1] = cube_exp.to_string();
-        parts[4] = "00".into();
-        if length == 0 {
-            parts[7] = (i32::from(jacoby) + 2 * i32::from(beaver)).to_string();
-        }
-        Ok((key, parts.join(":")))
+        let canonical = CanonicalKey::from_position(position)?;
+        Self::from_canonical(&canonical, beaver)
     }
 }
 
@@ -290,26 +280,14 @@ impl Book {
                         "XG entry lacks its mandatory author attribution"
                     );
                     let board: [i8; 26] = std::array::from_fn(|i| record[68 + i] as i8);
-                    ensure!(
-                        board[0] <= 0
-                            && board[25] >= 0
-                            && board.iter().all(|n| (-15..=15).contains(n)),
-                        "Invalid XG board"
-                    );
-                    for side in [1i32, -1] {
-                        let count: i32 = board.iter().map(|n| (i32::from(*n) * side).max(0)).sum();
-                        ensure!((1..=15).contains(&count), "Invalid XG checker count");
-                    }
+                    validate_active(&board.map(i32::from)).context("Invalid XG board")?;
                     // v3.70 stores the actual cube value: 1 centered, 2 turned.
                     // The website's exponent comment does not match its file.
                     let cube = integer(record, 96)?;
                     let owner = integer(record, 100)?;
                     let away = [integer(record, 104)?, integer(record, 108)?];
                     ensure!(
-                        cube > 0
-                            && cube <= 32768
-                            && (cube as u32).is_power_of_two()
-                            && (-1..=1).contains(&owner),
+                        is_valid_cube_value(cube) && (-1..=1).contains(&owner),
                         "Invalid XG cube state"
                     );
                     ensure!(

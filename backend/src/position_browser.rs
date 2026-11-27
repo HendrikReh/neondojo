@@ -6,7 +6,6 @@ use crate::{
     search::literal_pattern,
 };
 use axum::{Router, extract::State, http::StatusCode, routing::get};
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -119,7 +118,6 @@ impl PositionFilterDefinition {
             (&mut self.match_name, 240),
             (&mut self.tournament, 240),
             (&mut self.round, 120),
-            (&mut self.tag, 64),
             (&mut self.comment, 200),
             (&mut self.position_id, 14),
         ] {
@@ -135,15 +133,17 @@ impl PositionFilterDefinition {
                 }
             }
         }
-        if let Some(tag) = &mut self.tag {
-            *tag = tag.to_lowercase();
+        if let Some(tag) = self.tag.take() {
+            let normalized = crate::annotations::normalize_tag(&tag)?;
+            if !normalized.is_empty() {
+                self.tag = Some(normalized);
+            }
         }
-        if self.position_id.as_ref().is_some_and(|id| {
-            id.len() != 14
-                || !id
-                    .bytes()
-                    .all(|c| c.is_ascii_alphanumeric() || b"+/".contains(&c))
-        }) {
+        if self
+            .position_id
+            .as_deref()
+            .is_some_and(|id| !crate::engine::valid_id(id, 14))
+        {
             return Err(ApiError::invalid(
                 "position_id must be a 14-character GNUbg checker ID",
             ));
@@ -178,11 +178,12 @@ impl PositionFilterDefinition {
         }
         if self
             .cube_value
-            .is_some_and(|n| n <= 0 || n > 32768 || !(n as u32).is_power_of_two())
+            .is_some_and(|n| !crate::backgammon::board::is_valid_cube_value(n))
         {
-            return Err(ApiError::invalid(
-                "cube_value must be a power of two from 1 to 32768",
-            ));
+            return Err(ApiError::invalid(format!(
+                "cube_value must be a power of two from 1 to {}",
+                crate::backgammon::board::MAX_CUBE_VALUE
+            )));
         }
         if [self.min_loss, self.max_loss]
             .into_iter()

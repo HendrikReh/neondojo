@@ -120,7 +120,7 @@ pub(crate) async fn load(
     player: Option<&[String]>,
 ) -> ApiResult<Vec<SourceDecision>> {
     super::imported::catalog_legacy(pool, database, match_id, player).await?;
-    let mut tx = read_snapshot(pool).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
     let saved = read_saved_decisions(&mut tx, database, match_id, player).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     saved.project().await
@@ -139,16 +139,7 @@ pub(super) async fn read_saved_decisions(
     player: Option<&[String]>,
 ) -> ApiResult<SavedDecisions> {
     if let Some(id) = database {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
-        )
-        .bind(id)
-        .fetch_one(&mut **tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-        if !exists {
-            return Err(ApiError::invalid("Choose an existing database"));
-        }
+        require_database(&mut **tx, id).await?;
     }
     let (games, rows) = native_rows(tx, database, match_id, player).await?;
     let imported =
@@ -178,7 +169,7 @@ pub(crate) async fn load_native_match(
     pool: &PgPool,
     match_id: Uuid,
 ) -> ApiResult<(bool, Vec<SourceDecision>)> {
-    let mut tx = read_snapshot(pool).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
     let (games, rows) = native_rows(&mut tx, None, Some(match_id), None).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     let has_analysis = !games.is_empty();
@@ -188,22 +179,9 @@ pub(crate) async fn load_native_match(
     Ok((has_analysis, decisions))
 }
 
-pub(super) async fn require_database(pool: &PgPool, id: Uuid) -> ApiResult<()> {
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
-    )
-    .bind(id)
-    .fetch_one(pool)
-    .await
-    .map_err(anyhow::Error::from)?;
-    if exists {
-        Ok(())
-    } else {
-        Err(ApiError::invalid("Choose an existing database"))
-    }
+pub(super) async fn require_database<'e>(db: impl sqlx::PgExecutor<'e>, id: Uuid) -> ApiResult<()> {
+    crate::databases::require_library_database_invalid(db, id, "Choose an existing database").await
 }
-
-pub(super) use crate::browse_indexes::read_snapshot;
 
 async fn native_rows(
     tx: &mut Transaction<'_, Postgres>,
@@ -228,19 +206,10 @@ async fn native_rows(
 
 pub(super) async fn players(pool: &PgPool, database: Option<Uuid>) -> ApiResult<Vec<String>> {
     if let Some(id) = database {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
-        )
-        .bind(id)
-        .fetch_one(pool)
-        .await
-        .map_err(anyhow::Error::from)?;
-        if !exists {
-            return Err(ApiError::invalid("Choose an existing database"));
-        }
+        require_database(pool, id).await?;
     }
     let names: Vec<String> = sqlx::query_scalar(&format!(
-        "{CHOSEN}
+        "{ELIGIBLE}
          SELECT DISTINCT name FROM eligible m
          CROSS JOIN LATERAL (VALUES(btrim(m.white)), (btrim(m.black))) names(name)
          WHERE name<>'' ORDER BY name LIMIT 10001"
@@ -333,19 +302,10 @@ fn reconstruct(games: Vec<Game>, rows: Vec<Row>) -> ApiResult<Vec<SourceDecision
             let Ok(board) = ids::decode_board(position_id, match_state_id) else {
                 continue;
             };
-            let Ok(array) = <&[i32; 26]>::try_from(board.as_slice()) else {
+            let Some(plan) = game_plan::classify_for_player(&board, d.player) else {
                 continue;
             };
-            let Ok(plans) = game_plan::classify(array) else {
-                continue;
-            };
-            let question_kind = if d.kind == "checker" {
-                "checker"
-            } else if matches!(d.played.as_str(), "take" | "drop") {
-                "cube_response"
-            } else {
-                "cube_offer"
-            };
+            let question_kind = crate::cube_context::decision_question_kind(&d.kind, &d.played);
             let dice = if d.kind == "checker" {
                 let Some(dice) = d
                     .dice
@@ -356,11 +316,6 @@ fn reconstruct(games: Vec<Game>, rows: Vec<Row>) -> ApiResult<Vec<SourceDecision
                 dice.to_vec()
             } else {
                 vec![0, 0]
-            };
-            let plan = if d.player == 0 {
-                plans.white
-            } else {
-                plans.black
             };
             let question_match_id = if d.kind == "cube" {
                 ids::hide_dice(match_state_id)

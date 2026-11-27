@@ -2,8 +2,8 @@ use super::Assessment;
 use crate::{
     backgammon::ids::{Field, MatchId},
     game_plan::{self, GamePlan},
-    match_analysis::evaluated_equities,
-    play::PlaySession,
+    match_analysis::{Decision, evaluated_equities},
+    play::{PlayDecision, PlayHistorySnapshot, PlaySession},
 };
 use anyhow::{Context, Result, ensure};
 use serde::Serialize;
@@ -34,68 +34,24 @@ struct Evidence<'a> {
     first_attempt: Option<Value>,
 }
 
+struct AlignedDecision<'d, 'e> {
+    decision: &'d Decision,
+    event: Option<&'e PlayHistorySnapshot>,
+    checker_no: i32,
+    no_double: bool,
+}
+
 pub(super) fn build(session: &PlaySession, sgf: &str, language: &str) -> Result<Value> {
     let review = session.review.as_ref().context("Missing report analysis")?;
     let history = crate::play::build_history_snapshots(session, sgf)?;
-    let attempts: BTreeMap<_, _> = session
-        .decisions
-        .iter()
-        .filter(|decision| decision.committed && decision.original_action.is_some())
-        .map(|decision| {
-            (
-                (
-                    decision.game_no,
-                    decision.history_index,
-                    attempt_kind(decision),
-                ),
-                decision,
-            )
-        })
-        .collect();
+    let attempts = index_first_attempts(session);
     let mut evidence = Vec::new();
     let mut category: BTreeMap<&str, Counts> = BTreeMap::new();
     let mut human_count = 0;
     let mut context_missing = 0;
     for game in &review.games {
-        let events: Vec<_> = history
-            .items
-            .iter()
-            .filter(|event| event.game_no == game.game_no && event.kind != "resign")
-            .collect();
-        let (mut event_index, mut checker_no, mut aligned) = (0, 0, true);
-        for (index, decision) in game.decisions.iter().enumerate() {
-            let no_double = decision.kind == "cube" && decision.played == "no double";
-            if decision.kind == "checker" {
-                checker_no += 1;
-            }
-            let event = events.get(event_index).filter(|event| {
-                let before = &event.before;
-                let dice_match = decision.dice.is_some_and(|dice| {
-                    before.dice.as_slice() == dice || before.dice.as_slice() == [dice[1], dice[0]]
-                });
-                aligned
-                    && decision.decision_no == index as i32 + 1
-                    && before.player == decision.player
-                    && match decision.kind.as_str() {
-                        "checker" => {
-                            event.kind == "checker"
-                                && decision.checker_no == Some(checker_no)
-                                && dice_match
-                        }
-                        "cube" if no_double => {
-                            event.kind == "checker" && decision.checker_no == Some(checker_no + 1)
-                        }
-                        "cube" => {
-                            event.kind == "cube"
-                                && before.notation.eq_ignore_ascii_case(&decision.played)
-                        }
-                        _ => false,
-                    }
-            });
-            aligned &= event.is_some();
-            if !no_double {
-                event_index += 1;
-            }
+        for aligned in align_game_decisions(game.game_no, &game.decisions, &history.items) {
+            let decision = aligned.decision;
             if decision.player != session.human_player {
                 continue;
             }
@@ -105,119 +61,18 @@ pub(super) fn build(session: &PlaySession, sgf: &str, language: &str) -> Result<
                 .error_thresholds
                 .classify(decision.equity_loss)
                 .as_str();
-            let mut topics = vec![if decision.kind == "checker" {
-                "checker"
-            } else {
-                "cube"
-            }];
-            let mut context = Value::Null;
-            let mut first_attempt = None;
-            if let Some(event) = event {
-                let position = &event.before;
-                if let (Ok(board), Some(match_id)) = (
-                    <&[i32; 26]>::try_from(position.board.as_slice()),
-                    MatchId::decode(&position.gnubg_match_id),
-                ) {
-                    let plans = game_plan::classify(board).map_err(anyhow::Error::msg)?;
-                    let (plan, opponent_plan) = if decision.player == 0 {
-                        (plans.white, plans.black)
-                    } else {
-                        (plans.black, plans.white)
-                    };
-                    if matches!(plan, GamePlan::PureRace | GamePlan::Racing) {
-                        topics.push("race");
-                    }
-                    let contact = plan != GamePlan::PureRace;
-                    let (pips, _) = game_plan::absolute_pip_counts(board);
-                    let player_backgame = backgame_candidate(board, pips, decision.player);
-                    let opponent_backgame = backgame_candidate(board, pips, 1 - decision.player);
-                    if contact && (player_backgame || opponent_backgame) {
-                        topics.push("backgame");
-                    }
-                    if contact {
-                        topics.push("contact");
-                    }
-                    if plan == GamePlan::Priming {
-                        topics.push("prime");
-                    }
-                    if plan == GamePlan::Anchoring {
-                        topics.push("anchor");
-                    }
-                    let home = if decision.player == 0 {
-                        board[7..].iter().all(|n| *n <= 0)
-                    } else {
-                        board[..19].iter().all(|n| *n >= 0)
-                    };
-                    if decision.kind == "checker" {
-                        if checker_no <= 3 {
-                            topics.push("opening");
-                        }
-                        if home {
-                            topics.push("bear_off");
-                        }
-                        // The saved native recommendation and actual play provide both
-                        // sides of the comparison only when their hit markings differ.
-                        if evaluated && hits(&decision.best) != hits(&decision.played) {
-                            topics.push("hit");
-                        }
-                    }
-                    let owner = match match_id.get(Field::CUBE_OWNER) {
-                        0 => "white",
-                        1 => "black",
-                        _ => "centered",
-                    };
-                    let cube = 1 << match_id.get(Field::CUBE_LOG2);
-                    let response = matches!(decision.played.as_str(), "take" | "drop");
-                    context = json!({
-                        "score_white_black": [match_id.get(Field::SCORE_0), match_id.get(Field::SCORE_1)],
-                        "crawford": match_id.get(Field::CRAWFORD) == 1,
-                        "cube_value_before_offer": cube, "cube_owner": owner,
-                        "offered_cube": response.then_some(cube * 2),
-                        "dice": decision.dice.filter(|_| decision.kind == "checker"),
-                        "absolute_board": board.as_slice(), "pips_white_black": pips,
-                        "game_plan": plan, "opponent_plan": opponent_plan, "contact": contact,
-                        "can_bear_off": home, "checker_no": decision.checker_no,
-                        "player_backgame_candidate": contact && player_backgame,
-                        "opponent_backgame_candidate": contact && opponent_backgame,
-                        "played_hits": (decision.kind == "checker").then(|| hits(&decision.played)),
-                        "best_hits": (decision.kind == "checker").then(|| hits(&decision.best)),
-                    });
-                    let kind = if decision.kind == "checker" {
-                        "checker"
-                    } else if no_double {
-                        "no_double"
-                    } else {
-                        &decision.played
-                    };
-                    if let Some(attempt) = attempts.get(&(game.game_no, event.index, kind))
-                        && attempt.first_loss.is_some()
-                    {
-                        first_attempt = Some(json!({
-                            "action": attempt.original_notation.as_deref()
-                                .filter(|text| !text.is_empty()).or(attempt.original_action.as_deref()),
-                            "loss": attempt.first_loss,
-                            "assisted": attempt.attempts.first().map_or(attempt.assisted, |a| a.assisted),
-                            "retries": attempt.retry_count,
-                        }));
-                    }
-                }
-            }
+            let (topics, context, first_attempt) =
+                decision_context(&aligned, game.game_no, evaluated, &attempts)?;
             if context.is_null() {
                 context_missing += 1;
             }
-            for topic in &topics {
-                let counts = category.entry(topic).or_default();
-                if evaluated {
-                    counts.evaluated += 1;
-                    counts.loss += decision.equity_loss;
-                    counts.errors +=
-                        usize::from(decision.equity_loss >= session.error_thresholds.questionable);
-                } else if decision.evaluation_status == "forced" {
-                    counts.forced += 1;
-                } else {
-                    counts.unavailable += 1;
-                }
-            }
+            record_category_counts(
+                &mut category,
+                &topics,
+                decision,
+                evaluated,
+                session.error_thresholds.questionable,
+            );
             if evaluated {
                 evidence.push(Evidence {
                     evidence_ref: format!("{}:{}", game.game_no, decision.decision_no),
@@ -237,6 +92,239 @@ pub(super) fn build(session: &PlaySession, sgf: &str, language: &str) -> Result<
     }
     ensure!(!evidence.is_empty(), "No evaluated player decisions");
     let evaluated = evidence.len();
+    let selected = select_examples(evidence);
+    Ok(json!({
+        "output_language": language,
+        "target_player": if session.human_player == 0 { "white" } else { "black" },
+        "match_context": {
+            "match_length": session.match_length, "final_score_white_black": session.scores,
+            "play_mode": session.play_mode, "conceded": session.match_forfeited,
+            "reached_games": session.game_no, "analyzed_games": review.games.len(),
+        },
+        "analysis": {
+            "plies": review.analysis_plies, "assisted": review.assisted,
+            "first_attempt_pr_on_reached_positions": review.first_attempt_rating,
+            "first_attempt_pr_method": review.first_attempt_rating_method,
+            "independent_first_attempts": review.independent_first_attempt_count,
+            "assisted_first_attempts": review.assisted_first_attempt_count,
+            "native_statistics_complete": review.games.iter().all(|game| game.statistics.is_some()),
+        },
+        "coverage": {
+            "snapshot_decisions": human_count, "evaluated_decisions": evaluated,
+            "decisions_without_aligned_position": context_missing, "examples": selected.len(),
+            "backgame_membership": "candidate only: two or more anchors in the opponent home board while behind in pips",
+            "hit_membership": "only known when saved best and played differ in hit notation; no denominator for all hit choices",
+            "opening_membership": "first three checker plies of the game",
+            "board_convention": "absolute, white positive moves 24 to 1, black negative moves 1 to 24; bars 25 and 0",
+        },
+        "assessment_basis": "played choices; separately labeled recorded first attempts",
+        "category_summaries": category,
+        "decision_evidence": selected,
+    }))
+}
+
+fn index_first_attempts(session: &PlaySession) -> BTreeMap<(i32, usize, &str), &PlayDecision> {
+    session
+        .decisions
+        .iter()
+        .filter(|decision| decision.committed && decision.original_action.is_some())
+        .map(|decision| {
+            (
+                (
+                    decision.game_no,
+                    decision.history_index,
+                    attempt_kind(decision),
+                ),
+                decision,
+            )
+        })
+        .collect()
+}
+
+fn align_game_decisions<'d, 'e>(
+    game_no: i32,
+    decisions: &'d [Decision],
+    history: &'e [PlayHistorySnapshot],
+) -> Vec<AlignedDecision<'d, 'e>> {
+    let events: Vec<_> = history
+        .iter()
+        .filter(|event| event.game_no == game_no && event.kind != "resign")
+        .collect();
+    let (mut event_index, mut checker_no, mut aligned) = (0, 0, true);
+    let mut rows = Vec::with_capacity(decisions.len());
+    for (index, decision) in decisions.iter().enumerate() {
+        let no_double = decision.kind == "cube" && decision.played == "no double";
+        if decision.kind == "checker" {
+            checker_no += 1;
+        }
+        let event = events.get(event_index).copied().filter(|event| {
+            let before = &event.before;
+            let dice_match = decision.dice.is_some_and(|dice| {
+                before.dice.as_slice() == dice || before.dice.as_slice() == [dice[1], dice[0]]
+            });
+            aligned
+                && decision.decision_no == index as i32 + 1
+                && before.player == decision.player
+                && match decision.kind.as_str() {
+                    "checker" => {
+                        event.kind == "checker"
+                            && decision.checker_no == Some(checker_no)
+                            && dice_match
+                    }
+                    "cube" if no_double => {
+                        event.kind == "checker" && decision.checker_no == Some(checker_no + 1)
+                    }
+                    "cube" => {
+                        event.kind == "cube"
+                            && before.notation.eq_ignore_ascii_case(&decision.played)
+                    }
+                    _ => false,
+                }
+        });
+        aligned &= event.is_some();
+        if !no_double {
+            event_index += 1;
+        }
+        rows.push(AlignedDecision {
+            decision,
+            event,
+            checker_no,
+            no_double,
+        });
+    }
+    rows
+}
+
+fn decision_context<'a>(
+    aligned: &AlignedDecision<'a, '_>,
+    game_no: i32,
+    evaluated: bool,
+    attempts: &BTreeMap<(i32, usize, &'a str), &'a PlayDecision>,
+) -> Result<(Vec<&'static str>, Value, Option<Value>)> {
+    let decision = aligned.decision;
+    let mut topics = vec![if decision.kind == "checker" {
+        "checker"
+    } else {
+        "cube"
+    }];
+    let Some(event) = aligned.event else {
+        return Ok((topics, Value::Null, None));
+    };
+    let position = &event.before;
+    let (Ok(board), Some(match_id)) = (
+        <&[i32; 26]>::try_from(position.board.as_slice()),
+        MatchId::decode(&position.gnubg_match_id),
+    ) else {
+        return Ok((topics, Value::Null, None));
+    };
+    let plans = game_plan::classify(board).map_err(anyhow::Error::msg)?;
+    let (plan, opponent_plan) = if decision.player == 0 {
+        (plans.white, plans.black)
+    } else {
+        (plans.black, plans.white)
+    };
+    if matches!(plan, GamePlan::PureRace | GamePlan::Racing) {
+        topics.push("race");
+    }
+    let contact = plan != GamePlan::PureRace;
+    let (pips, _) = game_plan::absolute_pip_counts(board);
+    let player_backgame = backgame_candidate(board, pips, decision.player);
+    let opponent_backgame = backgame_candidate(board, pips, 1 - decision.player);
+    if contact && (player_backgame || opponent_backgame) {
+        topics.push("backgame");
+    }
+    if contact {
+        topics.push("contact");
+    }
+    if plan == GamePlan::Priming {
+        topics.push("prime");
+    }
+    if plan == GamePlan::Anchoring {
+        topics.push("anchor");
+    }
+    let home = if decision.player == 0 {
+        board[7..].iter().all(|n| *n <= 0)
+    } else {
+        board[..19].iter().all(|n| *n >= 0)
+    };
+    if decision.kind == "checker" {
+        if aligned.checker_no <= 3 {
+            topics.push("opening");
+        }
+        if home {
+            topics.push("bear_off");
+        }
+        // The saved native recommendation and actual play provide both
+        // sides of the comparison only when their hit markings differ.
+        if evaluated && hits(&decision.best) != hits(&decision.played) {
+            topics.push("hit");
+        }
+    }
+    let owner = match match_id.get(Field::CUBE_OWNER) {
+        0 => "white",
+        1 => "black",
+        _ => "centered",
+    };
+    let cube = 1 << match_id.get(Field::CUBE_LOG2);
+    let response = matches!(decision.played.as_str(), "take" | "drop");
+    let context = json!({
+        "score_white_black": [match_id.get(Field::SCORE_0), match_id.get(Field::SCORE_1)],
+        "crawford": match_id.get(Field::CRAWFORD) == 1,
+        "cube_value_before_offer": cube, "cube_owner": owner,
+        "offered_cube": response.then_some(cube * 2),
+        "dice": decision.dice.filter(|_| decision.kind == "checker"),
+        "absolute_board": board.as_slice(), "pips_white_black": pips,
+        "game_plan": plan, "opponent_plan": opponent_plan, "contact": contact,
+        "can_bear_off": home, "checker_no": decision.checker_no,
+        "player_backgame_candidate": contact && player_backgame,
+        "opponent_backgame_candidate": contact && opponent_backgame,
+        "played_hits": (decision.kind == "checker").then(|| hits(&decision.played)),
+        "best_hits": (decision.kind == "checker").then(|| hits(&decision.best)),
+    });
+    let kind = if decision.kind == "checker" {
+        "checker"
+    } else if aligned.no_double {
+        "no_double"
+    } else {
+        &decision.played
+    };
+    let first_attempt = attempts
+        .get(&(game_no, event.index, kind))
+        .filter(|attempt| attempt.first_loss.is_some())
+        .map(|attempt| {
+            json!({
+                "action": attempt.original_notation.as_deref()
+                    .filter(|text| !text.is_empty()).or(attempt.original_action.as_deref()),
+                "loss": attempt.first_loss,
+                "assisted": attempt.attempts.first().map_or(attempt.assisted, |a| a.assisted),
+                "retries": attempt.retry_count,
+            })
+        });
+    Ok((topics, context, first_attempt))
+}
+
+fn record_category_counts(
+    category: &mut BTreeMap<&'static str, Counts>,
+    topics: &[&'static str],
+    decision: &Decision,
+    evaluated: bool,
+    questionable: f64,
+) {
+    for topic in topics {
+        let counts = category.entry(topic).or_default();
+        if evaluated {
+            counts.evaluated += 1;
+            counts.loss += decision.equity_loss;
+            counts.errors += usize::from(decision.equity_loss >= questionable);
+        } else if decision.evaluation_status == "forced" {
+            counts.forced += 1;
+        } else {
+            counts.unavailable += 1;
+        }
+    }
+}
+
+fn select_examples<'a>(mut evidence: Vec<Evidence<'a>>) -> Vec<Evidence<'a>> {
     evidence.sort_by(|a, b| {
         priority(b)
             .total_cmp(&priority(a))
@@ -271,43 +359,15 @@ pub(super) fn build(session: &PlaySession, sgf: &str, language: &str) -> Result<
         }
         chosen.insert(index);
     }
-    let selected: Vec<_> = evidence
+    evidence
         .into_iter()
         .enumerate()
         .filter_map(|(index, item)| chosen.contains(&index).then_some(item))
-        .collect();
-    Ok(json!({
-        "output_language": language,
-        "target_player": if session.human_player == 0 { "white" } else { "black" },
-        "match_context": {
-            "match_length": session.match_length, "final_score_white_black": session.scores,
-            "play_mode": session.play_mode, "conceded": session.match_forfeited,
-            "reached_games": session.game_no, "analyzed_games": review.games.len(),
-        },
-        "analysis": {
-            "plies": review.analysis_plies, "assisted": review.assisted,
-            "first_attempt_pr_on_reached_positions": review.first_attempt_rating,
-            "first_attempt_pr_method": review.first_attempt_rating_method,
-            "independent_first_attempts": review.independent_first_attempt_count,
-            "assisted_first_attempts": review.assisted_first_attempt_count,
-            "native_statistics_complete": review.games.iter().all(|game| game.statistics.is_some()),
-        },
-        "coverage": {
-            "snapshot_decisions": human_count, "evaluated_decisions": evaluated,
-            "decisions_without_aligned_position": context_missing, "examples": selected.len(),
-            "backgame_membership": "candidate only: two or more anchors in the opponent home board while behind in pips",
-            "hit_membership": "only known when saved best and played differ in hit notation; no denominator for all hit choices",
-            "opening_membership": "first three checker plies of the game",
-            "board_convention": "absolute, white positive moves 24 to 1, black negative moves 1 to 24; bars 25 and 0",
-        },
-        "assessment_basis": "played choices; separately labeled recorded first attempts",
-        "category_summaries": category,
-        "decision_evidence": selected,
-    }))
+        .collect()
 }
 
 // A skipped cube offer can share a history index with the following checker play.
-fn attempt_kind(attempt: &crate::play::PlayDecision) -> &str {
+fn attempt_kind(attempt: &PlayDecision) -> &str {
     match attempt.action.as_deref().unwrap_or("") {
         "move" | "pass" => "checker",
         "roll" | "no_double" => "no_double",

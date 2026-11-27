@@ -5,18 +5,9 @@ use crate::{
     position_game_plans,
 };
 use axum::http::StatusCode;
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::PgPool;
 use std::time::Duration;
 use uuid::Uuid;
-
-pub(crate) async fn read_snapshot(pool: &PgPool) -> ApiResult<Transaction<'_, Postgres>> {
-    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    Ok(tx)
-}
 
 pub(crate) fn preparing(name: &str) -> ApiError {
     let mut error = crate::api::ErrorBody::from(format!(

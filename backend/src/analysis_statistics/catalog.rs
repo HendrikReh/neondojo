@@ -5,7 +5,10 @@ use crate::json_errors::{Json, Path, Query};
 use crate::{
     analysis_catalog::{SelectedAnalysis, resolve_selection},
     api::{ApiError, ApiResult, AppState, ErrorBody},
-    model::{MatchAnalysisSummary, PerformanceRatingSummary, PlayerAnalysisSummary, Position},
+    model::{
+        MatchAnalysisSummary, MatchGame, PerformanceRatingSummary, PlayerAnalysisSummary, Position,
+    },
+    review_decisions::ReviewDecision,
 };
 use axum::{Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
@@ -84,6 +87,234 @@ pub struct CatalogStatisticsQuery {
 pub fn routes() -> Router<AppState> {
     Router::new().route("/api/matches/{id}/analysis-statistics", get(statistics))
 }
+
+async fn summarize_native_entry(
+    state: &AppState,
+    job_id: Uuid,
+    analysis_id: Option<String>,
+    game_no: Option<i32>,
+) -> ApiResult<MatchAnalysisStatistics> {
+    let result = super::load_statistics(state, job_id).await?;
+    let mut games: Vec<CatalogGameStatistics> = result.games.into_iter().map(Into::into).collect();
+    let (summary, error_breakdown) = if let Some(game) = game_no {
+        if let Some(index) = games.iter().position(|g| g.game_no == game) {
+            let selected = games.remove(index);
+            // Return a single scope without duplicating/mixing the full-match rating.
+            return Ok(MatchAnalysisStatistics {
+                needs_cube_rule_reanalysis: selected.needs_cube_rule_reanalysis,
+                analysis_id,
+                summary: selected.summary,
+                games: vec![],
+                error_breakdown: selected.error_breakdown,
+            });
+        }
+        games.clear();
+        (None, None)
+    } else {
+        (result.summary.map(Into::into), result.error_breakdown)
+    };
+    Ok(MatchAnalysisStatistics {
+        needs_cube_rule_reanalysis: games.iter().any(|g| g.needs_cube_rule_reanalysis),
+        analysis_id,
+        summary,
+        games,
+        error_breakdown,
+    })
+}
+
+struct ImportedStatsInputs {
+    rows: Vec<ReviewDecision>,
+    source_games: Vec<MatchGame>,
+    positions: Vec<Position>,
+    explicit_cubes: Vec<(i32, i64)>,
+}
+
+async fn load_imported_inputs(
+    pool: &sqlx::PgPool,
+    id: Uuid,
+    key: &str,
+    game_no: Option<i32>,
+) -> ApiResult<ImportedStatsInputs> {
+    // Build the lazy catalogs first, then read every statistics input from one
+    // repeatable-read snapshot so a source replacement cannot combine old
+    // decisions with new coverage.
+    crate::review_decisions::prepare_review(pool, id).await?;
+    crate::store::game_catalog(pool, id)
+        .await?
+        .ok_or_else(ApiError::missing)?;
+    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
+    let rows = crate::review_decisions::load_all_review_on(&mut tx, id, key, game_no, None).await?;
+    let source_games = crate::store::match_games_on(&mut tx, id).await?;
+    if game_no.is_some_and(|n| !source_games.iter().any(|g| g.game_no == n)) {
+        return Err(ApiError::missing());
+    }
+    let source_games: Vec<_> = source_games
+        .into_iter()
+        .filter(|g| game_no.is_none_or(|n| n == g.game_no))
+        .collect();
+    let positions: Vec<Position> = sqlx::query_as(
+        "SELECT * FROM positions WHERE match_uuid=$1 AND ($2::integer IS NULL OR game_no=$2) ORDER BY ordinal LIMIT 100001",
+    )
+    .bind(id)
+    .bind(game_no)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    if positions.len() > 100_000 {
+        return Err(ApiError::invalid(
+            "Analysis exceeds supported position count",
+        ));
+    }
+    let explicit_cubes: Vec<(i32, i64)> = sqlx::query_as(
+        "SELECT game_no,count(*) FROM match_moves WHERE match_uuid=$1 AND kind='cube' AND ($2::integer IS NULL OR game_no=$2) GROUP BY game_no",
+    )
+    .bind(id)
+    .bind(game_no)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(ImportedStatsInputs {
+        rows,
+        source_games,
+        positions,
+        explicit_cubes,
+    })
+}
+
+fn summarize_imported_entry(
+    analysis_id: Option<String>,
+    inputs: ImportedStatsInputs,
+) -> anyhow::Result<MatchAnalysisStatistics> {
+    let ImportedStatsInputs {
+        rows,
+        source_games,
+        positions,
+        explicit_cubes,
+    } = inputs;
+    let engines: BTreeSet<_> = rows.iter().map(|r| r.engine.clone()).collect();
+    let depths: BTreeSet<_> = rows.iter().map(|r| r.depth.clone()).collect();
+    let plies: BTreeSet<_> = rows.iter().map(|r| r.depth_plies).collect();
+    let engine = engines.into_iter().collect::<Vec<_>>().join(" / ");
+    let depth = if depths.len() == 1 {
+        depths.into_iter().next().flatten()
+    } else {
+        None
+    };
+    let plies = if plies.len() == 1 {
+        plies.into_iter().next().flatten()
+    } else {
+        None
+    };
+    let empty = |games, moves| CatalogAnalysisSummary {
+        engine: engine.clone(),
+        plies,
+        recorded_depth: depth.clone(),
+        total_games: games,
+        completed_games: 0,
+        total_moves: moves,
+        analyzed_moves: 0,
+        players: [
+            PlayerAnalysisSummary::default(),
+            PlayerAnalysisSummary {
+                player: 1,
+                ..Default::default()
+            },
+        ],
+        performance_rating: None,
+    };
+    let error_counts = || {
+        [
+            PlayerErrorBreakdown::default(),
+            PlayerErrorBreakdown {
+                player: 1,
+                ..Default::default()
+            },
+        ]
+    };
+    let mut expected_cubes: BTreeMap<_, _> = explicit_cubes.into_iter().collect();
+    let disabled: BTreeSet<_> = source_games
+        .iter()
+        .filter(|g| g.cube_enabled == Some(false))
+        .map(|g| g.game_no)
+        .collect();
+    for p in &positions {
+        if crate::match_analysis::cube_analysis_available(
+            &p.board,
+            &p.gnubg_match_id,
+            p.player,
+            !disabled.contains(&p.game_no),
+        )? {
+            *expected_cubes.entry(p.game_no).or_default() += 1;
+        }
+    }
+    let mut overall = empty(source_games.len() as i32, positions.len() as i32);
+    let mut overall_errors = error_counts();
+    let mut games = Vec::with_capacity(source_games.len());
+    let mut by_game: BTreeMap<i32, Vec<_>> = BTreeMap::new();
+    for row in rows {
+        if row.decision.kind == "cube" && disabled.contains(&row.game_no) {
+            continue;
+        }
+        by_game.entry(row.game_no).or_default().push(row);
+    }
+    for g in source_games {
+        let mut summary = empty(1, g.position_count);
+        let mut errors = error_counts();
+        for row in by_game.remove(&g.game_no).unwrap_or_default() {
+            let d = &row.decision;
+            if !matches!(d.evaluation_status.as_str(), "evaluated" | "forced") {
+                continue;
+            }
+            for target in [&mut summary, &mut overall] {
+                crate::match_analysis::accumulate_decision(&mut target.players, d)?;
+                target.analyzed_moves += i32::from(d.kind == "checker");
+            }
+            for target in [&mut errors, &mut overall_errors] {
+                accumulate_errors(target, d);
+            }
+        }
+        let checker_count = summary
+            .players
+            .iter()
+            .map(|p| p.checker_decisions)
+            .sum::<i32>();
+        let cube_count = summary
+            .players
+            .iter()
+            .map(|p| p.cube_decisions)
+            .sum::<i32>();
+        let complete = g.cube_enabled.is_some()
+            && checker_count == g.position_count
+            && i64::from(cube_count) == *expected_cubes.get(&g.game_no).unwrap_or(&0);
+        summary.completed_games = i32::from(complete);
+        overall.completed_games += i32::from(complete);
+        let has_results = checker_count + cube_count > 0;
+        games.push(CatalogGameStatistics {
+            needs_cube_rule_reanalysis: false,
+            game_no: g.game_no,
+            white_score: g.white_score,
+            black_score: g.black_score,
+            crawford: g.crawford,
+            analyzed: complete,
+            summary: has_results.then_some(summary),
+            error_breakdown: complete.then_some(errors),
+        });
+    }
+    let complete = overall.total_games > 0 && overall.completed_games == overall.total_games;
+    let any = overall
+        .players
+        .iter()
+        .any(|p| p.checker_decisions + p.cube_decisions > 0);
+    Ok(MatchAnalysisStatistics {
+        needs_cube_rule_reanalysis: false,
+        analysis_id,
+        summary: any.then_some(overall),
+        games,
+        error_breakdown: complete.then_some(overall_errors),
+    })
+}
+
 #[utoipa::path(get,path="/api/matches/{id}/analysis-statistics",params(("id"=Uuid,Path),CatalogStatisticsQuery),responses((status=200,body=MatchAnalysisStatistics),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
 async fn statistics(
     State(state): State<AppState>,
@@ -106,35 +337,9 @@ async fn statistics(
     if let Some(SelectedAnalysis::Job(job)) = &selected
         && job.kind == "match"
     {
-        let result = super::load_statistics(&state, job.id).await?;
-        let mut games: Vec<CatalogGameStatistics> =
-            result.games.into_iter().map(Into::into).collect();
-        let (summary, error_breakdown) = if let Some(game) = query.game_no {
-            if let Some(index) = games.iter().position(|g| g.game_no == game) {
-                let selected = games.remove(index);
-                let summary = selected.summary;
-                let errors = selected.error_breakdown;
-                // Return a single scope without duplicating/mixing the full-match rating.
-                return Ok(Json(MatchAnalysisStatistics {
-                    needs_cube_rule_reanalysis: selected.needs_cube_rule_reanalysis,
-                    analysis_id,
-                    summary,
-                    games: vec![],
-                    error_breakdown: errors,
-                }));
-            }
-            games.clear();
-            (None, None)
-        } else {
-            (result.summary.map(Into::into), result.error_breakdown)
-        };
-        return Ok(Json(MatchAnalysisStatistics {
-            needs_cube_rule_reanalysis: games.iter().any(|g| g.needs_cube_rule_reanalysis),
-            analysis_id,
-            summary,
-            games,
-            error_breakdown,
-        }));
+        return Ok(Json(
+            summarize_native_entry(&state, job.id, analysis_id, query.game_no).await?,
+        ));
     }
     // A single-position result has no match statistics, even if it contains a loss.
     if !matches!(selected, Some(SelectedAnalysis::Imported { .. })) {
@@ -147,162 +352,10 @@ async fn statistics(
         }));
     }
     let key = analysis_id.as_deref().ok_or_else(ApiError::missing)?;
-    // Build the lazy catalogs first, then read every statistics input from one
-    // repeatable-read snapshot so a source replacement cannot combine old
-    // decisions with new coverage.
-    crate::review_decisions::prepare_review(&state.pool, id).await?;
-    crate::store::game_catalog(&state.pool, id)
-        .await?
-        .ok_or_else(ApiError::missing)?;
-    let mut tx = crate::review_decisions::begin_review_snapshot(&state.pool).await?;
-    let rows =
-        crate::review_decisions::load_all_review_on(&mut tx, id, key, query.game_no, None).await?;
-    let source_games = crate::store::match_games_on(&mut tx, id).await?;
-    if query
-        .game_no
-        .is_some_and(|n| !source_games.iter().any(|g| g.game_no == n))
-    {
-        return Err(ApiError::missing());
-    }
-    let source_games: Vec<_> = source_games
-        .into_iter()
-        .filter(|g| query.game_no.is_none_or(|n| n == g.game_no))
-        .collect();
-    let positions:Vec<Position>=sqlx::query_as("SELECT * FROM positions WHERE match_uuid=$1 AND ($2::integer IS NULL OR game_no=$2) ORDER BY ordinal LIMIT 100001")
-        .bind(id).bind(query.game_no).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
-    if positions.len() > 100_000 {
-        return Err(ApiError::invalid(
-            "Analysis exceeds supported position count",
-        ));
-    }
-    let explicit_cubes:Vec<(i32,i64)>=sqlx::query_as("SELECT game_no,count(*) FROM match_moves WHERE match_uuid=$1 AND kind='cube' AND ($2::integer IS NULL OR game_no=$2) GROUP BY game_no")
-        .bind(id).bind(query.game_no).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
-    tx.commit().await.map_err(anyhow::Error::from)?;
-    let data = tokio::task::spawn_blocking(move || -> anyhow::Result<MatchAnalysisStatistics> {
-        let engines: BTreeSet<_> = rows.iter().map(|r| r.engine.clone()).collect();
-        let depths: BTreeSet<_> = rows.iter().map(|r| r.depth.clone()).collect();
-        let plies: BTreeSet<_> = rows.iter().map(|r| r.depth_plies).collect();
-        let engine = engines.into_iter().collect::<Vec<_>>().join(" / ");
-        let depth = if depths.len() == 1 {
-            depths.into_iter().next().flatten()
-        } else {
-            None
-        };
-        let plies = if plies.len() == 1 {
-            plies.into_iter().next().flatten()
-        } else {
-            None
-        };
-        let empty = |games, moves| CatalogAnalysisSummary {
-            engine: engine.clone(),
-            plies,
-            recorded_depth: depth.clone(),
-            total_games: games,
-            completed_games: 0,
-            total_moves: moves,
-            analyzed_moves: 0,
-            players: [
-                PlayerAnalysisSummary::default(),
-                PlayerAnalysisSummary {
-                    player: 1,
-                    ..Default::default()
-                },
-            ],
-            performance_rating: None,
-        };
-        let error_counts = || {
-            [
-                PlayerErrorBreakdown::default(),
-                PlayerErrorBreakdown {
-                    player: 1,
-                    ..Default::default()
-                },
-            ]
-        };
-        let mut expected_cubes: BTreeMap<_, _> = explicit_cubes.into_iter().collect();
-        let disabled: BTreeSet<_> = source_games
-            .iter()
-            .filter(|g| g.cube_enabled == Some(false))
-            .map(|g| g.game_no)
-            .collect();
-        for p in &positions {
-            if crate::match_analysis::cube_analysis_available(
-                &p.board,
-                &p.gnubg_match_id,
-                p.player,
-                !disabled.contains(&p.game_no),
-            )? {
-                *expected_cubes.entry(p.game_no).or_default() += 1;
-            }
-        }
-        let mut overall = empty(source_games.len() as i32, positions.len() as i32);
-        let mut overall_errors = error_counts();
-        let mut games = Vec::with_capacity(source_games.len());
-        let mut by_game: BTreeMap<i32, Vec<_>> = BTreeMap::new();
-        for row in rows {
-            if row.decision.kind == "cube" && disabled.contains(&row.game_no) {
-                continue;
-            }
-            by_game.entry(row.game_no).or_default().push(row);
-        }
-        for g in source_games {
-            let mut summary = empty(1, g.position_count);
-            let mut errors = error_counts();
-            for row in by_game.remove(&g.game_no).unwrap_or_default() {
-                let d = &row.decision;
-                if !matches!(d.evaluation_status.as_str(), "evaluated" | "forced") {
-                    continue;
-                }
-                for target in [&mut summary, &mut overall] {
-                    crate::match_analysis::accumulate_decision(&mut target.players, d)?;
-                    target.analyzed_moves += i32::from(d.kind == "checker");
-                }
-                for target in [&mut errors, &mut overall_errors] {
-                    accumulate_errors(target, d);
-                }
-            }
-            let checker_count = summary
-                .players
-                .iter()
-                .map(|p| p.checker_decisions)
-                .sum::<i32>();
-            let cube_count = summary
-                .players
-                .iter()
-                .map(|p| p.cube_decisions)
-                .sum::<i32>();
-            let complete = g.cube_enabled.is_some()
-                && checker_count == g.position_count
-                && i64::from(cube_count) == *expected_cubes.get(&g.game_no).unwrap_or(&0);
-            summary.completed_games = i32::from(complete);
-            overall.completed_games += i32::from(complete);
-            let has_results = checker_count + cube_count > 0;
-            games.push(CatalogGameStatistics {
-                needs_cube_rule_reanalysis: false,
-                game_no: g.game_no,
-                white_score: g.white_score,
-                black_score: g.black_score,
-                crawford: g.crawford,
-                analyzed: complete,
-                summary: has_results.then_some(summary),
-                error_breakdown: complete.then_some(errors),
-            });
-        }
-        let complete = overall.total_games > 0 && overall.completed_games == overall.total_games;
-        let any = overall
-            .players
-            .iter()
-            .any(|p| p.checker_decisions + p.cube_decisions > 0);
-        Ok(MatchAnalysisStatistics {
-            needs_cube_rule_reanalysis: false,
-            analysis_id,
-            summary: any.then_some(overall),
-            games,
-            error_breakdown: complete.then_some(overall_errors),
-        })
-    })
-    .await
-    .map_err(anyhow::Error::from)??;
+    let inputs = load_imported_inputs(&state.pool, id, key, query.game_no).await?;
+    let data = tokio::task::spawn_blocking(move || summarize_imported_entry(analysis_id, inputs))
+        .await
+        .map_err(anyhow::Error::from)??;
     Ok(Json(data))
 }
 fn accumulate_errors(errors: &mut [PlayerErrorBreakdown; 2], d: &crate::match_analysis::Decision) {

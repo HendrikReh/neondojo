@@ -287,6 +287,80 @@ pub(super) async fn add_cards(
     ))
 }
 
+enum BatchAddSource<'a> {
+    Ready(&'a CardContent),
+    Rejected { missing: bool, message: String },
+}
+
+struct BatchAddOutcome<I> {
+    added: i64,
+    updated: i64,
+    total: i64,
+    items: Vec<I>,
+}
+
+async fn batch_add_cards<'a, K, S, I>(
+    pool: &PgPool,
+    deck_id: Uuid,
+    keys: Vec<K>,
+    mut resolve: impl FnMut(&K) -> BatchAddSource<'a>,
+    statuses: (S, S, S, S, S),
+    mut build_item: impl FnMut(K, S, Option<Uuid>, Option<String>) -> I,
+) -> ApiResult<BatchAddOutcome<I>>
+where
+    S: Copy,
+{
+    let (added_status, updated_status, duplicate_status, unavailable_status, not_found_status) =
+        statuses;
+    let mut unique = BTreeMap::new();
+    let mut pending = Vec::with_capacity(keys.len());
+    for key in keys {
+        match resolve(&key) {
+            BatchAddSource::Ready(content) => {
+                let signature = card_signature(content);
+                let first = !unique.contains_key(&signature);
+                unique
+                    .entry(signature.clone())
+                    .or_insert_with(|| content.clone());
+                pending.push((key, duplicate_status, None, Some((signature, first))));
+            }
+            BatchAddSource::Rejected { missing, message } => {
+                let status = if missing {
+                    not_found_status
+                } else {
+                    unavailable_status
+                };
+                pending.push((key, status, Some(message), None));
+            }
+        }
+    }
+    let written = write_cards(pool, deck_id, unique, &BTreeSet::new()).await?;
+    let mut added = 0;
+    let mut updated = 0;
+    let mut items = Vec::with_capacity(pending.len());
+    for (key, mut status, message, source) in pending {
+        let mut card_id = None;
+        if let Some((signature, first)) = source {
+            let card = &written.cards[&signature];
+            card_id = Some(card.id);
+            if first && card.added {
+                status = added_status;
+                added += 1;
+            } else if first && card.changed {
+                status = updated_status;
+                updated += 1;
+            }
+        }
+        items.push(build_item(key, status, card_id, message));
+    }
+    Ok(BatchAddOutcome {
+        added,
+        updated,
+        total: written.total,
+        items,
+    })
+}
+
 #[utoipa::path(post,path="/api/decks/{id}/positions",params(("id"=Uuid,Path)),request_body=AddPositions,responses((status=200,body=AddPositionsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn add_positions(
     State(state): State<AppState>,
@@ -296,58 +370,43 @@ pub(super) async fn add_positions(
     require_deck(&state.pool, id).await?;
     let ids = body.validated_ids()?;
     let sources = saved_position_cards(&state.pool, &ids).await?;
-    let mut unique = BTreeMap::new();
-    let mut items = Vec::with_capacity(ids.len());
-    let mut resolved = Vec::with_capacity(ids.len());
-    for position_id in ids {
-        let (status, message, source) = match sources.get(&position_id) {
-            Some(Some(content)) => {
-                let signature = card_signature(content);
-                let first = !unique.contains_key(&signature);
-                unique
-                    .entry(signature.clone())
-                    .or_insert_with(|| content.clone());
-                (PositionAddStatus::Duplicate, None, Some((signature, first)))
-            }
-            Some(None) => (
-                PositionAddStatus::AnalysisRequired,
-                Some(
+    let outcome = batch_add_cards(
+        &state.pool,
+        id,
+        ids,
+        |position_id| match sources.get(position_id) {
+            Some(Some(content)) => BatchAddSource::Ready(content),
+            Some(None) => BatchAddSource::Rejected {
+                missing: false,
+                message:
                     "Analyze this position or complete its game or match analysis before adding it"
                         .into(),
-                ),
-                None,
-            ),
-            None => (PositionAddStatus::NotFound, Some("Not found".into()), None),
-        };
-        items.push(PositionAddItem {
+            },
+            None => BatchAddSource::Rejected {
+                missing: true,
+                message: "Not found".into(),
+            },
+        },
+        (
+            PositionAddStatus::Added,
+            PositionAddStatus::Updated,
+            PositionAddStatus::Duplicate,
+            PositionAddStatus::AnalysisRequired,
+            PositionAddStatus::NotFound,
+        ),
+        |position_id, status, card_id, message| PositionAddItem {
             position_id,
             status,
-            card_id: None,
+            card_id,
             message,
-        });
-        resolved.push(source);
-    }
-    let written = write_cards(&state.pool, id, unique, &BTreeSet::new()).await?;
-    let mut added = 0;
-    let mut updated = 0;
-    for (item, source) in items.iter_mut().zip(resolved) {
-        if let Some((signature, first)) = source {
-            let card = &written.cards[&signature];
-            item.card_id = Some(card.id);
-            if first && card.added {
-                item.status = PositionAddStatus::Added;
-                added += 1;
-            } else if first && card.changed {
-                item.status = PositionAddStatus::Updated;
-                updated += 1;
-            }
-        }
-    }
+        },
+    )
+    .await?;
     Ok(Json(AddPositionsResult {
-        added,
-        updated,
-        total: written.total,
-        items,
+        added: outcome.added,
+        updated: outcome.updated,
+        total: outcome.total,
+        items: outcome.items,
     }))
 }
 
@@ -360,51 +419,41 @@ pub(super) async fn add_decisions(
     require_deck(&state.pool, id).await?;
     let references = body.validated()?;
     let sources = content::decision_cards(&state.pool, &references).await?;
-    let mut unique = BTreeMap::new();
-    let mut items = Vec::with_capacity(references.len());
-    let mut resolved = Vec::with_capacity(references.len());
-    for reference in references {
-        let (status, message, source) = match sources.get(&reference) {
-            Some(Ok(content)) => {
-                let signature = card_signature(content);
-                let first = !unique.contains_key(&signature);
-                unique
-                    .entry(signature.clone())
-                    .or_insert_with(|| content.clone());
-                (DecisionAddStatus::Duplicate, None, Some((signature, first)))
-            }
-            Some(Err(message)) => (DecisionAddStatus::Unavailable, Some(message.clone()), None),
-            None => (DecisionAddStatus::NotFound, Some("Not found".into()), None),
-        };
-        items.push(DecisionAddItem {
+    let outcome = batch_add_cards(
+        &state.pool,
+        id,
+        references,
+        |reference| match sources.get(reference) {
+            Some(Ok(content)) => BatchAddSource::Ready(content),
+            Some(Err(message)) => BatchAddSource::Rejected {
+                missing: false,
+                message: message.clone(),
+            },
+            None => BatchAddSource::Rejected {
+                missing: true,
+                message: "Not found".into(),
+            },
+        },
+        (
+            DecisionAddStatus::Added,
+            DecisionAddStatus::Updated,
+            DecisionAddStatus::Duplicate,
+            DecisionAddStatus::Unavailable,
+            DecisionAddStatus::NotFound,
+        ),
+        |reference, status, card_id, message| DecisionAddItem {
             reference,
             status,
-            card_id: None,
+            card_id,
             message,
-        });
-        resolved.push(source);
-    }
-    let written = write_cards(&state.pool, id, unique, &BTreeSet::new()).await?;
-    let mut added = 0;
-    let mut updated = 0;
-    for (item, source) in items.iter_mut().zip(resolved) {
-        if let Some((signature, first)) = source {
-            let card = &written.cards[&signature];
-            item.card_id = Some(card.id);
-            if first && card.added {
-                item.status = DecisionAddStatus::Added;
-                added += 1;
-            } else if first && card.changed {
-                item.status = DecisionAddStatus::Updated;
-                updated += 1;
-            }
-        }
-    }
+        },
+    )
+    .await?;
     Ok(Json(AddDecisionsResult {
-        added,
-        updated,
-        total: written.total,
-        items,
+        added: outcome.added,
+        updated: outcome.updated,
+        total: outcome.total,
+        items: outcome.items,
     }))
 }
 

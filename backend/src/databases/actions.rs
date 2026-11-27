@@ -162,46 +162,14 @@ pub(super) async fn action_one(
             action_item(id, "deleted", None, None)
         }
         "tags" => {
-            let old: Option<(Uuid, Vec<String>)> =
-                sqlx::query_as("SELECT id,tags FROM annotations WHERE match_uuid=$1 FOR UPDATE")
-                    .bind(id)
-                    .fetch_optional(&mut *tx)
-                    .await
-                    .map_err(anyhow::Error::from)?;
-            let mut tags = old
-                .as_ref()
-                .map(|(_, tags)| tags.iter().cloned().collect::<BTreeSet<_>>())
-                .unwrap_or_default();
-            for tag in &a.remove_tags {
-                tags.remove(tag);
-            }
-            tags.extend(a.add_tags.iter().cloned());
-            if tags.len() > 30 {
+            if let Err(message) =
+                crate::annotations::update_match_tags(&mut tx, id, &a.add_tags, &a.remove_tags)
+                    .await?
+            {
                 return Ok(ActionItem {
-                    error: Some("At most 30 tags per match".into()),
+                    error: Some(message.into()),
                     ..action_item(id, "invalid", None, None)
                 });
-            }
-            let tags = tags.into_iter().collect::<Vec<_>>();
-            if let Some((note_id, _)) = old {
-                sqlx::query(
-                    "UPDATE annotations SET tags=$2,version=version+1,updated_at=now() WHERE id=$1",
-                )
-                .bind(note_id)
-                .bind(tags)
-                .execute(&mut *tx)
-                .await
-                .map_err(anyhow::Error::from)?;
-            } else {
-                sqlx::query(
-                    "INSERT INTO annotations(id,match_uuid,tags,version) VALUES($1,$2,$3,1)",
-                )
-                .bind(Uuid::new_v4())
-                .bind(id)
-                .bind(tags)
-                .execute(&mut *tx)
-                .await
-                .map_err(anyhow::Error::from)?;
             }
             action_item(id, "tagged", None, None)
         }
@@ -235,7 +203,11 @@ pub(super) async fn copy_children(
     sqlx::query("INSERT INTO match_moves(id,match_uuid,game_no,move_no,kind,player,notation,position_uuid,board,dice,position_id,gnubg_match_id) SELECT m.new,$3,mv.game_no,mv.move_no,mv.kind,mv.player,mv.notation,pm.new,mv.board,mv.dice,mv.position_id,mv.gnubg_match_id FROM unnest($1::uuid[],$2::uuid[]) AS m(old,new) JOIN match_moves mv ON mv.id=m.old LEFT JOIN unnest($4::uuid[],$5::uuid[]) AS pm(old,new) ON pm.old=mv.position_uuid ORDER BY mv.game_no,mv.move_no")
         .bind(&old_moves).bind(&new_moves).bind(target).bind(&old_positions).bind(&new_positions)
         .execute(&mut **tx).await.map_err(anyhow::Error::from)?;
-    sqlx::query("INSERT INTO annotations(id,match_uuid,position_uuid,game_uuid,move_uuid,tags,comment,version,updated_at) SELECT gen_random_uuid(),CASE WHEN a.match_uuid IS NULL THEN NULL ELSE $1::uuid END,pm.new,gm.new,mm.new,a.tags,a.comment,a.version,a.updated_at FROM annotations a LEFT JOIN positions p ON p.id=a.position_uuid LEFT JOIN match_games g ON g.id=a.game_uuid LEFT JOIN match_moves mv ON mv.id=a.move_uuid LEFT JOIN unnest($3::uuid[],$4::uuid[]) AS pm(old,new) ON pm.old=a.position_uuid LEFT JOIN unnest($5::uuid[],$6::uuid[]) AS gm(old,new) ON gm.old=a.game_uuid LEFT JOIN unnest($7::uuid[],$8::uuid[]) AS mm(old,new) ON mm.old=a.move_uuid WHERE coalesce(a.match_uuid,p.match_uuid,g.match_uuid,mv.match_uuid)=$2")
+    sqlx::query(&format!(
+        "INSERT INTO annotations(id,match_uuid,position_uuid,game_uuid,move_uuid,tags,comment,version,updated_at) SELECT gen_random_uuid(),CASE WHEN a.match_uuid IS NULL THEN NULL ELSE $1::uuid END,pm.new,gm.new,mm.new,a.tags,a.comment,a.version,a.updated_at FROM {} LEFT JOIN unnest($3::uuid[],$4::uuid[]) AS pm(old,new) ON pm.old=a.position_uuid LEFT JOIN unnest($5::uuid[],$6::uuid[]) AS gm(old,new) ON gm.old=a.game_uuid LEFT JOIN unnest($7::uuid[],$8::uuid[]) AS mm(old,new) ON mm.old=a.move_uuid WHERE {}=$2",
+        crate::annotations::ANNOTATION_MATCH_JOIN_SQL,
+        crate::annotations::ANNOTATION_MATCH_UUID_EXPR,
+    ))
         .bind(target).bind(source)
         .bind(&old_positions).bind(&new_positions).bind(&old_games).bind(&new_games).bind(&old_moves).bind(&new_moves)
         .execute(&mut **tx).await.map_err(anyhow::Error::from)?;

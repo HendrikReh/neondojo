@@ -21,7 +21,12 @@ pub(super) const NAME: &str = "lower(coalesce(nullif(m.display_name,''),m.filena
 pub(super) const CURSOR_SCOPE: &str = "saved-positions-v1:";
 
 // Matches learning::card_signature; source occurrence UUIDs can differ for one shared card.
-pub(super) const CHECKER_SIGNATURE: &str = "(p.position_id || ':' || p.gnubg_match_id || ':checker' || CASE WHEN g.cube_enabled IS FALSE THEN ':nocube' ELSE '' END)";
+pub(super) const CHECKER_SIGNATURE: &str = crate::learning::card_signature_sql!(
+    "p.position_id",
+    "p.gnubg_match_id",
+    "'checker'",
+    "g.cube_enabled IS FALSE"
+);
 
 pub(super) fn table_sort_expression(sort: PositionBrowserSort) -> String {
     match sort {
@@ -82,18 +87,12 @@ pub(super) async fn database_exists<'e>(
     id: Option<Uuid>,
 ) -> ApiResult<()> {
     if let Some(id) = id {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
+        crate::databases::require_library_database_invalid(
+            db,
+            id,
+            "The filter's database no longer exists; choose an existing database explicitly",
         )
-        .bind(id)
-        .fetch_one(db)
-        .await
-        .map_err(anyhow::Error::from)?;
-        if !exists {
-            return Err(ApiError::invalid(
-                "The filter's database no longer exists; choose an existing database explicitly",
-            ));
-        }
+        .await?;
     }
     Ok(())
 }
@@ -117,7 +116,7 @@ pub(super) async fn search(
         return Err(ApiError::invalid("limit must be 1–100"));
     }
     let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
-    let mut tx = crate::browse_indexes::read_snapshot(&s.pool).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
     database_exists(&mut *tx, filters.database_id).await?;
     let scope = format!(
         "{CURSOR_SCOPE}{:x}",
@@ -130,14 +129,11 @@ pub(super) async fn search(
         );
     let direction = browse_direction(&filters);
     let cursor = if let Some(after) = query.after {
-        if after.len() > 4096 {
-            return Err(ApiError::invalid("Invalid position cursor"));
-        }
-        let cursor: BrowserCursor = URL_SAFE_NO_PAD
-            .decode(after)
-            .ok()
-            .and_then(|v| serde_json::from_slice(&v).ok())
-            .ok_or_else(|| ApiError::invalid("Invalid position cursor"))?;
+        let cursor: BrowserCursor = crate::cursor::decode(
+            &after,
+            crate::cursor::DEFAULT_MAX_LEN,
+            "Invalid position cursor",
+        )?;
         let valid = match &cursor {
             BrowserCursor::Legacy(cursor) => {
                 legacy_order
@@ -213,26 +209,22 @@ pub(super) async fn search(
         let position: Position =
             serde_json::from_value(row.get("position")).map_err(anyhow::Error::from)?;
         if more {
-            next_cursor = Some(
-                URL_SAFE_NO_PAD.encode(
-                    serde_json::to_vec(&if legacy_order {
-                        BrowserCursor::Legacy(Cursor {
-                            scope: scope.clone(),
-                            name: row.get("sort_name"),
-                            match_id: position.match_uuid,
-                            ordinal: position.ordinal,
-                            id: position.id,
-                            loss: row.get("equity_loss"),
-                        })
-                    } else {
-                        BrowserCursor::Table(TableCursor {
-                            scope: scope.clone(),
-                            anchor: position.id,
-                        })
-                    })
-                    .map_err(anyhow::Error::from)?,
-                ),
-            );
+            let cursor_payload = if legacy_order {
+                BrowserCursor::Legacy(Cursor {
+                    scope: scope.clone(),
+                    name: row.get("sort_name"),
+                    match_id: position.match_uuid,
+                    ordinal: position.ordinal,
+                    id: position.id,
+                    loss: row.get("equity_loss"),
+                })
+            } else {
+                BrowserCursor::Table(TableCursor {
+                    scope: scope.clone(),
+                    anchor: position.id,
+                })
+            };
+            next_cursor = Some(crate::cursor::encode(&cursor_payload)?);
         }
         let job_id: Option<Uuid> = row.get("job_id");
         let native_error =

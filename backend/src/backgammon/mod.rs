@@ -3,8 +3,9 @@
 //! White moves 24 -> 1, positive checkers; Black moves 1 -> 24, negative
 //! checkers. Index 0 is Black's bar, and index 25 is White's bar.
 
-mod board;
+pub(crate) mod board;
 pub(crate) mod ids;
+pub(crate) mod notation;
 mod rules;
 pub(crate) use board::{initial_board, local_board, valid_board};
 pub(crate) use rules::{CheckerPath, apply_checker_turn, checker_paths, expand_joined_play};
