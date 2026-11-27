@@ -108,6 +108,20 @@ test('before, arrows and after distinguish original checker placement and dice',
   }
 });
 
+test('the analysis board adds the last borne-off checker to its tray in the after view', () => {
+  const source = position();
+  source.board.fill(0);
+  source.board[1] = 1;
+  source.board[0] = -2;
+  source.notation = '1/off';
+  expect(render(source, 'terra-rossa', 'before')).toContain(
+    'data-point="off-white" data-count="14"',
+  );
+  expect(render(source, 'terra-rossa', 'after')).toContain(
+    'data-point="off-white" data-count="15"',
+  );
+});
+
 test('an invalid projection leaves the original board and dice visible', () => {
   const html = render(position(), 'forest', 'after', {
     ok: false,
