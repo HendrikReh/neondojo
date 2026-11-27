@@ -3,7 +3,7 @@
 # NeonDojo
 
 <!-- The repository is private: Shields.io cannot read it, so its badges are static, and GitHub shows the CI badge only to viewers with access. Update the version badge together with backend/Cargo.toml and web/package.json for each release. -->
-[![Version 1.4.2](https://img.shields.io/badge/version-1.4.2-2ea44f)](CHANGELOG.md)
+[![Version 1.5.0](https://img.shields.io/badge/version-1.5.0-2ea44f)](CHANGELOG.md)
 [![CI](https://github.com/HendrikReh/neondojo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/HendrikReh/neondojo/actions/workflows/ci.yml?query=branch%3Amain)
 [![NeonDojo manual](https://img.shields.io/badge/NeonDojo%20manual-0969DA)](https://hendrikreh.github.io/neondojo/)
 [![NeonGammon manual](https://img.shields.io/badge/NeonGammon%20manual-0969DA)](https://hendrikreh.github.io/neongammon/)
