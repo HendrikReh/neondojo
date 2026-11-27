@@ -202,6 +202,51 @@ class BatchTests(unittest.TestCase):
         self.cube = {'operation': 'cube', 'board': [0] * 26,
                      'context': dict(cube_value=1, cube_owner='centered', away1=0, away2=0, is_crawford=False, jacoby=True)}
 
+    def test_every_evaluation_rejects_unsupported_away_scores_before_engine_work(self):
+        def unexpected_evaluation(*args, **kwargs):
+            self.fail('Unsupported score reached the engine')
+
+        self.runtime.analyzer = SimpleNamespace(
+            checker_play=unexpected_evaluation, cube_action=unexpected_evaluation,
+            cube_decision=unexpected_evaluation)
+        self.runtime.opponent_policy = unexpected_evaluation
+        self.runtime.profile['threads'] = 2
+        self.runtime.release = PROBE.RELEASES['3.2.1']
+        self.runtime.sage = SimpleNamespace(
+            possible_moves=unexpected_evaluation, batch_checker_play=unexpected_evaluation,
+            batch_cube_action_nply=unexpected_evaluation)
+        self.runtime.models = object()
+        for away1, away2 in ((26, 1), (25, 26)):
+            context = dict(self.cube['context'], away1=away1, away2=away2, jacoby=False)
+            cube = dict(self.cube, context=context)
+            checker = dict(cube, operation='checker', dice=[3, 1])
+            requests = [
+                cube,
+                dict(cube, decision_only=True),
+                checker,
+                dict(checker, all_legal=True),
+                dict(checker, top_two=True),
+                dict(checker, operation='opponent_checker', difficulty='full_strength', seed=1),
+                dict(cube, operation='opponent_cube', difficulty='full_strength', seed=1),
+                dict(checker, operation='resignation', level=1),
+                dict(checker, operation='resignation', level=1, dice=[0, 0]),
+                dict(operation='checker_batch', rows=[dict(checker, context=self.cube['context']), checker]),
+                dict(operation='cube_batch_nply', rows=[self.cube, cube]),
+            ]
+            for request in requests:
+                operation = request['operation']
+                with self.subTest(away=(away1, away2), operation=operation):
+                    self.runtime.batch_active = 'rows' in request
+                    with self.assertRaisesRegex(ValueError, rf'{away1}-away vs {away2}-away.*25'):
+                        self.runtime.dispatch(request)
+
+    def test_money_and_match_away_scores_within_the_table_are_evaluated(self):
+        for away1, away2 in ((0, 0), (25, 25), (25, 1), (1, 25)):
+            with self.subTest(away=(away1, away2)):
+                context = dict(self.cube['context'], away1=away1, away2=away2, jacoby=away1 == 0)
+                result, _ = self.runtime.dispatch(dict(self.cube, context=context))
+                self.assertEqual(result['no_double'], .2)
+
     def test_keeps_only_fully_searched_candidates_and_requires_full_depth_played_move(self):
         full = SimpleNamespace(eval_level='2-ply', board=[0] * 26, equity=.1,
                                probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01]))

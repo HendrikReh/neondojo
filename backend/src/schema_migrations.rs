@@ -71,7 +71,13 @@ pub(super) async fn resolve_game_cube_rules(connection: &mut sqlx::PgConnection)
             }
         };
         sqlx::query("UPDATE match_games g SET cube_enabled=r.enabled FROM unnest($2::boolean[]) WITH ORDINALITY r(enabled,n) WHERE g.match_uuid=$1 AND g.game_no=r.n AND g.cube_enabled IS NULL")
-            .bind(id).bind(rules).execute(&mut *connection).await?;
+            .bind(id).bind(&rules).execute(&mut *connection).await?;
+        if rules.contains(&false) {
+            sqlx::query("SELECT repair_legacy_retained_checker_labels($1)")
+                .bind(id)
+                .execute(&mut *connection)
+                .await?;
+        }
     }
     Ok(())
 }

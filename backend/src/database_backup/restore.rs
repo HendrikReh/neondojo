@@ -321,6 +321,10 @@ pub(super) async fn replace(state: &AppState, mut input: Prepared) -> ApiResult<
             .context("Marking restored games for cube-rule replay")?;
     }
     crate::schema_migrations::resolve_game_cube_rules(&mut tx).await?;
+    sqlx::query("SELECT repair_legacy_retained_checker_labels(NULL)")
+        .execute(&mut *tx)
+        .await
+        .context("Correcting restored NeonGammon checker labels")?;
 
     let default: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM public.databases WHERE is_default")

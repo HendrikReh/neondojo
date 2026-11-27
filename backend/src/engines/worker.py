@@ -18,6 +18,8 @@ MAX_RESPONSE = 2097152
 ADAPTER_VERSION = 1
 TOP_TWO_GAP = 0.010
 PROBABILITY_EPSILON = 1e-7
+# The match equity tables in the supported wheels cover up to 25-away.
+MAX_AWAY = 25
 
 
 def process_cpu_us():
@@ -56,6 +58,10 @@ def board(value):
 
 def cube_context(request):
     context = request['context']
+    away1, away2 = context['away1'], context['away2']
+    if max(away1, away2) > MAX_AWAY:
+        raise ValueError(f'NeonGammon cannot evaluate {away1}-away vs {away2}-away '
+                         f'(supported up to {MAX_AWAY}-away per player)')
     return {key: context[key] for key in ('cube_value', 'cube_owner', 'away1', 'away2', 'is_crawford', 'jacoby')} | {'beaver': False}
 
 
@@ -204,6 +210,7 @@ class Runtime:
     def checker_input(self, request):
         before = board(request['board'])
         dice = checker_dice(request)
+        context = cube_context(request)
         forced = request.get('force_board')
         all_legal = request.get('all_legal', False)
         top_two = request.get('top_two', False)
@@ -219,7 +226,7 @@ class Runtime:
             force_boards = [forced]
         elif all_legal:
             force_boards = [board(list(move)) for move in self.sage.possible_moves(before, *dice)]
-        return dict(board=before, die1=dice[0], die2=dice[1], force_boards=force_boards, **cube_context(request))
+        return dict(board=before, die1=dice[0], die2=dice[1], force_boards=force_boards, **context)
 
     def checker_output(self, request, native):
         before, dice = request['board'], request['dice']

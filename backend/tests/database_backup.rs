@@ -116,7 +116,10 @@ async fn restores_pre_cube_rule_archive_using_each_games_sgf(pool: PgPool) {
         .bind(id).execute(&pool).await.unwrap();
     let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
     let archive = export_archive(&app).await;
-    migrate_through(&pool, 96).await;
+    neondojo::schema_migrations::MIGRATOR
+        .run(&pool)
+        .await
+        .unwrap();
     sqlx::query("DELETE FROM match_games WHERE match_uuid=$1")
         .bind(id)
         .execute(&pool)
@@ -175,7 +178,10 @@ async fn restores_selected_import_from_before_selection_indexes(pool: PgPool) {
     let app = router(AppState::new(pool.clone(), Engine::new("unused".into())));
     let archive = export_archive(&app).await;
 
-    migrate_through(&pool, 96).await;
+    neondojo::schema_migrations::MIGRATOR
+        .run(&pool)
+        .await
+        .unwrap();
     sqlx::query("DELETE FROM matches WHERE id=$1")
         .bind(match_id)
         .execute(&pool)
@@ -194,6 +200,55 @@ async fn restores_selected_import_from_before_selection_indexes(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(source, crate::support::FOREIGN_SOURCE.as_bytes());
+}
+
+#[sqlx::test(migrations = false)]
+async fn restores_and_repairs_legacy_neongammon_labels(pool: PgPool) {
+    use serde_json::json;
+    migrate_through(&pool, 96).await;
+    let sgf = "(;GM[6]RU[NoCube];W[31hefe])";
+    let imported = neondojo::import::parse_sgf(sgf).unwrap();
+    let id = neondojo::store::import_match(
+        &pool,
+        "legacy-duel.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &imported,
+    )
+    .await
+    .unwrap()
+    .r#match
+    .id;
+    let legacy = json!({
+        "engine": "NeonGammon", "method": "evaluation", "depth": "2-ply cubeful", "depth_plies": 2,
+        "raw": {"version": 1, "native_id": "4HPwATDgc/ABMA:MIEFAAAAAAAE"},
+        "candidates": [{"equity": 0.125, "equity_kind": "cubeful", "depth": "2-ply cubeful"}]
+    });
+    let analysis: uuid::Uuid = sqlx::query_scalar(
+        "INSERT INTO imported_analyses(match_uuid,position_uuid,source_ordinal,game_no,source_move_no,kind,data)
+         SELECT match_uuid,id,0,game_no,1,'checker',$2 FROM positions WHERE match_uuid=$1 RETURNING imported_analyses.id")
+        .bind(id).bind(&legacy).fetch_one(&pool).await.unwrap();
+    let app = router(AppState::new(pool.clone(), Engine::new("unused".into())));
+    let archive = export_archive(&app).await;
+    neondojo::schema_migrations::MIGRATOR
+        .run(&pool)
+        .await
+        .unwrap();
+    let response = app.oneshot(restore(archive, true)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+    let data: serde_json::Value =
+        sqlx::query_scalar("SELECT data FROM imported_analyses WHERE id=$1")
+            .bind(analysis)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    let mut expected = legacy;
+    expected["depth"] = json!("2-ply cubeless");
+    expected["candidates"][0]["depth"] = json!("2-ply cubeless");
+    expected["candidates"][0]["equity_kind"] = json!("cubeless");
+    assert_eq!(data, expected);
 }
 
 #[sqlx::test(migrations = "./migrations")]

@@ -2,7 +2,9 @@
 pub(crate) mod projections;
 pub(crate) mod sage;
 use crate::import::MatchFormat;
-use crate::import::sgf::{Node, SourceMove, parse_sgf_source_moves, parse_trees};
+#[cfg(test)]
+use crate::import::sgf::parse_sgf_source_moves;
+use crate::import::sgf::{Node, SourceMove, parse_sgf_events, parse_trees};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -268,10 +270,10 @@ fn bgf_analysis(m: &SourceMove, value: Value) -> Vec<ImportedAnalysisData> {
 }
 /// Extract only analysis actually present in the validated source, with its own units.
 pub(crate) fn extract(sgf: &str) -> Result<Vec<ImportedAnalysisData>> {
-    let (imported, moves) = parse_sgf_source_moves(sgf)?;
+    let (imported, games, moves) = parse_sgf_events(sgf)?;
     let trees = parse_trees(sgf)?;
     let mut result = Vec::new();
-    for (game_index, nodes) in trees.iter().enumerate() {
+    for (game_index, (nodes, game)) in trees.iter().zip(games).enumerate() {
         let application = text(&nodes[0], "AP").unwrap_or_default();
         let (engine, version) = if let Some(v) = application.strip_prefix("GNU Backgammon:") {
             ("GNU Backgammon", Some(v.to_owned()))
@@ -290,7 +292,7 @@ pub(crate) fn extract(sgf: &str) -> Result<Vec<ImportedAnalysisData>> {
             .zip(source_moves)
         {
             if let Some(value) = text(node, "BGTSC") {
-                result.push(sage::extract(m, &value)?);
+                result.push(sage::extract(m, game.cube_enabled, &value)?);
             }
             for (property, kind) in [("XGA", "checker"), ("XGC", "cube")] {
                 if let Some(v) = text(node, property) {
