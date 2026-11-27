@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::{collections::BTreeSet, convert::Infallible, sync::Arc, time::Duration};
 use tokio::sync::{Notify, Semaphore};
-use tokio_util::sync::CancellationToken;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
@@ -36,6 +36,7 @@ pub struct AppState {
     pub(crate) assessment_wake: Arc<Notify>,
     job_notifications: Arc<crate::job_events::JobNotifications>,
     pub shutdown: CancellationToken,
+    pub(crate) background_tasks: TaskTracker,
     imports: Arc<Semaphore>,
     /// Serialize on-demand evaluations without holding a database lock.
     pub(crate) practice_evaluation: Arc<tokio::sync::Mutex<()>>,
@@ -60,6 +61,7 @@ impl AppState {
             assessment_wake: Arc::new(Notify::new()),
             job_notifications: Arc::default(),
             shutdown: CancellationToken::new(),
+            background_tasks: TaskTracker::new(),
             imports: Arc::new(Semaphore::new(2)),
             practice_evaluation: Arc::default(),
             play_warmup: Arc::new(Semaphore::new(1)),
@@ -1062,9 +1064,10 @@ async fn events(
         .unwrap_or(Some(0))
         .filter(|n| *n >= 0)
         .ok_or_else(|| ApiError::invalid("Invalid Last-Event-ID"))?;
-    let mut notifications = state
-        .job_notifications
-        .subscribe(&state.pool, &state.shutdown);
+    let mut notifications =
+        state
+            .job_notifications
+            .subscribe(&state.pool, &state.shutdown, &state.background_tasks);
     let stream = async_stream::stream! {
         loop {
             if state.shutdown.is_cancelled() { return; }

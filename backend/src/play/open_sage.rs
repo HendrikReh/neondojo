@@ -35,7 +35,7 @@ pub(super) fn schedule_warmup(session: &PlaySession, state: &AppState) {
     };
     let snapshot = snapshot.clone();
     let shutdown = state.shutdown.clone();
-    tokio::spawn(async move {
+    state.background_tasks.spawn(async move {
         let _permit = permit;
         tokio::select! {
             biased;

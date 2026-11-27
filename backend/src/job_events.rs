@@ -5,7 +5,7 @@ use sqlx::{
 };
 use std::{sync::OnceLock, time::Duration};
 use tokio::{sync::broadcast, task::JoinHandle};
-use tokio_util::sync::CancellationToken;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use uuid::Uuid;
 
 const CHANNEL: &str = "neondojo_job_events";
@@ -31,13 +31,14 @@ impl JobNotifications {
         &self,
         pool: &PgPool,
         shutdown: &CancellationToken,
+        background_tasks: &TaskTracker,
     ) -> broadcast::Receiver<Option<Uuid>> {
         let receiver = self.signals.subscribe();
         self.task.get_or_init(|| {
             let pool = pool.clone();
             let shutdown = shutdown.clone();
             let signals = self.signals.clone();
-            tokio::spawn(async move {
+            background_tasks.spawn(async move {
                 // A long-lived LISTEN connection must not take a request-pool slot.
                 let listener_pool = PgPoolOptions::new()
                     .max_connections(1)

@@ -122,6 +122,7 @@ async fn serve(
 ) -> Result<()> {
     let stop = state.shutdown.clone();
     let pool = state.pool.clone();
+    let background_tasks = state.background_tasks.clone();
     let mut workers = JoinSet::new();
     workers.spawn(crate::jobs::worker(state.clone(), stop.clone()));
     workers.spawn(crate::browse_indexes::worker(state.clone()));
@@ -148,6 +149,8 @@ async fn serve(
     while let Some(worker) = workers.join_next().await {
         result = result.and(worker.context("NeonDojo worker failed"));
     }
+    background_tasks.close();
+    background_tasks.wait().await;
     pool.close().await;
     result
 }
