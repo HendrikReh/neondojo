@@ -28,7 +28,7 @@ pub(crate) const MY_VIRTUAL_PLAYER: i64 = 91_432_306;
 /// filter limit (`position_browser::filters::create_filter`).
 pub(crate) const POSITION_FILTER_LIMIT: i64 = 74_619_781_644_280;
 /// Serializes the allocation of collection-wide Anki review IDs
-/// (`learning::anki_review_sync`).
+/// (`learning::anki::review_sync`).
 pub(crate) const ANKI_REVIEW_EXPORT_IDS: i64 = 73_270_182_800_161;
 /// Serializes configuration writes: settings, profiles and opening books
 /// (`configuration::store::lock`).

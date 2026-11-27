@@ -1,17 +1,21 @@
 //! Exchange review records for cards exported using NeonDojo's decision model.
 use super::{
-    anki_connect::{self, Client, upstream_error},
-    *,
+    super::*,
+    apkg,
+    connect::{self, Client, upstream_error},
 };
 use anyhow::ensure;
 use serde_json::{Value, json};
 use std::{collections::HashMap, time::Duration};
 
+mod cards;
+pub(super) use cards::deck_cards;
+
 const PAGE_SIZE: usize = 100;
 const MAX_REVIEWS: usize = 100_000;
 
 #[derive(Serialize, ToSchema)]
-pub(super) struct SyncResult {
+pub(in crate::learning) struct SyncResult {
     profile: String,
     pub(super) matched_cards: usize,
     unmatched_cards: usize,
@@ -176,12 +180,12 @@ struct LocalReview {
     responses((status=200,body=SyncResult),(status=404,body=ErrorBody),(status=409,body=ErrorBody),
     (status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=502,body=ErrorBody),
     (status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Learning")]
-pub(super) async fn sync(
+pub(in crate::learning) async fn sync(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(_body): Json<SyncRequest>,
 ) -> ApiResult<Json<SyncResult>> {
-    let _permit = anki_connect::reserve()?;
+    let _permit = connect::reserve()?;
     let cards = deck_cards(&state.pool, id).await?;
     let client = Client::local();
     let collection = Collection::open(&client).await?;
@@ -253,48 +257,7 @@ impl Collection {
 
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct SyncRequest {}
-
-pub(super) async fn deck_cards(pool: &PgPool, id: Uuid) -> ApiResult<HashMap<String, Uuid>> {
-    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
-    lock_deck(&mut tx, id).await?;
-    let rows: Vec<CardRow> = sqlx::query_as(
-        "SELECT c.* FROM learning_cards c JOIN deck_cards dc ON dc.card_id=c.id
-         WHERE dc.deck_id=$1 LIMIT 1001",
-    )
-    .bind(id)
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(anyhow::Error::from)?;
-    tx.commit().await.map_err(anyhow::Error::from)?;
-    let unsupported =
-        || ApiError::invalid("Select a non-empty native NeonDojo deck with at most 1000 cards");
-    if rows.is_empty()
-        || rows.len() > MAX_CARDS as usize
-        || rows.iter().any(|row| row.decision().is_none())
-    {
-        return Err(unsupported());
-    }
-    let mut cards = HashMap::new();
-    for row in rows {
-        let identity = card_signature(row.decision().ok_or_else(unsupported)?);
-        // GNUbg's base64 IDs and the decision kind are literal Anki search terms.
-        if !identity.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b':' | b'/' | b'+' | b'=' | b'_')
-        }) {
-            return Err(ApiError::invalid("Invalid NeonDojo card identity"));
-        }
-        if cards
-            .insert(apkg::identity_field(&identity), row.id)
-            .is_some()
-        {
-            return Err(conflict(
-                "Resolve duplicate cards in the deck before synchronizing",
-            ));
-        }
-    }
-    Ok(cards)
-}
+pub(in crate::learning) struct SyncRequest {}
 
 async fn lock_deck(connection: &mut sqlx::PgConnection, id: Uuid) -> ApiResult<()> {
     sqlx::query_scalar::<_, Uuid>("SELECT id FROM decks WHERE id=$1 FOR SHARE")
@@ -702,115 +665,4 @@ async fn write_reviews(client: &Client, session: &str, batch: &[OutgoingReview])
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[sqlx::test(migrations = "./migrations")]
-    async fn merges_both_histories_and_retries_without_double_counting(pool: PgPool) {
-        let deck = Uuid::new_v4();
-        let card = Uuid::new_v4();
-        let session = Uuid::new_v4();
-        let request = Uuid::new_v4();
-        let at = DateTime::from_timestamp_millis(1_760_000_000_000).unwrap();
-        sqlx::query("INSERT INTO decks(id,name) VALUES($1,'Sync')")
-            .bind(deck)
-            .execute(&pool)
-            .await
-            .unwrap();
-        sqlx::query(
-            "INSERT INTO learning_cards(id,signature,payload,stability,difficulty,last_review,due_at,version,review_count)
-             VALUES($1,'fixture','{}',2.0,5.0,$2,$2+interval '2 days',4,1)",
-        ).bind(card).bind(at).execute(&pool).await.unwrap();
-        sqlx::query("INSERT INTO deck_cards VALUES($1,$2)")
-            .bind(deck)
-            .bind(card)
-            .execute(&pool)
-            .await
-            .unwrap();
-        sqlx::query(
-            "INSERT INTO review_sessions(id,card_id,card_version,expires_at) VALUES($1,$2,3,$3)",
-        )
-        .bind(session)
-        .bind(card)
-        .bind(at)
-        .execute(&pool)
-        .await
-        .unwrap();
-        sqlx::query("INSERT INTO card_reviews VALUES($1,$2,$3,'good',$4,$5)")
-            .bind(card)
-            .bind(request)
-            .bind(session)
-            .bind(json!({"interval_seconds":172800,"difficulty":5.0}))
-            .bind(at)
-            .execute(&pool)
-            .await
-            .unwrap();
-
-        let matched = HashMap::from([(card, "123".into())]);
-        let review = |id: i64, kind, factor| RemoteReview {
-            id: id.to_string(),
-            card_id: "123".into(),
-            rating: Some(Rating::Hard),
-            interval: Interval::from_seconds(86400).unwrap(),
-            previous_interval: Interval::from_seconds(0).unwrap(),
-            factor: Factor { value: factor },
-            elapsed_ms: 3000,
-            kind,
-        };
-        let occupied = at.timestamp_millis();
-        let mut remote = HashMap::from([
-            (occupied, review(occupied, Kind::Review, 2500)),
-            (occupied - 1, review(occupied - 1, Kind::Manual, 0)),
-            (occupied - 2, review(occupied - 2, Kind::Filtered, 0)),
-        ]);
-        let (received, outgoing) = reconcile(&pool, deck, &matched, &remote, None)
-            .await
-            .map_err(|e| (e.0, e.1))
-            .unwrap();
-        assert_eq!(received, 1);
-        assert_eq!(outgoing.len(), 1);
-        assert_ne!(outgoing[0].id, occupied.to_string());
-        assert_eq!(outgoing[0].rating, Rating::Good);
-
-        // A retry after a lost response reuses the original reservation.
-        let (received, retry) = reconcile(&pool, deck, &matched, &remote, None)
-            .await
-            .map_err(|e| (e.0, e.1))
-            .unwrap();
-        assert_eq!(received, 0);
-        assert_eq!(retry[0].id, outgoing[0].id);
-
-        let row: RemoteReview =
-            serde_json::from_value(serde_json::to_value(&retry[0]).unwrap()).unwrap();
-        remote.insert(row.id.parse().unwrap(), row);
-        let (received, outgoing) = reconcile(&pool, deck, &matched, &remote, None)
-            .await
-            .map_err(|e| (e.0, e.1))
-            .unwrap();
-        assert_eq!(received, 0);
-        assert!(outgoing.is_empty());
-
-        #[derive(FromRow)]
-        struct Schedule {
-            version: i64,
-            due_at: DateTime<Utc>,
-            review_count: i32,
-            anki_review_count: i32,
-            stability: Option<f64>,
-            difficulty: Option<f64>,
-            last_review: Option<DateTime<Utc>>,
-        }
-        let persisted: Schedule = sqlx::query_as("SELECT * FROM learning_cards WHERE id=$1")
-            .bind(card)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(persisted.anki_review_count, 1);
-        assert_eq!(persisted.review_count, 1);
-        assert_eq!(persisted.version, 4);
-        assert_eq!(persisted.last_review, Some(at));
-        assert_eq!(persisted.due_at, at + chrono::Duration::days(2));
-        assert_eq!(persisted.stability, Some(2.0));
-        assert_eq!(persisted.difficulty, Some(5.0));
-    }
-}
+mod tests;

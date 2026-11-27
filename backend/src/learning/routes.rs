@@ -1,4 +1,4 @@
-use super::*;
+use super::{anki, *};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -28,25 +28,25 @@ pub fn routes() -> Router<AppState> {
             get(suggestions::preview).post(suggestions::save),
         )
         .route("/api/decks/{id}/export.apkg", get(export_deck))
-        .route("/api/decks/{id}/send-to-anki", post(anki_connect::send))
+        .route("/api/decks/{id}/send-to-anki", post(anki::connect::send))
         .route(
             "/api/decks/{id}/sync-anki-reviews",
-            post(anki_review_sync::sync),
+            post(anki::review_sync::sync),
         )
         .route(
             "/api/decks/{id}/anki-auto-sync",
-            get(anki_auto_sync::settings).put(anki_auto_sync::set_settings),
+            get(anki::auto_sync::settings).put(anki::auto_sync::set_settings),
         )
-        .route("/api/study/anki-auto-sync", get(anki_auto_sync::overview))
+        .route("/api/study/anki-auto-sync", get(anki::auto_sync::overview))
         .route(
             "/api/decks/{id}/anki-auto-sync/history",
-            get(anki_auto_sync::history),
+            get(anki::auto_sync::history),
         )
         .route(
             "/api/decks/{id}/anki-auto-sync/action",
-            post(anki_auto_sync::act),
+            post(anki::auto_sync::act),
         )
-        .route("/api/decks/{id}/import.apkg", post(anki_import::import))
+        .route("/api/decks/{id}/import.apkg", post(anki::import::import))
         .route("/api/decks/{id}/next", get(next_card))
         .route("/api/study/learning-summary", get(learning_summary))
         .merge(daily::routes())
@@ -81,14 +81,14 @@ pub fn routes() -> Router<AppState> {
         suggestions::preview,
         suggestions::save,
         export_deck,
-        anki_connect::send,
-        anki_review_sync::sync,
-        anki_auto_sync::settings,
-        anki_auto_sync::set_settings,
-        anki_auto_sync::overview,
-        anki_auto_sync::history,
-        anki_auto_sync::act,
-        anki_import::import,
+        anki::connect::send,
+        anki::review_sync::sync,
+        anki::auto_sync::settings,
+        anki::auto_sync::set_settings,
+        anki::auto_sync::overview,
+        anki::auto_sync::history,
+        anki::auto_sync::act,
+        anki::import::import,
         anki_flashcards::face,
         anki_flashcards::media,
         anki_flashcards::upload,
@@ -121,7 +121,7 @@ pub fn routes() -> Router<AppState> {
         RenameDeck,
         AddCards,
         AddCardsResult,
-        anki_import::AnkiUpload,
+        anki::import::AnkiUpload,
         anki_flashcards::ImportedAnkiDeck,
         management::DuplicateCard,
         management::DuplicateDeck,
@@ -696,7 +696,7 @@ pub(super) async fn export_deck(
     Path(id): Path<Uuid>,
     Query(query): Query<ExportQuery>,
 ) -> ApiResult<impl IntoResponse> {
-    let bytes = build_deck_package(&state, id, query).await?;
+    let bytes = anki::build_deck_package(&state, id, query).await?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/zip"),
