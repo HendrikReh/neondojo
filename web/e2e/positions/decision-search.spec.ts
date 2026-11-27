@@ -5,7 +5,11 @@ import {
 } from '../helpers/navigation';
 import { playPositionFixture } from '../helpers/play-session-fixture';
 import { test, expect } from '../helpers/test';
-import { fulfillJson } from '../helpers/api-fixtures';
+import {
+  fulfillDecks,
+  fulfillJson,
+  fulfillMistakes,
+} from '../helpers/api-fixtures';
 import { profileBackend } from '../helpers/profile-backend';
 import { defaultConfiguration } from '../../src/settings/configuration/configuration-model';
 
@@ -44,13 +48,13 @@ test('all analyzed decisions are filtered on the server, previewed and practiced
 }) => {
   await seedLocale(page);
   await page.route('**/api/study/mistakes?*', (route) =>
-    route.fulfill({
-      json: {
-        players: ['Alice', 'Bob'],
-        groups: [],
-        analyzed_decisions: 0,
-        analyzed_matches: 0,
-      },
+    fulfillMistakes(route, {
+      players: ['Alice', 'Bob'],
+      groups: [],
+      analyzed_decisions: 0,
+      analyzed_matches: 0,
+      player_matches: 0,
+      unanalyzed_matches: 0,
     }),
   );
   const searches: URLSearchParams[] = [];
@@ -198,13 +202,13 @@ test('Clear filters resets the decision filters but keeps the player and refresh
   const profiles = await profileBackend(page, { configuration: config });
   await seedLocale(page);
   await page.route('**/api/study/mistakes?*', (route) =>
-    route.fulfill({
-      json: {
-        players: ['Alice', 'Bob'],
-        groups: [],
-        analyzed_decisions: 0,
-        analyzed_matches: 0,
-      },
+    fulfillMistakes(route, {
+      players: ['Alice', 'Bob'],
+      groups: [],
+      analyzed_decisions: 0,
+      analyzed_matches: 0,
+      player_matches: 0,
+      unanalyzed_matches: 0,
     }),
   );
   const searches: Record<string, string>[] = [];
@@ -266,13 +270,13 @@ test('decision search has a visible heading, a column picker and resizable colum
   await page.setViewportSize({ width: 1800, height: 1169 });
   await seedLocale(page);
   await page.route('**/api/study/mistakes?*', (route) =>
-    route.fulfill({
-      json: {
-        players: ['Alice', 'Bob'],
-        groups: [],
-        analyzed_decisions: 0,
-        analyzed_matches: 0,
-      },
+    fulfillMistakes(route, {
+      players: ['Alice', 'Bob'],
+      groups: [],
+      analyzed_decisions: 0,
+      analyzed_matches: 0,
+      player_matches: 0,
+      unanalyzed_matches: 0,
     }),
   );
   await page.route('**/api/study/decisions?*', (route) =>
@@ -390,14 +394,14 @@ test('a pre-filled player lists its decisions at once and hits join a deck one b
   await page.setViewportSize({ width: 1800, height: 1169 });
   await seedLocale(page);
   await page.route('**/api/study/mistakes?*', (route) =>
-    route.fulfill({
-      json: {
-        players: ['Alice', 'Bob'],
-        resolved_player: 'Alice',
-        groups: [],
-        analyzed_decisions: 0,
-        analyzed_matches: 0,
-      },
+    fulfillMistakes(route, {
+      players: ['Alice', 'Bob'],
+      resolved_player: 'Alice',
+      groups: [],
+      analyzed_decisions: 0,
+      analyzed_matches: 0,
+      player_matches: 0,
+      unanalyzed_matches: 0,
     }),
   );
   const searches: URLSearchParams[] = [];
@@ -439,7 +443,7 @@ test('a pre-filled player lists its decisions at once and hits join a deck one b
   };
   await page.route('**/api/decks', (route) =>
     route.request().method() === 'GET'
-      ? route.fulfill({ json: [deck] })
+      ? fulfillDecks(route, [deck])
       : route.fallback(),
   );
   await page.route(`**/api/decks/${deck.id}/next`, (route) =>

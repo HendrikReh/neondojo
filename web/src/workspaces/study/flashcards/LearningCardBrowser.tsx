@@ -200,28 +200,30 @@ export default function LearningCardBrowser({
             <tr>
               {selection && (
                 <th scope="col" className="learning-card-select-column">
-                  <input
-                    type="checkbox"
-                    aria-label={p('selectPage')}
-                    checked={selectedOnPage === ids.length}
-                    ref={(input) => {
-                      if (input)
-                        input.indeterminate =
-                          selectedOnPage > 0 && selectedOnPage < ids.length;
-                    }}
-                    disabled={
-                      selection.disabled ||
-                      (selectedOnPage === 0 &&
-                        selection.ids.size >= CARD_SELECTION_LIMIT)
-                    }
-                    onChange={() =>
-                      selection.toggle(
-                        ids,
-                        selectedOnPage < ids.length &&
-                          selection.ids.size < CARD_SELECTION_LIMIT,
-                      )
-                    }
-                  />
+                  <label className="table-checkbox-target">
+                    <input
+                      type="checkbox"
+                      aria-label={p('selectPage')}
+                      checked={selectedOnPage === ids.length}
+                      ref={(input) => {
+                        if (input)
+                          input.indeterminate =
+                            selectedOnPage > 0 && selectedOnPage < ids.length;
+                      }}
+                      disabled={
+                        selection.disabled ||
+                        (selectedOnPage === 0 &&
+                          selection.ids.size >= CARD_SELECTION_LIMIT)
+                      }
+                      onChange={() =>
+                        selection.toggle(
+                          ids,
+                          selectedOnPage < ids.length &&
+                            selection.ids.size < CARD_SELECTION_LIMIT,
+                        )
+                      }
+                    />
+                  </label>
                 </th>
               )}
               <th scope="col">{t('question')}</th>
@@ -264,21 +266,23 @@ export default function LearningCardBrowser({
                     className="learning-card-select-column"
                     onClick={(event) => event.stopPropagation()}
                   >
-                    <input
-                      type="checkbox"
-                      aria-label={deckText('select', {
-                        number: formatNumber(start + index + 1),
-                      })}
-                      checked={selection.ids.has(card.id)}
-                      disabled={
-                        selection.disabled ||
-                        (!selection.ids.has(card.id) &&
-                          selection.ids.size >= CARD_SELECTION_LIMIT)
-                      }
-                      onChange={(event) =>
-                        selection.toggle([card.id], event.target.checked)
-                      }
-                    />
+                    <label className="table-checkbox-target">
+                      <input
+                        type="checkbox"
+                        aria-label={deckText('select', {
+                          number: formatNumber(start + index + 1),
+                        })}
+                        checked={selection.ids.has(card.id)}
+                        disabled={
+                          selection.disabled ||
+                          (!selection.ids.has(card.id) &&
+                            selection.ids.size >= CARD_SELECTION_LIMIT)
+                        }
+                        onChange={(event) =>
+                          selection.toggle([card.id], event.target.checked)
+                        }
+                      />
+                    </label>
                   </td>
                 )}
                 <td>

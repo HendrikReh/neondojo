@@ -1,3 +1,4 @@
+import { fulfillDecks } from '../helpers/api-fixtures';
 import { DESKTOP_VIEWPORTS, seedLocale } from '../helpers/navigation';
 import { playPositionFixture } from '../helpers/play-session-fixture';
 import { test, expect, type Page } from '../helpers/test';
@@ -257,12 +258,13 @@ test('the card shortcut uses today’s allowance and opens the recommended deck'
     card_count: 8,
     due_count: 8,
     version: 1,
+    created_at: '2026-11-09T00:00:00Z',
   };
   await seedLocale(page);
   await page.route('**/api/study/learning-summary', (route) =>
     route.fulfill({ json: { today_count: 3, due_count: 8, next_deck: deck } }),
   );
-  await page.route('**/api/decks', (route) => route.fulfill({ json: [deck] }));
+  await page.route('**/api/decks', (route) => fulfillDecks(route, [deck]));
   await page.goto('/');
   const next = page.waitForRequest((request) =>
     request.url().includes('/decks/' + deck.id + '/next'),

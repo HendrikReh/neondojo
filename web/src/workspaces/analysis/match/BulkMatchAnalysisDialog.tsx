@@ -122,9 +122,13 @@ export default function BulkMatchAnalysisDialog({
           disabled={submitting || !analysisConfigured || !pending.length}
           onClick={() => void submit()}
         />
-        <button type="button" disabled={submitting} onClick={onClose}>
-          {l('close')}
-        </button>
+        <ActionButton
+          icon="close"
+          label={l('close')}
+          type="button"
+          disabled={submitting}
+          onClick={onClose}
+        />
       </div>
     </LibraryDialog>
   );

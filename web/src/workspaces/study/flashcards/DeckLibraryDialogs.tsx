@@ -23,6 +23,7 @@ import type { components } from '../../../generated-api';
 import { useDeckLibraryText } from './deck-library-messages';
 import { useDeckManagementText } from './deck-management-messages';
 import { useI18n } from '../../../shared/i18n/i18n';
+import { useLibraryText } from '../../library/library-messages';
 import { useLearningText } from './learning-messages';
 import './deck-management.css';
 
@@ -48,6 +49,7 @@ export function DeckDialog({
   const cancel = useRef<HTMLButtonElement>(null);
   const heading = useId();
   const t = useDeckManagementText();
+  const libraryText = useLibraryText();
   return (
     <ModalDialog
       className={`deck-management-dialog${wide ? ' deck-library-dialog' : ''} ${className}`}
@@ -56,7 +58,18 @@ export function DeckDialog({
       onCancel={close}
       initialFocus={focusCancel ? cancel : 'auto'}
     >
-      <h2 id={heading}>{title}</h2>
+      <div className="section-heading">
+        <h2 id={heading}>{title}</h2>
+        <ActionButton
+          icon="close"
+          label={libraryText('close')}
+          compact
+          type="button"
+          onClick={close}
+          disabled={busy}
+          aria-label={libraryText('close')}
+        />
+      </div>
       {children}
       <footer>
         <ActionButton

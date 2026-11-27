@@ -1,4 +1,5 @@
 import { DESKTOP_VIEWPORTS, seedLocale } from '../helpers/navigation';
+import { fulfillPositionAnalysisResult } from '../helpers/api-fixtures';
 import { installedBoardThemes } from '../helpers/board-themes';
 import {
   openFullMatchAnalysis,
@@ -106,7 +107,7 @@ test('compares saved catalog analyses without filtering them by calculation engi
     },
   );
   await page.route('**/api/positions/*/analysis-result?*', (route) =>
-    route.fulfill({ json: null }),
+    fulfillPositionAnalysisResult(route, null),
   );
   await page.route('**/api/matches/*/review-decisions?*', (route) =>
     route.fulfill({ json: { items: [], next_cursor: null } }),

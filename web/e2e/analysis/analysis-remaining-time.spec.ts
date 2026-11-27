@@ -1,7 +1,14 @@
 import { seedLocale } from '../helpers/navigation';
+import type { components } from '../../src/generated-api';
 import type { Job } from '../../src/shared/http/api';
+import {
+  fulfillAnalysisRemainingTime,
+  fulfillMalformedJson,
+} from '../helpers/api-fixtures';
 import { expect, test, type Page } from '../helpers/test';
-const timing = (overrides: Record<string, unknown> = {}) => ({
+const timing = (
+  overrides: Partial<components['schemas']['AnalysisRemainingTime']> = {},
+): components['schemas']['AnalysisRemainingTime'] => ({
   job_id: 'fixture',
   status: 'running',
   state: 'estimated',
@@ -73,7 +80,7 @@ test('counts down monotonically despite browser wall clock changes and shows ove
   let reads = 0;
   await page.route('**/api/jobs/fixture/remaining-time', (route) => {
     reads++;
-    return route.fulfill({ json: timing() });
+    return fulfillAnalysisRemainingTime(route, timing());
   });
   await mount(page);
   await expect(view(page)).toContainText('approx. 6s');
@@ -97,7 +104,7 @@ test('updates from measured speed on checkpoint and preserves a server snapshot 
 }) => {
   let response = timing({ remaining_ms: 61_000 });
   await page.route('**/api/jobs/fixture/remaining-time', (route) =>
-    route.fulfill({ json: response }),
+    fulfillAnalysisRemainingTime(route, response),
   );
   await mount(page);
   await expect(view(page)).toContainText('approx. 1m 1s');
@@ -125,7 +132,7 @@ test('waiting freezes the clock and retries until actual engine execution starts
   await page.clock.install();
   let response = timing({ state: 'waiting', remaining_ms: 60_000 });
   await page.route('**/api/jobs/fixture/remaining-time', (route) =>
-    route.fulfill({ json: response }),
+    fulfillAnalysisRemainingTime(route, response),
   );
   await mount(page);
   await expect(view(page)).toContainText('Waiting for engine availability');
@@ -142,7 +149,7 @@ test('queued jobs do not fetch or count queue time, terminal jobs hide the estim
   let reads = 0;
   await page.route('**/api/jobs/*/remaining-time', (route) => {
     reads++;
-    return route.fulfill({ json: timing() });
+    return fulfillAnalysisRemainingTime(route, timing());
   });
   await mount(page, job({ status: 'queued' }));
   await expect(view(page)).toContainText('Waiting for analysis to start');
@@ -162,13 +169,14 @@ test('ignores a delayed prior job and clears old timing when an attempt changes'
   });
   await page.route('**/api/jobs/fixture/remaining-time', async (route) => {
     await gate;
-    await route
-      .fulfill({ json: timing({ remaining_ms: 99_000 }) })
-      .catch(() => {});
+    await fulfillAnalysisRemainingTime(
+      route,
+      timing({ remaining_ms: 99_000 }),
+    ).catch(() => {});
   });
   let response = timing({ job_id: 'next', remaining_ms: 15_000 });
   await page.route('**/api/jobs/next/remaining-time', (route) =>
-    route.fulfill({ json: response }),
+    fulfillAnalysisRemainingTime(route, response),
   );
   await mount(page);
   await expect(view(page)).toContainText('Calculating');
@@ -194,12 +202,15 @@ for (const mode of [
     page.on('pageerror', (error) => errors.push(error.message));
     await page.route('**/api/jobs/fixture/remaining-time', (route) => {
       if (mode === 'network') return route.abort();
-      return route.fulfill({
-        json:
-          mode === 'malformed'
-            ? timing({ state: 'nonsense' })
-            : timing({ state: mode, remaining_ms: null, basis: null }),
-      });
+      if (mode === 'malformed')
+        return fulfillMalformedJson(route, {
+          ...timing(),
+          state: 'nonsense',
+        });
+      return fulfillAnalysisRemainingTime(
+        route,
+        timing({ state: mode, remaining_ms: null, basis: null }),
+      );
     });
     await mount(page);
     await expect(view(page)).toContainText(

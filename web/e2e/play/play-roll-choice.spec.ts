@@ -1,3 +1,4 @@
+import { fulfillPlaySession } from '../helpers/api-fixtures';
 import { eitherOrder } from '../helpers/play-turn-fixtures';
 import {
   mockPlaySession,
@@ -349,7 +350,7 @@ for (const action of ['roll', 'double'] as const) {
             }),
           });
         }
-        return route.fulfill({ json: saved });
+        return fulfillPlaySession(route, saved);
       },
     );
     await page.reload();

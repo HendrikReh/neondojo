@@ -8,7 +8,12 @@ import { applySettingsDraft } from './configuration-settings';
 import type { AppSettings } from '../settings-api';
 import type { BookConfig } from '../../workspaces/analysis/candidates/source-analysis-api';
 import { readLocale, saveLocale } from '../../shared/i18n/i18n-core';
-import { readTheme, saveTheme } from '../ui-preferences';
+import {
+  readTheme,
+  saveArchiveThemesPreloadHint,
+  saveTheme,
+  usesArchiveTheme,
+} from '../ui-preferences';
 import {
   readUiAppearance,
   saveUiAppearance,
@@ -76,6 +81,14 @@ export function readLegacyConfiguration(
 export function cacheConfiguration(c: ProfileConfiguration) {
   saveLocale(c.general.locale);
   saveTheme(c.appearance.board_theme);
+  saveArchiveThemesPreloadHint(
+    usesArchiveTheme({
+      theme: c.appearance.board_theme,
+      checkerTheme: c.appearance.checker_theme,
+      diceTheme: c.appearance.dice_theme,
+      cubeTheme: c.appearance.cube_theme,
+    }),
+  );
   saveUiAppearance({ theme: c.appearance.ui_theme, mode: c.appearance.mode });
   savePlaySounds(c.general.play_sounds);
 }

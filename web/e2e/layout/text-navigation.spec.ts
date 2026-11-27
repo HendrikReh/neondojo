@@ -1,4 +1,5 @@
 import { openMatchAnalysisOptions } from '../helpers/analysis-controls';
+import { fulfillPositionAnalysisResult } from '../helpers/api-fixtures';
 import { importSgfMatch } from '../helpers/match-fixtures';
 import {
   DESKTOP_VIEWPORTS,
@@ -25,7 +26,7 @@ async function fixture(
     workspace: { matchId: match.id, gameNo: 1 },
   });
   await page.route('**/api/positions/*/analysis-result?*', (route) =>
-    route.fulfill({ json: null }),
+    fulfillPositionAnalysisResult(route, null),
   );
   await page.route('**/api/positions/*/opening-book', (route) =>
     route.fulfill({

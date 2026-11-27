@@ -298,15 +298,19 @@ export function PositionBrowserResults({
         <thead>
           <tr>
             <th scope="col" data-column="select">
-              <input
-                ref={selectPageRef}
-                type="checkbox"
-                aria-label={p('selectPage')}
-                title={p('selectPage')}
-                checked={all}
-                disabled={!ids.length || busy || (!all && selected.size >= 200)}
-                onChange={(event) => onToggle(ids, event.target.checked)}
-              />
+              <label className="table-checkbox-target">
+                <input
+                  ref={selectPageRef}
+                  type="checkbox"
+                  aria-label={p('selectPage')}
+                  title={p('selectPage')}
+                  checked={all}
+                  disabled={
+                    !ids.length || busy || (!all && selected.size >= 200)
+                  }
+                  onChange={(event) => onToggle(ids, event.target.checked)}
+                />
+              </label>
               {columns.handle('select', l('selection'))}
             </th>
             {activeColumns.map(
@@ -331,23 +335,28 @@ export function PositionBrowserResults({
               onPreview={onPreview}
               onOpen={onOpen}
             >
-              <td onClick={(event) => event.stopPropagation()}>
-                <input
-                  type="checkbox"
-                  aria-label={p('selectRow', {
-                    game: hit.position.game_no,
-                    ply: hit.position.ply,
-                    player: positionPlayer(hit),
-                  })}
-                  checked={selected.has(hit.position.id)}
-                  disabled={
-                    busy ||
-                    (!selected.has(hit.position.id) && selected.size >= 200)
-                  }
-                  onChange={(event) =>
-                    onToggle([hit.position.id], event.target.checked)
-                  }
-                />
+              <td
+                className="position-select-cell"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <label className="table-checkbox-target">
+                  <input
+                    type="checkbox"
+                    aria-label={p('selectRow', {
+                      game: hit.position.game_no,
+                      ply: hit.position.ply,
+                      player: positionPlayer(hit),
+                    })}
+                    checked={selected.has(hit.position.id)}
+                    disabled={
+                      busy ||
+                      (!selected.has(hit.position.id) && selected.size >= 200)
+                    }
+                    onChange={(event) =>
+                      onToggle([hit.position.id], event.target.checked)
+                    }
+                  />
+                </label>
               </td>
               {shown.includes('origin') && (
                 <td>

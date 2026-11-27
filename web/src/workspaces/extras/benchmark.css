@@ -185,6 +185,23 @@
 }
 .benchmark-row-actions {
   white-space: nowrap;
+  vertical-align: middle;
+  padding-block: 3px;
+}
+.app-shell .benchmark-row-actions .action-button--compact {
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  min-height: 32px;
+  flex: 0 0 32px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--ui-muted);
+}
+.app-shell .benchmark-row-actions .action-button--compact:hover:not(:disabled),
+.app-shell .benchmark-row-actions .action-button--compact:focus-visible {
+  color: var(--ui-danger-text);
+  background: var(--ui-danger-bg);
 }
 .benchmark-delete-confirm {
   display: flex;
@@ -202,10 +219,4 @@
   background: transparent;
   color: inherit;
   font: inherit;
-}
-.benchmark-history th .action-button[aria-pressed='true'] {
-  color: var(--ui-accent);
-}
-.benchmark-history th .action-button[aria-pressed='true'] .action-icon {
-  color: inherit;
 }

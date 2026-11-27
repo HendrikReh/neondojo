@@ -67,6 +67,7 @@ export default function SettingsDialog({
   );
   const [bookOpen, setBookOpen] = useState(false);
   const bookTrigger = useRef<HTMLButtonElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogTrigger = useRef<HTMLElement | null>(null);
 
   const state = useSettingsDraft({
@@ -226,6 +227,7 @@ export default function SettingsDialog({
         className="settings-dialog"
         ariaLabelledBy={`${id}-title`}
         ariaDescribedBy={`${id}-description`}
+        initialFocus={closeButtonRef}
         onOpen={() => {
           setCategory(initialCategory);
           setDestination(null);
@@ -240,6 +242,7 @@ export default function SettingsDialog({
               <p id={`${id}-description`}>{t('description')}</p>
             </div>
             <ActionButton
+              ref={closeButtonRef}
               icon="close"
               label={t('close')}
               compact
@@ -248,7 +251,6 @@ export default function SettingsDialog({
               aria-label={t('close')}
               onClick={() => requestDestination('close')}
               disabled={state.saving || state.sage.busy}
-              autoFocus
             />
           </header>
           <div className="settings-layout">
@@ -304,7 +306,9 @@ export default function SettingsDialog({
                     draftLocale={state.draftLocale}
                     onLocale={state.setDraftLocale}
                     playerName={state.draft.player_name}
-                    onPlayerName={(player_name) => state.update({ player_name })}
+                    onPlayerName={(player_name) =>
+                      state.update({ player_name })
+                    }
                     myProfile={state.myProfile}
                   />
                   <AppearanceSettingsSection

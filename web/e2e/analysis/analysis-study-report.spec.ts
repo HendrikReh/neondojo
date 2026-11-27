@@ -1,3 +1,4 @@
+import { fulfillError, fulfillPlaySession } from '../helpers/api-fixtures';
 import { importSgfMatch } from '../helpers/match-fixtures';
 import {
   gotoAnalysisBoard,
@@ -23,7 +24,7 @@ async function fixture(page: Page, available = true) {
   const report = {
     ...detail(),
     version: 3,
-    phase: 'match_over',
+    phase: 'match_over' as const,
     library_match_id: match.id,
     human_name: 'Hendrik',
     scores: [7, 3],
@@ -32,7 +33,7 @@ async function fixture(page: Page, available = true) {
   };
   await page.route(`**/api/study/reports/${reportId}`, (r) => {
     reads++;
-    return r.fulfill({ json: report });
+    return fulfillPlaySession(r, report);
   });
   await seedStorage(page, {
     locale: 'en',
@@ -112,15 +113,10 @@ test('report loading errors and a mismatched report can be retried without write
   await page.route(`**/api/study/reports/${reportId}`, (r) => {
     attempts++;
     return attempts === 1
-      ? r.fulfill({
-          status: 503,
-          json: { error: 'Saved report temporarily unavailable' },
-        })
-      : r.fulfill({
-          json: {
-            ...f.report,
-            id: attempts === 2 ? 'wrong-session' : reportId,
-          },
+      ? fulfillError(r, 'Saved report temporarily unavailable', 503)
+      : fulfillPlaySession(r, {
+          ...f.report,
+          id: attempts === 2 ? 'wrong-session' : reportId,
         });
   });
   await page
@@ -153,7 +149,7 @@ test('closing a pending report and leaving analysis discards the late response',
   await page.route(`**/api/study/reports/${reportId}`, async (r) => {
     start();
     await held;
-    await r.fulfill({ json: f.report }).catch(() => {});
+    await fulfillPlaySession(r, f.report).catch(() => {});
   });
   const button = page
     .locator('.analysis-match-header')

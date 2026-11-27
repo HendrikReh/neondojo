@@ -1,8 +1,20 @@
-import { gotoWorkspace, openWorkspace, seedLocale } from '../helpers/navigation';
-import { fulfillJson, mockEngineCatalog } from '../helpers/api-fixtures';
+import {
+  gotoWorkspace,
+  openWorkspace,
+  seedLocale,
+} from '../helpers/navigation';
+import {
+  fulfillError,
+  fulfillJson,
+  mockEngineCatalog,
+} from '../helpers/api-fixtures';
 import { test, expect } from '../helpers/test';
 import { historyFixture } from '../helpers/play-history-review-helpers';
-import { botDice, playMenuItem, resignGame } from '../helpers/play-board-actions';
+import {
+  botDice,
+  playMenuItem,
+  resignGame,
+} from '../helpers/play-board-actions';
 import { eitherOrder } from '../helpers/play-turn-fixtures';
 import { nativeSteps } from '../../src/shared/board/play-sound-events';
 
@@ -270,7 +282,7 @@ test('a deleted stored session is forgotten and opens the setup dialog', async (
   let reads = 0;
   await page.route(`**/api/play/sessions/${missing}`, (route) => {
     reads++;
-    return route.fulfill({ status: 404, json: { error: 'Not found' } });
+    return fulfillError(route, 'Not found', 404);
   });
   await gotoWorkspace(page, 'play');
   await expect(

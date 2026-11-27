@@ -18,8 +18,162 @@ export function fulfillJson<Name extends keyof Schemas>(
 export function fulfillJsonList<Name extends keyof Schemas>(
   route: Route,
   payload: Schemas[Name][],
+  status = 200,
 ) {
-  return route.fulfill({ json: payload });
+  return route.fulfill({ status, json: payload });
+}
+
+export function fulfillNullableJson<Name extends keyof Schemas>(
+  route: Route,
+  payload: Schemas[Name] | null,
+  status = 200,
+) {
+  return route.fulfill({ status, json: payload });
+}
+
+/** Explicit opt-in only for tests that verify resilience to malformed wire payloads. */
+export function fulfillMalformedJson(
+  route: Route,
+  payload: unknown,
+  status = 200,
+) {
+  return route.fulfill({ status, json: payload });
+}
+
+export function fulfillError(
+  route: Route,
+  error: string | Schemas['ErrorBody'],
+  status: number,
+) {
+  return fulfillJson<'ErrorBody'>(
+    route,
+    typeof error === 'string' ? { error } : error,
+    status,
+  );
+}
+
+export function fulfillPlaySession(
+  route: Route,
+  session: Schemas['PlaySession'],
+  status = 200,
+) {
+  return fulfillJson<'PlaySession'>(route, session, status);
+}
+
+export function fulfillDecks(
+  route: Route,
+  decks: Schemas['Deck'][],
+  status = 200,
+) {
+  return fulfillJsonList<'Deck'>(route, decks, status);
+}
+
+export function fulfillMistakes(
+  route: Route,
+  payload: Schemas['Mistakes'],
+  status = 200,
+) {
+  return fulfillJson<'Mistakes'>(route, payload, status);
+}
+
+export function fulfillMistakePractice(
+  route: Route,
+  payload: Schemas['MistakePractice'],
+  status = 200,
+) {
+  return fulfillJson<'MistakePractice'>(route, payload, status);
+}
+
+export function fulfillMistakeAttempt(
+  route: Route,
+  payload: Schemas['MistakeAttempt'],
+  status = 200,
+) {
+  return fulfillJson<'MistakeAttempt'>(route, payload, status);
+}
+
+export function fulfillMistakeAnswer(
+  route: Route,
+  payload: Schemas['MistakeAnswer'],
+  status = 200,
+) {
+  return fulfillJson<'MistakeAnswer'>(route, payload, status);
+}
+
+export function fulfillStudyReportPage(
+  route: Route,
+  payload: Schemas['StudyReportPage'],
+  status = 200,
+) {
+  return fulfillJson<'StudyReportPage'>(route, payload, status);
+}
+
+export function fulfillAnalysisEstimate(
+  route: Route,
+  payload: Schemas['AnalysisTimeEstimate'],
+  status = 200,
+) {
+  return fulfillJson<'AnalysisTimeEstimate'>(route, payload, status);
+}
+
+export function fulfillAnalysisRemainingTime(
+  route: Route,
+  payload: Schemas['AnalysisRemainingTime'],
+  status = 200,
+) {
+  return fulfillJson<'AnalysisRemainingTime'>(route, payload, status);
+}
+
+export function fulfillPositionAnalysisResult(
+  route: Route,
+  payload: Schemas['SelectedPositionAnalysis'] | null,
+  status = 200,
+) {
+  return fulfillNullableJson<'SelectedPositionAnalysis'>(
+    route,
+    payload,
+    status,
+  );
+}
+
+export function fulfillBenchmarkHistory(
+  route: Route,
+  payload: Schemas['BenchmarkHistory'],
+  status = 200,
+) {
+  return fulfillJson<'BenchmarkHistory'>(route, payload, status);
+}
+
+export function fulfillBenchmarkStatus(
+  route: Route,
+  payload: Schemas['BenchmarkStatus'],
+  status = 200,
+) {
+  return fulfillJson<'BenchmarkStatus'>(route, payload, status);
+}
+
+export function fulfillBenchmarkReference(
+  route: Route,
+  payload: Schemas['BenchmarkReference'],
+  status = 200,
+) {
+  return fulfillJson<'BenchmarkReference'>(route, payload, status);
+}
+
+export function fulfillBenchmarkRun(
+  route: Route,
+  payload: Schemas['BenchmarkRun'],
+  status = 200,
+) {
+  return fulfillJson<'BenchmarkRun'>(route, payload, status);
+}
+
+export function fulfillBenchmarkRuns(
+  route: Route,
+  payload: Schemas['BenchmarkRun'][],
+  status = 200,
+) {
+  return fulfillJsonList<'BenchmarkRun'>(route, payload, status);
 }
 
 // GET serializes the host overrides even when they are unset. The same API

@@ -154,7 +154,6 @@ export default function DeckManagementDialog({
           <ActionButton
             icon="refresh"
             label={t('refresh')}
-            compact
             type="button"
             disabled={busy}
             onClick={() => void refresh()}
@@ -166,7 +165,6 @@ export default function DeckManagementDialog({
           <ActionButton
             icon="cancel"
             label={t('cancel')}
-            compact
             type="button"
             disabled={busy}
             onClick={onClose}

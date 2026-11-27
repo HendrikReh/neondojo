@@ -47,12 +47,20 @@ export default function SettingsDraftGuardDialog({
       )}
       {saveFeedback}
       <div className="library-dialog-actions settings-draft-actions">
-        <button type="button" disabled={saving} onClick={onCancel}>
-          {t('keepEditing')}
-        </button>
-        <button type="button" disabled={saving} onClick={onDiscard}>
-          {profileT('discardDraft')}
-        </button>
+        <ActionButton
+          icon="edit"
+          label={t('keepEditing')}
+          type="button"
+          disabled={saving}
+          onClick={onCancel}
+        />
+        <ActionButton
+          icon="clear"
+          label={profileT('discardDraft')}
+          type="button"
+          disabled={saving}
+          onClick={onDiscard}
+        />
         <ActionButton
           icon="save"
           label={

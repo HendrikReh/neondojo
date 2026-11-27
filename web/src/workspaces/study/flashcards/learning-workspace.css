@@ -62,17 +62,18 @@
   min-width: 800px;
 }
 .learning-card-list .position-table th:nth-last-child(6) {
-  width: 27%;
+  width: 25%;
 }
 .learning-card-list .position-table th:nth-last-child(5),
 .learning-card-list .position-table th:nth-last-child(4) {
   width: 15%;
 }
 .learning-card-list .position-table th:nth-last-child(3) {
-  width: 18%;
+  width: 16%;
 }
 .learning-card-list .position-table th:last-child {
-  width: 96px;
+  width: clamp(132px, 12%, 180px);
+  min-width: 112px;
 }
 .learning-card-list .position-table th:last-child,
 .learning-card-list .position-table td:last-child {
@@ -129,6 +130,7 @@
 
 .learning-card-list .position-table .learning-card-select-column {
   width: 36px;
+  padding: 2px;
   text-align: center;
 }
 
@@ -388,28 +390,6 @@
   width: 100%;
   max-width: none;
 }
-/* "More filters" and "Clear filters" share the line below the fields. */
-.learning-workspace .position-filter-form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-}
-.learning-workspace .position-filter-form > * {
-  grid-column: 1 / -1;
-}
-.learning-workspace .position-filter-form > :nth-child(2) {
-  grid-row: 2;
-}
-.learning-workspace .position-filter-form > .position-filter-footer {
-  grid-area: 2 / 2;
-  align-self: start;
-  margin-top: 9px;
-}
-.learning-workspace .position-filter-details {
-  margin-top: 9px;
-}
-.learning-workspace .position-filter-details summary {
-  width: fit-content;
-}
 /* Deck panel: name, the one primary action and the Anki menu in one row. */
 .learning-deck-panel {
   display: grid;
@@ -507,10 +487,4 @@
 .learning-result-toolbar > [role='status'] {
   flex-basis: 100%;
   margin: 0;
-}
-.learning-workspace .position-filter-footer .action-button {
-  min-height: 28px;
-  padding: 3px 6px;
-  border-color: transparent;
-  background: transparent;
 }

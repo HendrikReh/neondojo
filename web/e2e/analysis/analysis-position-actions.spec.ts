@@ -1,5 +1,5 @@
 import type { components } from '../../src/generated-api';
-import { fulfillJson } from '../helpers/api-fixtures';
+import { fulfillAnalysisEstimate, fulfillJson } from '../helpers/api-fixtures';
 import { openMatchAnalysisOptions } from '../helpers/analysis-controls';
 import { seedSgfMatch } from '../helpers/match-fixtures';
 import {
@@ -54,18 +54,16 @@ for (const [width, height, locale] of [
     await page.route('**/api/matches/*/analysis/estimate?*', (route) => {
       const { pathname, searchParams } = new URL(route.request().url());
       const game = searchParams.get('game_no');
-      return route.fulfill({
-        json: {
-          match_id: pathname.split('/')[3],
-          game_no: game === null ? null : Number(game),
-          engine_id: searchParams.get('engine_id'),
-          engine_version: null,
-          plies: Number(searchParams.get('plies')),
-          position_count: 2,
-          estimated_ms: null,
-          unavailable_reason: 'no_matching_benchmark',
-          benchmark: null,
-        },
+      return fulfillAnalysisEstimate(route, {
+        match_id: pathname.split('/')[3],
+        game_no: game === null ? null : Number(game),
+        engine_id: searchParams.get('engine_id') ?? 'gnubg',
+        engine_version: null,
+        plies: Number(searchParams.get('plies')),
+        position_count: 2,
+        estimated_ms: null,
+        unavailable_reason: 'no_matching_benchmark',
+        benchmark: null,
       });
     });
     const opening: BookLookup = {

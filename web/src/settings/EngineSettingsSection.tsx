@@ -181,13 +181,18 @@ export default function EngineSettingsSection({
                   }}
                 />
               </label>
-              <ActionButton
-                icon="confirm"
-                label={t('check')}
-                type="button"
-                disabled={checking || !draft.gnubg_path.trim()}
-                onClick={onCheck}
-              />
+              <div className="settings-engine-actions">
+                <ActionButton
+                  icon="confirm"
+                  label={t('check')}
+                  type="button"
+                  disabled={checking || !draft.gnubg_path.trim()}
+                  onClick={onCheck}
+                />
+                <span className="settings-engine-save-badge settings-engine-save-badge--draft">
+                  {t('engineSaveWithApply')}
+                </span>
+              </div>
             </div>
             <div className="settings-engine-status" id={`${id}-check-status`}>
               {engine?.version && !check && !gnubgEdited && (
@@ -240,7 +245,12 @@ export default function EngineSettingsSection({
             [
               ['gnubg', 'gnubg_threads', 'gnubgAnalysisThreads', 'analysis'],
               ['gnubg', 'gnubg_play_threads', 'gnubgPlayThreads', 'play'],
-              ['bgsage', 'open_sage_threads', 'sageAnalysisThreads', 'analysis'],
+              [
+                'bgsage',
+                'open_sage_threads',
+                'sageAnalysisThreads',
+                'analysis',
+              ],
               ['bgsage', 'open_sage_play_threads', 'sagePlayThreads', 'play'],
             ] as const
           ).map(([provider, field, label, purpose]) => {

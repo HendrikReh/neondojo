@@ -321,7 +321,6 @@ export default function OpeningBookDialog({
             <ActionButton
               icon="cancel"
               label={l('cancel')}
-              compact
               type="button"
               disabled={busy}
               onClick={onClose}

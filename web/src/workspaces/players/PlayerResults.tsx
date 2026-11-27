@@ -3,6 +3,7 @@ import { request } from '../../shared/http/api';
 import { cursorSearchParams } from '../../shared/http/cursor-search';
 import type { components } from '../../generated-api';
 import { useI18n } from '../../shared/i18n/i18n';
+import ActionButton from '../../shared/ui/ActionButton';
 import LibrarySortHeading from '../../shared/ui/LibrarySortHeading';
 import { usePlayerText } from './player-directory-messages';
 import { useVirtualPlayerText } from './virtual-player-messages';
@@ -102,7 +103,12 @@ export function PlayerResults({
       {results.error !== undefined && (
         <p role="alert">
           {formatError(results.error)}{' '}
-          <button onClick={results.retry}>{t('retry')}</button>
+          <ActionButton
+            icon="refresh"
+            label={t('retry')}
+            type="button"
+            onClick={results.retry}
+          />
         </p>
       )}
       {results.loading && <p role="status">{t('loading')}</p>}

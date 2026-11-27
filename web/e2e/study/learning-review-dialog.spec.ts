@@ -1,3 +1,9 @@
+import {
+  fulfillDecks,
+  fulfillError,
+  fulfillPlaySession,
+  fulfillStudyReportPage,
+} from '../helpers/api-fixtures';
 import { openWorkspace } from '../helpers/navigation';
 import { test, expect, type Page, type Locator } from '../helpers/test';
 import {
@@ -20,23 +26,24 @@ async function study(
     (locale) => localStorage.setItem('neondojo.locale', locale),
     locale,
   );
-  await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
+  await page.route('**/api/decks', (r) => fulfillDecks(r, []));
   await page.route('**/api/study/reports?group_by=session', (r) =>
-    r.fulfill({
-      json: { items: [moneySummary(id, name)], next_cursor: null },
+    fulfillStudyReportPage(r, {
+      items: [moneySummary(id, name)],
+      next_cursor: null,
     }),
   );
   const report = asMoneyReport(detail());
   if (long)
-    report.review.games[0].decisions = Array.from(
+    report.review!.games[0].decisions = Array.from(
       { length: 150 },
       (_, index) => ({
-        ...report.review.games[0].decisions[0],
+        ...report.review!.games[0].decisions[0],
         decision_no: index + 1,
       }),
     );
   await page.route(`**/api/study/reports/${id}`, (r) =>
-    r.fulfill({ json: report }),
+    fulfillPlaySession(r, report),
   );
   await page.goto('/');
   await page
@@ -153,7 +160,7 @@ test('end-of-match generation opens the same report modal and reopening never re
         decisions: detail().decisions,
         version: saved.version + 1,
       });
-      await r.fulfill({ json: saved });
+      await fulfillPlaySession(r, saved);
     },
   );
   await page.reload();
@@ -193,8 +200,8 @@ test('failed review generation keeps the action available for retry', async ({
   let fail = true;
   await page.route(`**/api/play/sessions/${historySessionId}/review`, (r) =>
     fail
-      ? r.fulfill({ status: 503, json: { error: 'Engine unavailable' } })
-      : r.fulfill({ json: { ...saved, review: detail().review } }),
+      ? fulfillError(r, 'Engine unavailable', 503)
+      : fulfillPlaySession(r, { ...saved, review: detail().review }),
   );
   await page.reload();
   await openWorkspace(page, 'play');
@@ -232,7 +239,7 @@ test('a review finishing in the background does not reopen a modal on return', a
     async (r) => {
       await delayed;
       Object.assign(saved, { review: detail().review });
-      await r.fulfill({ json: saved });
+      await fulfillPlaySession(r, saved);
     },
   );
   await page.reload();

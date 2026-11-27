@@ -127,14 +127,19 @@ export default function OpenSageInstallation({
             autoComplete="off"
           />
         </label>
-        <ActionButton
-          icon="confirm"
-          label={t(busy ? 'sageVerifying' : 'sageVerify')}
-          type="button"
-          aria-describedby={saveTargetId}
-          disabled={!installation || !path.trim()}
-          onClick={() => void verify().catch(() => {})}
-        />
+        <div className="settings-engine-actions">
+          <ActionButton
+            icon="confirm"
+            label={t(busy ? 'sageVerifying' : 'sageVerify')}
+            type="button"
+            aria-describedby={saveTargetId}
+            disabled={!installation || !path.trim()}
+            onClick={() => void verify().catch(() => {})}
+          />
+          <span className="settings-engine-save-badge settings-engine-save-badge--immediate">
+            {t('engineSaveImmediate')}
+          </span>
+        </div>
       </div>
       <div className="settings-engine-status" role="status">
         {snapshot ? (

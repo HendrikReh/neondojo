@@ -1,3 +1,4 @@
+import { fulfillError, fulfillPlaySession } from '../helpers/api-fixtures';
 import {
   mockPlaySession,
   playDecisionFixture,
@@ -37,7 +38,7 @@ for (const width of [1440, 390])
     const writes: unknown[] = [];
     await page.route(`**/api/play/sessions/${id}/actions`, (r) => {
       writes.push(r.request().postDataJSON());
-      return r.fulfill({ json: { ...saved, version: 1, phase: 'roll' } });
+      return fulfillPlaySession(r, { ...saved, version: 1, phase: 'roll' });
     });
     await resume(page, saved);
     const dialog = page.getByRole('alertdialog', {
@@ -123,7 +124,7 @@ test('cube dialog keeps Tutor warning and explicit acknowledgment accessible', a
           }
         : { version: 2, phase: 'roll', pending_decision: null },
     );
-    return r.fulfill({ json: saved });
+    return fulfillPlaySession(r, saved);
   });
   await resume(page, saved);
   const dialog = page.getByRole('alertdialog', {
@@ -147,7 +148,7 @@ test('native failure is visible inside the mandatory dialog', async ({
   page,
 }) => {
   await page.route(`**/api/play/sessions/${id}/actions`, (r) =>
-    r.fulfill({ status: 503, json: { error: 'Native cube failure' } }),
+    fulfillError(r, 'Native cube failure', 503),
   );
   await resume(page, state());
   const dialog = page.getByRole('alertdialog', {

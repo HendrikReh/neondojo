@@ -1,6 +1,7 @@
 .position-comparison-scroll {
   max-width: 100%;
   overflow-x: auto;
+  container: position-comparison / inline-size;
 }
 
 .position-comparison-table {

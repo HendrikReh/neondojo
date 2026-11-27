@@ -329,31 +329,6 @@
   text-align: left;
   background: transparent;
 }
-.saved-position-table .library-sort-heading .action-icon {
-  width: 14px;
-  height: 14px;
-}
-.saved-position-table
-  .library-sort-heading
-  button[aria-pressed='false']
-  .action-icon {
-  visibility: hidden;
-}
-.saved-position-table
-  .library-sort-heading
-  button:is(:hover, :focus-visible)
-  .action-icon {
-  visibility: visible;
-}
-.saved-position-table .library-sort-heading button[aria-pressed='true'] {
-  color: var(--ui-accent);
-}
-.saved-position-table
-  .library-sort-heading
-  button[aria-pressed='true']
-  .action-icon {
-  color: inherit;
-}
 :is(.position-browser, .learning-card-browser) .position-table td {
   padding: 5px 8px;
   vertical-align: middle;
@@ -782,6 +757,11 @@
 }
 .position-page-select .position-selection-summary {
   margin: 0;
+}
+.position-table th[data-column='select'],
+.position-table td.position-select-cell {
+  padding: 2px;
+  text-align: center;
 }
 .position-table th[data-column='select'] input {
   display: block;

@@ -5,6 +5,7 @@ import { useLibraryText } from '../../workspaces/library/library-messages';
 import {
   lockBodyScroll,
   resolveInitialFocus,
+  restoreDialogFocus,
   trapTabKey,
 } from './ModalDialog';
 
@@ -52,7 +53,7 @@ export default function LibraryDialog({
       document.removeEventListener('keydown', key, true);
       unlock?.();
       layer?.close();
-      if (previous?.isConnected) previous.focus();
+      restoreDialogFocus(previous);
     };
   }, [native, initialFocus, lockScroll, close, pending]);
   const content = (

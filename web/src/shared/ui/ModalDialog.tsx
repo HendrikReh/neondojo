@@ -2,6 +2,8 @@ import {
   useEffect,
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type RefObject,
 } from 'react';
@@ -10,13 +12,56 @@ import { useLatest } from '../hooks/useLatest';
 export const FOCUSABLE_SELECTOR =
   'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],summary,[tabindex="0"]';
 
+export function isFocusableElement(element: HTMLElement): boolean {
+  if (element.matches(':disabled')) return false;
+  if (typeof element.closest === 'function' && element.closest('[inert]'))
+    return false;
+  if (typeof element.checkVisibility === 'function')
+    return element.checkVisibility();
+  return element.getClientRects().length > 0;
+}
+
 export function focusableElements(container: ParentNode | null): HTMLElement[] {
   if (!container) return [];
   return Array.from(
     container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
-  ).filter(
-    (element) =>
-      !element.matches(':disabled') && element.getClientRects().length > 0,
+  ).filter(isFocusableElement);
+}
+
+export function restoreDialogFocus(
+  target: HTMLElement | null | undefined,
+  fallback?: () => HTMLElement | null | undefined,
+  options?: FocusOptions,
+): boolean {
+  if (target?.isConnected && isFocusableElement(target)) {
+    target.focus(options);
+    return true;
+  }
+  const replacement = fallback?.();
+  if (replacement?.isConnected && isFocusableElement(replacement)) {
+    replacement.focus(options);
+    return true;
+  }
+  return false;
+}
+
+export function isBackdropPointerEvent(
+  event: Pick<
+    MouseEvent | PointerEvent,
+    'target' | 'currentTarget' | 'clientX' | 'clientY' | 'detail'
+  >,
+): boolean {
+  if (event.target !== event.currentTarget) return false;
+  if (event.detail === 0) return false;
+  const element = event.currentTarget as HTMLElement | null;
+  if (!element || typeof element.getBoundingClientRect !== 'function')
+    return false;
+  const rect = element.getBoundingClientRect();
+  return (
+    event.clientX < rect.left ||
+    event.clientX > rect.right ||
+    event.clientY < rect.top ||
+    event.clientY > rect.bottom
   );
 }
 
@@ -36,7 +81,10 @@ export function trapTabKey(
     return true;
   }
   const inside = activeElement !== null && container.contains(activeElement);
-  if (event.shiftKey && (activeElement === first || !inside)) {
+  if (
+    event.shiftKey &&
+    (activeElement === first || activeElement === fallbackFocus || !inside)
+  ) {
     event.preventDefault();
     last.focus();
     return true;
@@ -97,6 +145,7 @@ export default function ModalDialog({
   open = true,
   onCancel,
   busy = false,
+  closeOnBackdropClick = true,
   lockScroll = true,
   restoreFocus = true,
   restoreFocusFallback,
@@ -115,6 +164,7 @@ export default function ModalDialog({
   open?: boolean;
   onCancel: () => void;
   busy?: boolean;
+  closeOnBackdropClick?: boolean;
   lockScroll?: boolean;
   restoreFocus?: boolean;
   restoreFocusFallback?: () => HTMLElement | null;
@@ -132,6 +182,7 @@ export default function ModalDialog({
 }) {
   const internalRef = useRef<HTMLDialogElement>(null);
   const ref = dialogRef ?? internalRef;
+  const backdropPress = useRef(false);
   const cancelLatest = useLatest(onCancel);
   const busyLatest = useLatest(busy);
   const fallbackLatest = useLatest(restoreFocusFallback);
@@ -154,13 +205,17 @@ export default function ModalDialog({
       unlock?.();
       if (element.open) element.close();
       if (!restoreFocus) return;
-      if (previous?.isConnected && !previous.matches(':disabled')) {
-        previous.focus();
-      } else {
-        fallbackLatest.current?.()?.focus();
-      }
+      restoreDialogFocus(previous, () => fallbackLatest.current?.());
     };
-  }, [open, lockScroll, restoreFocus, ref, onOpenLatest, initialFocusLatest, fallbackLatest]);
+  }, [
+    open,
+    lockScroll,
+    restoreFocus,
+    ref,
+    onOpenLatest,
+    initialFocusLatest,
+    fallbackLatest,
+  ]);
 
   return (
     <dialog
@@ -170,6 +225,30 @@ export default function ModalDialog({
       aria-labelledby={ariaLabelledBy}
       aria-describedby={ariaDescribedBy}
       aria-label={ariaLabel}
+      onPointerDown={(event: ReactPointerEvent<HTMLDialogElement>) => {
+        backdropPress.current =
+          closeOnBackdropClick &&
+          event.button === 0 &&
+          isBackdropPointerEvent({
+            target: event.target,
+            currentTarget: event.currentTarget,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            detail: 1,
+          });
+      }}
+      onClick={(event: ReactMouseEvent<HTMLDialogElement>) => {
+        const startedOnBackdrop = backdropPress.current;
+        backdropPress.current = false;
+        if (
+          closeOnBackdropClick &&
+          startedOnBackdrop &&
+          !busyLatest.current &&
+          isBackdropPointerEvent(event)
+        ) {
+          cancelLatest.current();
+        }
+      }}
       onCancel={(event) => {
         event.preventDefault();
         if (!busyLatest.current) cancelLatest.current();

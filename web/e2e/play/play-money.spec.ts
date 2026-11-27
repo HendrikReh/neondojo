@@ -1,5 +1,9 @@
 import { openWorkspace } from '../helpers/navigation';
-import { fulfillJson } from '../helpers/api-fixtures';
+import {
+  fulfillError,
+  fulfillJson,
+  fulfillPlaySession,
+} from '../helpers/api-fixtures';
 import { test, expect } from '../helpers/test';
 import { playMenuItem } from '../helpers/play-board-actions';
 test.use({ actionTimeout: 10000 });
@@ -122,7 +126,7 @@ test('money games continue with the score and keep each saved game report', asyn
   await page.route(`**/api/play/sessions/${saved.id}/review`, async (route) => {
     reviews++;
     const { detail } = await import('../helpers/study-report-fixture');
-    const report = detail().review;
+    const report = detail().review!;
     report.games[0].game_no = saved.game_no;
     Object.assign(saved, {
       version: saved.version + 1,
@@ -132,7 +136,7 @@ test('money games continue with the score and keep each saved game report', asyn
       review_game_no: saved.game_no,
     });
     reports.push(structuredClone(saved));
-    await route.fulfill({ json: saved });
+    await fulfillPlaySession(route, saved);
   });
   await page.route(
     `**/api/play/sessions/${saved.id}/actions`,
@@ -158,7 +162,7 @@ test('money games continue with the score and keep each saved game report', asyn
           winner: null,
         });
       }
-      await route.fulfill({ json: saved });
+      await fulfillPlaySession(route, saved);
     },
   );
   await page.reload();
@@ -257,18 +261,15 @@ for (const [width, height, locale] of [
         if (body.action === 'resume') {
           expect(body).toEqual({ version: 8, action: 'resume' });
           Object.assign(saved, { paused: false, version: 9 });
-          return route.fulfill({ json: saved });
+          return fulfillPlaySession(route, saved);
         }
         expect(body).toEqual({ version: 7, action: 'pause' });
         if (fail) {
           fail = false;
-          return route.fulfill({
-            status: 503,
-            json: { error: 'Saved session is unchanged' },
-          });
+          return fulfillError(route, 'Saved session is unchanged', 503);
         }
         Object.assign(saved, { paused: true, version: 8 });
-        return route.fulfill({ json: saved });
+        return fulfillPlaySession(route, saved);
       },
     );
     await page.reload();
@@ -352,7 +353,7 @@ test('a money session can be ended after a finished game', async ({ page }) => {
       phase: 'match_over',
       money_session_ended: true,
     });
-    return route.fulfill({ json: saved });
+    return fulfillPlaySession(route, saved);
   });
   await page.reload();
   await openWorkspace(page, 'play');

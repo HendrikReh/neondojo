@@ -1,3 +1,4 @@
+import { fulfillError, fulfillPlaySession } from '../helpers/api-fixtures';
 import { test, expect, type Page } from '../helpers/test';
 import { rollDice, playMenuItem } from '../helpers/play-board-actions';
 import {
@@ -78,7 +79,7 @@ for (const width of [1440, 390])
             },
       );
       if (writes.length === 2) saved.position.dice = [3, 1];
-      return r.fulfill({ json: saved });
+      return fulfillPlaySession(r, saved);
     });
     await reload(page);
     await rollDice(page).click();
@@ -122,7 +123,7 @@ test('the dice resume a saved routine Coach roll directly', async ({
       pending_decision: null,
     });
     saved.position.dice = [3, 1];
-    return route.fulfill({ json: saved });
+    return fulfillPlaySession(route, saved);
   });
   await reload(page);
   await rollDice(page).click();
@@ -172,7 +173,7 @@ test('closing a Hint after a Tutor retry leaves the board free of feedback', asy
         retry_count: 1,
       },
     });
-    return r.fulfill({ json: saved });
+    return fulfillPlaySession(r, saved);
   });
   await reload(page);
   const dialog = await mandatory(page, 'Tutor');
@@ -225,7 +226,7 @@ test('a blocked turn passes from the dice gap before the game result dialog', as
               }
             : { version: 11, phase: 'roll' },
     );
-    return r.fulfill({ json: saved });
+    return fulfillPlaySession(r, saved);
   });
   await reload(page);
   const pair = page.getByRole('button', { name: /^No legal move — pass ·/ });
@@ -340,7 +341,7 @@ test('pending Tutor dialog keeps live mode and threshold saving accessible', asy
       play_mode: data.play_mode,
       tutor_threshold: data.tutor_threshold ?? 0.08,
     });
-    await r.fulfill({ json: saved });
+    await fulfillPlaySession(r, saved);
   });
   await reload(page);
   const dialog = await mandatory(page, 'Tutor');
@@ -380,7 +381,7 @@ test('Roll failure and reload return to the board decision', async ({
   const { saved } = await historyFixture(page);
   Object.assign(saved, { phase: 'roll', can_double: true });
   await page.route(`**/api/play/sessions/${id}/actions`, (r) =>
-    r.fulfill({ status: 503, json: { error: 'Native roll failure' } }),
+    fulfillError(r, 'Native roll failure', 503),
   );
   await reload(page);
   await rollDice(page).click();

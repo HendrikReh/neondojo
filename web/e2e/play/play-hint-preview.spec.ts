@@ -1,3 +1,4 @@
+import { fulfillError, fulfillPlaySession } from '../helpers/api-fixtures';
 import { openWorkspace } from '../helpers/navigation';
 import { playDecisionFixture } from '../helpers/play-session-fixture';
 import { checkerPath } from '../helpers/play-turn-fixtures';
@@ -67,7 +68,7 @@ async function fixture(page: Page, human = 0, phase = 'move') {
             ],
       ),
     });
-    return r.fulfill({ json: saved });
+    return fulfillPlaySession(r, saved);
   });
   await page.reload();
   await page.locator('#workspace-tab-play').click();
@@ -169,10 +170,7 @@ test('Hint loading and errors stay in the view and can be closed', async ({
   const gate = new Promise<void>((resolve) => (release = resolve));
   await page.route(`**/api/play/sessions/${id}/feedback`, async (r) => {
     await gate;
-    await r.fulfill({
-      status: 503,
-      json: { error: 'Hint engine unavailable' },
-    });
+    await fulfillError(r, 'Hint engine unavailable', 503);
   });
   await page.getByRole('button', { name: 'Hint', exact: true }).click();
   const modal = page.getByRole('dialog', { name: 'Hint', exact: true });
@@ -193,14 +191,12 @@ test('mobile Hint fits viewport and an invalid move never changes the preview bo
   await page.setViewportSize({ width: 390, height: 844 });
   const { saved } = await fixture(page);
   await page.route(`**/api/play/sessions/${id}/feedback`, (r) =>
-    r.fulfill({
-      json: {
-        ...saved,
-        version: 8,
-        pending_decision: hint([
-          { action: 'move', move_index: 0, notation: '24/off', loss: 0 },
-        ]),
-      },
+    fulfillPlaySession(r, {
+      ...saved,
+      version: 8,
+      pending_decision: hint([
+        { action: 'move', move_index: 0, notation: '24/off', loss: 0 },
+      ]),
     }),
   );
   await page.getByRole('button', { name: 'Hint', exact: true }).click();
@@ -228,14 +224,12 @@ for (const exit of ['close', 'workspace'] as const)
     const gate = new Promise<void>((resolve) => (release = resolve));
     await page.route(`**/api/play/sessions/${id}/feedback`, async (r) => {
       await gate;
-      await r.fulfill({
-        json: {
-          ...saved,
-          version: 8,
-          pending_decision: hint([
-            { action: 'move', move_index: 0, notation: '13/10 6/5', loss: 0 },
-          ]),
-        },
+      await fulfillPlaySession(r, {
+        ...saved,
+        version: 8,
+        pending_decision: hint([
+          { action: 'move', move_index: 0, notation: '13/10 6/5', loss: 0 },
+        ]),
       });
     });
     await page.getByRole('button', { name: 'Hint', exact: true }).click();
@@ -300,15 +294,13 @@ test('retrying a failed hint preserves the partial turn', async ({ page }) => {
   let requests = 0;
   await page.route(`**/api/play/sessions/${id}/feedback`, (r) =>
     ++requests === 1
-      ? r.fulfill({ status: 503, json: { error: 'Transient hint failure' } })
-      : r.fulfill({
-          json: {
-            ...saved,
-            version: 8,
-            pending_decision: hint([
-              { action: 'move', move_index: 0, notation: '13/10 6/5', loss: 0 },
-            ]),
-          },
+      ? fulfillError(r, 'Transient hint failure', 503)
+      : fulfillPlaySession(r, {
+          ...saved,
+          version: 8,
+          pending_decision: hint([
+            { action: 'move', move_index: 0, notation: '13/10 6/5', loss: 0 },
+          ]),
         }),
   );
   await page.getByRole('button', { name: 'Hint', exact: true }).click();

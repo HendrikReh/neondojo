@@ -1,3 +1,9 @@
+import {
+  fulfillDecks,
+  fulfillError,
+  fulfillPlaySession,
+  fulfillStudyReportPage,
+} from '../helpers/api-fixtures';
 import { seedLocale } from '../helpers/navigation';
 import { expect, test, type Page } from '../helpers/test';
 import { id, other, summary, detail } from '../helpers/study-report-fixture';
@@ -6,7 +12,7 @@ async function open(page: Page, locale = 'en') {
     (locale) => localStorage.setItem('neondojo.locale', locale),
     locale,
   );
-  await page.route('**/api/decks', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/decks', (route) => fulfillDecks(route, []));
   await page.goto('/');
   await page
     .getByRole('tab', {
@@ -37,10 +43,10 @@ test('Study opens persisted reports with original attempts and keeps flashcards 
       writes.push(r.url());
   });
   await page.route('**/api/study/reports?group_by=session', (r) =>
-    r.fulfill({ json: { items: [summary()], next_cursor: null } }),
+    fulfillStudyReportPage(r, { items: [summary()], next_cursor: null }),
   );
   await page.route(`**/api/study/reports/${id}`, (r) =>
-    r.fulfill({ json: detail() }),
+    fulfillPlaySession(r, detail()),
   );
   await open(page);
   const archive = page.getByRole('region', { name: 'Saved reports' });
@@ -82,14 +88,15 @@ test('archive retries failed requests, paginates and refreshes on re-entry', asy
   await page.route('**/api/study/reports*', (r) => {
     const after = new URL(r.request().url()).searchParams.get('after');
     return fail
-      ? r.fulfill({ status: 503, json: { error: 'Unavailable' } })
-      : r.fulfill({
-          json: fresh
+      ? fulfillError(r, 'Unavailable', 503)
+      : fulfillStudyReportPage(
+          r,
+          fresh
             ? { items: [], next_cursor: null }
             : after
               ? { items: [summary(other, 'Older report')], next_cursor: null }
               : { items: [summary()], next_cursor: 'page2' },
-        });
+        );
   });
   await open(page);
   const archive = page.getByRole('region', { name: 'Saved reports' });
@@ -120,22 +127,20 @@ test('late report response cannot replace newer selection and details support re
     release = resolve;
   });
   await page.route('**/api/study/reports?group_by=session', (r) =>
-    r.fulfill({
-      json: {
-        items: [summary(), summary(other, 'Other report')],
-        next_cursor: null,
-      },
+    fulfillStudyReportPage(r, {
+      items: [summary(), summary(other, 'Other report')],
+      next_cursor: null,
     }),
   );
   await page.route(`**/api/study/reports/${id}`, async (r) => {
     await delayed;
-    await r.fulfill({ json: detail() }).catch(() => {});
+    await fulfillPlaySession(r, detail()).catch(() => {});
   });
   let fail = true;
   await page.route(`**/api/study/reports/${other}`, (r) =>
     fail
-      ? r.fulfill({ status: 503, json: { error: 'Unavailable' } })
-      : r.fulfill({ json: { ...detail(other), play_mode: 'coach' } }),
+      ? fulfillError(r, 'Unavailable', 503)
+      : fulfillPlaySession(r, { ...detail(other), play_mode: 'coach' }),
   );
   await open(page);
   const buttons = page.getByRole('button', {
@@ -162,10 +167,10 @@ test('opening a report below a long archive moves keyboard focus to its visible 
     summary(index ? crypto.randomUUID() : id, `Match ${index + 1}`),
   );
   await page.route('**/api/study/reports?group_by=session', (r) =>
-    r.fulfill({ json: { items, next_cursor: null } }),
+    fulfillStudyReportPage(r, { items, next_cursor: null }),
   );
   await page.route(`**/api/study/reports/${id}`, (r) =>
-    r.fulfill({ json: detail() }),
+    fulfillPlaySession(r, detail()),
   );
   await open(page);
   await page
@@ -181,16 +186,14 @@ test('Study areas support German labels, unknown PR and arrow/Home/End navigatio
   page,
 }) => {
   await seedLocale(page, 'de');
-  await page.route('**/api/decks', (r) => r.fulfill({ json: [] }));
+  await page.route('**/api/decks', (r) => fulfillDecks(r, []));
   await page.route('**/api/study/similar-practice', (r) =>
     r.fulfill({ json: { items: [], next_cursor: null } }),
   );
   await page.route('**/api/study/reports?group_by=session', (r) =>
-    r.fulfill({
-      json: {
-        items: [{ ...summary(), first_attempt_rating: null }],
-        next_cursor: null,
-      },
+    fulfillStudyReportPage(r, {
+      items: [{ ...summary(), first_attempt_rating: null }],
+      next_cursor: null,
     }),
   );
   await page.goto('/');
@@ -388,14 +391,15 @@ for (const [width, locale] of [
     };
     await page.route('**/api/study/reports*', (route) => {
       const after = new URL(route.request().url()).searchParams.get('after');
-      return route.fulfill({
-        json: after
+      return fulfillStudyReportPage(
+        route,
+        after
           ? {
               items: [summary(pointReport, 'Point match'), b1],
               next_cursor: null,
             }
           : { items: [a2, a1], next_cursor: 'page2' },
-      });
+      );
     });
     const report = detail(other);
     Object.assign(report, {
@@ -404,9 +408,9 @@ for (const [width, locale] of [
       match_length: 0,
       review_game_no: 2,
     });
-    report.review.games[0].game_no = 2;
+    report.review!.games[0].game_no = 2;
     await page.route(`**/api/study/reports/${other}`, (route) =>
-      route.fulfill({ json: report }),
+      fulfillPlaySession(route, report),
     );
     await open(page, locale);
     const first = page.locator(`.study-money-session[data-session-id="${a}"]`);

@@ -1,3 +1,7 @@
+import {
+  fulfillPlaySession,
+  fulfillStudyReportPage,
+} from '../helpers/api-fixtures';
 import { DESKTOP_VIEWPORTS, openWorkspace } from '../helpers/navigation';
 import { expect, test } from '../helpers/test';
 import { detail, summary } from '../helpers/study-report-fixture';
@@ -12,7 +16,7 @@ test('starts from match end, reopens from Study, and inspects the pre-roll board
   await page.setViewportSize({ width: 1800, height: 1169 });
   const { saved, items } = await historyFixture(page);
   const review = {
-    ...detail().review,
+    ...detail().review!,
     games: [
       {
         game_no: 1,
@@ -27,6 +31,7 @@ test('starts from match end, reopens from Study, and inspects the pre-roll board
             played: '8/5 6/5',
             best: '8/5 6/5',
             equity_loss: 0,
+            severity: 'none',
             evaluation_status: 'evaluated',
           },
           {
@@ -37,6 +42,7 @@ test('starts from match end, reopens from Study, and inspects the pre-roll board
             played: 'no double',
             best: 'double',
             equity_loss: 0.12,
+            severity: 'bad',
             evaluation_status: 'evaluated',
           },
           {
@@ -48,6 +54,7 @@ test('starts from match end, reopens from Study, and inspects the pre-roll board
             played: '8/4 6/4',
             best: '8/4 6/4',
             equity_loss: 0,
+            severity: 'none',
             evaluation_status: 'evaluated',
           },
         ],
@@ -69,13 +76,13 @@ test('starts from match end, reopens from Study, and inspects the pre-roll board
     review,
   };
   await page.route(`**/api/play/sessions/${id}/review`, (route) =>
-    route.fulfill({ json: report }),
+    fulfillPlaySession(route, report),
   );
   await page.route('**/api/study/reports?group_by=session', (route) =>
-    route.fulfill({ json: { items: [summary(id)], next_cursor: null } }),
+    fulfillStudyReportPage(route, { items: [summary(id)], next_cursor: null }),
   );
   await page.route(`**/api/study/reports/${id}`, (route) =>
-    route.fulfill({ json: report }),
+    fulfillPlaySession(route, report),
   );
   await page.route(`**/api/study/reports/${id}/history?version=8`, (route) =>
     route.fulfill({ json: { version: 8, session_id: id, items } }),
