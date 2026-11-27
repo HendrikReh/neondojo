@@ -9,6 +9,8 @@ mod daily;
 mod decks;
 mod exercises;
 mod management;
+mod queue;
+mod reviews;
 mod rounds;
 mod routes;
 mod scheduler;

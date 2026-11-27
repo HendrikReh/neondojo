@@ -85,3 +85,55 @@ pub(super) async fn persist_session_with_report(
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(present_with_results(current, sgf.to_owned()).await?))
 }
+
+pub(super) async fn recent_sessions(pool: &sqlx::PgPool) -> ApiResult<Vec<(PlaySession, String)>> {
+    let rows: Vec<(sqlx::types::Json<PlaySession>, String)> = sqlx::query_as(&format!(
+        "SELECT {SAVED_STATE},sgf FROM play_sessions ORDER BY updated_at DESC,id DESC LIMIT 100"
+    ))
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    Ok(rows
+        .into_iter()
+        .map(|(state, sgf)| (state.0, sgf))
+        .collect())
+}
+
+pub(super) async fn insert_saved_session(
+    pool: &sqlx::PgPool,
+    session: &mut PlaySession,
+    pinned_path: &str,
+) -> ApiResult<()> {
+    let sgf = "";
+    let native_id = "";
+    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
+    library::lock_bot_database(&mut tx).await?;
+    sqlx::query(
+        "INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id) VALUES($1,$2,$3,$4,$5)",
+    )
+    .bind(session.id)
+    .bind(sqlx::types::Json(&*session))
+    .bind(pinned_path)
+    .bind(sgf)
+    .bind(native_id)
+    .execute(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    session.library_match_id = Some(
+        library::sync(
+            &mut tx,
+            session,
+            sgf,
+            library::ArchiveTarget::NewIn(BOT_DATABASE_ID),
+        )
+        .await?,
+    );
+    sqlx::query("UPDATE play_sessions SET state=$2 WHERE id=$1")
+        .bind(session.id)
+        .bind(sqlx::types::Json(&*session))
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(())
+}

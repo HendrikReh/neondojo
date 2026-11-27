@@ -41,16 +41,11 @@ pub(super) async fn checker_turns(
 pub(super) async fn list_sessions(
     State(state): State<AppState>,
 ) -> ApiResult<Json<Vec<PlaySession>>> {
-    let rows: Vec<(sqlx::types::Json<PlaySession>, String)> = sqlx::query_as(&format!(
-        "SELECT {SAVED_STATE},sgf FROM play_sessions ORDER BY updated_at DESC,id DESC LIMIT 100"
-    ))
-    .fetch_all(&state.pool)
-    .await
-    .map_err(anyhow::Error::from)?;
+    let rows = recent_sessions(&state.pool).await?;
     let mut sessions = Vec::with_capacity(rows.len());
     for (session, sgf) in rows {
         // Keep the list bounded: only one source replay is queued at a time.
-        sessions.push(present_with_results(session.0, sgf).await?);
+        sessions.push(present_with_results(session, sgf).await?);
     }
     Ok(Json(sessions))
 }
@@ -270,37 +265,7 @@ async fn start_session(
         .await
         .map_err(native_error)?;
     stage_opening(&mut session, false)?;
-    let sgf = String::new();
-    let native_id = String::new();
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    library::lock_bot_database(&mut tx).await?;
-    sqlx::query(
-        "INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id) VALUES($1,$2,$3,$4,$5)",
-    )
-    .bind(id)
-    .bind(sqlx::types::Json(&session))
-    .bind(pinned_path)
-    .bind(&sgf)
-    .bind(native_id)
-    .execute(&mut *tx)
-    .await
-    .map_err(anyhow::Error::from)?;
-    session.library_match_id = Some(
-        library::sync(
-            &mut tx,
-            &session,
-            &sgf,
-            library::ArchiveTarget::NewIn(BOT_DATABASE_ID),
-        )
-        .await?,
-    );
-    sqlx::query("UPDATE play_sessions SET state=$2 WHERE id=$1")
-        .bind(id)
-        .bind(sqlx::types::Json(&session))
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    tx.commit().await.map_err(anyhow::Error::from)?;
+    insert_saved_session(&state.pool, &mut session, &pinned_path).await?;
     open_sage::schedule_warmup(&session, &state.shutdown);
     Ok((StatusCode::CREATED, Json(session)))
 }
