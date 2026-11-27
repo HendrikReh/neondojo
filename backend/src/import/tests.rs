@@ -236,3 +236,34 @@ fn winning_bearoff_can_end_before_every_playable_die_is_used() {
     assert!(!board.iter().any(|n| *n > 0));
     assert!(parse_sgf("(;GM[6]AE[a:y]AW[c][c]AB[x];W[42cz])").is_err());
 }
+
+#[test]
+fn sgf_setup_error_keeps_format_context_and_board_cause() {
+    let extra_white = "(;GM[6]AW[b];W[31hefe])";
+    let error = parse_sgf(extra_white).err().unwrap();
+
+    assert!(error.to_string().starts_with("SGF:"));
+    assert_eq!(
+        error.root_cause().to_string(),
+        "more than 15 white checkers"
+    );
+}
+
+#[test]
+fn sgf_checker_error_keeps_the_move_and_the_rule() {
+    // Either die enters from the bar, but both choices leave the second
+    // die blocked on point 14. The single move must use the larger die.
+    let smaller_die = "(;GM[6]AE[a:y]AW[y]AB[n][n];W[65yt])";
+    let error = parse_sgf(smaller_die).err().unwrap();
+
+    assert_eq!(error.to_string(), "game 1, checker ply 1");
+    assert!(
+        error
+            .chain()
+            .any(|cause| { cause.to_string() == "SGF: illegal or incomplete checker move 65yt" })
+    );
+    assert_eq!(
+        error.root_cause().to_string(),
+        "single checker move must use the larger die"
+    );
+}

@@ -223,25 +223,25 @@ pub(crate) fn expand_joined_play(
     dice: [i32; 2],
     runs: &[(usize, usize)],
 ) -> Result<Vec<(usize, usize)>> {
-    ensure!(dice.iter().all(|d| (1..=6).contains(d)), "XG: invalid dice");
+    ensure!(dice.iter().all(|d| (1..=6).contains(d)), "invalid dice");
     ensure!(
         runs.len() <= 4
             && runs
                 .iter()
                 .all(|&(from, to)| (1..=25).contains(&from) && to < from),
-        "XG: invalid checker run"
+        "invalid checker run"
     );
     let available = turn_dice(dice);
     let before = local_board(board, player);
     let required = max_plays(&before, &available);
     let (after, steps) = expand_runs(&before, runs, &available, required)
-        .context("XG: checker runs cannot be expanded to a legal, complete play")?;
+        .context("checker runs cannot be expanded to a legal, complete play")?;
     if steps.len() == 1 && dice[0] != dice[1] {
         let high = dice[0].max(dice[1]);
         let (from, to) = steps[0];
         ensure!(
             step(&before, from, to, high).is_some() || !any_step(&before, high),
-            "XG: single checker move must use the larger die"
+            "single checker move must use the larger die"
         );
     }
     *board = local_board(&after, player);
@@ -266,14 +266,14 @@ pub(crate) fn apply_checker_turn(
         apply_pairs(&before, pairs, &available).context("Illegal or incomplete checker move")?;
     ensure!(
         pairs.len() == max_plays(&before, &available) || is_finished(&after),
-        "SGF: checker play does not use the maximum possible dice"
+        "checker play does not use the maximum possible dice"
     );
     if pairs.len() == 1 && dice[0] != dice[1] {
         let high = dice[0].max(dice[1]);
         let (from, to) = pairs[0];
         ensure!(
             step(&before, from, to, high).is_some() || !any_step(&before, high),
-            "SGF: single checker move must use the larger die"
+            "single checker move must use the larger die"
         );
     }
     Ok(local_board(&after, player))
