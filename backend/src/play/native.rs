@@ -216,8 +216,12 @@ pub(super) async fn read_native_result(
         let expression = regex::Regex::new(r"(?m)^.* rolls ([1-6]), .* rolls ([1-6])\.\r?$")?;
         let rolls: Vec<[i32; 2]> = expression
             .captures_iter(output)
-            .map(|hit| [hit[1].parse().unwrap(), hit[2].parse().unwrap()])
-            .collect();
+            .map(|hit| {
+                let white = hit.get(1).context("Missing GNUbg opening die for White")?;
+                let black = hit.get(2).context("Missing GNUbg opening die for Black")?;
+                Ok([white.as_str().parse()?, black.as_str().parse()?])
+            })
+            .collect::<anyhow::Result<_>>()?;
         let last = *rolls
             .last()
             .context("GNUbg did not report its opening dice")?;

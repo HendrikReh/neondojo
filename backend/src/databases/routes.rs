@@ -200,10 +200,7 @@ pub(super) async fn actions(
         return Err(ApiError::invalid("Unknown library action"));
     }
     if ["copy", "move"].contains(&a.action.as_str()) {
-        let db = a
-            .target_database_id
-            .ok_or_else(|| ApiError::invalid("target_database_id is required"))?;
-        require_library_destination(&s.pool, db).await?;
+        require_library_destination(&s.pool, a.required_destination()?).await?;
     }
     a.add_tags = a
         .add_tags
@@ -340,12 +337,14 @@ pub(super) async fn export(
             format!("{id}-{clean}")
         }
     };
-    let (name, bytes, content_type) = if files.len() == 1 {
-        let (id, name, data) = files.into_iter().next().unwrap();
+    let mut files = files.into_iter();
+    let first = files.next().ok_or_else(ApiError::missing)?;
+    let (name, bytes, content_type) = if files.len() == 0 {
+        let (id, name, data) = first;
         (safe_name(id, &name), data, "application/octet-stream")
     } else {
         let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
-        for (id, name, data) in files {
+        for (id, name, data) in std::iter::once(first).chain(files) {
             zip.start_file(
                 safe_name(id, &name),
                 zip::write::SimpleFileOptions::default(),
