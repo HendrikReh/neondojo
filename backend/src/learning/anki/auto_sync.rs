@@ -25,10 +25,33 @@ enum ConnectionState {
     Open(String),
 }
 
-#[derive(Clone, Copy, Serialize, ToSchema, sqlx::Type)]
+#[derive(Debug, Clone, Serialize)]
+pub struct AnkiConnectStatus {
+    pub reachable: bool,
+    pub profile: Option<String>,
+    pub error: Option<String>,
+}
+
+pub(crate) async fn probe_connect_status() -> AnkiConnectStatus {
+    let client = Client::local();
+    match Collection::open(&client).await {
+        Ok(collection) => AnkiConnectStatus {
+            reachable: true,
+            profile: Some(collection.profile),
+            error: None,
+        },
+        Err(ApiError(_, body)) => AnkiConnectStatus {
+            reachable: false,
+            profile: None,
+            error: Some(body.error),
+        },
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "text", rename_all = "snake_case")]
-enum SyncProblem {
+pub enum SyncProblem {
     Unreachable,
     InvalidDeck,
     Conflict,
@@ -50,9 +73,9 @@ impl From<StatusCode> for SyncProblem {
     }
 }
 
-#[derive(Default, Serialize, ToSchema)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-enum OverviewStatus {
+pub enum OverviewStatus {
     #[default]
     Checking,
     Paused,
@@ -69,16 +92,16 @@ enum OverviewStatus {
     Failed,
 }
 
-#[derive(Serialize, ToSchema, sqlx::FromRow)]
-pub(in crate::learning) struct LinkedAnkiDeck {
-    deck_id: Uuid,
-    deck_name: String,
-    profile: String,
-    last_synced_at: Option<DateTime<Utc>>,
-    received_reviews: i64,
-    sent_reviews: i64,
-    open_errors: i64,
-    paused: bool,
+#[derive(Debug, Serialize, ToSchema, sqlx::FromRow)]
+pub struct LinkedAnkiDeck {
+    pub deck_id: Uuid,
+    pub deck_name: String,
+    pub profile: String,
+    pub last_synced_at: Option<DateTime<Utc>>,
+    pub received_reviews: i64,
+    pub sent_reviews: i64,
+    pub open_errors: i64,
+    pub paused: bool,
     #[serde(skip)]
     collection_key: String,
     #[serde(skip)]
@@ -86,7 +109,7 @@ pub(in crate::learning) struct LinkedAnkiDeck {
     #[serde(skip)]
     last_problem: Option<SyncProblem>,
     #[sqlx(skip)]
-    status: OverviewStatus,
+    pub status: OverviewStatus,
 }
 
 impl LinkedAnkiDeck {
@@ -142,17 +165,94 @@ pub(in crate::learning) async fn overview(
     Ok(Json(decks))
 }
 
-#[derive(Serialize, ToSchema, sqlx::FromRow)]
-pub(in crate::learning) struct AnkiSyncHistoryEntry {
+pub(crate) async fn overview_service(
+    state: &AppState,
+) -> Result<Vec<LinkedAnkiDeck>, crate::domain_error::DomainError> {
+    let Json(decks) = overview(State(state.clone())).await?;
+    Ok(decks)
+}
+
+pub(crate) async fn history_service(
+    state: &AppState,
     id: Uuid,
-    profile: String,
-    finished_at: DateTime<Utc>,
-    received_reviews: i64,
-    sent_reviews: i64,
-    outcome: SyncOutcome,
-    problem: Option<SyncProblem>,
-    error_detail: Option<String>,
-    resolved_at: Option<DateTime<Utc>>,
+) -> Result<Vec<AnkiSyncHistoryEntry>, crate::domain_error::DomainError> {
+    let Json(rows) = history(State(state.clone()), Path(id)).await?;
+    Ok(rows)
+}
+
+pub(crate) async fn settings_service(
+    state: &AppState,
+    id: Uuid,
+) -> Result<AutoSyncSettings, crate::domain_error::DomainError> {
+    let Json(s) = settings(State(state.clone()), Path(id)).await?;
+    Ok(s)
+}
+
+pub(crate) async fn set_settings_service(
+    state: &AppState,
+    id: Uuid,
+    enabled: bool,
+) -> Result<AutoSyncSettings, crate::domain_error::DomainError> {
+    let Json(s) = set_settings(
+        State(state.clone()),
+        Path(id),
+        Json(SetAutoSync { enabled }),
+    )
+    .await?;
+    Ok(s)
+}
+
+pub(crate) async fn act_service(
+    state: &AppState,
+    id: Uuid,
+    input: SyncActionRequest,
+) -> Result<Option<SyncAttemptResult>, crate::domain_error::DomainError> {
+    if input.include_result && !matches!(input.action, SyncAction::RetryOpenErrors) {
+        return Err(crate::domain_error::DomainError::invalid(
+            "A result can be requested when retrying open errors",
+        ));
+    }
+    match input.action {
+        SyncAction::SyncNow => {
+            sync_now(state, id, input.retry_of.map_or(Retry::None, Retry::Entry))
+                .await?
+                .into_status()?;
+        }
+        _ if input.retry_of.is_some() => {
+            return Err(crate::domain_error::DomainError::invalid(
+                "Retry requires a review sync",
+            ));
+        }
+        SyncAction::RetryOpenErrors => {
+            let finished = sync_now(state, id, Retry::OpenErrors).await?;
+            if input.include_result {
+                return Ok(Some(finished.result));
+            }
+            finished.into_status()?;
+        }
+        SyncAction::Pause => {
+            set_paused(&state.pool, id, true).await?;
+            state.notify_anki_sync_update(Some(id));
+        }
+        SyncAction::Resume => {
+            set_paused(&state.pool, id, false).await?;
+            state.notify_anki_sync_update(Some(id));
+        }
+    }
+    Ok(None)
+}
+
+#[derive(Debug, Serialize, ToSchema, sqlx::FromRow)]
+pub struct AnkiSyncHistoryEntry {
+    pub id: Uuid,
+    pub profile: String,
+    pub finished_at: DateTime<Utc>,
+    pub received_reviews: i64,
+    pub sent_reviews: i64,
+    pub outcome: SyncOutcome,
+    pub problem: Option<SyncProblem>,
+    pub error_detail: Option<String>,
+    pub resolved_at: Option<DateTime<Utc>>,
 }
 
 #[utoipa::path(get, path="/api/decks/{id}/anki-auto-sync/history", params(("id"=Uuid,Path)),
@@ -185,32 +285,32 @@ pub(in crate::learning) async fn history(
     Ok(Json(rows))
 }
 
-#[derive(Serialize, ToSchema, Default, sqlx::FromRow)]
-pub(in crate::learning) struct AutoSyncSettings {
-    profile: Option<String>,
-    last_synced_at: Option<DateTime<Utc>>,
-    last_received_at: Option<DateTime<Utc>>,
-    last_outcome: Option<SyncOutcome>,
+#[derive(Debug, Serialize, ToSchema, Default, sqlx::FromRow)]
+pub struct AutoSyncSettings {
+    pub profile: Option<String>,
+    pub last_synced_at: Option<DateTime<Utc>>,
+    pub last_received_at: Option<DateTime<Utc>>,
+    pub last_outcome: Option<SyncOutcome>,
 }
 
-#[derive(Clone, Copy, Serialize, ToSchema, sqlx::Type)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "text", rename_all = "snake_case")]
-enum SyncOutcome {
+pub enum SyncOutcome {
     Synced,
     NoMatches,
     Failed,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(in crate::learning) struct SetAutoSync {
-    enabled: bool,
+pub struct SetAutoSync {
+    pub enabled: bool,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-enum SyncAction {
+pub enum SyncAction {
     SyncNow,
     RetryOpenErrors,
     Pause,
@@ -224,22 +324,22 @@ enum Retry {
     OpenErrors,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(in crate::learning) struct SyncActionRequest {
-    action: SyncAction,
-    retry_of: Option<Uuid>,
+pub struct SyncActionRequest {
+    pub action: SyncAction,
+    pub retry_of: Option<Uuid>,
     #[serde(default)]
-    include_result: bool,
+    pub include_result: bool,
 }
 
-#[derive(Serialize, ToSchema)]
-pub(in crate::learning) struct SyncAttemptResult {
-    outcome: SyncOutcome,
-    received_reviews: i64,
-    sent_reviews: i64,
-    open_errors: i64,
-    error_detail: Option<String>,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SyncAttemptResult {
+    pub outcome: SyncOutcome,
+    pub received_reviews: i64,
+    pub sent_reviews: i64,
+    pub open_errors: i64,
+    pub error_detail: Option<String>,
 }
 
 struct FinishedSync {
@@ -266,29 +366,8 @@ pub(in crate::learning) async fn act(
     Path(id): Path<Uuid>,
     Json(input): Json<SyncActionRequest>,
 ) -> ApiResult<axum::response::Response> {
-    if input.include_result && !matches!(input.action, SyncAction::RetryOpenErrors) {
-        return Err(ApiError::invalid(
-            "A result can be requested when retrying open errors",
-        ));
-    }
-    match input.action {
-        SyncAction::SyncNow => {
-            sync_now(&state, id, input.retry_of.map_or(Retry::None, Retry::Entry))
-                .await?
-                .into_status()?
-        }
-        _ if input.retry_of.is_some() => {
-            return Err(ApiError::invalid("Retry requires a review sync"));
-        }
-        SyncAction::RetryOpenErrors => {
-            let finished = sync_now(&state, id, Retry::OpenErrors).await?;
-            if input.include_result {
-                return Ok(Json(finished.result).into_response());
-            }
-            finished.into_status()?;
-        }
-        SyncAction::Pause => set_paused(&state.pool, id, true).await?,
-        SyncAction::Resume => set_paused(&state.pool, id, false).await?,
+    if let Some(result) = act_service(&state, id, input).await? {
+        return Ok(Json(result).into_response());
     }
     Ok(StatusCode::NO_CONTENT.into_response())
 }
@@ -339,7 +418,9 @@ async fn sync_now(state: &AppState, id: Uuid, retry: Retry) -> ApiResult<Finishe
                 Err(conflict("Open the linked Anki profile"))
             }
         });
-    run_claimed(&state.pool, claimed, &client, collection).await
+    let finished = run_claimed(&state.pool, claimed, &client, collection).await;
+    state.notify_anki_sync_update(Some(id));
+    finished
 }
 
 #[utoipa::path(get, path="/api/decks/{id}/anki-auto-sync", params(("id"=Uuid,Path)),
@@ -376,6 +457,7 @@ pub(in crate::learning) async fn set_settings(
             .execute(&state.pool)
             .await
             .map_err(anyhow::Error::from)?;
+        state.notify_anki_sync_update(Some(id));
         return Ok(Json(AutoSyncSettings::default()));
     }
 
@@ -406,6 +488,7 @@ pub(in crate::learning) async fn set_settings(
     .fetch_optional(&state.pool)
     .await
     .map_err(anyhow::Error::from)?;
+    state.notify_anki_sync_update(Some(id));
     match updated {
         Some(updated) => Ok(Json(updated)),
         None => settings(State(state), Path(id)).await,
@@ -459,9 +542,10 @@ async fn run_once(state: &AppState) -> ApiResult<()> {
     let Some(claimed) = claim(&state.pool, &key, None, Retry::None).await? else {
         return Ok(());
     };
-    run_claimed(&state.pool, claimed, &client, Ok(collection))
-        .await?
-        .into_status()
+    let deck_id = claimed.deck_id;
+    let outcome = run_claimed(&state.pool, claimed, &client, Ok(collection)).await;
+    state.notify_anki_sync_update(Some(deck_id));
+    outcome?.into_status()
 }
 
 async fn probe_collection(state: &AppState, client: &Client) -> ApiResult<(Collection, String)> {
@@ -485,6 +569,7 @@ async fn probe_collection(state: &AppState, client: &Client) -> ApiResult<(Colle
         Err(_) => ConnectionState::AnkiError,
     };
     *state.anki_connection.0.write().await = status;
+    state.notify_anki_sync_update(None);
     result
 }
 

@@ -2,22 +2,71 @@
 mod anki;
 pub(crate) use anki::OperationLimits;
 pub(crate) use anki::auto_sync::AnkiConnection;
+pub use anki::auto_sync::{
+    AnkiConnectStatus, AnkiSyncHistoryEntry, AutoSyncSettings, LinkedAnkiDeck, OverviewStatus,
+    SetAutoSync, SyncAction, SyncActionRequest, SyncAttemptResult, SyncOutcome, SyncProblem,
+};
+pub(crate) use anki::auto_sync::{
+    act_service as anki_auto_sync_act_service, history_service as anki_sync_history_service,
+    overview_service as anki_sync_overview_service, probe_connect_status,
+    set_settings_service as set_anki_auto_sync_service,
+    settings_service as get_anki_auto_sync_service,
+};
+pub(crate) use anki::connect::send_deck_service as send_deck_to_anki_service;
+pub use anki::flashcards::{AnkiMediaBlob, ImportedAnkiDeck, Side};
+pub(crate) use anki::flashcards::{
+    import_anki_package_from_path, load_media_blob, render_card_face_html,
+};
+pub(crate) use anki::import::import_deck_apkg_from_path;
+pub use anki::review_sync::SyncResult;
+pub(crate) use anki::review_sync::sync_deck_service as sync_deck_with_anki_service;
 pub use anki::{auto_sync::worker as anki_sync_worker, flashcards as anki_flashcards};
 mod attempts;
 mod card_writes;
 mod content;
 mod daily;
+pub use daily::LearningPreferences;
+pub(crate) use daily::{read_preferences, write_preferences};
 mod decks;
 mod exercises;
+pub use exercises::{PipAnswer, PipResult, ScoreAnswer, ScorePractice, ScoreQuestion};
+pub(crate) use exercises::{
+    check_pips_service, preview_card_service, score_answer_service, score_questions_service,
+};
 mod management;
+pub use management::{
+    AddDeckCards, AddDeckCardsResult, DeleteCard, DeleteCards, DuplicateCard, DuplicateDeck,
+    DuplicatePage, DuplicatePeer, DuplicateQuery, MoveCards, MoveCardsResult, RemoveCards,
+    ResolveDuplicate,
+};
+pub(crate) use management::{
+    add_deck_cards_service, delete_cards_service, list_duplicates_service, move_cards_service,
+    remove_cards_service, resolve_duplicate_service,
+};
 mod queue;
 mod reviews;
 mod rounds;
+pub use rounds::{
+    PracticeRound, RoundAdvance, RoundAnswer, RoundResult, RoundSummary, RoundVersion,
+};
+pub(crate) use rounds::{
+    advance_round_service, answer_round_service, mark_round_service, read_round_service,
+    retry_round_service, start_round_service,
+};
 mod routes;
 mod scheduler;
 mod search;
 mod suggestions;
+pub use suggestions::{
+    CardSuggestion, CardSuggestions, SaveSuggestions, SuggestionQuery, SuggestionReference,
+};
+pub(crate) use suggestions::{preview_suggestions_service, save_suggestions_service};
 mod topics;
+pub use topics::{CardTags, CardTopic, EditCardTags, SaveCardTopic, TagCard};
+pub(crate) use topics::{
+    delete_topic_service, edit_tags_service, list_topics_service, save_topic_service,
+    suggest_tags_service,
+};
 mod transfer;
 use crate::practice::evaluation::{self, PracticeAnswer, PracticeEvaluation, SavedEvaluation};
 #[cfg(test)]
@@ -26,6 +75,9 @@ pub(crate) use content::{saved_checker_move, saved_position_cards};
 pub use search::{
     CardBrowseContext, CardBrowseItem, CardDeck, CardKind, CardQuery, CardReviewState,
 };
+pub(crate) use search::{get_card_service, search_cards_service};
+pub use transfer::{TransferRequest, TransferSummary};
+pub(crate) use transfer::{start_transfer_service, transfer_history_service};
 
 use crate::configuration::ConfigurationLocale;
 use crate::json_errors::{Json, Path, Query};
@@ -54,6 +106,12 @@ pub(crate) use card_writes::card_signature_sql;
 use card_writes::*;
 use decks::*;
 pub use routes::{LearningDoc, daily_doc, routes};
+pub(crate) use routes::{
+    add_cards_to_deck_service, add_decisions_to_deck_service, add_positions_to_deck_service,
+    create_deck_service, delete_deck_service, export_deck_apkg_to_path_service,
+    learning_summary_service, list_decks_service, next_card_service, rename_deck_service,
+    reveal_card_service, review_card_service, submit_card_attempt_service,
+};
 
 const MAX_CARDS: i64 = 1000;
 
@@ -69,29 +127,29 @@ pub struct Deck {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Serialize, ToSchema)]
-struct StudyDeck {
-    id: Uuid,
-    name: String,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct StudyDeck {
+    pub id: Uuid,
+    pub name: String,
 }
 
-#[derive(Serialize, ToSchema)]
-struct LearningSummary {
-    card_count: i64,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct LearningSummary {
+    pub card_count: i64,
     /// Every card whose due time has passed, including never-reviewed cards.
-    due_count: i64,
+    pub due_count: i64,
     /// Due cards that have been reviewed before.
-    review_due_count: i64,
+    pub review_due_count: i64,
     /// Due cards in a deck that have never been reviewed.
-    new_count: i64,
-    new_cards_per_day: i32,
+    pub new_count: i64,
+    pub new_cards_per_day: i32,
     /// New cards still allowed today, at most `new_count`.
-    new_available_today: i64,
+    pub new_available_today: i64,
     /// Due reviews plus the new cards still allowed today.
-    today_count: i64,
-    next_due_at: Option<DateTime<Utc>>,
+    pub today_count: i64,
+    pub next_due_at: Option<DateTime<Utc>>,
     /// Deck of the next card to study today.
-    next_deck: Option<StudyDeck>,
+    pub next_deck: Option<StudyDeck>,
 }
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -347,17 +405,17 @@ pub struct RevealedCard {
 }
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-struct CardAttemptRequest {
-    expected_version: i64,
-    request_id: Uuid,
-    answer: PracticeAnswer,
+pub struct CardAttemptRequest {
+    pub expected_version: i64,
+    pub request_id: Uuid,
+    pub answer: PracticeAnswer,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct AttemptedCard {
-    revealed: RevealedCard,
-    submitted: PracticeAnswer,
-    evaluation: PracticeEvaluation,
+    pub revealed: RevealedCard,
+    pub submitted: PracticeAnswer,
+    pub evaluation: PracticeEvaluation,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]

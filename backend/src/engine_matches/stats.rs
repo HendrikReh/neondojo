@@ -2,40 +2,40 @@ use super::{DiceMode, DuelFormat, MatchResult};
 use serde::Serialize;
 use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, ToSchema)]
-pub(super) struct SeriesStatistics {
-    pub(super) wins_a: i32,
-    pub(super) wins_b: i32,
-    pub(super) win_rate_a: Option<f64>,
-    pub(super) complete_pairs: i32,
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct SeriesStatistics {
+    pub wins_a: i32,
+    pub wins_b: i32,
+    pub win_rate_a: Option<f64>,
+    pub complete_pairs: i32,
     /// 95% interval for A's match win rate; matches in paired mode only.
-    pub(super) confidence_interval_a: Option<[f64; 2]>,
+    pub confidence_interval_a: Option<[f64; 2]>,
     /// Cubeless money blocks only. `wins_a`/`wins_b` then count games won.
-    pub(super) money: Option<MoneyStatistics>,
+    pub money: Option<MoneyStatistics>,
     /// Engine work of A over the counted matches that recorded it.
-    pub(super) cost_a: Option<SideCostSummary>,
+    pub cost_a: Option<SideCostSummary>,
     /// Engine work of B over the counted matches that recorded it.
-    pub(super) cost_b: Option<SideCostSummary>,
+    pub cost_b: Option<SideCostSummary>,
 }
 
 /// Results of cubeless money blocks over the counted blocks.
-#[derive(Debug, PartialEq, Serialize, ToSchema)]
-pub(super) struct MoneyStatistics {
-    pub(super) games: i64,
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct MoneyStatistics {
+    pub games: i64,
     /// Net points per game from A's perspective, between −3 and 3.
-    pub(super) points_per_game_a: Option<f64>,
+    pub points_per_game_a: Option<f64>,
     /// 95% interval for `points_per_game_a`, from 20 pairs or blocks.
-    pub(super) confidence_interval: Option<[f64; 2]>,
-    pub(super) outcomes_a: GameOutcomes,
-    pub(super) outcomes_b: GameOutcomes,
+    pub confidence_interval: Option<[f64; 2]>,
+    pub outcomes_a: GameOutcomes,
+    pub outcomes_b: GameOutcomes,
 }
 
 /// Games won by one side, by value.
-#[derive(Debug, PartialEq, Serialize, ToSchema)]
-pub(super) struct GameOutcomes {
-    pub(super) single: i64,
-    pub(super) gammon: i64,
-    pub(super) backgammon: i64,
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct GameOutcomes {
+    pub single: i64,
+    pub gammon: i64,
+    pub backgammon: i64,
 }
 
 impl From<[i64; 3]> for GameOutcomes {
@@ -50,14 +50,14 @@ impl From<[i64; 3]> for GameOutcomes {
 
 /// Engine work per checker turn. CPU time covers all engine threads; both
 /// include cube decisions but exclude process startup, replay and checks.
-#[derive(Debug, PartialEq, Serialize, ToSchema)]
-pub(super) struct SideCostSummary {
+#[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
+pub struct SideCostSummary {
     /// Counted matches with a measurement for this side.
-    pub(super) measured_matches: i32,
+    pub measured_matches: i32,
     /// Checker turns of this side in those matches, including forced moves.
-    pub(super) moves: i64,
-    pub(super) cpu_ms_per_move: f64,
-    pub(super) wall_ms_per_move: f64,
+    pub moves: i64,
+    pub cpu_ms_per_move: f64,
+    pub wall_ms_per_move: f64,
 }
 
 pub(super) fn summarize(

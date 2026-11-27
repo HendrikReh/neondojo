@@ -53,12 +53,12 @@ pub struct StudyReportPage {
     pub items: Vec<StudyReportSummary>,
     pub next_cursor: Option<String>,
 }
-#[derive(Deserialize, IntoParams)]
-struct ReportQuery {
-    limit: Option<i64>,
-    after: Option<String>,
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct ReportQuery {
+    pub limit: Option<i64>,
+    pub after: Option<String>,
     /// "session" paginates complete money sessions; point reports remain individual.
-    group_by: Option<String>,
+    pub group_by: Option<String>,
 }
 #[derive(Serialize, Deserialize)]
 struct Cursor {
@@ -96,19 +96,24 @@ pub(crate) fn routes() -> Router<AppState> {
             axum::routing::get(report_history),
         )
 }
-#[utoipa::path(get, path="/api/study/reports", params(ReportQuery), responses((status=200, body=StudyReportPage),(status=422,body=ErrorBody)), tag="Study")]
-async fn list_reports(
-    State(state): State<AppState>,
-    Query(query): Query<ReportQuery>,
-) -> ApiResult<Json<StudyReportPage>> {
+pub(crate) async fn list_reports_service(
+    state: &AppState,
+    query: ReportQuery,
+) -> Result<StudyReportPage, crate::domain_error::DomainError> {
     let grouped = match query.group_by.as_deref() {
         None => false,
         Some("session") => true,
-        _ => return Err(ApiError::invalid("group_by must be session")),
+        _ => {
+            return Err(crate::domain_error::DomainError::invalid(
+                "group_by must be session",
+            ));
+        }
     };
     let limit = query.limit.unwrap_or(50);
     if !(1..=100).contains(&limit) {
-        return Err(ApiError::invalid("limit must be between 1 and 100"));
+        return Err(crate::domain_error::DomainError::invalid(
+            "limit must be between 1 and 100",
+        ));
     }
     let cursor: Option<Cursor> = query
         .after
@@ -119,7 +124,9 @@ async fn list_reports(
         .as_ref()
         .is_some_and(|cursor| cursor.grouped != grouped)
     {
-        return Err(ApiError::invalid("Report cursor uses a different grouping"));
+        return Err(crate::domain_error::DomainError::invalid(
+            "Report cursor uses a different grouping",
+        ));
     }
     // Resolve page boundaries from indexed, small metadata. Report sources are
     // referenced only once below, so PostgreSQL can inline them and fetch JSON
@@ -192,15 +199,31 @@ async fn list_reports(
         None
     };
     let items = rows.into_iter().map(ReportRow::into_summary).collect();
-    Ok(Json(StudyReportPage { items, next_cursor }))
+    Ok(StudyReportPage { items, next_cursor })
 }
+
+#[utoipa::path(get, path="/api/study/reports", params(ReportQuery), responses((status=200, body=StudyReportPage),(status=422,body=ErrorBody)), tag="Study")]
+async fn list_reports(
+    State(state): State<AppState>,
+    Query(query): Query<ReportQuery>,
+) -> ApiResult<Json<StudyReportPage>> {
+    Ok(Json(list_reports_service(&state, query).await?))
+}
+
+pub(crate) async fn get_report_service(
+    state: &AppState,
+    id: Uuid,
+) -> Result<PlaySession, crate::domain_error::DomainError> {
+    let (session, _) = report_checkpoint(&state.pool, id).await?;
+    Ok(session)
+}
+
 #[utoipa::path(get,path="/api/study/reports/{id}", params(("id"=Uuid,Path)), responses((status=200,body=PlaySession),(status=404,body=ErrorBody)),tag="Study")]
 async fn get_report(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<PlaySession>> {
-    let (session, _) = report_checkpoint(&state.pool, id).await?;
-    Ok(Json(session))
+    Ok(Json(get_report_service(&state, id).await?))
 }
 pub(crate) async fn report_checkpoint(
     pool: &sqlx::PgPool,
@@ -225,24 +248,33 @@ pub(crate) async fn report_checkpoint(
 struct ReportHistoryQuery {
     version: i64,
 }
-#[utoipa::path(get,path="/api/study/reports/{id}/history",params(("id"=Uuid,Path),("version"=i64,Query)),responses((status=200,body=crate::play::PlayHistorySnapshots),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Study")]
-async fn report_history(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Query(query): Query<ReportHistoryQuery>,
-) -> ApiResult<Json<crate::play::PlayHistorySnapshots>> {
+pub(crate) async fn report_history_service(
+    state: &AppState,
+    id: Uuid,
+    version: i64,
+) -> Result<crate::play::PlayHistorySnapshots, crate::domain_error::DomainError> {
     let (session, sgf) = report_checkpoint(&state.pool, id).await?;
-    if session.version != query.version {
-        return Err(ApiError(
-            axum::http::StatusCode::CONFLICT,
-            "Report version differs from saved snapshot".into(),
+    if session.version != version {
+        return Err(crate::domain_error::DomainError::conflict(
+            "Report version differs from saved snapshot",
         ));
     }
     let history =
         tokio::task::spawn_blocking(move || crate::play::build_history_snapshots(&session, &sgf))
             .await
             .map_err(anyhow::Error::from)??;
-    Ok(Json(history))
+    Ok(history)
+}
+
+#[utoipa::path(get,path="/api/study/reports/{id}/history",params(("id"=Uuid,Path),("version"=i64,Query)),responses((status=200,body=crate::play::PlayHistorySnapshots),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Study")]
+async fn report_history(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<ReportHistoryQuery>,
+) -> ApiResult<Json<crate::play::PlayHistorySnapshots>> {
+    Ok(Json(
+        report_history_service(&state, id, query.version).await?,
+    ))
 }
 
 #[derive(OpenApi)]

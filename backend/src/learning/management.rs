@@ -5,109 +5,109 @@ use std::collections::{BTreeSet, HashMap};
 
 const MAX_SELECTION: usize = 200;
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct MoveCards {
-    source_version: i64,
-    target_id: Uuid,
-    target_version: i64,
+pub struct MoveCards {
+    pub source_version: i64,
+    pub target_id: Uuid,
+    pub target_version: i64,
     #[schema(min_items = 1, max_items = 200)]
-    card_ids: Vec<Uuid>,
+    pub card_ids: Vec<Uuid>,
 }
 
-#[derive(Serialize, ToSchema)]
-pub(super) struct MoveCardsResult {
-    moved: usize,
-    already_in_target: usize,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MoveCardsResult {
+    pub moved: usize,
+    pub already_in_target: usize,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct RemoveCards {
-    expected_version: i64,
+pub struct RemoveCards {
+    pub expected_version: i64,
     #[schema(min_items = 1, max_items = 200)]
-    card_ids: Vec<Uuid>,
+    pub card_ids: Vec<Uuid>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct AddDeckCards {
-    expected_version: i64,
+pub struct AddDeckCards {
+    pub expected_version: i64,
     #[schema(min_items = 1, max_items = 200)]
-    card_ids: Vec<Uuid>,
+    pub card_ids: Vec<Uuid>,
 }
 
-#[derive(Serialize, ToSchema)]
-pub(super) struct AddDeckCardsResult {
-    added: usize,
-    already_in_target: usize,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct AddDeckCardsResult {
+    pub added: usize,
+    pub already_in_target: usize,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct DeleteCards {
+pub struct DeleteCards {
     #[schema(min_items = 1, max_items = 200)]
-    cards: Vec<DeleteCard>,
+    pub cards: Vec<DeleteCard>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct DeleteCard {
-    id: Uuid,
-    version: i64,
-    deck_ids: Vec<Uuid>,
+pub struct DeleteCard {
+    pub id: Uuid,
+    pub version: i64,
+    pub deck_ids: Vec<Uuid>,
 }
 
-#[derive(Deserialize, IntoParams)]
+#[derive(Debug, Default, Deserialize, IntoParams)]
 #[serde(deny_unknown_fields)]
 #[into_params(parameter_in = Query)]
-pub(super) struct DuplicateQuery {
-    after: Option<Uuid>,
+pub struct DuplicateQuery {
+    pub after: Option<Uuid>,
     /// One-based result page. Mutually exclusive with `after`.
-    page: Option<i64>,
+    pub page: Option<i64>,
 }
 
-#[derive(Serialize, ToSchema)]
-pub(super) struct DuplicateCard {
-    card: CardQuestion,
-    decks: Vec<DuplicateDeck>,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DuplicateCard {
+    pub card: CardQuestion,
+    pub decks: Vec<DuplicateDeck>,
     #[schema(required = true)]
-    duplicate_key: Option<String>,
-    copies: i64,
+    pub duplicate_key: Option<String>,
+    pub copies: i64,
 }
 
-#[derive(Serialize, FromRow, ToSchema)]
-pub(super) struct DuplicateDeck {
-    id: Uuid,
-    name: String,
-    version: i64,
+#[derive(Debug, Serialize, FromRow, ToSchema)]
+pub struct DuplicateDeck {
+    pub id: Uuid,
+    pub name: String,
+    pub version: i64,
 }
 
-#[derive(Serialize, FromRow, ToSchema)]
-pub(super) struct DuplicatePeer {
-    id: Uuid,
-    version: i64,
-    review_count: i32,
+#[derive(Debug, Serialize, FromRow, ToSchema)]
+pub struct DuplicatePeer {
+    pub id: Uuid,
+    pub version: i64,
+    pub review_count: i32,
 }
 
-#[derive(Serialize, ToSchema)]
-pub(super) struct DuplicatePage {
-    items: Vec<DuplicateCard>,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct DuplicatePage {
+    pub items: Vec<DuplicateCard>,
     #[schema(required = true)]
-    next_cursor: Option<Uuid>,
+    pub next_cursor: Option<Uuid>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    total: Option<i64>,
+    pub total: Option<i64>,
     #[serde(skip_serializing_if = "HashMap::is_empty")]
-    peers: HashMap<String, Vec<DuplicatePeer>>,
+    pub peers: HashMap<String, Vec<DuplicatePeer>>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct ResolveDuplicate {
-    keep_id: Uuid,
-    keep_version: i64,
-    delete_id: Uuid,
-    delete_version: i64,
+pub struct ResolveDuplicate {
+    pub keep_id: Uuid,
+    pub keep_version: i64,
+    pub delete_id: Uuid,
+    pub delete_version: i64,
 }
 
 fn validate_selection(ids: &[Uuid]) -> ApiResult<()> {
@@ -166,6 +166,57 @@ async fn insert_memberships(
     .rows_affected() as usize;
     check_deck_capacity(tx, deck_id).await?;
     Ok(added)
+}
+
+pub(crate) async fn add_deck_cards_service(
+    state: &AppState,
+    id: Uuid,
+    body: AddDeckCards,
+) -> Result<AddDeckCardsResult, crate::domain_error::DomainError> {
+    let Json(result) = add_deck_cards(State(state.clone()), Path(id), Json(body)).await?;
+    Ok(result)
+}
+
+pub(crate) async fn move_cards_service(
+    state: &AppState,
+    source_id: Uuid,
+    body: MoveCards,
+) -> Result<MoveCardsResult, crate::domain_error::DomainError> {
+    let Json(result) = move_cards(State(state.clone()), Path(source_id), Json(body)).await?;
+    Ok(result)
+}
+
+pub(crate) async fn remove_cards_service(
+    state: &AppState,
+    id: Uuid,
+    body: RemoveCards,
+) -> Result<(), crate::domain_error::DomainError> {
+    remove_cards(State(state.clone()), Path(id), Json(body)).await?;
+    Ok(())
+}
+
+pub(crate) async fn delete_cards_service(
+    state: &AppState,
+    body: DeleteCards,
+) -> Result<(), crate::domain_error::DomainError> {
+    delete_cards(State(state.clone()), Json(body)).await?;
+    Ok(())
+}
+
+pub(crate) async fn list_duplicates_service(
+    state: &AppState,
+    query: DuplicateQuery,
+) -> Result<DuplicatePage, crate::domain_error::DomainError> {
+    let Json(page) = duplicates(State(state.clone()), Query(query)).await?;
+    Ok(page)
+}
+
+pub(crate) async fn resolve_duplicate_service(
+    state: &AppState,
+    body: ResolveDuplicate,
+) -> Result<(), crate::domain_error::DomainError> {
+    resolve_duplicate(State(state.clone()), Json(body)).await?;
+    Ok(())
 }
 
 #[utoipa::path(post,path="/api/decks/{id}/add-cards",params(("id"=Uuid,Path)),request_body=AddDeckCards,responses((status=200,body=AddDeckCardsResult),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]

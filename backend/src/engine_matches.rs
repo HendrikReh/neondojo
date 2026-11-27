@@ -6,12 +6,16 @@ mod stats;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use routes::{EngineMatchDoc, routes};
+pub(crate) use routes::{
+    EngineMatchDoc, cancel_series, create_series, delete_series, list_series, routes,
+    series_details, series_library_match, series_sgf,
+};
 pub(crate) use runner::ENGINE_DUELS_DATABASE_ID;
 pub use runner::worker;
 #[cfg(test)]
 use stats::student_t_975;
-use stats::{GameOutcomes, MoneyStatistics, SeriesStatistics, SideCostSummary, summarize};
+use stats::summarize;
+pub use stats::{GameOutcomes, MoneyStatistics, SeriesStatistics, SideCostSummary};
 
 use crate::settings::EngineSnapshot;
 use chrono::{DateTime, Utc};
@@ -22,7 +26,7 @@ use uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum DiceMode {
+pub enum DiceMode {
     #[default]
     Paired,
     Random,
@@ -41,7 +45,7 @@ impl DiceMode {
 /// independent cubeless money games without the Jacoby rule.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
-enum DuelFormat {
+pub enum DuelFormat {
     #[default]
     Match,
     MoneyCubeless,
@@ -50,46 +54,46 @@ enum DuelFormat {
 const MAX_BLOCK_GAMES: i32 = 1000;
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
-struct Competitor {
-    engine_id: String,
-    plies: i32,
+pub struct Competitor {
+    pub engine_id: String,
+    pub plies: i32,
 }
 
-#[derive(Debug, Deserialize, ToSchema)]
-struct CreateSeries {
-    a: Competitor,
-    b: Competitor,
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct CreateSeries {
+    pub a: Competitor,
+    pub b: Competitor,
     #[serde(default)]
-    format: DuelFormat,
+    pub format: DuelFormat,
     /// Point match length; 1–25 for matches, 0 or omitted for money blocks.
     #[serde(default)]
     #[schema(minimum = 0, maximum = 25)]
-    match_length: i32,
+    pub match_length: i32,
     /// Games per stored block; required for cubeless money blocks.
     #[schema(minimum = 1, maximum = 1000)]
-    block_games: Option<i32>,
+    pub block_games: Option<i32>,
     /// Matches or money blocks; pairs in paired mode.
     #[schema(minimum = 1, maximum = 1000)]
-    count: i32,
+    pub count: i32,
     #[serde(default)]
-    mode: DiceMode,
-    seed: Option<Uuid>,
+    pub mode: DiceMode,
+    pub seed: Option<Uuid>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
-struct SeriesConfig {
-    a: Competitor,
-    b: Competitor,
+pub struct SeriesConfig {
+    pub a: Competitor,
+    pub b: Competitor,
     /// Absent in series created before money blocks existed.
     #[serde(default)]
-    format: DuelFormat,
+    pub format: DuelFormat,
     /// 0 for money blocks.
-    match_length: i32,
+    pub match_length: i32,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    block_games: Option<i32>,
-    count: i32,
-    mode: DiceMode,
-    seed: Uuid,
+    pub block_games: Option<i32>,
+    pub count: i32,
+    pub mode: DiceMode,
+    pub seed: Uuid,
 }
 
 impl SeriesConfig {
@@ -112,35 +116,35 @@ impl SeriesConfig {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, ToSchema)]
-struct SeriesEngines {
-    rules_version: String,
-    a: EngineSnapshot,
-    b: EngineSnapshot,
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
+pub struct SeriesEngines {
+    pub rules_version: String,
+    pub a: EngineSnapshot,
+    pub b: EngineSnapshot,
 }
 
-#[derive(Debug, FromRow, Serialize, ToSchema)]
-struct Series {
-    id: Uuid,
+#[derive(Debug, Clone, FromRow, Serialize, ToSchema)]
+pub struct Series {
+    pub id: Uuid,
     #[sqlx(json)]
-    configuration: SeriesConfig,
+    pub configuration: SeriesConfig,
     #[sqlx(json)]
-    engines: SeriesEngines,
-    dice_version: String,
-    status: String,
-    total_matches: i32,
-    completed_matches: i32,
-    error: Option<String>,
-    created_at: DateTime<Utc>,
+    pub engines: SeriesEngines,
+    pub dice_version: String,
+    pub status: String,
+    pub total_matches: i32,
+    pub completed_matches: i32,
+    pub error: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, FromRow, Serialize, ToSchema)]
-struct MatchResult {
-    match_index: i32,
-    seed: Uuid,
-    score_a: i32,
-    score_b: i32,
-    games: i32,
+#[derive(Debug, Clone, FromRow, Serialize, ToSchema)]
+pub struct MatchResult {
+    pub match_index: i32,
+    pub seed: Uuid,
+    pub score_a: i32,
+    pub score_b: i32,
+    pub games: i32,
     #[serde(skip)]
     #[sqlx(flatten)]
     cost: MatchCost,
@@ -151,7 +155,7 @@ struct MatchResult {
 
 /// Stored engine work per side. Each side is all NULL for matches played
 /// before the measurement existed.
-#[derive(Debug, Default, FromRow)]
+#[derive(Debug, Clone, Default, FromRow)]
 struct MatchCost {
     cpu_us_a: Option<i64>,
     wall_us_a: Option<i64>,
@@ -170,17 +174,17 @@ impl MatchCost {
     }
 }
 
-#[derive(Serialize, ToSchema)]
-struct SeriesDetails {
-    series: Series,
-    statistics: SeriesStatistics,
-    matches: Vec<MatchResult>,
-    next_offset: Option<i32>,
-    previous_offset: Option<i32>,
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct SeriesDetails {
+    pub series: Series,
+    pub statistics: SeriesStatistics,
+    pub matches: Vec<MatchResult>,
+    pub next_offset: Option<i32>,
+    pub previous_offset: Option<i32>,
 }
 
-#[derive(Serialize, ToSchema)]
-struct SeriesPage {
-    runs: Vec<Series>,
-    next_cursor: Option<Uuid>,
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct SeriesPage {
+    pub runs: Vec<Series>,
+    pub next_cursor: Option<Uuid>,
 }

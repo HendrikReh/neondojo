@@ -86,36 +86,31 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/profiles/{id}/activate", post(activate_profile))
 }
 
-#[utoipa::path(get,path="/api/profiles",responses((status=200,body=Vec<ConfigurationProfile>)),tag="Profiles")]
-async fn list_profiles(State(app): State<AppState>) -> Result<Json<Vec<ConfigurationProfile>>> {
+pub(crate) async fn list(app: &AppState) -> Result<Vec<ConfigurationProfile>> {
     let mut tx = app.pool.begin().await?;
     store::lock(&mut tx).await?;
     let result = store::profiles(&mut tx).await?;
     tx.commit().await?;
-    Ok(Json(result))
+    Ok(result)
 }
-#[utoipa::path(get,path="/api/profiles/{id}",params(("id"=Uuid,Path)),responses((status=200,body=ConfigurationProfile),(status=404,body=ErrorBody)),tag="Profiles")]
-async fn get_profile(
-    State(app): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> Result<Json<ConfigurationProfile>> {
+
+pub(crate) async fn get_by_id(app: &AppState, id: Uuid) -> Result<ConfigurationProfile> {
     let mut tx = app.pool.begin().await?;
     let result = store::profile(&mut tx, id).await?;
     tx.commit().await?;
-    Ok(Json(result))
+    Ok(result)
 }
-#[utoipa::path(post,path="/api/profiles",request_body=CreateConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Profiles")]
-async fn create_profile(
-    State(app): State<AppState>,
-    input: std::result::Result<Json<CreateConfigurationProfile>, ApiError>,
-) -> Result<Json<ConfigurationState>> {
-    let input = payload(input)?;
+
+pub(crate) async fn create(
+    app: &AppState,
+    input: CreateConfigurationProfile,
+) -> Result<ConfigurationState> {
     let config = normalize(input.configuration)?;
-    let mut tx = store::begin(&app).await?;
+    let mut tx = store::begin(app).await?;
     let before = store::state(&mut tx).await?;
     store::revision(input.expected_state_revision, before.revision)?;
     let (name, key) = store::name(&mut tx, &input.name).await?;
-    let issues = resources(&app, &mut tx, &config, true, true).await?;
+    let issues = resources(app, &mut tx, &config, true, true).await?;
     if !issues.is_empty() {
         return Err(ConfigurationError::resources(issues));
     }
@@ -133,16 +128,15 @@ async fn create_profile(
     let mut result = store::state(&mut tx).await?;
     result.profile = Some(result.active_profile.clone());
     tx.commit().await?;
-    Ok(Json(result))
+    Ok(result)
 }
-#[utoipa::path(patch,path="/api/profiles/{id}",params(("id"=Uuid,Path)),request_body=RenameConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Profiles")]
-async fn rename_profile(
-    State(app): State<AppState>,
-    Path(id): Path<Uuid>,
-    input: std::result::Result<Json<RenameConfigurationProfile>, ApiError>,
-) -> Result<Json<ConfigurationState>> {
-    let input = payload(input)?;
-    let mut tx = store::begin(&app).await?;
+
+pub(crate) async fn rename(
+    app: &AppState,
+    id: Uuid,
+    input: RenameConfigurationProfile,
+) -> Result<ConfigurationState> {
+    let mut tx = store::begin(app).await?;
     let before = store::state(&mut tx).await?;
     store::revision(input.expected_state_revision, before.revision)?;
     let target = store::profile(&mut tx, id).await?;
@@ -155,17 +149,16 @@ async fn rename_profile(
     let mut result = store::state(&mut tx).await?;
     result.profile = Some(store::profile(&mut tx, id).await?);
     tx.commit().await?;
-    Ok(Json(result))
+    Ok(result)
 }
-#[utoipa::path(put,path="/api/profiles/{id}/snapshot",params(("id"=Uuid,Path)),request_body=SaveConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Profiles")]
-async fn save_profile(
-    State(app): State<AppState>,
-    Path(id): Path<Uuid>,
-    input: std::result::Result<Json<SaveConfigurationProfile>, ApiError>,
-) -> Result<Json<ConfigurationState>> {
-    let input = payload(input)?;
+
+pub(crate) async fn save_snapshot(
+    app: &AppState,
+    id: Uuid,
+    input: SaveConfigurationProfile,
+) -> Result<ConfigurationState> {
     let config = normalize(input.configuration)?;
-    let mut tx = store::begin(&app).await?;
+    let mut tx = store::begin(app).await?;
     let before = store::state(&mut tx).await?;
     store::revision(input.expected_state_revision, before.revision)?;
     let target = store::profile(&mut tx, id).await?;
@@ -174,7 +167,7 @@ async fn save_profile(
     let current_changed = store::value(&before.current_configuration) != store::value(&config);
     if current_changed {
         let issues =
-            changed_resources(&app, &mut tx, &before.current_configuration, &config).await?;
+            changed_resources(app, &mut tx, &before.current_configuration, &config).await?;
         if !issues.is_empty() {
             return Err(ConfigurationError::resources(issues));
         }
@@ -190,16 +183,15 @@ async fn save_profile(
     let mut result = store::state(&mut tx).await?;
     result.profile = Some(store::profile(&mut tx, id).await?);
     tx.commit().await?;
-    Ok(Json(result))
+    Ok(result)
 }
-#[utoipa::path(delete,path="/api/profiles/{id}",params(("id"=Uuid,Path)),request_body=DeleteConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody)),tag="Profiles")]
-async fn delete_profile(
-    State(app): State<AppState>,
-    Path(id): Path<Uuid>,
-    input: std::result::Result<Json<DeleteConfigurationProfile>, ApiError>,
-) -> Result<Json<ConfigurationState>> {
-    let input = payload(input)?;
-    let mut tx = store::begin(&app).await?;
+
+pub(crate) async fn delete(
+    app: &AppState,
+    id: Uuid,
+    input: DeleteConfigurationProfile,
+) -> Result<ConfigurationState> {
+    let mut tx = store::begin(app).await?;
     let before = store::state(&mut tx).await?;
     store::revision(input.expected_state_revision, before.revision)?;
     let target = store::profile(&mut tx, id).await?;
@@ -218,35 +210,33 @@ async fn delete_profile(
     store::bump(&mut tx).await?;
     let result = store::state(&mut tx).await?;
     tx.commit().await?;
-    Ok(Json(result))
+    Ok(result)
 }
-#[utoipa::path(post,path="/api/profiles/{id}/validate",params(("id"=Uuid,Path)),request_body=ValidateConfigurationProfile,responses((status=200,body=ConfigurationValidation),(status=409,body=ErrorBody)),tag="Profiles")]
-async fn validate_profile(
-    State(app): State<AppState>,
-    Path(id): Path<Uuid>,
-    input: std::result::Result<Json<ValidateConfigurationProfile>, ApiError>,
-) -> Result<Json<ConfigurationValidation>> {
-    let input = payload(input)?;
-    let mut tx = store::begin(&app).await?;
+
+pub(crate) async fn validate(
+    app: &AppState,
+    id: Uuid,
+    input: ValidateConfigurationProfile,
+) -> Result<ConfigurationValidation> {
+    let mut tx = store::begin(app).await?;
     let target = store::profile(&mut tx, id).await?;
     store::revision(input.expected_profile_revision, target.revision)?;
     let config = normalize(target.configuration)?;
-    let issues = resources(&app, &mut tx, &config, true, true).await?;
+    let issues = resources(app, &mut tx, &config, true, true).await?;
     tx.commit().await?;
-    Ok(Json(ConfigurationValidation {
+    Ok(ConfigurationValidation {
         valid: issues.is_empty(),
         issues,
-    }))
+    })
 }
-#[utoipa::path(post,path="/api/profiles/{id}/activate",params(("id"=Uuid,Path)),request_body=ActivateConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Profiles")]
-async fn activate_profile(
-    State(app): State<AppState>,
-    Path(id): Path<Uuid>,
-    input: std::result::Result<Json<ActivateConfigurationProfile>, ApiError>,
-) -> Result<Json<ConfigurationState>> {
-    let input = payload(input)?;
+
+pub(crate) async fn activate(
+    app: &AppState,
+    id: Uuid,
+    input: ActivateConfigurationProfile,
+) -> Result<ConfigurationState> {
     let current = normalize(input.current_configuration)?;
-    let mut tx = store::begin(&app).await?;
+    let mut tx = store::begin(app).await?;
     let before = store::state(&mut tx).await?;
     store::revision(input.expected_state_revision, before.revision)?;
     store::revision(
@@ -257,10 +247,10 @@ async fn activate_profile(
     store::revision(input.expected_target_revision, target.revision)?;
     if id == before.active_profile.id {
         tx.commit().await?;
-        return Ok(Json(before));
+        return Ok(before);
     }
     let config = normalize(target.configuration)?;
-    let issues = resources(&app, &mut tx, &config, true, true).await?;
+    let issues = resources(app, &mut tx, &config, true, true).await?;
     if !issues.is_empty() {
         return Err(ConfigurationError::resources(issues));
     }
@@ -272,7 +262,66 @@ async fn activate_profile(
     store::write_state(&mut tx, &config, id).await?;
     let result = store::state(&mut tx).await?;
     tx.commit().await?;
-    Ok(Json(result))
+    Ok(result)
+}
+
+#[utoipa::path(get,path="/api/profiles",responses((status=200,body=Vec<ConfigurationProfile>)),tag="Profiles")]
+async fn list_profiles(State(app): State<AppState>) -> Result<Json<Vec<ConfigurationProfile>>> {
+    Ok(Json(list(&app).await?))
+}
+#[utoipa::path(get,path="/api/profiles/{id}",params(("id"=Uuid,Path)),responses((status=200,body=ConfigurationProfile),(status=404,body=ErrorBody)),tag="Profiles")]
+async fn get_profile(
+    State(app): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<Json<ConfigurationProfile>> {
+    Ok(Json(get_by_id(&app, id).await?))
+}
+#[utoipa::path(post,path="/api/profiles",request_body=CreateConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Profiles")]
+async fn create_profile(
+    State(app): State<AppState>,
+    input: std::result::Result<Json<CreateConfigurationProfile>, ApiError>,
+) -> Result<Json<ConfigurationState>> {
+    Ok(Json(create(&app, payload(input)?).await?))
+}
+#[utoipa::path(patch,path="/api/profiles/{id}",params(("id"=Uuid,Path)),request_body=RenameConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Profiles")]
+async fn rename_profile(
+    State(app): State<AppState>,
+    Path(id): Path<Uuid>,
+    input: std::result::Result<Json<RenameConfigurationProfile>, ApiError>,
+) -> Result<Json<ConfigurationState>> {
+    Ok(Json(rename(&app, id, payload(input)?).await?))
+}
+#[utoipa::path(put,path="/api/profiles/{id}/snapshot",params(("id"=Uuid,Path)),request_body=SaveConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Profiles")]
+async fn save_profile(
+    State(app): State<AppState>,
+    Path(id): Path<Uuid>,
+    input: std::result::Result<Json<SaveConfigurationProfile>, ApiError>,
+) -> Result<Json<ConfigurationState>> {
+    Ok(Json(save_snapshot(&app, id, payload(input)?).await?))
+}
+#[utoipa::path(delete,path="/api/profiles/{id}",params(("id"=Uuid,Path)),request_body=DeleteConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody)),tag="Profiles")]
+async fn delete_profile(
+    State(app): State<AppState>,
+    Path(id): Path<Uuid>,
+    input: std::result::Result<Json<DeleteConfigurationProfile>, ApiError>,
+) -> Result<Json<ConfigurationState>> {
+    Ok(Json(delete(&app, id, payload(input)?).await?))
+}
+#[utoipa::path(post,path="/api/profiles/{id}/validate",params(("id"=Uuid,Path)),request_body=ValidateConfigurationProfile,responses((status=200,body=ConfigurationValidation),(status=409,body=ErrorBody)),tag="Profiles")]
+async fn validate_profile(
+    State(app): State<AppState>,
+    Path(id): Path<Uuid>,
+    input: std::result::Result<Json<ValidateConfigurationProfile>, ApiError>,
+) -> Result<Json<ConfigurationValidation>> {
+    Ok(Json(validate(&app, id, payload(input)?).await?))
+}
+#[utoipa::path(post,path="/api/profiles/{id}/activate",params(("id"=Uuid,Path)),request_body=ActivateConfigurationProfile,responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Profiles")]
+async fn activate_profile(
+    State(app): State<AppState>,
+    Path(id): Path<Uuid>,
+    input: std::result::Result<Json<ActivateConfigurationProfile>, ApiError>,
+) -> Result<Json<ConfigurationState>> {
+    Ok(Json(activate(&app, id, payload(input)?).await?))
 }
 
 #[derive(OpenApi)]

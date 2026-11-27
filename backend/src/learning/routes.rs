@@ -197,9 +197,23 @@ pub fn daily_doc() -> utoipa::openapi::OpenApi {
     daily::DailyDoc::openapi()
 }
 
+pub(crate) async fn list_decks_service(
+    state: &AppState,
+) -> Result<Vec<Deck>, crate::domain_error::DomainError> {
+    Ok(list_decks(&state.pool).await?)
+}
+
 #[utoipa::path(get,path="/api/decks",responses((status=200,body=Vec<Deck>)),tag="Learning")]
 pub(super) async fn decks(State(state): State<AppState>) -> ApiResult<Json<Vec<Deck>>> {
-    Ok(Json(list_decks(&state.pool).await?))
+    Ok(Json(list_decks_service(&state).await?))
+}
+
+pub(crate) async fn create_deck_service(
+    state: &AppState,
+    body: CreateDeck,
+) -> Result<Deck, crate::domain_error::DomainError> {
+    let name = deck_name(&body.name)?;
+    Ok(insert_deck(&state.pool, name).await?)
 }
 
 #[utoipa::path(post,path="/api/decks",request_body=CreateDeck,responses((status=201,body=Deck),(status=422,body=ErrorBody)),tag="Learning")]
@@ -207,9 +221,19 @@ pub(super) async fn create_deck(
     State(state): State<AppState>,
     Json(body): Json<CreateDeck>,
 ) -> ApiResult<(StatusCode, Json<Deck>)> {
+    Ok((
+        StatusCode::CREATED,
+        Json(create_deck_service(&state, body).await?),
+    ))
+}
+
+pub(crate) async fn rename_deck_service(
+    state: &AppState,
+    id: Uuid,
+    body: RenameDeck,
+) -> Result<Deck, crate::domain_error::DomainError> {
     let name = deck_name(&body.name)?;
-    let deck = insert_deck(&state.pool, name).await?;
-    Ok((StatusCode::CREATED, Json(deck)))
+    Ok(update_deck(&state.pool, id, body.expected_version, name).await?)
 }
 
 #[utoipa::path(put,path="/api/decks/{id}",params(("id"=Uuid,Path)),request_body=RenameDeck,responses((status=200,body=Deck),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
@@ -219,10 +243,16 @@ pub(super) async fn rename_deck(
     Json(body): Json<RenameDeck>,
 ) -> ApiResult<Json<Deck>> {
     let Path(id) = path.map_err(ApiError::into_invalid)?;
-    let name = deck_name(&body.name)?;
-    Ok(Json(
-        update_deck(&state.pool, id, body.expected_version, name).await?,
-    ))
+    Ok(Json(rename_deck_service(&state, id, body).await?))
+}
+
+pub(crate) async fn delete_deck_service(
+    state: &AppState,
+    id: Uuid,
+    expected_version: i64,
+) -> Result<(), crate::domain_error::DomainError> {
+    remove_deck(&state.pool, id, expected_version).await?;
+    Ok(())
 }
 
 #[utoipa::path(delete,path="/api/decks/{id}",params(("id"=Uuid,Path),DeleteDeckQuery),responses((status=204,description="Deck and its memberships deleted; shared cards and history retained"),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
@@ -233,7 +263,7 @@ pub(super) async fn delete_deck(
 ) -> ApiResult<StatusCode> {
     let Path(id) = path.map_err(ApiError::into_invalid)?;
     let Query(query) = query?;
-    remove_deck(&state.pool, id, query.expected_version).await?;
+    delete_deck_service(&state, id, query.expected_version).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -246,33 +276,34 @@ pub(super) async fn cards(
     search::load(&state, Some(id), query).await
 }
 
-#[utoipa::path(post,path="/api/decks/{id}/cards",params(("id"=Uuid,Path)),request_body=AddCards,responses((status=200,body=AddCardsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
-pub(super) async fn add_cards(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(body): Json<AddCards>,
-) -> ApiResult<Json<AddCardsResult>> {
+pub(crate) async fn add_cards_to_deck_service(
+    state: &AppState,
+    id: Uuid,
+    body: AddCards,
+) -> Result<AddCardsResult, crate::domain_error::DomainError> {
     require_deck(&state.pool, id).await?;
     if body.position_id.is_some() && body.job_id.is_some()
         || body.position_id.is_none() && body.job_id.is_none() && body.match_id.is_none()
     {
-        return Err(ApiError::invalid(
+        return Err(crate::domain_error::DomainError::invalid(
             "Supply position_id, or match_id / saved match-analysis job_id",
         ));
     }
     if body.min_loss.is_some_and(|n| !n.is_finite() || n < 0.0)
         || body.player.is_some_and(|p| !(0..=1).contains(&p))
     {
-        return Err(ApiError::invalid(
+        return Err(crate::domain_error::DomainError::invalid(
             "min_loss must be finite and nonnegative; player must be 0 or 1",
         ));
     }
     if body.game_no.is_some_and(|n| n < 1) {
-        return Err(ApiError::invalid("game_no must be positive"));
+        return Err(crate::domain_error::DomainError::invalid(
+            "game_no must be positive",
+        ));
     }
     let contents = content::from_source(&state.pool, &body).await?;
     if contents.len() > MAX_CARDS as usize {
-        return Err(ApiError::invalid(
+        return Err(crate::domain_error::DomainError::invalid(
             "Batch exceeds 1000 cards; narrow the player or minimum-loss filter",
         ));
     }
@@ -282,9 +313,16 @@ pub(super) async fn add_cards(
         unique.insert(card_signature(&c), c);
     }
     let tags = topics::tags(body.tags)?;
-    Ok(Json(
-        write_match_cards(&state.pool, id, unique, &tags).await?,
-    ))
+    Ok(write_match_cards(&state.pool, id, unique, &tags).await?)
+}
+
+#[utoipa::path(post,path="/api/decks/{id}/cards",params(("id"=Uuid,Path)),request_body=AddCards,responses((status=200,body=AddCardsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
+pub(super) async fn add_cards(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<AddCards>,
+) -> ApiResult<Json<AddCardsResult>> {
+    Ok(Json(add_cards_to_deck_service(&state, id, body).await?))
 }
 
 enum BatchAddSource<'a> {
@@ -361,12 +399,11 @@ where
     })
 }
 
-#[utoipa::path(post,path="/api/decks/{id}/positions",params(("id"=Uuid,Path)),request_body=AddPositions,responses((status=200,body=AddPositionsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
-pub(super) async fn add_positions(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(body): Json<AddPositions>,
-) -> ApiResult<Json<AddPositionsResult>> {
+pub(crate) async fn add_positions_to_deck_service(
+    state: &AppState,
+    id: Uuid,
+    body: AddPositions,
+) -> Result<AddPositionsResult, crate::domain_error::DomainError> {
     require_deck(&state.pool, id).await?;
     let ids = body.validated_ids()?;
     let sources = saved_position_cards(&state.pool, &ids).await?;
@@ -402,20 +439,28 @@ pub(super) async fn add_positions(
         },
     )
     .await?;
-    Ok(Json(AddPositionsResult {
+    Ok(AddPositionsResult {
         added: outcome.added,
         updated: outcome.updated,
         total: outcome.total,
         items: outcome.items,
-    }))
+    })
 }
 
-#[utoipa::path(post,path="/api/decks/{id}/decisions",params(("id"=Uuid,Path)),request_body=AddDecisions,responses((status=200,body=AddDecisionsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
-pub(super) async fn add_decisions(
+#[utoipa::path(post,path="/api/decks/{id}/positions",params(("id"=Uuid,Path)),request_body=AddPositions,responses((status=200,body=AddPositionsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
+pub(super) async fn add_positions(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    Json(body): Json<AddDecisions>,
-) -> ApiResult<Json<AddDecisionsResult>> {
+    Json(body): Json<AddPositions>,
+) -> ApiResult<Json<AddPositionsResult>> {
+    Ok(Json(add_positions_to_deck_service(&state, id, body).await?))
+}
+
+pub(crate) async fn add_decisions_to_deck_service(
+    state: &AppState,
+    id: Uuid,
+    body: AddDecisions,
+) -> Result<AddDecisionsResult, crate::domain_error::DomainError> {
     require_deck(&state.pool, id).await?;
     let references = body.validated()?;
     let sources = content::decision_cards(&state.pool, &references).await?;
@@ -449,19 +494,41 @@ pub(super) async fn add_decisions(
         },
     )
     .await?;
-    Ok(Json(AddDecisionsResult {
+    Ok(AddDecisionsResult {
         added: outcome.added,
         updated: outcome.updated,
         total: outcome.total,
         items: outcome.items,
-    }))
+    })
+}
+
+#[utoipa::path(post,path="/api/decks/{id}/decisions",params(("id"=Uuid,Path)),request_body=AddDecisions,responses((status=200,body=AddDecisionsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
+pub(super) async fn add_decisions(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(body): Json<AddDecisions>,
+) -> ApiResult<Json<AddDecisionsResult>> {
+    Ok(Json(add_decisions_to_deck_service(&state, id, body).await?))
+}
+
+pub(crate) async fn learning_summary_service(
+    state: &AppState,
+) -> Result<LearningSummary, crate::domain_error::DomainError> {
+    Ok(queue::summary(&state.pool).await?)
 }
 
 #[utoipa::path(get, path = "/api/study/learning-summary", responses((status = 200, body = LearningSummary)), tag = "Learning")]
 pub(super) async fn learning_summary(
     State(state): State<AppState>,
 ) -> ApiResult<Json<LearningSummary>> {
-    Ok(Json(queue::summary(&state.pool).await?))
+    Ok(Json(learning_summary_service(&state).await?))
+}
+
+pub(crate) async fn next_card_service(
+    state: &AppState,
+    id: Uuid,
+) -> Result<NextCard, crate::domain_error::DomainError> {
+    Ok(queue::next(&state.pool, id).await?)
 }
 
 #[utoipa::path(get,path="/api/decks/{id}/next",params(("id"=Uuid,Path)),responses((status=200,body=NextCard),(status=404,body=ErrorBody)),tag="Learning")]
@@ -469,7 +536,15 @@ pub(super) async fn next_card(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<NextCard>> {
-    Ok(Json(queue::next(&state.pool, id).await?))
+    Ok(Json(next_card_service(&state, id).await?))
+}
+
+pub(crate) async fn reveal_card_service(
+    state: &AppState,
+    id: Uuid,
+    expected_version: i64,
+) -> Result<RevealedCard, crate::domain_error::DomainError> {
+    Ok(reviews::reveal_card(&state.pool, id, expected_version).await?)
 }
 
 #[utoipa::path(post,path="/api/cards/{id}/reveal",params(("id"=Uuid,Path)),request_body=RevealCard,responses((status=200,body=RevealedCard),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
@@ -479,8 +554,16 @@ pub(super) async fn reveal(
     Json(body): Json<RevealCard>,
 ) -> ApiResult<Json<RevealedCard>> {
     Ok(Json(
-        reviews::reveal_card(&state.pool, id, body.expected_version).await?,
+        reveal_card_service(&state, id, body.expected_version).await?,
     ))
+}
+
+pub(crate) async fn submit_card_attempt_service(
+    state: &AppState,
+    id: Uuid,
+    body: CardAttemptRequest,
+) -> Result<AttemptedCard, crate::domain_error::DomainError> {
+    Ok(submit_card_attempt(state, id, body).await?)
 }
 
 #[utoipa::path(post,path="/api/cards/{id}/attempt",params(("id"=Uuid,Path)),request_body=CardAttemptRequest,responses((status=200,body=AttemptedCard),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Learning")]
@@ -489,7 +572,15 @@ pub(super) async fn submit_attempt(
     Path(id): Path<Uuid>,
     Json(body): Json<CardAttemptRequest>,
 ) -> ApiResult<Json<AttemptedCard>> {
-    Ok(Json(submit_card_attempt(&state, id, body).await?))
+    Ok(Json(submit_card_attempt_service(&state, id, body).await?))
+}
+
+pub(crate) async fn review_card_service(
+    state: &AppState,
+    id: Uuid,
+    body: ReviewCard,
+) -> Result<ReviewResult, crate::domain_error::DomainError> {
+    Ok(reviews::rate_card(&state.pool, id, body).await?)
 }
 
 #[utoipa::path(post,path="/api/cards/{id}/review",params(("id"=Uuid,Path)),request_body=ReviewCard,responses((status=200,body=ReviewResult),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
@@ -498,7 +589,22 @@ pub(super) async fn review(
     Path(id): Path<Uuid>,
     Json(body): Json<ReviewCard>,
 ) -> ApiResult<Json<ReviewResult>> {
-    Ok(Json(reviews::rate_card(&state.pool, id, body).await?))
+    Ok(Json(review_card_service(&state, id, body).await?))
+}
+
+pub(crate) async fn export_deck_apkg_to_path_service(
+    state: &AppState,
+    id: Uuid,
+    locale: Option<ConfigurationLocale>,
+    destination: &std::path::Path,
+) -> Result<std::path::PathBuf, crate::domain_error::DomainError> {
+    let bytes = anki::build_deck_package(state, id, ExportQuery { locale }).await?;
+    tokio::fs::write(destination, bytes)
+        .await
+        .map_err(|error| {
+            crate::domain_error::DomainError::invalid(format!("Cannot write Anki package: {error}"))
+        })?;
+    Ok(destination.to_path_buf())
 }
 
 #[utoipa::path(get,path="/api/decks/{id}/export.apkg",params(("id"=Uuid,Path),ExportQuery),responses((status=200,description="Native Anki package without review history",content_type="application/zip",body=Vec<u8>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody)),tag="Learning")]

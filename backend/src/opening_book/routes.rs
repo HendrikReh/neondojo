@@ -1,4 +1,5 @@
 use super::*;
+use crate::domain_error::DomainError;
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
@@ -23,30 +24,28 @@ pub(super) fn validate_path(path: &str) -> ApiResult<()> {
     Ok(())
 }
 
-#[utoipa::path(get,path="/api/opening-book",responses((status=200,body=BookSettings)),tag="Opening book")]
-pub(super) async fn get_settings(State(state): State<AppState>) -> ApiResult<Json<BookSettings>> {
+pub(crate) async fn read_settings(state: &AppState) -> Result<BookSettings, DomainError> {
     let config = load(&state.pool).await?;
     let status = status(&config).await;
     let xg_status = state.opening_books.xg.status(&config.xg_path).await;
-    Ok(Json(BookSettings {
+    Ok(BookSettings {
         config,
         status,
         xg_status,
-    }))
+    })
 }
 
-#[utoipa::path(put,path="/api/opening-book",request_body=BookConfigWrite,responses((status=200,body=BookSettings),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Opening book")]
-pub(super) async fn put_settings(
-    State(state): State<AppState>,
-    Json(config): Json<BookConfigWrite>,
-) -> ApiResult<Json<BookSettings>> {
+pub(crate) async fn write_settings(
+    state: &AppState,
+    config: BookConfigWrite,
+) -> Result<BookSettings, DomainError> {
     if !(0..i64::MAX).contains(&config.version)
         || !matches!(
             config.provider.as_str(),
             "off" | "backgammondb" | "automatic" | "xg"
         )
     {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "Invalid opening book version or provider",
         ));
     }
@@ -68,10 +67,7 @@ pub(super) async fn put_settings(
     let latest = latest
         .filter(|latest| latest.version == config.version)
         .ok_or_else(|| {
-            ApiError(
-                StatusCode::CONFLICT,
-                "Opening book settings changed; reload before saving".into(),
-            )
+            DomainError::conflict("Opening book settings changed; reload before saving")
         })?;
     let config = BookConfig {
         version: config.version,
@@ -91,27 +87,75 @@ pub(super) async fn put_settings(
     tx.commit().await.map_err(anyhow::Error::from)?;
     let status = status(&config).await;
     let xg_status = state.opening_books.xg.status(&config.xg_path).await;
-    Ok(Json(BookSettings {
+    Ok(BookSettings {
         config,
         status,
         xg_status,
-    }))
+    })
+}
+
+pub(crate) async fn check_book_path(path: String) -> Result<BookStatus, DomainError> {
+    validate_path(&path)?;
+    Ok(status(&BookConfig {
+        version: 0,
+        provider: "backgammondb".into(),
+        path,
+        xg_path: xg_book::default_path(),
+    })
+    .await)
+}
+
+pub(crate) async fn install_book_path(
+    state: &AppState,
+    path: String,
+) -> Result<BookStatus, DomainError> {
+    validate_path(&path)?;
+    let config = load(&state.pool).await?;
+    install_from_path(&config, &path)
+        .await
+        .map_err(|error| DomainError::invalid(format!("Cannot install opening book: {error:#}")))
+}
+
+pub(crate) async fn check_xg_book_path(
+    state: &AppState,
+    path: String,
+) -> Result<xg_book::XgBookStatus, DomainError> {
+    validate_path(&path)?;
+    Ok(state.opening_books.xg.status(&path).await)
+}
+
+pub(crate) async fn install_xg_book_path(
+    state: &AppState,
+    path: String,
+) -> Result<xg_book::XgBookStatus, DomainError> {
+    validate_path(&path)?;
+    let config = load(&state.pool).await?;
+    state
+        .opening_books
+        .xg
+        .install_from_path(&config.xg_path, &path)
+        .await
+        .map_err(|error| DomainError::invalid(format!("Cannot install XG opening book: {error:#}")))
+}
+
+#[utoipa::path(get,path="/api/opening-book",responses((status=200,body=BookSettings)),tag="Opening book")]
+pub(super) async fn get_settings(State(state): State<AppState>) -> ApiResult<Json<BookSettings>> {
+    Ok(Json(read_settings(&state).await?))
+}
+
+#[utoipa::path(put,path="/api/opening-book",request_body=BookConfigWrite,responses((status=200,body=BookSettings),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Opening book")]
+pub(super) async fn put_settings(
+    State(state): State<AppState>,
+    Json(config): Json<BookConfigWrite>,
+) -> ApiResult<Json<BookSettings>> {
+    Ok(Json(write_settings(&state, config).await?))
 }
 
 #[utoipa::path(post,path="/api/opening-book/check",request_body=BookPathRequest,responses((status=200,body=BookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
 pub(super) async fn check_book(
     Json(request): Json<BookPathRequest>,
 ) -> ApiResult<Json<BookStatus>> {
-    validate_path(&request.path)?;
-    Ok(Json(
-        status(&BookConfig {
-            version: 0,
-            provider: "backgammondb".into(),
-            path: request.path,
-            xg_path: xg_book::default_path(),
-        })
-        .await,
-    ))
+    Ok(Json(check_book_path(request.path).await?))
 }
 
 #[utoipa::path(post,path="/api/opening-book/install",request_body=BookPathRequest,responses((status=200,body=BookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
@@ -119,15 +163,7 @@ pub(super) async fn install_book(
     State(state): State<AppState>,
     Json(request): Json<BookPathRequest>,
 ) -> ApiResult<Json<BookStatus>> {
-    validate_path(&request.path)?;
-    let config = load(&state.pool).await?;
-    Ok(Json(
-        install_from_path(&config, &request.path)
-            .await
-            .map_err(|error| {
-                ApiError::invalid(format!("Cannot install opening book: {error:#}"))
-            })?,
-    ))
+    Ok(Json(install_book_path(&state, request.path).await?))
 }
 
 #[utoipa::path(post,path="/api/opening-book/xg/check",request_body=BookPathRequest,responses((status=200,body=xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
@@ -135,8 +171,7 @@ pub(super) async fn check_xg_book(
     State(state): State<AppState>,
     Json(request): Json<BookPathRequest>,
 ) -> ApiResult<Json<xg_book::XgBookStatus>> {
-    validate_path(&request.path)?;
-    Ok(Json(state.opening_books.xg.status(&request.path).await))
+    Ok(Json(check_xg_book_path(&state, request.path).await?))
 }
 
 #[utoipa::path(post,path="/api/opening-book/xg/install",request_body=BookPathRequest,responses((status=200,body=xg_book::XgBookStatus),(status=422,body=ErrorBody)),tag="Opening book")]
@@ -144,18 +179,26 @@ pub(super) async fn install_xg_book(
     State(state): State<AppState>,
     Json(request): Json<BookPathRequest>,
 ) -> ApiResult<Json<xg_book::XgBookStatus>> {
-    validate_path(&request.path)?;
+    Ok(Json(install_xg_book_path(&state, request.path).await?))
+}
+
+pub(crate) async fn lookup_position_book(
+    state: &AppState,
+    id: Uuid,
+) -> Result<BookLookup, DomainError> {
+    crate::play::require_position_review_available(&state.pool, id).await?;
+    let position = crate::store::get_position(&state.pool, id)
+        .await?
+        .ok_or_else(DomainError::missing)?;
     let config = load(&state.pool).await?;
-    Ok(Json(
-        state
-            .opening_books
-            .xg
-            .install_from_path(&config.xg_path, &request.path)
-            .await
-            .map_err(|error| {
-                ApiError::invalid(format!("Cannot install XG opening book: {error:#}"))
-            })?,
-    ))
+    let beaver = state
+        .opening_books
+        .source_beaver_rule(&state.pool, &position)
+        .await?;
+    Ok(state
+        .opening_books
+        .lookup(&config, &position, None, beaver)
+        .await?)
 }
 
 #[utoipa::path(get,path="/api/positions/{id}/opening-book",params(("id"=Uuid,Path)),responses((status=200,body=BookLookup),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Opening book")]
@@ -163,21 +206,7 @@ pub(super) async fn position_book(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<BookLookup>> {
-    crate::play::require_position_review_available(&state.pool, id).await?;
-    let position = crate::store::get_position(&state.pool, id)
-        .await?
-        .ok_or_else(ApiError::missing)?;
-    let config = load(&state.pool).await?;
-    let beaver = state
-        .opening_books
-        .source_beaver_rule(&state.pool, &position)
-        .await?;
-    Ok(Json(
-        state
-            .opening_books
-            .lookup(&config, &position, None, beaver)
-            .await?,
-    ))
+    Ok(Json(lookup_position_book(&state, id).await?))
 }
 
 #[derive(OpenApi)]

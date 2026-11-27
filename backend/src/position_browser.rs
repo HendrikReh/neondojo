@@ -19,8 +19,13 @@ mod browse;
 mod browse_performance;
 mod filters;
 mod routes;
+pub(crate) use browse::search_saved_positions;
 use browse::*;
 use filters::*;
+pub(crate) use filters::{
+    create_saved_filter, delete_saved_filter, list_saved_filters, update_saved_filter,
+};
+pub(crate) use routes::check_analysis_readiness;
 use routes::*;
 pub use routes::{PositionBrowserDoc, routes};
 
@@ -264,7 +269,7 @@ pub struct PositionBrowserPage {
     pub total: Option<i64>,
 }
 
-#[derive(Deserialize, IntoParams)]
+#[derive(Debug, Default, Deserialize, IntoParams)]
 #[serde(deny_unknown_fields)]
 #[into_params(parameter_in = Query)]
 pub struct PositionBrowserQuery {
@@ -339,9 +344,9 @@ pub struct DeletePositionFilter {
 
 pub(crate) const SAVED_VISIBLE: &str = concat!("NOT ", crate::play::review_blocked_sql!("m.id"));
 
-#[derive(Serialize, ToSchema)]
-struct PositionAnalysisReadiness {
-    analysis_required: i64,
-    unavailable: i64,
-    first_analysis_required: Option<Uuid>,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PositionAnalysisReadiness {
+    pub analysis_required: i64,
+    pub unavailable: i64,
+    pub first_analysis_required: Option<Uuid>,
 }

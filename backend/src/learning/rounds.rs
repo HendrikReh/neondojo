@@ -1,62 +1,119 @@
 use super::*;
 use sqlx::{PgConnection, Postgres, QueryBuilder};
 
-#[derive(Serialize, ToSchema)]
-pub(super) struct PracticeRound {
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PracticeRound {
+    pub id: Uuid,
+    pub version: i64,
+    pub pass: i16,
+    pub index: i64,
+    pub total: i64,
+    pub card: Option<CardQuestion>,
+    pub missing: bool,
+    pub marked: bool,
+    pub result: Option<RoundResult>,
+    pub summary: RoundSummary,
+    pub transfer: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct RoundResult {
+    pub answer: CardAnswer,
+    pub evaluation: Option<PracticeEvaluation>,
+    pub submitted: Option<PracticeAnswer>,
+    #[serde(default)]
+    pub confidence: Option<bool>,
+}
+
+#[derive(Debug, FromRow, Serialize, ToSchema)]
+pub struct RoundSummary {
+    pub errors: i64,
+    pub correct: i64,
+    pub revealed: i64,
+    pub skipped: i64,
+    pub retry_count: i64,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RoundVersion {
+    pub version: i64,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RoundAnswer {
+    pub version: i64,
+    pub card_version: i64,
+    pub request_id: Uuid,
+    pub answer: Option<PracticeAnswer>,
+    pub confidence: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RoundAdvance {
+    pub version: i64,
+    pub marked: bool,
+    pub diagnosis: Option<String>,
+    pub lesson: Option<String>,
+}
+
+pub(crate) async fn start_round_service(
+    state: &AppState,
+    query: CardQuery,
+) -> Result<PracticeRound, crate::domain_error::DomainError> {
+    let (_, Json(round)) = start(State(state.clone()), Query(query)).await?;
+    Ok(round)
+}
+
+pub(crate) async fn read_round_service(
+    state: &AppState,
+    id: Uuid,
+) -> Result<PracticeRound, crate::domain_error::DomainError> {
+    let Json(round) = read(State(state.clone()), Path(id)).await?;
+    Ok(round)
+}
+
+pub(crate) async fn answer_round_service(
+    state: &AppState,
+    id: Uuid,
+    body: RoundAnswer,
+) -> Result<PracticeRound, crate::domain_error::DomainError> {
+    let Json(round) = answer(State(state.clone()), Path(id), Json(body)).await?;
+    Ok(round)
+}
+
+pub(crate) async fn advance_round_service(
+    state: &AppState,
+    id: Uuid,
+    body: RoundAdvance,
+) -> Result<PracticeRound, crate::domain_error::DomainError> {
+    let Json(round) = advance(State(state.clone()), Path(id), Json(body)).await?;
+    Ok(round)
+}
+
+pub(crate) async fn mark_round_service(
+    state: &AppState,
+    id: Uuid,
+    body: RoundAdvance,
+) -> Result<PracticeRound, crate::domain_error::DomainError> {
+    let Json(round) = mark(State(state.clone()), Path(id), Json(body)).await?;
+    Ok(round)
+}
+
+pub(crate) async fn retry_round_service(
+    state: &AppState,
     id: Uuid,
     version: i64,
-    pass: i16,
-    index: i64,
-    total: i64,
-    card: Option<CardQuestion>,
-    missing: bool,
-    marked: bool,
-    result: Option<RoundResult>,
-    summary: RoundSummary,
-    transfer: bool,
-}
-
-#[derive(Serialize, Deserialize, ToSchema)]
-pub(super) struct RoundResult {
-    answer: CardAnswer,
-    evaluation: Option<PracticeEvaluation>,
-    submitted: Option<PracticeAnswer>,
-    #[serde(default)]
-    confidence: Option<bool>,
-}
-
-#[derive(FromRow, Serialize, ToSchema)]
-pub(super) struct RoundSummary {
-    errors: i64,
-    correct: i64,
-    revealed: i64,
-    skipped: i64,
-    retry_count: i64,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub(super) struct RoundVersion {
-    version: i64,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub(super) struct RoundAnswer {
-    version: i64,
-    card_version: i64,
-    request_id: Uuid,
-    answer: Option<PracticeAnswer>,
-    confidence: Option<bool>,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub(super) struct RoundAdvance {
-    version: i64,
-    marked: bool,
-    diagnosis: Option<String>,
-    lesson: Option<String>,
+) -> Result<PracticeRound, crate::domain_error::DomainError> {
+    let Json(round) = retry(
+        State(state.clone()),
+        Path(id),
+        Json(RoundVersion { version }),
+    )
+    .await?;
+    Ok(round)
 }
 
 #[derive(FromRow)]

@@ -14,13 +14,13 @@ pub(super) use cards::deck_cards;
 const PAGE_SIZE: usize = 100;
 const MAX_REVIEWS: usize = 100_000;
 
-#[derive(Serialize, ToSchema)]
-pub(in crate::learning) struct SyncResult {
-    profile: String,
-    pub(super) matched_cards: usize,
-    unmatched_cards: usize,
-    received_reviews: usize,
-    sent_reviews: usize,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SyncResult {
+    pub profile: String,
+    pub matched_cards: usize,
+    pub unmatched_cards: usize,
+    pub received_reviews: usize,
+    pub sent_reviews: usize,
 }
 
 #[derive(Deserialize)]
@@ -176,6 +176,17 @@ struct LocalReview {
     export_id: Option<i64>,
 }
 
+pub(crate) async fn sync_deck_service(
+    state: &AppState,
+    id: Uuid,
+) -> Result<SyncResult, crate::domain_error::DomainError> {
+    let _permit = connect::reserve(state)?;
+    let cards = deck_cards(&state.pool, id).await?;
+    let client = Client::local();
+    let collection = Collection::open(&client).await?;
+    Ok(sync_deck(&state.pool, id, &client, &collection, &cards, None).await?)
+}
+
 #[utoipa::path(post, path="/api/decks/{id}/sync-anki-reviews", params(("id"=Uuid,Path)), request_body=SyncRequest,
     responses((status=200,body=SyncResult),(status=404,body=ErrorBody),(status=409,body=ErrorBody),
     (status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=502,body=ErrorBody),
@@ -185,13 +196,7 @@ pub(in crate::learning) async fn sync(
     Path(id): Path<Uuid>,
     Json(_body): Json<SyncRequest>,
 ) -> ApiResult<Json<SyncResult>> {
-    let _permit = connect::reserve(&state)?;
-    let cards = deck_cards(&state.pool, id).await?;
-    let client = Client::local();
-    let collection = Collection::open(&client).await?;
-    Ok(Json(
-        sync_deck(&state.pool, id, &client, &collection, &cards, None).await?,
-    ))
+    Ok(Json(sync_deck_service(&state, id).await?))
 }
 
 pub(super) async fn sync_deck(

@@ -13,50 +13,49 @@ use std::{collections::BTreeSet, convert::Infallible, time::Duration};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub(super) enum PositionJobKind {
+pub enum PositionJobKind {
     Analysis,
     Dice,
 }
 
-#[derive(Deserialize, ToSchema)]
-pub(super) struct JobRequest {
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct JobRequest {
     /// Database UUID of the imported position, not its GNUbg ID.
-    position_id: Uuid,
+    pub position_id: Uuid,
     /// A ranked candidate analysis or a distribution over 21 weighted rolls.
-    kind: PositionJobKind,
+    pub kind: PositionJobKind,
     /// Provider for this job; omitted uses the saved analysis engine.
-    engine_id: Option<MatchAnalysisEngine>,
+    pub engine_id: Option<MatchAnalysisEngine>,
     /// Verified search depth of the selected engine. Omitted uses saved analysis depth.
     #[serde(default)]
     #[schema(minimum = 1, maximum = 5)]
-    plies: Option<i32>,
+    pub plies: Option<i32>,
 }
 
-#[utoipa::path(post, path="/api/jobs", request_body=JobRequest, responses((status=202, body=Job), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Analysis")]
-pub(super) async fn create_job(
-    State(state): State<AppState>,
-    Json(request): Json<JobRequest>,
-) -> ApiResult<(StatusCode, Json<Job>)> {
+pub(crate) async fn submit_position_job(
+    state: &AppState,
+    request: JobRequest,
+) -> Result<Job, DomainError> {
     crate::play::require_position_review_available(&state.pool, request.position_id).await?;
     let engine_id = request.engine_id.as_ref().map(MatchAnalysisEngine::id);
     let (settings, snapshot) =
-        crate::settings::snapshot_for_analysis(&state, request.plies, engine_id)
+        crate::settings::snapshot_for_analysis(state, request.plies, engine_id)
             .await
-            .map_err(|e| ApiError::invalid(format!("Engine unavailable: {e:#}")))?;
+            .map_err(|e| DomainError::invalid(format!("Engine unavailable: {e:#}")))?;
     let plies = request.plies.unwrap_or(settings.analysis_plies);
     if !crate::configuration::engine_depths(&snapshot.engine_id, "analysis").contains(&plies) {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "Depth is not verified for the selected engine",
         ));
     }
     let position = store::get_position(&state.pool, request.position_id)
         .await?
-        .ok_or_else(ApiError::missing)?;
+        .ok_or_else(DomainError::missing)?;
     if snapshot.provider() == Some(crate::engines::EngineId::NeonGammon) {
         crate::engines::validate_match_id_away(&position.gnubg_match_id)
-            .map_err(|e| ApiError::invalid(format!("{e:#}")))?;
+            .map_err(|e| DomainError::invalid(format!("{e:#}")))?;
     }
     let job = store::create_job_with_snapshot(
         &state.pool,
@@ -70,7 +69,18 @@ pub(super) async fn create_job(
     )
     .await?;
     state.wake.notify_one();
-    Ok((StatusCode::ACCEPTED, Json(job)))
+    Ok(job)
+}
+
+#[utoipa::path(post, path="/api/jobs", request_body=JobRequest, responses((status=202, body=Job), (status=404, body=ErrorBody), (status=422, body=ErrorBody)), tag="Analysis")]
+pub(super) async fn create_job(
+    State(state): State<AppState>,
+    Json(request): Json<JobRequest>,
+) -> ApiResult<(StatusCode, Json<Job>)> {
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(submit_position_job(&state, request).await?),
+    ))
 }
 
 pub(crate) async fn get_job_by_id(state: &AppState, id: Uuid) -> Result<Job, DomainError> {

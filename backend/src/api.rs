@@ -3,12 +3,22 @@ mod jobs;
 mod matches;
 mod openapi;
 
-pub(crate) use analysis::MatchAnalysisEngine;
-pub use jobs::JobStatusBatch;
-pub(crate) use jobs::{
-    cancel_job_by_id, get_job_by_id, get_job_status_batch, watch_job_events_checked,
+pub use analysis::{
+    MatchAnalysisEngine, MatchAnalysisQuery, MatchAnalysisRequest, MoveAnalysisQuery,
 };
-pub use matches::ImportQuery;
+pub(crate) use analysis::{
+    get_latest_match_analysis, get_match_analysis_jobs, list_move_analyses, submit_match_analysis,
+};
+pub use jobs::{JobRequest, JobStatusBatch, PositionJobKind};
+pub(crate) use jobs::{
+    cancel_job_by_id, get_job_by_id, get_job_status_batch, submit_position_job,
+    watch_job_events_checked,
+};
+pub use matches::{GameScope, ImportQuery, PositionQuery};
+pub(crate) use matches::{
+    get_match_by_id, get_match_dice, get_match_games, get_match_import_warnings,
+    get_match_source_sgf, get_position_by_id, import_match_from_path, list_positions,
+};
 pub use openapi::{ApiDoc, BaseApiDoc};
 
 use crate::json_errors::Json;
@@ -24,10 +34,11 @@ use axum::{
 use serde::Serialize;
 use sqlx::PgPool;
 use std::{sync::Arc, time::Duration};
-use tokio::sync::{Notify, Semaphore};
+use tokio::sync::{Notify, Semaphore, broadcast};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -37,9 +48,13 @@ pub struct AppState {
     pub(crate) browse_wake: Arc<Notify>,
     pub(crate) assessment_wake: Arc<Notify>,
     job_notifications: Arc<crate::job_events::JobNotifications>,
+    pub(crate) benchmark_updates: broadcast::Sender<Uuid>,
+    pub(crate) engine_match_updates: broadcast::Sender<Uuid>,
+    pub(crate) assessment_updates: broadcast::Sender<Uuid>,
+    pub(crate) anki_sync_updates: broadcast::Sender<Option<Uuid>>,
     pub shutdown: CancellationToken,
     pub(crate) background_tasks: TaskTracker,
-    imports: Arc<Semaphore>,
+    pub(crate) imports: Arc<Semaphore>,
     /// Serialize on-demand evaluations without holding a database lock.
     pub(crate) practice_evaluation: Arc<tokio::sync::Mutex<()>>,
     pub(crate) play_warmup: Arc<Semaphore>,
@@ -63,6 +78,10 @@ impl AppState {
             browse_wake: Arc::default(),
             assessment_wake: Arc::new(Notify::new()),
             job_notifications: Arc::default(),
+            benchmark_updates: broadcast::channel(128).0,
+            engine_match_updates: broadcast::channel(128).0,
+            assessment_updates: broadcast::channel(128).0,
+            anki_sync_updates: broadcast::channel(128).0,
             shutdown: CancellationToken::new(),
             background_tasks: TaskTracker::new(),
             imports: Arc::new(Semaphore::new(2)),
@@ -77,6 +96,38 @@ impl AppState {
             openai: Arc::new(crate::match_assessment::OpenAi::from_env()),
             review_hit_queue: Arc::default(),
         }
+    }
+
+    pub fn subscribe_benchmark_updates(&self) -> broadcast::Receiver<Uuid> {
+        self.benchmark_updates.subscribe()
+    }
+
+    pub fn subscribe_engine_match_updates(&self) -> broadcast::Receiver<Uuid> {
+        self.engine_match_updates.subscribe()
+    }
+
+    pub fn subscribe_assessment_updates(&self) -> broadcast::Receiver<Uuid> {
+        self.assessment_updates.subscribe()
+    }
+
+    pub fn subscribe_anki_sync_updates(&self) -> broadcast::Receiver<Option<Uuid>> {
+        self.anki_sync_updates.subscribe()
+    }
+
+    pub(crate) fn notify_benchmark_update(&self, id: Uuid) {
+        let _ = self.benchmark_updates.send(id);
+    }
+
+    pub(crate) fn notify_engine_match_update(&self, id: Uuid) {
+        let _ = self.engine_match_updates.send(id);
+    }
+
+    pub(crate) fn notify_assessment_update(&self, report_id: Uuid) {
+        let _ = self.assessment_updates.send(report_id);
+    }
+
+    pub(crate) fn notify_anki_sync_update(&self, deck_id: Option<Uuid>) {
+        let _ = self.anki_sync_updates.send(deck_id);
     }
 
     /// Sets how often running analysis jobs renew their lease. Each renewal

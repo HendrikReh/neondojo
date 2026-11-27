@@ -28,12 +28,12 @@ pub mod configuration;
 pub mod profiles;
 pub mod settings;
 
-mod database_backup;
+pub mod database_backup;
 pub mod databases;
 pub mod duplicate_matches;
 pub mod move_catalog;
 pub mod move_explanation;
-mod player_directory;
+pub mod player_directory;
 mod player_scope;
 
 pub mod opening_book;
@@ -64,10 +64,10 @@ pub mod recurring_mistakes;
 pub mod browse_indexes;
 mod position_game_plans;
 
-mod analysis_timing;
-mod practice;
+pub mod analysis_timing;
+pub mod practice;
 mod search;
-mod similar_positions;
+pub mod similar_positions;
 mod untrusted_sqlite;
 
 pub mod engine_matches;

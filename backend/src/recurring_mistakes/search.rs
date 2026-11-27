@@ -387,6 +387,23 @@ impl Search {
     }
 }
 
+pub(crate) async fn search_decisions_service(
+    s: &AppState,
+    q: DecisionSearchQuery,
+) -> Result<DecisionSearchPage, crate::domain_error::DomainError> {
+    let search = Search::new(&s.pool, q).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
+    super::index::require_current(s, &mut tx, search.database(), search.player(), false).await?;
+    let (items, total) = search.read(&mut tx).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(DecisionSearchPage {
+        items,
+        total,
+        page: search.page,
+        limit: search.limit,
+    })
+}
+
 #[utoipa::path(get, path = "/api/study/decisions", params(DecisionSearchQuery),
     responses((status = 200, body = DecisionSearchPage), (status = 422, body = ErrorBody),
               (status = 503, description = "Decision index is being prepared", body = ErrorBody)),
@@ -395,17 +412,7 @@ pub(super) async fn search(
     State(s): State<AppState>,
     Query(q): Query<DecisionSearchQuery>,
 ) -> ApiResult<Json<DecisionSearchPage>> {
-    let search = Search::new(&s.pool, q).await?;
-    let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
-    super::index::require_current(&s, &mut tx, search.database(), search.player(), false).await?;
-    let (items, total) = search.read(&mut tx).await?;
-    tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(DecisionSearchPage {
-        items,
-        total,
-        page: search.page,
-        limit: search.limit,
-    }))
+    Ok(Json(search_decisions_service(&s, q).await?))
 }
 
 #[cfg(test)]

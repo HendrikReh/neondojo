@@ -9,7 +9,7 @@ use crate::{
 };
 use anyhow::{Context, Result, ensure};
 
-pub(crate) mod evaluation;
+pub mod evaluation;
 
 pub(crate) fn checker_turn(position: &Position, steps: &[PlayStep]) -> Option<[i32; 26]> {
     if steps.len() > 4 || !matches!(position.player, 0 | 1) {

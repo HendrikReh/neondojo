@@ -1,6 +1,7 @@
 //! Statistics of the chosen catalog result. Imported summaries use the same
 //! validated decisions as review; unknown depth and missing coverage stay absent.
 use super::{GameAnalysisStatistics, PlayerErrorBreakdown};
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Path, Query};
 use crate::{
     analysis_catalog::{SelectedAnalysis, resolve_selection_on},
@@ -78,7 +79,7 @@ pub struct MatchAnalysisStatistics {
     pub games: Vec<CatalogGameStatistics>,
     pub error_breakdown: Option<[PlayerErrorBreakdown; 2]>,
 }
-#[derive(Deserialize, IntoParams)]
+#[derive(Debug, Default, Deserialize, IntoParams)]
 #[into_params(parameter_in=Query)]
 pub struct CatalogStatisticsQuery {
     pub analysis_id: Option<String>,
@@ -314,14 +315,13 @@ fn summarize_imported_entry(
     })
 }
 
-#[utoipa::path(get,path="/api/matches/{id}/analysis-statistics",params(("id"=Uuid,Path),CatalogStatisticsQuery),responses((status=200,body=MatchAnalysisStatistics),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Match analysis")]
-async fn statistics(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Query(query): Query<CatalogStatisticsQuery>,
-) -> ApiResult<Json<MatchAnalysisStatistics>> {
+pub(crate) async fn load_match_statistics(
+    state: &AppState,
+    id: Uuid,
+    query: CatalogStatisticsQuery,
+) -> Result<MatchAnalysisStatistics, DomainError> {
     if query.game_no.is_some_and(|g| g <= 0) {
-        return Err(ApiError::invalid("game_no must be positive"));
+        return Err(DomainError::invalid("game_no must be positive"));
     }
     let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     let flags: Option<(bool, bool)> =
@@ -331,14 +331,11 @@ async fn statistics(
             .await
             .map_err(anyhow::Error::from)?;
     let Some((moves_cataloged, imported_loaded)) = flags else {
-        return Err(ApiError::missing());
+        return Err(DomainError::missing());
     };
     crate::play::require_review_available_on(&mut *tx, id).await?;
     if !imported_loaded {
-        return Err(crate::browse_indexes::preparing(
-            &state,
-            "Imported analysis",
-        ));
+        return Err(crate::browse_indexes::preparing(state, "Imported analysis").into());
     }
     let selected = resolve_selection_on(&mut tx, id, query.analysis_id.as_deref()).await?;
     let analysis_id = selected.as_ref().map(|s| s.id());
@@ -346,34 +343,38 @@ async fn statistics(
         && job.kind == "match"
     {
         tx.commit().await.map_err(anyhow::Error::from)?;
-        return Ok(Json(
-            summarize_native_entry(&state, job.id, analysis_id, query.game_no).await?,
-        ));
+        return Ok(summarize_native_entry(state, job.id, analysis_id, query.game_no).await?);
     }
     // A single-position result has no match statistics, even if it contains a loss.
     if !matches!(selected, Some(SelectedAnalysis::Imported { .. })) {
         tx.commit().await.map_err(anyhow::Error::from)?;
-        return Ok(Json(MatchAnalysisStatistics {
+        return Ok(MatchAnalysisStatistics {
             needs_cube_rule_reanalysis: false,
             analysis_id,
             summary: None,
             games: vec![],
             error_breakdown: None,
-        }));
+        });
     }
     if !moves_cataloged {
-        return Err(crate::browse_indexes::preparing(
-            &state,
-            "The match analysis catalog",
-        ));
+        return Err(crate::browse_indexes::preparing(state, "The match analysis catalog").into());
     }
-    let key = analysis_id.as_deref().ok_or_else(ApiError::missing)?;
-    let inputs = load_imported_inputs_on(&state, &mut tx, id, key, query.game_no).await?;
+    let key = analysis_id.as_deref().ok_or_else(DomainError::missing)?;
+    let inputs = load_imported_inputs_on(state, &mut tx, id, key, query.game_no).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     let data = tokio::task::spawn_blocking(move || summarize_imported_entry(analysis_id, inputs))
         .await
         .map_err(anyhow::Error::from)??;
-    Ok(Json(data))
+    Ok(data)
+}
+
+#[utoipa::path(get,path="/api/matches/{id}/analysis-statistics",params(("id"=Uuid,Path),CatalogStatisticsQuery),responses((status=200,body=MatchAnalysisStatistics),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Match analysis")]
+async fn statistics(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<CatalogStatisticsQuery>,
+) -> ApiResult<Json<MatchAnalysisStatistics>> {
+    Ok(Json(load_match_statistics(&state, id, query).await?))
 }
 fn accumulate_errors(errors: &mut [PlayerErrorBreakdown; 2], d: &crate::match_analysis::Decision) {
     let p = &mut errors[d.player as usize];

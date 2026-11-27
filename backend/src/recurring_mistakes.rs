@@ -20,6 +20,8 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
 mod history;
+pub(crate) use history::list_history_service;
+pub use history::{MistakePracticeDay, MistakePracticeHistory};
 mod imported;
 pub(crate) mod imported_projection;
 mod index;
@@ -27,6 +29,11 @@ pub use index::backfill_batch;
 #[doc(hidden)]
 pub mod query_plans;
 mod search;
+pub(crate) use search::search_decisions_service;
+pub use search::{
+    CubeOwnerFilter, DecisionHit, DecisionKind, DecisionSearchPage, DecisionSearchQuery,
+    LossDirection,
+};
 pub(crate) mod source;
 use source::{SourceDecision, load, players};
 
@@ -43,7 +50,7 @@ pub enum MistakeKind {
     WrongPass,
     UnclassifiedCube,
 }
-#[derive(Deserialize, IntoParams)]
+#[derive(Debug, Default, Deserialize, IntoParams)]
 #[serde(deny_unknown_fields)]
 #[into_params(parameter_in=Query)]
 pub struct MistakesQuery {
@@ -159,7 +166,7 @@ pub struct MistakePracticeQuestion {
 pub struct MistakePractice {
     pub items: Vec<MistakePracticeQuestion>,
 }
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct MistakeAnswer {
     pub best: String,
     pub played: String,
@@ -174,17 +181,17 @@ pub struct MistakeAnswer {
     pub source: Option<MistakeSource>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-struct MistakeAttemptRequest {
-    reference: MistakeReference,
-    answer: PracticeAnswer,
+pub struct MistakeAttemptRequest {
+    pub reference: MistakeReference,
+    pub answer: PracticeAnswer,
 }
 
-#[derive(Serialize, ToSchema)]
-struct MistakeAttempt {
-    evaluation: PracticeEvaluation,
-    original: MistakeAnswer,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct MistakeAttempt {
+    pub evaluation: PracticeEvaluation,
+    pub original: MistakeAnswer,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -264,11 +271,10 @@ fn can_practice_correct_cube(row: &SourceDecision) -> bool {
     }
 }
 
-#[utoipa::path(get,path="/api/study/mistakes",params(MistakesQuery),responses((status=200,body=Mistakes),(status=422,body=ErrorBody),(status=503,description="Decision index is being prepared",body=ErrorBody)),tag="Study")]
-async fn list(
-    State(s): State<AppState>,
-    Query(q): Query<MistakesQuery>,
-) -> ApiResult<Json<Mistakes>> {
+pub(crate) async fn list_mistakes_service(
+    s: &AppState,
+    q: MistakesQuery,
+) -> Result<Mistakes, crate::domain_error::DomainError> {
     let player = q.player.as_deref().map(validate_player).transpose()?;
     let loss = validate_loss(q.min_loss)?;
     let players = players(&s.pool, q.database_id).await?;
@@ -290,12 +296,12 @@ async fn list(
             .cloned();
     }
     let Some(player) = player else {
-        return Ok(Json(result));
+        return Ok(result);
     };
     let names = player_scope::names(&s.pool, &player).await?;
     let independent_only = q.independent_only.unwrap_or(false);
     let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
-    index::require_current(&s, &mut tx, q.database_id, &names, independent_only).await?;
+    index::require_current(s, &mut tx, q.database_id, &names, independent_only).await?;
     let (groups, decisions, matches) = index::groups(
         &mut tx,
         q.database_id,
@@ -311,13 +317,47 @@ async fn list(
     (result.player_matches, result.unanalyzed_matches) =
         index::coverage(&mut tx, q.database_id, &names, independent_only).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(result))
+    Ok(result)
 }
-#[utoipa::path(post,path="/api/study/mistakes/practice",request_body=MistakePracticeRequest,responses((status=200,body=MistakePractice),(status=422,body=ErrorBody)),tag="Study")]
-async fn practice(
+
+#[utoipa::path(get,path="/api/study/mistakes",params(MistakesQuery),responses((status=200,body=Mistakes),(status=422,body=ErrorBody),(status=503,description="Decision index is being prepared",body=ErrorBody)),tag="Study")]
+async fn list(
     State(s): State<AppState>,
-    Json(q): Json<MistakePracticeRequest>,
-) -> ApiResult<Json<MistakePractice>> {
+    Query(q): Query<MistakesQuery>,
+) -> ApiResult<Json<Mistakes>> {
+    Ok(Json(list_mistakes_service(&s, q).await?))
+}
+
+pub(crate) async fn list_unanalyzed_matches_service(
+    s: &AppState,
+    player: &str,
+    database_id: Option<Uuid>,
+    independent_only: bool,
+    limit: Option<i64>,
+) -> Result<Vec<crate::model::MatchSummary>, crate::domain_error::DomainError> {
+    let player = validate_player(player)?;
+    let limit = limit.unwrap_or(100);
+    if !(1..=500).contains(&limit) {
+        return Err(crate::domain_error::DomainError::invalid(
+            "limit must be between 1 and 500",
+        ));
+    }
+    if let Some(database_id) = database_id {
+        source::require_database(&s.pool, database_id).await?;
+    }
+    let names = player_scope::names(&s.pool, &player).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
+    index::require_current(s, &mut tx, database_id, &names, independent_only).await?;
+    let items =
+        index::unanalyzed_matches(&mut tx, database_id, &names, independent_only, limit).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(items)
+}
+
+pub(crate) async fn practice_mistakes_service(
+    s: &AppState,
+    q: MistakePracticeRequest,
+) -> Result<MistakePractice, crate::domain_error::DomainError> {
     let player = validate_player(&q.player)?;
     let loss = validate_loss(q.min_loss)?;
     let names = player_scope::names(&s.pool, &player).await?;
@@ -333,7 +373,15 @@ async fn practice(
         rows.retain(|row| independent.contains(&row.question.position.match_uuid));
     }
     let items = select_practice_questions(rows, &names, q.game_plan, q.mistake_kind, loss);
-    Ok(Json(MistakePractice { items }))
+    Ok(MistakePractice { items })
+}
+
+#[utoipa::path(post,path="/api/study/mistakes/practice",request_body=MistakePracticeRequest,responses((status=200,body=MistakePractice),(status=422,body=ErrorBody)),tag="Study")]
+async fn practice(
+    State(s): State<AppState>,
+    Json(q): Json<MistakePracticeRequest>,
+) -> ApiResult<Json<MistakePractice>> {
+    Ok(Json(practice_mistakes_service(&s, q).await?))
 }
 
 fn select_practice_questions(
@@ -414,24 +462,30 @@ fn select_practice_questions(
     }
     items
 }
+pub(crate) async fn reveal_mistake_service(
+    s: &AppState,
+    reference: &MistakeReference,
+) -> Result<MistakeAnswer, crate::domain_error::DomainError> {
+    Ok(original_answer(load_question(s, reference).await?))
+}
+
 #[utoipa::path(post,path="/api/study/mistakes/reveal",request_body=MistakeReference,responses((status=200,body=MistakeAnswer),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Study")]
 async fn reveal(
     State(s): State<AppState>,
     Json(reference): Json<MistakeReference>,
 ) -> ApiResult<Json<MistakeAnswer>> {
-    Ok(Json(original_answer(load_question(&s, &reference).await?)))
+    Ok(Json(reveal_mistake_service(&s, &reference).await?))
 }
 
-#[utoipa::path(post,path="/api/study/mistakes/attempt",request_body=MistakeAttemptRequest,responses((status=200,body=MistakeAttempt),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Study")]
-async fn attempt(
-    State(s): State<AppState>,
-    Json(input): Json<MistakeAttemptRequest>,
-) -> ApiResult<Json<MistakeAttempt>> {
-    let row = load_question(&s, &input.reference).await?;
+pub(crate) async fn attempt_mistake_service(
+    s: &AppState,
+    input: MistakeAttemptRequest,
+) -> Result<MistakeAttempt, crate::domain_error::DomainError> {
+    let row = load_question(s, &input.reference).await?;
     let native = matches!(row.question.source, Some(MistakeSource::Native));
     let position = evaluation_position(&row.question)?;
     let evaluation = evaluation::evaluate(
-        &s,
+        s,
         &row.question.kind,
         &position,
         SavedEvaluation {
@@ -446,13 +500,21 @@ async fn attempt(
     .await?;
     // An engine run can outlive a change in the winning source or competition state.
     if evaluation.is_recomputed() {
-        load_question(&s, &input.reference).await?;
+        load_question(s, &input.reference).await?;
     }
     history::record(&s.pool, &row, &evaluation).await?;
-    Ok(Json(MistakeAttempt {
+    Ok(MistakeAttempt {
         evaluation,
         original: original_answer(row),
-    }))
+    })
+}
+
+#[utoipa::path(post,path="/api/study/mistakes/attempt",request_body=MistakeAttemptRequest,responses((status=200,body=MistakeAttempt),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Study")]
+async fn attempt(
+    State(s): State<AppState>,
+    Json(input): Json<MistakeAttemptRequest>,
+) -> ApiResult<Json<MistakeAttempt>> {
+    Ok(Json(attempt_mistake_service(&s, input).await?))
 }
 
 async fn load_question(s: &AppState, reference: &MistakeReference) -> ApiResult<SourceDecision> {

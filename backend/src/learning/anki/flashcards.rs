@@ -54,10 +54,124 @@ pub fn routes() -> Router<AppState> {
         )
 }
 
-#[derive(Serialize, ToSchema)]
-pub(in crate::learning) struct ImportedAnkiDeck {
-    name: String,
-    cards: usize,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ImportedAnkiDeck {
+    pub name: String,
+    pub cards: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct AnkiMediaBlob {
+    pub content_type: String,
+    pub bytes: Vec<u8>,
+}
+
+async fn import_package_file_inner(
+    state: &AppState,
+    directory: crate::async_temp_dir::AsyncTempDir,
+    package: std::path::PathBuf,
+    permit: tokio::sync::OwnedSemaphorePermit,
+) -> Result<Vec<ImportedAnkiDeck>, crate::domain_error::DomainError> {
+    let inspected = package.clone();
+    let (directory, inspection, _permit) = tokio::task::spawn_blocking(move || {
+        let result = inspect_archive(&inspected);
+        (directory, result, permit)
+    })
+    .await
+    .map_err(anyhow::Error::from)?;
+    inspection.map_err(|error| {
+        crate::domain_error::DomainError::invalid(format!("Invalid Anki package: {error}"))
+    })?;
+    let output = directory.path().join("rendered");
+    tokio::fs::create_dir(&output)
+        .await
+        .map_err(anyhow::Error::from)?;
+    let python = std::env::var_os("NEONDOJO_ANKI_PYTHON").unwrap_or_else(|| "python3".into());
+    let mut renderer = tokio::process::Command::new(python)
+        .arg("-I")
+        .arg("-c")
+        .arg(include_str!("../../../../tools/import_anki_flashcards.py"))
+        .arg(&package)
+        .arg("--render-to")
+        .arg(&output)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .env_remove("DATABASE_URL")
+        .kill_on_drop(true)
+        .spawn()
+        .map_err(|_| renderer_unavailable())?;
+    let status = tokio::time::timeout(Duration::from_secs(90), renderer.wait())
+        .await
+        .map_err(|_| {
+            ApiError(
+                StatusCode::GATEWAY_TIMEOUT,
+                "Anki package rendering timed out".into(),
+            )
+        })?
+        .map_err(anyhow::Error::from)?;
+    if status.code() == Some(3) {
+        return Err(renderer_unavailable().into());
+    }
+    if !status.success() {
+        return Err(crate::domain_error::DomainError::invalid(
+            "Anki could not render this package",
+        ));
+    }
+    let decks = import_rendered_package(&state.pool, &output)
+        .await
+        .map_err(|error| {
+            if error.is::<sqlx::Error>() {
+                crate::domain_error::DomainError::from(error)
+            } else {
+                crate::domain_error::DomainError::invalid(format!(
+                    "Cannot import this Anki package: {error}"
+                ))
+            }
+        })?;
+    Ok(decks
+        .into_iter()
+        .map(|(name, cards)| ImportedAnkiDeck { name, cards })
+        .collect())
+}
+
+pub(crate) async fn import_anki_package_from_path(
+    state: &AppState,
+    path: &FilePath,
+) -> Result<Vec<ImportedAnkiDeck>, crate::domain_error::DomainError> {
+    let metadata = tokio::fs::metadata(path).await.map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            crate::domain_error::DomainError::missing()
+        } else {
+            crate::domain_error::DomainError::invalid(format!("Cannot read Anki package: {error}"))
+        }
+    })?;
+    if !metadata.is_file() {
+        return Err(crate::domain_error::DomainError::invalid(
+            "Select an Anki package file",
+        ));
+    }
+    if metadata.len() > MAX_UPLOAD as u64 {
+        return Err(crate::domain_error::DomainError::payload_too_large(
+            "Anki package exceeds 128 MiB",
+        ));
+    }
+    let permit = state
+        .anki_limits
+        .package_import
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            crate::domain_error::DomainError::too_many_requests(
+                "An Anki package import is already running",
+            )
+        })?;
+    let directory = crate::async_temp_dir::AsyncTempDir::new().await?;
+    let package = directory.path().join("upload.apkg");
+    tokio::fs::copy(path, &package).await.map_err(|error| {
+        crate::domain_error::DomainError::invalid(format!("Cannot read Anki package: {error}"))
+    })?;
+    import_package_file_inner(state, directory, package, permit).await
 }
 
 #[utoipa::path(post,path="/api/study/anki-imports",request_body(content=super::import::AnkiUpload,content_type="multipart/form-data"),
@@ -105,66 +219,8 @@ pub(in crate::learning) async fn upload(
     }
     file.flush().await.map_err(anyhow::Error::from)?;
     drop(file);
-    let inspected = package.clone();
-    let (directory, inspection, _permit) = tokio::task::spawn_blocking(move || {
-        let result = inspect_archive(&inspected);
-        (directory, result, permit)
-    })
-    .await
-    .map_err(anyhow::Error::from)?;
-    inspection.map_err(|error| ApiError::invalid(format!("Invalid Anki package: {error}")))?;
-    let output = directory.path().join("rendered");
-    tokio::fs::create_dir(&output)
-        .await
-        .map_err(anyhow::Error::from)?;
-    let python = std::env::var_os("NEONDOJO_ANKI_PYTHON").unwrap_or_else(|| "python3".into());
-    let mut renderer = tokio::process::Command::new(python)
-        .arg("-I")
-        .arg("-c")
-        .arg(include_str!("../../../../tools/import_anki_flashcards.py"))
-        .arg(&package)
-        .arg("--render-to")
-        .arg(&output)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .env_remove("DATABASE_URL")
-        .kill_on_drop(true)
-        .spawn()
-        .map_err(|_| renderer_unavailable())?;
-    let status = tokio::time::timeout(Duration::from_secs(90), renderer.wait())
-        .await
-        .map_err(|_| {
-            ApiError(
-                StatusCode::GATEWAY_TIMEOUT,
-                "Anki package rendering timed out".into(),
-            )
-        })?
-        .map_err(anyhow::Error::from)?;
-    if status.code() == Some(3) {
-        return Err(renderer_unavailable());
-    }
-    if !status.success() {
-        return Err(ApiError::invalid("Anki could not render this package"));
-    }
-    let decks = import_rendered_package(&state.pool, &output)
-        .await
-        .map_err(|error| {
-            if error.is::<sqlx::Error>() {
-                ApiError::from(error)
-            } else {
-                ApiError::invalid(format!("Cannot import this Anki package: {error}"))
-            }
-        })?;
-    Ok((
-        StatusCode::CREATED,
-        Json(
-            decks
-                .into_iter()
-                .map(|(name, cards)| ImportedAnkiDeck { name, cards })
-                .collect(),
-        ),
-    ))
+    let decks = import_package_file_inner(&state, directory, package, permit).await?;
+    Ok((StatusCode::CREATED, Json(decks)))
 }
 
 fn renderer_unavailable() -> ApiError {
@@ -211,9 +267,9 @@ fn inspect_archive_within(path: &FilePath, limit: u64) -> Result<()> {
     Ok(())
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(in crate::learning) enum Side {
+pub enum Side {
     Front,
     Back,
 }
@@ -226,22 +282,47 @@ struct CardFace {
     template_number: i32,
 }
 
+pub(crate) async fn render_card_face_html(
+    state: &AppState,
+    card_id: Uuid,
+    side: &str,
+) -> Result<String, crate::domain_error::DomainError> {
+    let is_back = match side {
+        "front" => false,
+        "back" => true,
+        _ => {
+            return Err(crate::domain_error::DomainError::invalid(
+                "Card face side must be 'front' or 'back'",
+            ));
+        }
+    };
+    let row = sqlx::query_as::<_, CardFace>(
+        "SELECT package, css, CASE WHEN $2 THEN back ELSE front END AS content, template_number
+         FROM anki_card_faces WHERE card_id=$1",
+    )
+    .bind(card_id)
+    .bind(is_back)
+    .fetch_optional(&state.pool)
+    .await
+    .map_err(anyhow::Error::from)?
+    .ok_or_else(crate::domain_error::DomainError::missing)?;
+    Ok(format!(
+        r#"<!doctype html><html><head><meta charset="utf-8"><base href="/api/anki-media/{}/" target="_blank"><style>{}</style></head><body class="card card{} mac">{}</body></html>"#,
+        row.package, row.css, row.template_number, row.content,
+    ))
+}
+
 #[utoipa::path(get, path="/api/cards/{id}/anki/{side}", params(("id"=Uuid,Path),("side"=String,Path)),
     responses((status=200, content_type="text/html", body=String), (status=404, body=ErrorBody)), tag="Learning")]
 pub(in crate::learning) async fn face(
     State(state): State<AppState>,
     Path((id, side)): Path<(Uuid, Side)>,
 ) -> ApiResult<Response> {
-    let row = sqlx::query_as::<_, CardFace>(
-        "SELECT package, css, CASE WHEN $2 THEN back ELSE front END AS content, template_number
-         FROM anki_card_faces WHERE card_id=$1",
-    )
-    .bind(id)
-    .bind(matches!(side, Side::Back))
-    .fetch_optional(&state.pool)
-    .await
-    .map_err(anyhow::Error::from)?
-    .ok_or_else(ApiError::missing)?;
+    let side = match side {
+        Side::Front => "front",
+        Side::Back => "back",
+    };
+    let html = render_card_face_html(&state, id, side).await?;
     Ok((
         [
             (header::CONTENT_TYPE, "text/html; charset=utf-8"),
@@ -250,12 +331,28 @@ pub(in crate::learning) async fn face(
             (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
             (header::CACHE_CONTROL, "no-store"),
         ],
-        format!(
-            r#"<!doctype html><html><head><meta charset="utf-8"><base href="/api/anki-media/{}/" target="_blank"><style>{}</style></head><body class="card card{} mac">{}</body></html>"#,
-            row.package, row.css, row.template_number, row.content,
-        ),
+        html,
     )
         .into_response())
+}
+
+pub(crate) async fn load_media_blob(
+    state: &AppState,
+    package: &str,
+    name: &str,
+) -> Result<AnkiMediaBlob, crate::domain_error::DomainError> {
+    let (content_type, bytes): (String, Vec<u8>) =
+        sqlx::query_as("SELECT content_type,content FROM anki_media WHERE package=$1 AND name=$2")
+            .bind(package)
+            .bind(name)
+            .fetch_optional(&state.pool)
+            .await
+            .map_err(anyhow::Error::from)?
+            .ok_or_else(crate::domain_error::DomainError::missing)?;
+    Ok(AnkiMediaBlob {
+        content_type,
+        bytes,
+    })
 }
 
 #[utoipa::path(get, path="/api/anki-media/{package}/{name}", params(("package"=String,Path),("name"=String,Path)),
@@ -264,17 +361,10 @@ pub(in crate::learning) async fn media(
     State(state): State<AppState>,
     Path((package, name)): Path<(String, String)>,
 ) -> ApiResult<Response> {
-    let (content_type, content): (String, Vec<u8>) =
-        sqlx::query_as("SELECT content_type,content FROM anki_media WHERE package=$1 AND name=$2")
-            .bind(package)
-            .bind(name)
-            .fetch_optional(&state.pool)
-            .await
-            .map_err(anyhow::Error::from)?
-            .ok_or_else(ApiError::missing)?;
+    let blob = load_media_blob(&state, &package, &name).await?;
     Ok((
         [
-            (header::CONTENT_TYPE, content_type.as_str()),
+            (header::CONTENT_TYPE, blob.content_type.as_str()),
             (
                 header::CONTENT_SECURITY_POLICY,
                 "default-src 'none'; sandbox",
@@ -285,7 +375,7 @@ pub(in crate::learning) async fn media(
                 "private, max-age=31536000, immutable",
             ),
         ],
-        content,
+        blob.bytes,
     )
         .into_response())
 }

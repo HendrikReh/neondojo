@@ -9,10 +9,15 @@ use std::fmt;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     BadRequest,
+    Forbidden,
     NotFound,
     MethodNotAllowed,
+    RequestTimeout,
     Conflict,
+    PayloadTooLarge,
+    UnsupportedMediaType,
     UnprocessableEntity,
+    TooManyRequests,
     ServiceUnavailable,
     GatewayTimeout,
     Internal,
@@ -22,10 +27,15 @@ impl ErrorKind {
     pub fn from_status(status: StatusCode) -> Self {
         match status {
             StatusCode::BAD_REQUEST => Self::BadRequest,
+            StatusCode::FORBIDDEN => Self::Forbidden,
             StatusCode::NOT_FOUND => Self::NotFound,
             StatusCode::METHOD_NOT_ALLOWED => Self::MethodNotAllowed,
+            StatusCode::REQUEST_TIMEOUT => Self::RequestTimeout,
             StatusCode::CONFLICT => Self::Conflict,
+            StatusCode::PAYLOAD_TOO_LARGE => Self::PayloadTooLarge,
+            StatusCode::UNSUPPORTED_MEDIA_TYPE => Self::UnsupportedMediaType,
             StatusCode::UNPROCESSABLE_ENTITY => Self::UnprocessableEntity,
+            StatusCode::TOO_MANY_REQUESTS => Self::TooManyRequests,
             StatusCode::SERVICE_UNAVAILABLE => Self::ServiceUnavailable,
             StatusCode::GATEWAY_TIMEOUT => Self::GatewayTimeout,
             _ => Self::Internal,
@@ -35,10 +45,15 @@ impl ErrorKind {
     pub fn status_code(self) -> StatusCode {
         match self {
             Self::BadRequest => StatusCode::BAD_REQUEST,
+            Self::Forbidden => StatusCode::FORBIDDEN,
             Self::NotFound => StatusCode::NOT_FOUND,
             Self::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
+            Self::RequestTimeout => StatusCode::REQUEST_TIMEOUT,
             Self::Conflict => StatusCode::CONFLICT,
+            Self::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            Self::UnsupportedMediaType => StatusCode::UNSUPPORTED_MEDIA_TYPE,
             Self::UnprocessableEntity => StatusCode::UNPROCESSABLE_ENTITY,
+            Self::TooManyRequests => StatusCode::TOO_MANY_REQUESTS,
             Self::ServiceUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             Self::GatewayTimeout => StatusCode::GATEWAY_TIMEOUT,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
@@ -83,6 +98,14 @@ impl DomainError {
     pub fn unavailable(message: impl Into<String>) -> Self {
         Self::new(ErrorKind::ServiceUnavailable, message.into())
     }
+
+    pub fn too_many_requests(message: impl Into<String>) -> Self {
+        Self::new(ErrorKind::TooManyRequests, message.into())
+    }
+
+    pub fn payload_too_large(message: impl Into<String>) -> Self {
+        Self::new(ErrorKind::PayloadTooLarge, message.into())
+    }
 }
 
 impl fmt::Display for DomainError {
@@ -112,6 +135,12 @@ impl From<ApiError> for DomainError {
     }
 }
 
+impl From<crate::configuration::ConfigurationError> for DomainError {
+    fn from(error: crate::configuration::ConfigurationError) -> Self {
+        ApiError::from(error).into()
+    }
+}
+
 impl From<anyhow::Error> for DomainError {
     fn from(error: anyhow::Error) -> Self {
         tracing::error!(error = ?error, "Service call failed");
@@ -130,13 +159,21 @@ mod tests {
     fn round_trips_status_codes_and_structured_body() {
         let cases = [
             (ErrorKind::BadRequest, StatusCode::BAD_REQUEST),
+            (ErrorKind::Forbidden, StatusCode::FORBIDDEN),
             (ErrorKind::NotFound, StatusCode::NOT_FOUND),
             (ErrorKind::MethodNotAllowed, StatusCode::METHOD_NOT_ALLOWED),
+            (ErrorKind::RequestTimeout, StatusCode::REQUEST_TIMEOUT),
             (ErrorKind::Conflict, StatusCode::CONFLICT),
+            (ErrorKind::PayloadTooLarge, StatusCode::PAYLOAD_TOO_LARGE),
+            (
+                ErrorKind::UnsupportedMediaType,
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            ),
             (
                 ErrorKind::UnprocessableEntity,
                 StatusCode::UNPROCESSABLE_ENTITY,
             ),
+            (ErrorKind::TooManyRequests, StatusCode::TOO_MANY_REQUESTS),
             (
                 ErrorKind::ServiceUnavailable,
                 StatusCode::SERVICE_UNAVAILABLE,

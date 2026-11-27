@@ -19,7 +19,7 @@ use utoipa::ToSchema;
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
-pub(crate) enum PracticeAnswer {
+pub enum PracticeAnswer {
     Checker {
         #[schema(max_items = 4)]
         steps: Vec<PlayStep>,
@@ -34,21 +34,21 @@ pub(crate) enum PracticeAnswer {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum CubeOfferAction {
+pub enum CubeOfferAction {
     NoDouble,
     Double,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum CubeResponseAction {
+pub enum CubeResponseAction {
     Take,
     Drop,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum PracticeVerdict {
+pub enum PracticeVerdict {
     Best,
     Playable,
     Error,
@@ -57,31 +57,31 @@ pub(crate) enum PracticeVerdict {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum PracticeProvenanceKind {
+pub enum PracticeProvenanceKind {
     Stored,
     Recomputed,
     Forced,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub(crate) struct PracticeProvenance {
-    kind: PracticeProvenanceKind,
-    engine: Option<String>,
-    plies: Option<i32>,
+pub struct PracticeProvenance {
+    pub kind: PracticeProvenanceKind,
+    pub engine: Option<String>,
+    pub plies: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
-pub(crate) struct PracticeEvaluation {
-    verdict: PracticeVerdict,
-    chosen: String,
-    best: String,
-    chosen_equity: Option<f64>,
-    best_equity: Option<f64>,
-    equity_loss: f64,
-    provenance: PracticeProvenance,
+pub struct PracticeEvaluation {
+    pub verdict: PracticeVerdict,
+    pub chosen: String,
+    pub best: String,
+    pub chosen_equity: Option<f64>,
+    pub best_equity: Option<f64>,
+    pub equity_loss: f64,
+    pub provenance: PracticeProvenance,
     /// All cube outcomes behind a cube answer, from the answering player.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    cube_evaluation: Option<CubeEvaluation>,
+    pub cube_evaluation: Option<CubeEvaluation>,
 }
 
 pub(crate) struct SavedEvaluation<'a> {

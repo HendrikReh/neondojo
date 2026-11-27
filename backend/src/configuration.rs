@@ -504,20 +504,24 @@ pub(crate) fn routes() -> Router<AppState> {
             get(configuration_availability),
         )
 }
+pub(crate) async fn availability(app: &AppState) -> Result<ConfigurationAvailability> {
+    let mut tx = store::begin(app).await?;
+    let current = store::state(&mut tx).await?;
+    let issues =
+        validation::resources(app, &mut tx, &current.current_configuration, true, true).await?;
+    tx.commit().await?;
+    Ok(ConfigurationAvailability {
+        revision: current.revision,
+        valid: issues.is_empty(),
+        issues,
+    })
+}
+
 #[utoipa::path(get,path="/api/configuration/availability",responses((status=200,body=ConfigurationAvailability),(status=409,body=ErrorBody)),tag="Configuration")]
 async fn configuration_availability(
     State(app): State<AppState>,
 ) -> Result<Json<ConfigurationAvailability>> {
-    let mut tx = store::begin(&app).await?;
-    let current = store::state(&mut tx).await?;
-    let issues =
-        validation::resources(&app, &mut tx, &current.current_configuration, true, true).await?;
-    tx.commit().await?;
-    Ok(Json(ConfigurationAvailability {
-        revision: current.revision,
-        valid: issues.is_empty(),
-        issues,
-    }))
+    Ok(Json(availability(&app).await?))
 }
 #[utoipa::path(get,path="/api/configuration",responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody)),tag="Configuration")]
 async fn get_configuration(State(state): State<AppState>) -> Result<Json<ConfigurationState>> {

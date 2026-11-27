@@ -3,6 +3,7 @@ mod archive;
 mod restore;
 
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Query};
 use anyhow::{Context, Result};
 use axum::{
@@ -16,10 +17,15 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::PgConnection;
-use std::{sync::Arc, time::Duration};
+use sqlx::{PgConnection, PgPool};
+use std::{
+    path::{Path as FsPath, PathBuf},
+    sync::Arc,
+    time::Duration,
+};
 use tokio::{
     fs::File,
+    io::AsyncWriteExt,
     sync::{OwnedRwLockReadGuard, OwnedSemaphorePermit, RwLock, Semaphore},
 };
 use utoipa::{
@@ -504,34 +510,48 @@ async fn receive_backup(
     Ok((file, Arc::new(permit)))
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-enum BackupCompatibility {
+pub enum BackupCompatibility {
     Compatible,
     IncompatibleSchema,
 }
 
-#[derive(Serialize, ToSchema)]
-struct BackupCheck {
-    status: BackupCompatibility,
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct BackupCheck {
+    pub status: BackupCompatibility,
     #[serde(skip_serializing_if = "Option::is_none")]
-    contents: Option<BackupContents>,
+    pub contents: Option<BackupContents>,
 }
 
-#[derive(Serialize, ToSchema)]
-struct BackupContents {
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct BackupContents {
     #[serde(skip_serializing_if = "Option::is_none")]
-    created_at: Option<DateTime<Utc>>,
-    matches: u64,
-    saved_positions: u64,
-    learning_cards: u64,
+    pub created_at: Option<DateTime<Utc>>,
+    pub matches: u64,
+    pub saved_positions: u64,
+    pub learning_cards: u64,
 }
 
-#[derive(Serialize, ToSchema, sqlx::FromRow)]
-struct BackupTargetCounts {
-    matches: i64,
-    saved_positions: i64,
-    learning_cards: i64,
+#[derive(Debug, Clone, Serialize, ToSchema, sqlx::FromRow)]
+pub struct BackupTargetCounts {
+    pub matches: i64,
+    pub saved_positions: i64,
+    pub learning_cards: i64,
+}
+
+pub(crate) async fn read_target_counts(pool: &PgPool) -> Result<BackupTargetCounts, DomainError> {
+    // One statement keeps all three counts on the same PostgreSQL snapshot.
+    let counts: BackupTargetCounts = sqlx::query_as(
+        "SELECT
+            (SELECT count(*) FROM matches WHERE NOT collection_only) AS matches,
+            (SELECT count(*) FROM saved_positions) AS saved_positions,
+            (SELECT count(*) FROM learning_cards) AS learning_cards",
+    )
+    .fetch_one(pool)
+    .await
+    .context("Counting backup destination contents")?;
+    Ok(counts)
 }
 
 #[utoipa::path(get, path="/api/database-backup/target-counts", operation_id="database_backup_target_counts",
@@ -540,32 +560,38 @@ struct BackupTargetCounts {
     tag="Database backup"
 )]
 pub(crate) async fn target_counts(State(state): State<AppState>) -> ApiResult<impl IntoResponse> {
-    // One statement keeps all three counts on the same PostgreSQL snapshot.
-    let counts: BackupTargetCounts = sqlx::query_as(
-        "SELECT
-            (SELECT count(*) FROM matches WHERE NOT collection_only) AS matches,
-            (SELECT count(*) FROM saved_positions) AS saved_positions,
-            (SELECT count(*) FROM learning_cards) AS learning_cards",
-    )
-    .fetch_one(&state.pool)
-    .await
-    .context("Counting backup destination contents")?;
+    let counts = read_target_counts(&state.pool).await?;
     Ok(([(header::CACHE_CONTROL, "no-store")], Json(counts)))
 }
 
-#[utoipa::path(post, path="/api/database-backup/check", operation_id="check_database_backup",
-    request_body(content=inline(BackupFile), content_type="application/vnd.neondojo.backup"),
-    responses((status=200, body=BackupCheck), (status=408, body=ErrorBody), (status=409, body=ErrorBody),
-              (status=413, body=ErrorBody), (status=415, body=ErrorBody),
-              (status=422, body=ErrorBody), (status=500, body=ErrorBody)),
-    tag="Database backup"
-)]
-async fn check(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    body: Body,
-) -> ApiResult<Json<BackupCheck>> {
-    let (file, permit) = receive_backup(&state, &headers, body).await?;
+async fn open_backup_path(path: &FsPath) -> Result<File, DomainError> {
+    let file = File::open(path).await.map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            DomainError::missing()
+        } else {
+            DomainError::invalid(format!("Cannot open backup file: {error}"))
+        }
+    })?;
+    let metadata = file
+        .metadata()
+        .await
+        .map_err(|error| DomainError::invalid(format!("Cannot read backup file: {error}")))?;
+    if !metadata.is_file() {
+        return Err(DomainError::invalid("Select a NeonDojo backup file"));
+    }
+    if metadata.len() > MAX_ARCHIVE_BYTES {
+        return Err(DomainError::payload_too_large(
+            "Backup exceeds the 16 GiB file limit",
+        ));
+    }
+    Ok(file)
+}
+
+async fn check_backup_file(
+    state: &AppState,
+    file: File,
+    permit: Arc<OwnedSemaphorePermit>,
+) -> Result<BackupCheck, DomainError> {
     let mut connection = state
         .pool
         .acquire()
@@ -581,10 +607,149 @@ async fn check(
     } else {
         BackupCompatibility::IncompatibleSchema
     };
-    Ok(Json(BackupCheck {
+    Ok(BackupCheck {
         status,
         contents: checked.contents,
-    }))
+    })
+}
+
+async fn restore_backup_file(
+    state: &AppState,
+    file: File,
+    permit: Arc<OwnedSemaphorePermit>,
+) -> Result<(), DomainError> {
+    let mut connection = state
+        .pool
+        .acquire()
+        .await
+        .context("Accessing backup schema")?;
+    let fingerprint = schema(&mut connection).await?;
+    drop(connection);
+    let input = archive::prepare(file, fingerprint, permit).await?;
+
+    // Benchmarks, engine duels, AI assessments and Anki syncs are not stopped.
+    // Refuse at once while one runs: waiting for the write lock below would
+    // turn every API request away with 503 until the work finished.
+    let _admission = state.backup.close_for_restore().await.map_err(|blockers| {
+        let running = blockers
+            .iter()
+            .map(|work| work.label())
+            .collect::<Vec<_>>()
+            .join(", ");
+        DomainError::conflict(format!(
+            "Database is busy; retry the restore when current work finishes ({running} running)"
+        ))
+    })?;
+    // Analysis jobs can hold their read access for hours, and the restore
+    // replaces their data anyway: stop them instead of waiting. The drain also
+    // stops a job claimed just before admission closed once it registers.
+    let drain = state
+        .running_jobs
+        .drain(crate::jobs::RESTORE_INTERRUPTED_ERROR);
+    if drain.interrupted > 0 {
+        tracing::info!(
+            interrupted = drain.interrupted,
+            "Database restore stops running analysis jobs"
+        );
+    }
+    // Drain requests already using the destination and reject new ones until
+    // the transaction finishes. The table locks also cover other DB clients.
+    let _maintenance = tokio::time::timeout(state.backup.drain, state.backup.requests.write())
+        .await
+        .map_err(|_| {
+            DomainError::conflict("Database is busy; retry the restore when current work finishes")
+        })?;
+    restore::replace(state, input).await?;
+    state.browse_wake.notify_one();
+    drop(drain);
+    Ok(())
+}
+
+pub(crate) async fn export_to_path(
+    state: &AppState,
+    destination: &FsPath,
+) -> Result<PathBuf, DomainError> {
+    let _permit = state
+        .backup
+        .transfer
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| DomainError::from(busy()))?;
+    let created_at = Utc::now();
+    let (mut file, _length) = archive::export(&state.pool, created_at).await?;
+    let filename = format!(
+        "neondojo-{}.neondojo-backup",
+        created_at.format("%Y-%m-%d-%H%M%S")
+    );
+    let target = if tokio::fs::metadata(destination)
+        .await
+        .is_ok_and(|metadata| metadata.is_dir())
+    {
+        destination.join(filename)
+    } else {
+        destination.to_path_buf()
+    };
+    let mut output = File::create(&target)
+        .await
+        .context("Creating destination backup file")?;
+    tokio::io::copy(&mut file, &mut output)
+        .await
+        .context("Writing destination backup file")?;
+    output
+        .flush()
+        .await
+        .context("Flushing destination backup file")?;
+    Ok(target)
+}
+
+pub(crate) async fn check_path(
+    state: &AppState,
+    path: &FsPath,
+) -> Result<BackupCheck, DomainError> {
+    let permit = state
+        .backup
+        .transfer
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| DomainError::from(busy()))?;
+    let file = open_backup_path(path).await?;
+    check_backup_file(state, file, Arc::new(permit)).await
+}
+
+pub(crate) async fn restore_path(
+    state: &AppState,
+    path: &FsPath,
+    replace: bool,
+) -> Result<(), DomainError> {
+    if !replace {
+        return Err(DomainError::invalid(
+            "Replacing the target database must be confirmed",
+        ));
+    }
+    let permit = state
+        .backup
+        .transfer
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| DomainError::from(busy()))?;
+    let file = open_backup_path(path).await?;
+    restore_backup_file(state, file, Arc::new(permit)).await
+}
+
+#[utoipa::path(post, path="/api/database-backup/check", operation_id="check_database_backup",
+    request_body(content=inline(BackupFile), content_type="application/vnd.neondojo.backup"),
+    responses((status=200, body=BackupCheck), (status=408, body=ErrorBody), (status=409, body=ErrorBody),
+              (status=413, body=ErrorBody), (status=415, body=ErrorBody),
+              (status=422, body=ErrorBody), (status=500, body=ErrorBody)),
+    tag="Database backup"
+)]
+async fn check(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Body,
+) -> ApiResult<Json<BackupCheck>> {
+    let (file, permit) = receive_backup(&state, &headers, body).await?;
+    Ok(Json(check_backup_file(&state, file, permit).await?))
 }
 
 #[derive(Deserialize, IntoParams)]
@@ -612,57 +777,7 @@ async fn import(
         ));
     }
     let (file, permit) = receive_backup(&state, &headers, body).await?;
-    let mut connection = state
-        .pool
-        .acquire()
-        .await
-        .context("Accessing backup schema")?;
-    let fingerprint = schema(&mut connection).await?;
-    drop(connection);
-    let input = archive::prepare(file, fingerprint, permit.clone()).await?;
-
-    // Benchmarks, engine duels, AI assessments and Anki syncs are not stopped.
-    // Refuse at once while one runs: waiting for the write lock below would
-    // turn every API request away with 503 until the work finished.
-    let _admission = state.backup.close_for_restore().await.map_err(|blockers| {
-        let running = blockers
-            .iter()
-            .map(|work| work.label())
-            .collect::<Vec<_>>()
-            .join(", ");
-        ApiError(
-            StatusCode::CONFLICT,
-            format!(
-                "Database is busy; retry the restore when current work finishes ({running} running)"
-            )
-            .into(),
-        )
-    })?;
-    // Analysis jobs can hold their read access for hours, and the restore
-    // replaces their data anyway: stop them instead of waiting. The drain also
-    // stops a job claimed just before admission closed once it registers.
-    let drain = state
-        .running_jobs
-        .drain(crate::jobs::RESTORE_INTERRUPTED_ERROR);
-    if drain.interrupted > 0 {
-        tracing::info!(
-            interrupted = drain.interrupted,
-            "Database restore stops running analysis jobs"
-        );
-    }
-    // Drain requests already using the destination and reject new ones until
-    // the transaction finishes. The table locks also cover other DB clients.
-    let _maintenance = tokio::time::timeout(state.backup.drain, state.backup.requests.write())
-        .await
-        .map_err(|_| {
-            ApiError(
-                StatusCode::CONFLICT,
-                "Database is busy; retry the restore when current work finishes".into(),
-            )
-        })?;
-    restore::replace(&state, input).await?;
-    state.browse_wake.notify_one();
-    drop(drain);
+    restore_backup_file(&state, file, permit).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -2,11 +2,14 @@
 mod results;
 mod selection;
 
+pub use results::{PositionJobsQuery, PositionResultQuery, SelectedPositionAnalysis};
+pub(crate) use results::{list_position_jobs, load_position_result, remove_position_job};
 pub(crate) use selection::{SelectedAnalysis, resolve_selection, resolve_selection_on};
 
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Path, Query};
 use crate::{
-    api::{ApiError, ApiResult, AppState, ErrorBody},
+    api::{ApiResult, AppState, ErrorBody},
     model::Job,
 };
 use axum::{
@@ -67,7 +70,7 @@ pub struct AnalysisCatalogPage {
     pub selected_id: Option<String>,
     pub next_cursor: Option<String>,
 }
-#[derive(Debug, Deserialize, IntoParams)]
+#[derive(Debug, Default, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct AnalysisCatalogQuery {
     /// 1–100; default 50.
@@ -136,15 +139,14 @@ async fn entry_on(
         .bind(match_id).bind(analysis_id).fetch_optional(connection).await.map_err(anyhow::Error::from)?)
 }
 
-#[utoipa::path(get, path="/api/matches/{id}/analyses", params(("id"=Uuid,Path),AnalysisCatalogQuery),responses((status=200,body=AnalysisCatalogPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Analysis catalog")]
-async fn catalog(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Query(query): Query<AnalysisCatalogQuery>,
-) -> ApiResult<Json<AnalysisCatalogPage>> {
+pub(crate) async fn list_catalog(
+    state: &AppState,
+    id: Uuid,
+    query: AnalysisCatalogQuery,
+) -> Result<AnalysisCatalogPage, DomainError> {
     let limit = query.limit.unwrap_or(50);
     if !(1..=100).contains(&limit) {
-        return Err(ApiError::invalid("limit must be between 1 and 100"));
+        return Err(DomainError::invalid("limit must be between 1 and 100"));
     }
     let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     crate::play::require_review_available_on(&mut *tx, id).await?;
@@ -154,12 +156,9 @@ async fn catalog(
             .fetch_optional(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?
-            .ok_or_else(ApiError::missing)?;
+            .ok_or_else(DomainError::missing)?;
     if !imported_loaded {
-        return Err(crate::browse_indexes::preparing(
-            &state,
-            "Imported analysis",
-        ));
+        return Err(crate::browse_indexes::preparing(state, "Imported analysis").into());
     }
     if let Some(position) = query.position_id {
         let belongs: bool = sqlx::query_scalar(
@@ -171,13 +170,15 @@ async fn catalog(
         .await
         .map_err(anyhow::Error::from)?;
         if !belongs {
-            return Err(ApiError::invalid("Position does not belong to this match"));
+            return Err(DomainError::invalid(
+                "Position does not belong to this match",
+            ));
         }
     }
     let cursor = query
         .cursor
         .as_deref()
-        .map(|encoded| {
+        .map(|encoded| -> Result<Cursor, DomainError> {
             let cursor: Cursor = crate::cursor::decode(
                 encoded,
                 crate::cursor::DEFAULT_MAX_LEN,
@@ -187,7 +188,7 @@ async fn catalog(
                 || cursor.position_id != query.position_id
                 || cursor.revision != revision
             {
-                return Err(ApiError::invalid(
+                return Err(DomainError::invalid(
                     "Catalog cursor does not match the current source and filters",
                 ));
             }
@@ -232,24 +233,33 @@ async fn catalog(
         None
     };
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(AnalysisCatalogPage {
+    Ok(AnalysisCatalogPage {
         match_id: id,
         source_revision: revision,
         items,
         selected,
         selected_id,
         next_cursor,
-    }))
+    })
 }
 
-#[utoipa::path(delete,path="/api/matches/{id}/analyses/{analysis_id}",params(("id"=Uuid,Path),("analysis_id"=String,Path),DeleteAnalysisQuery),responses((status=204,description="Saved analysis deleted"),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Analysis catalog")]
-async fn delete_analysis(
+#[utoipa::path(get, path="/api/matches/{id}/analyses", params(("id"=Uuid,Path),AnalysisCatalogQuery),responses((status=200,body=AnalysisCatalogPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Analysis catalog")]
+async fn catalog(
     State(state): State<AppState>,
-    Path((id, analysis_id)): Path<(Uuid, String)>,
-    Query(query): Query<DeleteAnalysisQuery>,
-) -> ApiResult<StatusCode> {
-    if query.source_revision < 0 {
-        return Err(ApiError::invalid("Source revision must be nonnegative"));
+    Path(id): Path<Uuid>,
+    Query(query): Query<AnalysisCatalogQuery>,
+) -> ApiResult<Json<AnalysisCatalogPage>> {
+    Ok(Json(list_catalog(&state, id, query).await?))
+}
+
+pub(crate) async fn delete_analysis_entry(
+    state: &AppState,
+    id: Uuid,
+    analysis_id: &str,
+    source_revision: i64,
+) -> Result<(), DomainError> {
+    if source_revision < 0 {
+        return Err(DomainError::invalid("Source revision must be nonnegative"));
     }
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let revision: i64 =
@@ -258,23 +268,20 @@ async fn delete_analysis(
             .fetch_optional(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?
-            .ok_or_else(ApiError::missing)?;
+            .ok_or_else(DomainError::missing)?;
     crate::play::require_review_available_on(&mut *tx, id).await?;
-    if revision != query.source_revision {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "The match source has changed".into(),
-        ));
+    if revision != source_revision {
+        return Err(DomainError::conflict("The match source has changed"));
     }
     let job_id: Option<Uuid> = sqlx::query_scalar(
         "SELECT job_id FROM analysis_catalog_sources WHERE match_id=$1 AND analysis_id=$2",
     )
     .bind(id)
-    .bind(&analysis_id)
+    .bind(analysis_id)
     .fetch_optional(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?
-    .ok_or_else(ApiError::missing)?;
+    .ok_or_else(DomainError::missing)?;
     if let Some(job_id) = job_id {
         let deleted =
             sqlx::query("DELETE FROM jobs WHERE id=$1 AND status IN ('completed','failed')")
@@ -283,9 +290,8 @@ async fn delete_analysis(
                 .await
                 .map_err(anyhow::Error::from)?;
         if deleted.rows_affected() == 0 {
-            return Err(ApiError(
-                StatusCode::CONFLICT,
-                "The analysis is no longer available for deletion".into(),
+            return Err(DomainError::conflict(
+                "The analysis is no longer available for deletion",
             ));
         }
     } else {
@@ -299,24 +305,33 @@ async fn delete_analysis(
     }
     sqlx::query("DELETE FROM analysis_selections WHERE match_id=$1 AND analysis_id=$2")
         .bind(id)
-        .bind(&analysis_id)
+        .bind(analysis_id)
         .execute(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     state.browse_wake.notify_one();
+    Ok(())
+}
+
+#[utoipa::path(delete,path="/api/matches/{id}/analyses/{analysis_id}",params(("id"=Uuid,Path),("analysis_id"=String,Path),DeleteAnalysisQuery),responses((status=204,description="Saved analysis deleted"),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Analysis catalog")]
+async fn delete_analysis(
+    State(state): State<AppState>,
+    Path((id, analysis_id)): Path<(Uuid, String)>,
+    Query(query): Query<DeleteAnalysisQuery>,
+) -> ApiResult<StatusCode> {
+    delete_analysis_entry(&state, id, &analysis_id, query.source_revision).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[utoipa::path(put, path="/api/matches/{id}/analysis-selection", params(("id"=Uuid,Path)),request_body=AnalysisSelectionUpdate,responses((status=200,body=AnalysisSelection),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Analysis catalog")]
-async fn update_selection(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(request): Json<AnalysisSelectionUpdate>,
-) -> ApiResult<Json<AnalysisSelection>> {
+pub(crate) async fn select_analysis(
+    state: &AppState,
+    id: Uuid,
+    request: AnalysisSelectionUpdate,
+) -> Result<AnalysisSelection, DomainError> {
     crate::play::require_review_available(&state.pool, id).await?;
     if !crate::imported_analysis::ensure_catalog(&state.pool, id).await? {
-        return Err(ApiError::missing());
+        return Err(DomainError::missing());
     }
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     let exists: Option<Uuid> = sqlx::query_scalar("SELECT id FROM matches WHERE id=$1 FOR UPDATE")
@@ -325,7 +340,7 @@ async fn update_selection(
         .await
         .map_err(anyhow::Error::from)?;
     if exists.is_none() {
-        return Err(ApiError::missing());
+        return Err(DomainError::missing());
     }
     crate::play::require_review_available_on(&mut *tx, id).await?;
     if let Some(key) = request.analysis_id.as_deref() {
@@ -341,10 +356,19 @@ async fn update_selection(
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
     state.browse_wake.notify_one();
-    Ok(Json(AnalysisSelection {
+    Ok(AnalysisSelection {
         match_id: id,
         analysis_id: request.analysis_id,
-    }))
+    })
+}
+
+#[utoipa::path(put, path="/api/matches/{id}/analysis-selection", params(("id"=Uuid,Path)),request_body=AnalysisSelectionUpdate,responses((status=200,body=AnalysisSelection),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Analysis catalog")]
+async fn update_selection(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(request): Json<AnalysisSelectionUpdate>,
+) -> ApiResult<Json<AnalysisSelection>> {
+    Ok(Json(select_analysis(&state, id, request).await?))
 }
 
 #[derive(OpenApi)]

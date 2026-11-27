@@ -2,7 +2,7 @@
 //!
 //! Reviews that are due are always offered. A new card counts against the
 //! allowance on the local day of its first review.
-use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::api::{ApiResult, AppState, ErrorBody};
 use crate::json_errors::Json;
 use axum::{Router, extract::State, routing::get};
 use chrono::{DateTime, Local, NaiveTime, Utc};
@@ -65,15 +65,38 @@ pub(super) fn routes() -> Router<AppState> {
     Router::new().route("/api/study/learning-preferences", get(read).put(write))
 }
 
-#[utoipa::path(get, path = "/api/study/learning-preferences",
-    responses((status = 200, body = LearningPreferences)), tag = "Learning")]
-async fn read(State(state): State<AppState>) -> ApiResult<Json<LearningPreferences>> {
+pub(crate) async fn read_preferences(
+    state: &AppState,
+) -> Result<LearningPreferences, crate::domain_error::DomainError> {
     let new_cards_per_day =
         sqlx::query_scalar("SELECT new_cards_per_day FROM learning_preferences")
             .fetch_one(&state.pool)
             .await
             .map_err(anyhow::Error::from)?;
-    Ok(Json(LearningPreferences { new_cards_per_day }))
+    Ok(LearningPreferences { new_cards_per_day })
+}
+
+#[utoipa::path(get, path = "/api/study/learning-preferences",
+    responses((status = 200, body = LearningPreferences)), tag = "Learning")]
+async fn read(State(state): State<AppState>) -> ApiResult<Json<LearningPreferences>> {
+    Ok(Json(read_preferences(&state).await?))
+}
+
+pub(crate) async fn write_preferences(
+    state: &AppState,
+    body: LearningPreferences,
+) -> Result<LearningPreferences, crate::domain_error::DomainError> {
+    if !(0..=MAX_NEW_CARDS_PER_DAY).contains(&body.new_cards_per_day) {
+        return Err(crate::domain_error::DomainError::invalid(
+            "new_cards_per_day must be between 0 and 1000",
+        ));
+    }
+    sqlx::query("UPDATE learning_preferences SET new_cards_per_day=$1, updated_at=now()")
+        .bind(body.new_cards_per_day)
+        .execute(&state.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+    Ok(body)
 }
 
 #[utoipa::path(put, path = "/api/study/learning-preferences", request_body = LearningPreferences,
@@ -83,17 +106,7 @@ async fn write(
     State(state): State<AppState>,
     Json(body): Json<LearningPreferences>,
 ) -> ApiResult<Json<LearningPreferences>> {
-    if !(0..=MAX_NEW_CARDS_PER_DAY).contains(&body.new_cards_per_day) {
-        return Err(ApiError::invalid(
-            "new_cards_per_day must be between 0 and 1000",
-        ));
-    }
-    sqlx::query("UPDATE learning_preferences SET new_cards_per_day=$1, updated_at=now()")
-        .bind(body.new_cards_per_day)
-        .execute(&state.pool)
-        .await
-        .map_err(anyhow::Error::from)?;
-    Ok(Json(body))
+    Ok(Json(write_preferences(&state, body).await?))
 }
 
 #[derive(OpenApi)]

@@ -1,7 +1,8 @@
 //! Durable aggregates from completed similar-position practice rounds.
-use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::api::{ApiResult, AppState, ErrorBody};
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Query};
-use axum::{Router, extract::State, http::StatusCode, routing::get};
+use axum::{Router, extract::State, routing::get};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -12,32 +13,32 @@ const PAGE_SIZE: usize = 25;
 const COLUMNS: &str =
     "id, completed_at, total_positions, scored_moves, missed_moves, total_equity_loss, is_retry";
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-struct SaveSimilarPracticeSummary {
+pub struct SaveSimilarPracticeSummary {
     /// Stable round ID for safe retries after a lost response.
-    id: Uuid,
+    pub id: Uuid,
     /// Time the user finished the round, preserved across save retries.
-    completed_at: DateTime<Utc>,
+    pub completed_at: DateTime<Utc>,
     #[schema(minimum = 1, maximum = 50)]
-    total_positions: i32,
+    pub total_positions: i32,
     /// One loss for every scored move, including correct plays with zero loss.
     #[schema(min_items = 1, max_items = 50)]
-    losses: Vec<f64>,
-    is_retry: bool,
+    pub losses: Vec<f64>,
+    pub is_retry: bool,
 }
 
-#[derive(Serialize, ToSchema, FromRow)]
-struct SimilarPracticeSummary {
-    id: Uuid,
-    completed_at: DateTime<Utc>,
-    total_positions: i32,
-    scored_moves: i32,
-    missed_moves: i32,
-    total_equity_loss: f64,
+#[derive(Debug, Serialize, ToSchema, FromRow)]
+pub struct SimilarPracticeSummary {
+    pub id: Uuid,
+    pub completed_at: DateTime<Utc>,
+    pub total_positions: i32,
+    pub scored_moves: i32,
+    pub missed_moves: i32,
+    pub total_equity_loss: f64,
     #[sqlx(skip)]
-    average_equity_loss: f64,
-    is_retry: bool,
+    pub average_equity_loss: f64,
+    pub is_retry: bool,
 }
 
 impl SimilarPracticeSummary {
@@ -47,18 +48,18 @@ impl SimilarPracticeSummary {
     }
 }
 
-#[derive(Deserialize, IntoParams)]
+#[derive(Debug, Default, Deserialize, IntoParams)]
 #[serde(deny_unknown_fields)]
 #[into_params(parameter_in = Query)]
-struct HistoryQuery {
+pub struct HistoryQuery {
     /// Pass next_cursor to continue from the previous page.
-    before: Option<Uuid>,
+    pub before: Option<Uuid>,
 }
 
-#[derive(Serialize, ToSchema)]
-struct SimilarPracticeHistory {
-    items: Vec<SimilarPracticeSummary>,
-    next_cursor: Option<Uuid>,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SimilarPracticeHistory {
+    pub items: Vec<SimilarPracticeSummary>,
+    pub next_cursor: Option<Uuid>,
 }
 
 pub(super) fn routes() -> Router<AppState> {
@@ -68,14 +69,12 @@ pub(super) fn routes() -> Router<AppState> {
     )
 }
 
-#[utoipa::path(post, path="/api/study/similar-practice",request_body=SaveSimilarPracticeSummary,
-    responses((status=200,body=SimilarPracticeSummary),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Study")]
-async fn save_similar_practice_summary(
-    State(state): State<AppState>,
-    Json(round): Json<SaveSimilarPracticeSummary>,
-) -> ApiResult<Json<SimilarPracticeSummary>> {
+pub(crate) async fn save_similar_practice_summary_service(
+    state: &AppState,
+    round: SaveSimilarPracticeSummary,
+) -> Result<SimilarPracticeSummary, DomainError> {
     let completed_at = DateTime::from_timestamp_millis(round.completed_at.timestamp_millis())
-        .ok_or_else(|| ApiError::invalid("Invalid practice completion time"))?;
+        .ok_or_else(|| DomainError::invalid("Invalid practice completion time"))?;
     if !(1..=super::RESULT_LIMIT as i32).contains(&round.total_positions)
         || round.losses.is_empty()
         || round.losses.len() > round.total_positions as usize
@@ -84,13 +83,13 @@ async fn save_similar_practice_summary(
             .iter()
             .any(|loss| !loss.is_finite() || *loss < 0.0)
     {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "Supply one nonnegative equity loss per scored move within the round",
         ));
     }
     let total: f64 = round.losses.iter().sum();
     if !total.is_finite() {
-        return Err(ApiError::invalid("Total equity loss must be finite"));
+        return Err(DomainError::invalid("Total equity loss must be finite"));
     }
     let scored = round.losses.len() as i32;
     let missed = round.losses.iter().filter(|loss| **loss > 0.0).count() as i32;
@@ -112,12 +111,46 @@ async fn save_similar_practice_summary(
         || saved.total_equity_loss != total
         || saved.is_retry != round.is_retry
     {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "This practice round was already saved with a different summary".into(),
+        return Err(DomainError::conflict(
+            "This practice round was already saved with a different summary",
         ));
     }
-    Ok(Json(saved.with_average()))
+    Ok(saved.with_average())
+}
+
+#[utoipa::path(post, path="/api/study/similar-practice",request_body=SaveSimilarPracticeSummary,
+    responses((status=200,body=SimilarPracticeSummary),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Study")]
+async fn save_similar_practice_summary(
+    State(state): State<AppState>,
+    Json(round): Json<SaveSimilarPracticeSummary>,
+) -> ApiResult<Json<SimilarPracticeSummary>> {
+    Ok(Json(
+        save_similar_practice_summary_service(&state, round).await?,
+    ))
+}
+
+pub(crate) async fn list_similar_practice_history_service(
+    state: &AppState,
+    before: Option<Uuid>,
+) -> Result<SimilarPracticeHistory, DomainError> {
+    let mut items: Vec<SimilarPracticeSummary> = sqlx::query_as(&format!(
+        "SELECT {COLUMNS} FROM similar_practice_summaries
+         WHERE $1::uuid IS NULL OR (completed_at,id) < (SELECT completed_at,id FROM similar_practice_summaries WHERE id=$1)
+         ORDER BY completed_at DESC,id DESC LIMIT $2"
+    )).bind(before).bind((PAGE_SIZE + 1) as i64).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
+    let next_cursor = if items.len() > PAGE_SIZE {
+        items.truncate(PAGE_SIZE);
+        items.last().map(|item| item.id)
+    } else {
+        None
+    };
+    Ok(SimilarPracticeHistory {
+        items: items
+            .into_iter()
+            .map(SimilarPracticeSummary::with_average)
+            .collect(),
+        next_cursor,
+    })
 }
 
 #[utoipa::path(get, path="/api/study/similar-practice",params(HistoryQuery),
@@ -126,24 +159,9 @@ async fn list_similar_practice_history(
     State(state): State<AppState>,
     Query(query): Query<HistoryQuery>,
 ) -> ApiResult<Json<SimilarPracticeHistory>> {
-    let mut items: Vec<SimilarPracticeSummary> = sqlx::query_as(&format!(
-        "SELECT {COLUMNS} FROM similar_practice_summaries
-         WHERE $1::uuid IS NULL OR (completed_at,id) < (SELECT completed_at,id FROM similar_practice_summaries WHERE id=$1)
-         ORDER BY completed_at DESC,id DESC LIMIT $2"
-    )).bind(query.before).bind((PAGE_SIZE + 1) as i64).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
-    let next_cursor = if items.len() > PAGE_SIZE {
-        items.truncate(PAGE_SIZE);
-        items.last().map(|item| item.id)
-    } else {
-        None
-    };
-    Ok(Json(SimilarPracticeHistory {
-        items: items
-            .into_iter()
-            .map(SimilarPracticeSummary::with_average)
-            .collect(),
-        next_cursor,
-    }))
+    Ok(Json(
+        list_similar_practice_history_service(&state, query.before).await?,
+    ))
 }
 
 #[derive(OpenApi)]
@@ -162,7 +180,7 @@ mod tests {
     use super::*;
     use axum::{
         body::{Body, to_bytes},
-        http::Request,
+        http::{Request, StatusCode},
     };
     use serde_json::{Value, json};
     use tower::ServiceExt;

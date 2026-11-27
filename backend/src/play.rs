@@ -34,7 +34,12 @@ pub(crate) use review_gate::{
 };
 pub(crate) use routes::{PlayDoc, routes};
 use service::*;
-pub(crate) use service::{build_history_snapshots, named_export};
+pub(crate) use service::{
+    act_in_session_service, build_history_snapshots, change_mode_service, compute_checker_turns,
+    create_session_service, delete_session_service, export_session_sgf_service,
+    get_session_service, history_snapshots_service, list_sessions_service, named_export,
+    review_session_service, update_feedback_service,
+};
 
 use crate::json_errors::{Json, Path, Query};
 use crate::{

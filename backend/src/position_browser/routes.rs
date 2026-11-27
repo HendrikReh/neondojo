@@ -21,11 +21,10 @@ pub(super) fn conflict(message: &str) -> ApiError {
     ApiError(StatusCode::CONFLICT, message.into())
 }
 
-#[utoipa::path(post,path="/api/position-browser/analysis-readiness",request_body=crate::learning::AddPositions,responses((status=200,body=PositionAnalysisReadiness),(status=422,body=ErrorBody)),tag="Positions")]
-pub(super) async fn analysis_readiness(
-    State(s): State<AppState>,
-    Json(input): Json<crate::learning::AddPositions>,
-) -> ApiResult<Json<PositionAnalysisReadiness>> {
+pub(crate) async fn check_analysis_readiness(
+    s: &AppState,
+    input: crate::learning::AddPositions,
+) -> Result<PositionAnalysisReadiness, crate::domain_error::DomainError> {
     let mut ids = input.validated_ids()?;
     let mut seen = BTreeSet::new();
     ids.retain(|id| seen.insert(*id));
@@ -45,7 +44,15 @@ pub(super) async fn analysis_readiness(
             Some(Some(_)) => {}
         }
     }
-    Ok(Json(result))
+    Ok(result)
+}
+
+#[utoipa::path(post,path="/api/position-browser/analysis-readiness",request_body=crate::learning::AddPositions,responses((status=200,body=PositionAnalysisReadiness),(status=422,body=ErrorBody)),tag="Positions")]
+pub(super) async fn analysis_readiness(
+    State(s): State<AppState>,
+    Json(input): Json<crate::learning::AddPositions>,
+) -> ApiResult<Json<PositionAnalysisReadiness>> {
+    Ok(Json(check_analysis_readiness(&s, input).await?))
 }
 
 #[derive(OpenApi)]

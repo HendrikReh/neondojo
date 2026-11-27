@@ -482,7 +482,7 @@ pub struct ImportedAnalysisSummary {
     pub engines: Vec<String>,
     pub depths: Vec<String>,
 }
-use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::api::{ApiResult, AppState, ErrorBody};
 use crate::json_errors::{Json, Path};
 use axum::{Router, extract::State, routing::get};
 use sqlx::{PgPool, Postgres, Transaction};
@@ -690,11 +690,10 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/positions/{id}/imported-analysis", get(get_position))
         .route("/api/moves/{id}/imported-analysis", get(get_move))
 }
-#[utoipa::path(get,path="/api/matches/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=ImportedAnalysisSummary),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Imported analysis")]
-async fn get_match(
-    State(s): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<ImportedAnalysisSummary>> {
+pub(crate) async fn load_match_summary(
+    s: &AppState,
+    id: Uuid,
+) -> Result<ImportedAnalysisSummary, crate::domain_error::DomainError> {
     let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
     crate::play::require_review_available_on(&mut *tx, id).await?;
     let row: Option<(String, bool)> =
@@ -703,19 +702,27 @@ async fn get_match(
             .fetch_optional(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
-    let (format, loaded) = row.ok_or_else(ApiError::missing)?;
+    let (format, loaded) = row.ok_or_else(crate::domain_error::DomainError::missing)?;
     if !loaded {
-        return Err(crate::browse_indexes::preparing(&s, "Imported analysis"));
+        return Err(crate::browse_indexes::preparing(s, "Imported analysis").into());
     }
     let summary = match_summary_on(&mut tx, id, format).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(summary))
+    Ok(summary)
 }
-#[utoipa::path(get,path="/api/positions/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Imported analysis")]
-async fn get_position(
+
+#[utoipa::path(get,path="/api/matches/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=ImportedAnalysisSummary),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Imported analysis")]
+async fn get_match(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
-) -> ApiResult<Json<Vec<ImportedAnalysisRecord>>> {
+) -> ApiResult<Json<ImportedAnalysisSummary>> {
+    Ok(Json(load_match_summary(&s, id).await?))
+}
+
+pub(crate) async fn load_position_records(
+    s: &AppState,
+    id: Uuid,
+) -> Result<Vec<ImportedAnalysisRecord>, crate::domain_error::DomainError> {
     let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
     let row: Option<(Uuid, bool)> = sqlx::query_as(
         "SELECT m.id,m.imported_analysis_loaded FROM positions p JOIN matches m ON m.id=p.match_uuid WHERE p.id=$1",
@@ -724,20 +731,28 @@ async fn get_position(
     .fetch_optional(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?;
-    let (match_id, loaded) = row.ok_or_else(ApiError::missing)?;
+    let (match_id, loaded) = row.ok_or_else(crate::domain_error::DomainError::missing)?;
     crate::play::require_review_available_on(&mut *tx, match_id).await?;
     if !loaded {
-        return Err(crate::browse_indexes::preparing(&s, "Imported analysis"));
+        return Err(crate::browse_indexes::preparing(s, "Imported analysis").into());
     }
     let records = records_where(&mut *tx, match_id, Some(id), None).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(records))
+    Ok(records)
 }
-#[utoipa::path(get,path="/api/moves/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Imported analysis")]
-async fn get_move(
+
+#[utoipa::path(get,path="/api/positions/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Imported analysis")]
+async fn get_position(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<ImportedAnalysisRecord>>> {
+    Ok(Json(load_position_records(&s, id).await?))
+}
+
+pub(crate) async fn load_move_records(
+    s: &AppState,
+    id: Uuid,
+) -> Result<Vec<ImportedAnalysisRecord>, crate::domain_error::DomainError> {
     let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
     let row: Option<(Uuid, i32, i32, bool)> = sqlx::query_as(
         "SELECT mm.match_uuid,mm.game_no,mm.move_no,m.imported_analysis_loaded FROM match_moves mm JOIN matches m ON m.id=mm.match_uuid WHERE mm.id=$1",
@@ -746,14 +761,23 @@ async fn get_move(
     .fetch_optional(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?;
-    let (match_id, game, mov, loaded) = row.ok_or_else(ApiError::missing)?;
+    let (match_id, game, mov, loaded) =
+        row.ok_or_else(crate::domain_error::DomainError::missing)?;
     crate::play::require_review_available_on(&mut *tx, match_id).await?;
     if !loaded {
-        return Err(crate::browse_indexes::preparing(&s, "Imported analysis"));
+        return Err(crate::browse_indexes::preparing(s, "Imported analysis").into());
     }
     let records = records_where(&mut *tx, match_id, None, Some((game, mov))).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(records))
+    Ok(records)
+}
+
+#[utoipa::path(get,path="/api/moves/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Imported analysis")]
+async fn get_move(
+    State(s): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<ImportedAnalysisRecord>>> {
+    Ok(Json(load_move_records(&s, id).await?))
 }
 #[derive(OpenApi)]
 #[openapi(
