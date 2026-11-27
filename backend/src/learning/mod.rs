@@ -1,5 +1,6 @@
 //! Shared cards power native Anki exports and the integrated FSRS trainer.
 mod anki;
+pub(crate) use anki::OperationLimits;
 pub(crate) use anki::auto_sync::AnkiConnection;
 pub use anki::{auto_sync::worker as anki_sync_worker, flashcards as anki_flashcards};
 mod attempts;

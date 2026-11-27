@@ -185,7 +185,7 @@ pub(in crate::learning) async fn sync(
     Path(id): Path<Uuid>,
     Json(_body): Json<SyncRequest>,
 ) -> ApiResult<Json<SyncResult>> {
-    let _permit = connect::reserve()?;
+    let _permit = connect::reserve(&state)?;
     let cards = deck_cards(&state.pool, id).await?;
     let client = Client::local();
     let collection = Collection::open(&client).await?;

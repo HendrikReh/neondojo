@@ -4,7 +4,6 @@ use crate::json_errors::Multipart;
 use std::io::{Cursor, Read, Write};
 
 const MAX_DB_BYTES: u64 = 32 * 1024 * 1024;
-static IMPORTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
 
 #[derive(ToSchema)]
 #[allow(dead_code)]
@@ -20,12 +19,17 @@ pub(in crate::learning) async fn import(
     Multipart(mut multipart): Multipart,
 ) -> ApiResult<Json<AddCardsResult>> {
     require_deck(&state.pool, id).await?;
-    let permit = IMPORTS.try_acquire().map_err(|_| {
-        ApiError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "Two Anki imports are already in progress".into(),
-        )
-    })?;
+    let permit = state
+        .anki_limits
+        .decision_imports
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            ApiError(
+                StatusCode::TOO_MANY_REQUESTS,
+                "Two Anki imports are already in progress".into(),
+            )
+        })?;
     let field = multipart
         .next_field()
         .await

@@ -311,7 +311,7 @@ async fn set_paused(pool: &PgPool, id: Uuid, paused: bool) -> ApiResult<()> {
 }
 
 async fn sync_now(state: &AppState, id: Uuid, retry: Retry) -> ApiResult<FinishedSync> {
-    let _permit = connect::reserve()?;
+    let _permit = connect::reserve(state)?;
     let key: String =
         sqlx::query_scalar("SELECT collection_key FROM anki_auto_sync WHERE deck_id=$1")
             .bind(id)
@@ -379,7 +379,7 @@ pub(in crate::learning) async fn set_settings(
         return Ok(Json(AutoSyncSettings::default()));
     }
 
-    let _permit = connect::reserve()?;
+    let _permit = connect::reserve(&state)?;
     let cards = review_sync::deck_cards(&state.pool, id).await?;
     let client = Client::local();
     let collection = Collection::open(&client).await?;
@@ -453,7 +453,7 @@ async fn run_once(state: &AppState) -> ApiResult<()> {
     let Ok((collection, key)) = probe_collection(state, &client).await else {
         return Ok(());
     };
-    let Ok(_permit) = connect::reserve() else {
+    let Ok(_permit) = connect::reserve(state) else {
         return Ok(());
     };
     let Some(claimed) = claim(&state.pool, &key, None, Retry::None).await? else {

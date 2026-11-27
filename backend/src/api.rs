@@ -42,6 +42,7 @@ pub struct AppState {
     pub(crate) play_warmup: Arc<Semaphore>,
     pub(crate) opening_books: Arc<crate::opening_book::LookupCache>,
     pub(crate) backup: Arc<crate::database_backup::Access>,
+    pub(crate) anki_limits: crate::learning::OperationLimits,
     pub(crate) anki_connection: Arc<crate::learning::AnkiConnection>,
     /// How often a running analysis job renews its lease.
     pub(crate) job_heartbeat: Duration,
@@ -64,6 +65,7 @@ impl AppState {
             play_warmup: Arc::new(Semaphore::new(1)),
             opening_books: Arc::default(),
             backup: Arc::default(),
+            anki_limits: Default::default(),
             anki_connection: Arc::default(),
             job_heartbeat: crate::jobs::DEFAULT_HEARTBEAT,
             running_jobs: Arc::default(),

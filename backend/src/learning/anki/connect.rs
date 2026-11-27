@@ -16,15 +16,18 @@ use tokio::{
 const ADDRESS: SocketAddr = SocketAddr::new(std::net::IpAddr::V4(Ipv4Addr::LOCALHOST), 8765);
 const TIMEOUT: Duration = Duration::from_secs(20);
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
-static TRANSFER: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
-
-pub(super) fn reserve() -> ApiResult<tokio::sync::SemaphorePermit<'static>> {
-    TRANSFER.try_acquire().map_err(|_| {
-        ApiError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "An Anki operation is already in progress".into(),
-        )
-    })
+pub(super) fn reserve(state: &AppState) -> ApiResult<tokio::sync::OwnedSemaphorePermit> {
+    state
+        .anki_limits
+        .connect
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            ApiError(
+                StatusCode::TOO_MANY_REQUESTS,
+                "An Anki operation is already in progress".into(),
+            )
+        })
 }
 
 pub(super) struct Client {
@@ -121,7 +124,7 @@ pub(in crate::learning) async fn send(
     Path(id): Path<Uuid>,
     Json(query): Json<ExportQuery>,
 ) -> ApiResult<StatusCode> {
-    let _transfer = reserve()?;
+    let _transfer = reserve(&state)?;
     let bytes = build_deck_package(&state, id, query).await?;
     let directory = crate::async_temp_dir::AsyncTempDir::new().await?;
     let package = directory.path().join("neondojo.apkg");

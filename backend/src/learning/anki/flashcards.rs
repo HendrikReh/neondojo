@@ -10,7 +10,6 @@ use std::{path::Path as FilePath, process::Stdio, time::Duration};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncReadExt, AsyncWriteExt};
 
 const MAX_UPLOAD: usize = 128 * 1024 * 1024;
-static PACKAGE_IMPORT: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
 /// The payload `kind` of a rendered Anki card.
 pub(in crate::learning) const KIND: &str = "anki";
@@ -67,12 +66,17 @@ pub(in crate::learning) async fn upload(
     State(state): State<AppState>,
     Multipart(mut multipart): Multipart,
 ) -> ApiResult<(StatusCode, Json<Vec<ImportedAnkiDeck>>)> {
-    let _permit = PACKAGE_IMPORT.try_acquire().map_err(|_| {
-        ApiError(
-            StatusCode::TOO_MANY_REQUESTS,
-            "An Anki package import is already running".into(),
-        )
-    })?;
+    let permit = state
+        .anki_limits
+        .package_import
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            ApiError(
+                StatusCode::TOO_MANY_REQUESTS,
+                "An Anki package import is already running".into(),
+            )
+        })?;
     let mut field = multipart
         .next_field()
         .await
@@ -102,9 +106,9 @@ pub(in crate::learning) async fn upload(
     file.flush().await.map_err(anyhow::Error::from)?;
     drop(file);
     let inspected = package.clone();
-    let (directory, inspection) = tokio::task::spawn_blocking(move || {
+    let (directory, inspection, _permit) = tokio::task::spawn_blocking(move || {
         let result = inspect_archive(&inspected);
-        (directory, result)
+        (directory, result, permit)
     })
     .await
     .map_err(anyhow::Error::from)?;
