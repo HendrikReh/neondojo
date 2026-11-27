@@ -1,0 +1,1576 @@
+{
+  "benchmarks": [
+    {
+      "init_seconds": 0.016918750014156103,
+      "level": "1ply",
+      "requested_threads": 2,
+      "scope": "opening 31 checker_play; one warmup, three sequential calls; default move filter",
+      "warm_seconds": [
+        4.066701512783766e-05,
+        4.937499761581421e-05,
+        3.7375022657215595e-05
+      ]
+    },
+    {
+      "init_seconds": 0.017076833988539875,
+      "level": "2ply",
+      "requested_threads": 2,
+      "scope": "opening 31 checker_play; one warmup, three sequential calls; default move filter",
+      "warm_seconds": [
+        0.0022686669835820794,
+        0.0022066669771447778,
+        0.002267999923788011
+      ]
+    },
+    {
+      "init_seconds": 0.01671700004953891,
+      "level": "3ply",
+      "requested_threads": 2,
+      "scope": "opening 31 checker_play; one warmup, three sequential calls; default move filter",
+      "warm_seconds": [
+        0.09466383303515613,
+        0.09931529103778303,
+        0.10001616692170501
+      ]
+    },
+    {
+      "init_seconds": 0.016530332970432937,
+      "level": "4ply",
+      "requested_threads": 2,
+      "scope": "opening 31 checker_play; one warmup, three sequential calls; default move filter",
+      "warm_seconds": [
+        2.015770290978253,
+        2.0474246670491993,
+        2.014736291952431
+      ]
+    },
+    {
+      "init_seconds": 0.016775666968896985,
+      "level": "1ply",
+      "requested_threads": 4,
+      "scope": "opening 31 checker_play; one warmup, three sequential calls; default move filter",
+      "warm_seconds": [
+        3.966607619076967e-05,
+        3.5041943192481995e-05,
+        3.3334014005959034e-05
+      ]
+    },
+    {
+      "init_seconds": 0.016920624999329448,
+      "level": "2ply",
+      "requested_threads": 4,
+      "scope": "opening 31 checker_play; one warmup, three sequential calls; default move filter",
+      "warm_seconds": [
+        0.0015462500741705298,
+        0.0016730839852243662,
+        0.0013128750724717975
+      ]
+    },
+    {
+      "init_seconds": 0.01765179098583758,
+      "level": "3ply",
+      "requested_threads": 4,
+      "scope": "opening 31 checker_play; one warmup, three sequential calls; default move filter",
+      "warm_seconds": [
+        0.059336208971217275,
+        0.061710334033705294,
+        0.06403975002467632
+      ]
+    },
+    {
+      "init_seconds": 0.01661154197063297,
+      "level": "4ply",
+      "requested_threads": 4,
+      "scope": "opening 31 checker_play; one warmup, three sequential calls; default move filter",
+      "warm_seconds": [
+        1.1037708749063313,
+        1.1244299579411745,
+        1.1186557080363855
+      ]
+    }
+  ],
+  "capabilities": [
+    "checker_play",
+    "cube_action",
+    "cube_decision",
+    "post_move_analytics",
+    "force_boards"
+  ],
+  "checks": [
+    {
+      "detail": {
+        "best_board": [
+          0,
+          -2,
+          0,
+          0,
+          0,
+          2,
+          4,
+          0,
+          2,
+          0,
+          0,
+          0,
+          -5,
+          5,
+          0,
+          0,
+          0,
+          -3,
+          0,
+          -5,
+          0,
+          0,
+          0,
+          0,
+          2,
+          0
+        ],
+        "best_equity": 0.23592618107795715,
+        "candidates": 16,
+        "level": "1-ply"
+      },
+      "name": "opening_31_five_point",
+      "seconds": 0.0009289169684052467,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "bar_hit": "bar/24* 24/22",
+        "bearoff": "1/off(2)",
+        "opening": "8/5 6/5",
+        "pass": ""
+      },
+      "name": "public_move_notation",
+      "seconds": 0.0002477499656379223,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "both_bars_nonnegative": true,
+        "opponent_bar_index": 0,
+        "own_bar_index": 25
+      },
+      "name": "both_perspectives_and_bars",
+      "seconds": 6.925000343471766e-05,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "double_pass": 1.0,
+          "double_take": 0.31021228432655334,
+          "jacoby": false,
+          "no_double": 0.45950788259506226,
+          "owner": "centered"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.31021228432655334,
+          "jacoby": false,
+          "no_double": 0.5632311701774597,
+          "owner": "player"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.31021228432655334,
+          "jacoby": false,
+          "no_double": 0.15510614216327667,
+          "owner": "opponent"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.31021228432655334,
+          "jacoby": true,
+          "no_double": 0.4398059844970703,
+          "owner": "centered"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.31021228432655334,
+          "jacoby": true,
+          "no_double": 0.5632311701774597,
+          "owner": "player"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.31021228432655334,
+          "jacoby": true,
+          "no_double": 0.15510614216327667,
+          "owner": "opponent"
+        }
+      ],
+      "name": "money_jacoby_cube_owners_beaver_disabled",
+      "seconds": 0.00010725005995482206,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "action": "Double/Take",
+          "away1": 5,
+          "away2": 3,
+          "crawford": false,
+          "double_pass": 1.0,
+          "double_take": 0.5703186988830566,
+          "no_double": 0.5265827775001526
+        },
+        {
+          "action": "No Double",
+          "away1": 1,
+          "away2": 3,
+          "crawford": true,
+          "double_pass": 1.0,
+          "double_take": -0.01836247742176056,
+          "no_double": 0.19442354142665863
+        },
+        {
+          "action": "No Double",
+          "away1": 3,
+          "away2": 1,
+          "crawford": true,
+          "double_pass": 1.0,
+          "double_take": 0.6530800461769104,
+          "no_double": 0.24274741113185883
+        },
+        {
+          "action": "No Double",
+          "away1": 1,
+          "away2": 3,
+          "crawford": false,
+          "double_pass": 1.0,
+          "double_take": -0.6202943325042725,
+          "no_double": -0.01836247742176056
+        }
+      ],
+      "name": "match_and_crawford",
+      "seconds": 0.00032720796298235655,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "pass_post_move_equity": -0.9940102696418762,
+        "probs": [
+          0.009300800040364265,
+          0.0,
+          0.0,
+          0.10184653103351593,
+          0.0
+        ]
+      },
+      "name": "forced_pass_post_move",
+      "seconds": 5.020899698138237e-05,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "equity": 1.0,
+        "probs": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "name": "bearoff_terminal_and_post_move",
+      "seconds": 2.6417081244289875e-05,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "context": {
+            "jacoby": false
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "jacoby": false
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 5,
+            "away2": 3
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 5,
+            "away2": 3
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 1,
+            "away2": 3,
+            "is_crawford": true
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 1,
+            "away2": 3,
+            "is_crawford": true
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "name": "match_equity_units",
+      "seconds": 6.150000263005495e-05,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "match": [
+          {
+            "cube": 1,
+            "double_pass": 1.0,
+            "double_take": 1.0,
+            "no_double": 1.0
+          },
+          {
+            "cube": 2,
+            "double_pass": 1.0,
+            "double_take": 1.0,
+            "no_double": 1.0
+          }
+        ],
+        "money": {
+          "double_pass": 1.0,
+          "double_take": 2.0,
+          "no_double": 1.0
+        },
+        "response_perspective": "Negate original offer equity_dt/equity_dp; do not flip board and recompute"
+      },
+      "name": "cube_equity_units_and_response_perspective",
+      "seconds": 3.6082929000258446e-05,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "after_level": "2-ply",
+        "before_level": "1-ply",
+        "cubeful_all_candidates_full_depth": false,
+        "cubeful_full_depth_candidates": 5,
+        "equity": -0.24806565511971712,
+        "played_board": [
+          0,
+          -2,
+          0,
+          0,
+          0,
+          1,
+          5,
+          1,
+          1,
+          0,
+          0,
+          0,
+          -5,
+          5,
+          0,
+          0,
+          0,
+          -3,
+          0,
+          -5,
+          0,
+          0,
+          0,
+          0,
+          2,
+          0
+        ]
+      },
+      "name": "forced_played_move_2ply",
+      "seconds": 0.04013850004412234,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "best_board": [
+          0,
+          -2,
+          0,
+          0,
+          0,
+          2,
+          4,
+          0,
+          2,
+          0,
+          0,
+          0,
+          -5,
+          5,
+          0,
+          0,
+          0,
+          -3,
+          0,
+          -5,
+          0,
+          0,
+          0,
+          0,
+          2,
+          0
+        ],
+        "best_equity": 0.23391151428222656,
+        "candidates": 16,
+        "level": "2-ply"
+      },
+      "name": "opening_31_five_point_2ply",
+      "seconds": 0.0024162089684978127,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "both_bars_nonnegative": true,
+        "opponent_bar_index": 0,
+        "own_bar_index": 25
+      },
+      "name": "both_perspectives_and_bars_2ply",
+      "seconds": 0.0007292499067261815,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "double_pass": 1.0,
+          "double_take": 0.2898365557193756,
+          "jacoby": false,
+          "no_double": 0.4453427493572235,
+          "owner": "centered"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.2898365557193756,
+          "jacoby": false,
+          "no_double": 0.5517411828041077,
+          "owner": "player"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.2898365557193756,
+          "jacoby": false,
+          "no_double": 0.1449182778596878,
+          "owner": "opponent"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.2898365557193756,
+          "jacoby": true,
+          "no_double": 0.42642489075660706,
+          "owner": "centered"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.2898365557193756,
+          "jacoby": true,
+          "no_double": 0.5517411828041077,
+          "owner": "player"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.2898365557193756,
+          "jacoby": true,
+          "no_double": 0.1449182778596878,
+          "owner": "opponent"
+        }
+      ],
+      "name": "money_jacoby_cube_owners_beaver_disabled_2ply",
+      "seconds": 0.0035620840499177575,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "action": "Double/Take",
+          "away1": 5,
+          "away2": 3,
+          "crawford": false,
+          "double_pass": 1.0,
+          "double_take": 0.5391146540641785,
+          "no_double": 0.5073949098587036
+        },
+        {
+          "action": "No Double",
+          "away1": 1,
+          "away2": 3,
+          "crawford": true,
+          "double_pass": 1.0,
+          "double_take": -0.01466355286538601,
+          "no_double": 0.19105707108974457
+        },
+        {
+          "action": "No Double",
+          "away1": 3,
+          "away2": 1,
+          "crawford": true,
+          "double_pass": 1.0,
+          "double_take": 0.6304841637611389,
+          "no_double": 0.2379249781370163
+        },
+        {
+          "action": "No Double",
+          "away1": 1,
+          "away2": 3,
+          "crawford": false,
+          "double_pass": 1.0,
+          "double_take": -0.6318520307540894,
+          "no_double": -0.01245538517832756
+        }
+      ],
+      "name": "match_and_crawford_2ply",
+      "seconds": 0.01171049999538809,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "pass_post_move_equity": -0.9942916631698608,
+        "probs": [
+          0.008863866329193115,
+          0.0,
+          0.0,
+          0.048895809799432755,
+          0.0
+        ]
+      },
+      "name": "forced_pass_post_move_2ply",
+      "seconds": 0.000565042020753026,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "equity": 1.0,
+        "probs": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "name": "bearoff_terminal_and_post_move_2ply",
+      "seconds": 2.7791946195065975e-05,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "context": {
+            "jacoby": false
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "jacoby": false
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 5,
+            "away2": 3
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 5,
+            "away2": 3
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 1,
+            "away2": 3,
+            "is_crawford": true
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 1,
+            "away2": 3,
+            "is_crawford": true
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "name": "match_equity_units_2ply",
+      "seconds": 4.8874993808567524e-05,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "match": [
+          {
+            "cube": 1,
+            "double_pass": 1.0,
+            "double_take": 1.0,
+            "no_double": 1.0
+          },
+          {
+            "cube": 2,
+            "double_pass": 1.0,
+            "double_take": 1.0,
+            "no_double": 1.0
+          }
+        ],
+        "money": {
+          "double_pass": 1.0,
+          "double_take": 2.0,
+          "no_double": 1.0
+        },
+        "response_perspective": "Negate original offer equity_dt/equity_dp; do not flip board and recompute"
+      },
+      "name": "cube_equity_units_and_response_perspective_2ply",
+      "seconds": 5.64999645575881e-05,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "best_board": [
+          0,
+          -2,
+          0,
+          0,
+          0,
+          2,
+          4,
+          0,
+          2,
+          0,
+          0,
+          0,
+          -5,
+          5,
+          0,
+          0,
+          0,
+          -3,
+          0,
+          -5,
+          0,
+          0,
+          0,
+          0,
+          2,
+          0
+        ],
+        "best_equity": 0.202249214053154,
+        "candidates": 16,
+        "level": "3-ply"
+      },
+      "name": "opening_31_five_point_3ply",
+      "seconds": 0.10416037496179342,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "both_bars_nonnegative": true,
+        "opponent_bar_index": 0,
+        "own_bar_index": 25
+      },
+      "name": "both_perspectives_and_bars_3ply",
+      "seconds": 0.007383792079053819,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3482535481452942,
+          "jacoby": false,
+          "no_double": 0.4400133788585663,
+          "owner": "centered"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3482535481452942,
+          "jacoby": false,
+          "no_double": 0.5233678221702576,
+          "owner": "player"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3482535481452942,
+          "jacoby": false,
+          "no_double": 0.1741267740726471,
+          "owner": "opponent"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3490489423274994,
+          "jacoby": true,
+          "no_double": 0.42151013016700745,
+          "owner": "centered"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3482535481452942,
+          "jacoby": true,
+          "no_double": 0.5233678221702576,
+          "owner": "player"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3482535481452942,
+          "jacoby": true,
+          "no_double": 0.1741267740726471,
+          "owner": "opponent"
+        }
+      ],
+      "name": "money_jacoby_cube_owners_beaver_disabled_3ply",
+      "seconds": 0.05104654107708484,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "action": "No Double",
+          "away1": 5,
+          "away2": 3,
+          "crawford": false,
+          "double_pass": 1.0,
+          "double_take": 0.5452043414115906,
+          "no_double": 0.5696055293083191
+        },
+        {
+          "action": "No Double",
+          "away1": 1,
+          "away2": 3,
+          "crawford": true,
+          "double_pass": 1.0,
+          "double_take": -0.0168597511947155,
+          "no_double": 0.18897445499897003
+        },
+        {
+          "action": "No Double",
+          "away1": 3,
+          "away2": 1,
+          "crawford": true,
+          "double_pass": 1.0,
+          "double_take": 0.6410009264945984,
+          "no_double": 0.23546497523784637
+        },
+        {
+          "action": "No Double",
+          "away1": 1,
+          "away2": 3,
+          "crawford": false,
+          "double_pass": 1.0,
+          "double_take": -0.630100667476654,
+          "no_double": -0.015195808373391628
+        }
+      ],
+      "name": "match_and_crawford_3ply",
+      "seconds": 0.485123582999222,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "pass_post_move_equity": -0.9958436489105225,
+        "probs": [
+          0.006453990936279297,
+          3.2731215924286516e-06,
+          0.0,
+          0.11449906975030899,
+          3.0150255042826757e-05
+        ]
+      },
+      "name": "forced_pass_post_move_3ply",
+      "seconds": 0.0013491249410435557,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "equity": 1.0,
+        "probs": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "name": "bearoff_terminal_and_post_move_3ply",
+      "seconds": 4.16669063270092e-05,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "context": {
+            "jacoby": false
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "jacoby": false
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 5,
+            "away2": 3
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 5,
+            "away2": 3
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 1,
+            "away2": 3,
+            "is_crawford": true
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 1,
+            "away2": 3,
+            "is_crawford": true
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "name": "match_equity_units_3ply",
+      "seconds": 5.324999801814556e-05,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "match": [
+          {
+            "cube": 1,
+            "double_pass": 1.0,
+            "double_take": 1.0,
+            "no_double": 1.0
+          },
+          {
+            "cube": 2,
+            "double_pass": 1.0,
+            "double_take": 1.0,
+            "no_double": 1.0
+          }
+        ],
+        "money": {
+          "double_pass": 1.0,
+          "double_take": 2.0,
+          "no_double": 1.0
+        },
+        "response_perspective": "Negate original offer equity_dt/equity_dp; do not flip board and recompute"
+      },
+      "name": "cube_equity_units_and_response_perspective_3ply",
+      "seconds": 7.116596680134535e-05,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "best_board": [
+          0,
+          -2,
+          0,
+          0,
+          0,
+          2,
+          4,
+          0,
+          2,
+          0,
+          0,
+          0,
+          -5,
+          5,
+          0,
+          0,
+          0,
+          -3,
+          0,
+          -5,
+          0,
+          0,
+          0,
+          0,
+          2,
+          0
+        ],
+        "best_equity": 0.22237391769886017,
+        "candidates": 16,
+        "level": "4-ply"
+      },
+      "name": "opening_31_five_point_4ply",
+      "seconds": 2.0259653750108555,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "both_bars_nonnegative": true,
+        "opponent_bar_index": 0,
+        "own_bar_index": 25
+      },
+      "name": "both_perspectives_and_bars_4ply",
+      "seconds": 0.08737683296203613,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "double_pass": 1.0,
+          "double_take": 0.34593233466148376,
+          "jacoby": false,
+          "no_double": 0.43898263573646545,
+          "owner": "centered"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3459324836730957,
+          "jacoby": false,
+          "no_double": 0.5224443674087524,
+          "owner": "player"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3459455966949463,
+          "jacoby": false,
+          "no_double": 0.17297279834747314,
+          "owner": "opponent"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.34749293327331543,
+          "jacoby": true,
+          "no_double": 0.42051947116851807,
+          "owner": "centered"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3459324836730957,
+          "jacoby": true,
+          "no_double": 0.5224443674087524,
+          "owner": "player"
+        },
+        {
+          "double_pass": 1.0,
+          "double_take": 0.3459455966949463,
+          "jacoby": true,
+          "no_double": 0.17297279834747314,
+          "owner": "opponent"
+        }
+      ],
+      "name": "money_jacoby_cube_owners_beaver_disabled_4ply",
+      "seconds": 1.5183210839750245,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "action": "No Double",
+          "away1": 5,
+          "away2": 3,
+          "crawford": false,
+          "double_pass": 1.0,
+          "double_take": 0.5418245792388916,
+          "no_double": 0.5672198534011841
+        },
+        {
+          "action": "No Double",
+          "away1": 1,
+          "away2": 3,
+          "crawford": true,
+          "double_pass": 1.0,
+          "double_take": -0.011765820905566216,
+          "no_double": 0.19207565486431122
+        },
+        {
+          "action": "No Double",
+          "away1": 3,
+          "away2": 1,
+          "crawford": true,
+          "double_pass": 1.0,
+          "double_take": 0.6316622495651245,
+          "no_double": 0.2364719659090042
+        },
+        {
+          "action": "No Double",
+          "away1": 1,
+          "away2": 3,
+          "crawford": false,
+          "double_pass": 1.0,
+          "double_take": -0.6293624639511108,
+          "no_double": -0.01020202785730362
+        }
+      ],
+      "name": "match_and_crawford_4ply",
+      "seconds": 9.412384000024758,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "pass_post_move_equity": -0.9942865371704102,
+        "probs": [
+          0.008871793746948242,
+          5.538738605537219e-06,
+          4.581811197112984e-08,
+          0.04161795973777771,
+          0.0
+        ]
+      },
+      "name": "forced_pass_post_move_4ply",
+      "seconds": 0.012151250033639371,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "equity": 1.0,
+        "probs": [
+          1.0,
+          0.0,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "name": "bearoff_terminal_and_post_move_4ply",
+      "seconds": 4.8874993808567524e-05,
+      "status": "passed"
+    },
+    {
+      "detail": [
+        {
+          "context": {
+            "jacoby": false
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "jacoby": false
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 5,
+            "away2": 3
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 5,
+            "away2": 3
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 1,
+            "away2": 3,
+            "is_crawford": true
+          },
+          "cubeful_equity": 1.0,
+          "probs": [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        {
+          "context": {
+            "away1": 1,
+            "away2": 3,
+            "is_crawford": true
+          },
+          "cubeful_equity": -1.0,
+          "probs": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      ],
+      "name": "match_equity_units_4ply",
+      "seconds": 5.429191514849663e-05,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "match": [
+          {
+            "cube": 1,
+            "double_pass": 1.0,
+            "double_take": 1.0,
+            "no_double": 1.0
+          },
+          {
+            "cube": 2,
+            "double_pass": 1.0,
+            "double_take": 1.0,
+            "no_double": 1.0
+          }
+        ],
+        "money": {
+          "double_pass": 1.0,
+          "double_take": 2.0,
+          "no_double": 1.0
+        },
+        "response_perspective": "Negate original offer equity_dt/equity_dp; do not flip board and recompute"
+      },
+      "name": "cube_equity_units_and_response_perspective_4ply",
+      "seconds": 7.612502668052912e-05,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "level": "1ply",
+        "observed_thread_budgets": [],
+        "requested_threads": 2,
+        "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+        "serial_checker": true
+      },
+      "name": "thread_budget_1ply_2",
+      "seconds": 0.035931042046286166,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "level": "2ply",
+        "observed_thread_budgets": [
+          2
+        ],
+        "requested_threads": 2,
+        "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+        "serial_checker": false
+      },
+      "name": "thread_budget_2ply_2",
+      "seconds": 0.019058624980971217,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "level": "3ply",
+        "observed_thread_budgets": [
+          2
+        ],
+        "requested_threads": 2,
+        "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+        "serial_checker": false
+      },
+      "name": "thread_budget_3ply_2",
+      "seconds": 0.12734670902136713,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "level": "4ply",
+        "observed_thread_budgets": [
+          2
+        ],
+        "requested_threads": 2,
+        "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+        "serial_checker": false
+      },
+      "name": "thread_budget_4ply_2",
+      "seconds": 2.0492043329868466,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "level": "1ply",
+        "observed_thread_budgets": [],
+        "requested_threads": 4,
+        "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+        "serial_checker": true
+      },
+      "name": "thread_budget_1ply_4",
+      "seconds": 0.016781624988652766,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "level": "2ply",
+        "observed_thread_budgets": [
+          4
+        ],
+        "requested_threads": 4,
+        "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+        "serial_checker": false
+      },
+      "name": "thread_budget_2ply_4",
+      "seconds": 0.018117457977496088,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "level": "3ply",
+        "observed_thread_budgets": [
+          4
+        ],
+        "requested_threads": 4,
+        "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+        "serial_checker": false
+      },
+      "name": "thread_budget_3ply_4",
+      "seconds": 0.07731087494175881,
+      "status": "passed"
+    },
+    {
+      "detail": {
+        "level": "4ply",
+        "observed_thread_budgets": [
+          4
+        ],
+        "requested_threads": 4,
+        "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+        "serial_checker": false
+      },
+      "name": "thread_budget_4ply_4",
+      "seconds": 1.1170802080305293,
+      "status": "passed"
+    }
+  ],
+  "cold_process_seconds": 30.731810500030406,
+  "cold_scope": "Fresh Python worker including imports, asset hashes, all checks and warm benchmarks; OS file caches not cleared",
+  "excluded_profiles": {},
+  "first_analyzer_init_seconds": 0.018340791924856603,
+  "identity": {
+    "files_sha256": {
+      "__init__.py": "2f407d39d353ad4dd768e90ad57c7cf8751698d7cf6d8894e307228e8f0d883f",
+      "__main__.py": "edffa55b854f046329a4efb3ac45d3fbeb52aa1a1c1bbc6e595d6b1ea75a60a4",
+      "_assets/data/bearoff_1sided.db": "907bbe0042dadfa14840a9f470b6b5adac213d5b2c17dc0e41aec27b087e3fe6",
+      "_assets/models/sl_s11_bg_containment.weights.best": "6c9b8aad4b6694cba7aa1b83c616020b6e8aa922b7b7b99cf27b7558ffe964a1",
+      "_assets/models/sl_s11_bg_deep.weights.best": "621031738d7def6186a98c5944bacbdcf1cc912588bac3aad7bb99d00f3a7a80",
+      "_assets/models/sl_s11_bg_double.weights.best": "84f4a48e7393fdf5774295d66c0c8c90d90723f46eeb83135a750dc9a9bf600b",
+      "_assets/models/sl_s11_bg_massive.weights.best": "d8960a41f2fd62467644546cbf9385b326e23da8cbc8e4577010aaa6bd8a0ce0",
+      "_assets/models/sl_s11_bg_middle.weights.best": "e2c01a4caf321a96ea85d1bb706a94deeb5facb6a3f38285e38eb41087921059",
+      "_assets/models/sl_s11_bg_p3.weights.best": "f793cc34fa20f5de29d0564e95d6c9408f4632e47ef9f4d502483a8a97a82268",
+      "_assets/models/sl_s11_bg_snake.weights.best": "4604df0029736b1117c92291fe1d0735120d9699237fb86c13b029ed13ac1ba6",
+      "_assets/models/sl_s5_purerace.weights.best": "4f3bedb89abe0fc0fa9550eea2a3dafb263ef124c0cb10f7dd6bdef415505d3d",
+      "_assets/models/sl_s9_anch_att.weights.best": "94345949736aed37fad339d56f7c3c5a386da3303e4c975bc20fe31de4b3c3b1",
+      "_assets/models/sl_s9_anch_race.weights.best": "522e1de2d65d7d8c0b2f571b9cfab8b5f3113c68d194b0ad3414025a86d065bf",
+      "_assets/models/sl_s9_att_anch.weights.best": "58bdecf6930f4c1897a47c85a4f9863e533641b0029a5593bc0b6ac498dfd801",
+      "_assets/models/sl_s9_att_att.weights.best": "239447eb28eb48ce0800c395a0f066568cf863eb15241552264a751f2150b243",
+      "_assets/models/sl_s9_att_prim.weights.best": "fb112487b9ff4f4cc810f8f88f3ffab357c9f7ce8a900dd0aa45374189c2ae05",
+      "_assets/models/sl_s9_att_race.weights.best": "cd40466951c3a78b4f7b22d98664aab66258857c6e7ff6f15d51f2222543ecb9",
+      "_assets/models/sl_s9_opponent_bg.weights.best": "26fed902a4d4380059e9bb1676252de276c9dc638ac87e3577d01cf61a2ea2c6",
+      "_assets/models/sl_s9_player_bg.weights.best": "c39a3eeefe0a5dbda3309515faa422c47995b2f8bc3443465b7f4e3ea56bc6cd",
+      "_assets/models/sl_s9_prim_anch.weights.best": "453fa330381d33480b6720e14ed189f08a156394d6e4ad965b283e8fd45b7b04",
+      "_assets/models/sl_s9_prim_att.weights.best": "002d3486dc279ca0da611de325400deed58c9162ff147e710b6ddbe4b26d53f6",
+      "_assets/models/sl_s9_prim_race.weights.best": "6a466f82c474175a5a3f04e11568426c0b86538a08c99e2990c49af49c6d7ae4",
+      "_assets/models/sl_s9_purerace.weights.best": "9c5e64afa4b2d826b4af54ce3eb5c87e13de75f7a43e27ef812231451ce85545",
+      "_assets/models/sl_s9_race_anch.weights.best": "137d9da64e17898ba954a677d58bfed62d144d5de99431c5462ea0a55d7e90e0",
+      "_assets/models/sl_s9_race_att.weights.best": "aa13ecc8dcfb7c2a46e00bff83947bfbacbc6832b625515dcea6a0582300e1e7",
+      "_assets/models/sl_s9_race_prim.weights.best": "ea4252b68134a5eea8fbdc5149a9b2e197a7d9f4025fea0432b7a296dc4e3754",
+      "_assets/models/sl_s9_race_race.weights.best": "e1bd7faa62adc6a87012357f3773fae89eec15f387200062e717af07506354f9",
+      "_native.py": "36b83d3fe7fa8b44afd1ec3252a79ae0cde57bc3e6696d90320650fa9374b63c",
+      "_primitives.py": "34bece96b94bb981fbb66badf222ee9238b007f82238532222bdebfe02d9cf7f",
+      "analyzer.py": "1b5392b8d1693f4ee3b2c615a78ad6f949038a99df8718b05a39473dcd8cc680",
+      "batch.py": "48eda88283ba25de48c0035fa294dda51975b1408d7e71695d16c5d801ab741a",
+      "bgbot_cpp.cpython-312-darwin.so": "2262c5b883731c90a035c3b97e582a5d97d69799df808f016e6864e27b3f13f4",
+      "board.py": "94b8dce939ff8f750da1345a63fae13964f0570a6a2d4d3bd273d175217341c8",
+      "cli.py": "3f2b4d65cb1c7183dfdc4b0e953b3cc537313d40870356a179a90b799147db87",
+      "cube_points.py": "45614195b827b52776aad818a1a25672c66d9cb3a65546240bbfbf9dbc0ec854",
+      "cubeful.py": "3cae2e7d7a09b8af046af581a448f3c5fe694e2a36ab18cc968792888fadbc19",
+      "data.py": "1af6cc613dcc10d8e71c3c7b3154bdd819a60d931a18e36046ca5bb55288085b",
+      "difficulty.py": "6ceee23b5ea4fd6959558a355490ebcc2c605253545c553ace18be1a402d0f9c",
+      "facade.py": "4e40b51a07549bedd5f7d9f95b475aab3309e95adb94c556a3317a173932539b",
+      "gnubg.py": "b20a61170c7b2b78bbb2139faaeab0f40e5b44179d7c3a873d0df094f2998d94",
+      "luck.py": "b87cbb926c88dad5f46ea41d624099b3f0a89a7ada5944158ea83ef35b3496e3",
+      "matchinfo.py": "10d560936a0fd9d979411e4714c0424c5c3febddca9d74af6d5a08e43b0ed8d7",
+      "move_arrays.py": "43b6bc24d960fe9ed948d68595ff0ef315d5b4a3669273067492df3d6c2fba25",
+      "puretd.py": "6f1af6856eef3ca7a517a15dda86a7a0c0980f0c58c9f2297b23b0c089d13bba",
+      "rollout.py": "a3abe9b2f171ae534876328c5ca3faa2a980d257c7c2512839515248c0f7aa53",
+      "runtime.py": "2ea3b0766d53f3a2409dd754787c95de543e51d964403ce7ddaa9685eb990751",
+      "settings.py": "000a50c954494639895773314a06872e7040ba2602faec192a2b7567f603a356",
+      "simulation.py": "3150dda75b1d87043b42d3bf66771b5d79fbf04cd984d6f4857bb2bafe72f70b",
+      "sl_train.py": "f9e11f2732ee4b432f2ccfce29255807f5f442db96ed8bf734bfb882d790cced",
+      "strategies.py": "467f31d79425bece4177c31c0852c17898d74f3d4b272f0bb64d78e63229cbf7",
+      "text_export.py": "96a375c1017dd16df7e718a0dae6737f11f67bdc0acc6d6566bff3978b843839",
+      "types.py": "9e88e5d85652a08a962667728e48295dd2d6ec085f12488dd3ffd1b417c23bcd",
+      "weights.py": "d2c82c527d633ab07679112a81250bf6b3147c261c4e55057c790306cf359bd0",
+      "xg_compare.py": "77f9b0174497e0f7ff4f59726d3ea57a833f3dc2e0c6e86913df065ee0da51da",
+      "xg_file.py": "9a1c596243f05315fec2e0a1cc8a02e99a83c4dc43289b4796b54748db4dc0c3"
+    },
+    "identity_sha256": "afd024c52c752694bd163b450de1ab232d719df90864da1be48fe12e823b6d1a",
+    "neongammon": "4.0.0",
+    "numpy": "2.5.4",
+    "production_model": "stage11",
+    "strategy": "backgame_pair_phased",
+    "weight_slots": 24,
+    "wheel_record_verified": true
+  },
+  "import_seconds": 0.006281667039729655,
+  "measured_at_utc": "2026-11-27T19:35:46.547015+00:00",
+  "offline": {
+    "python_network_audit": true,
+    "scope": "Python sockets and DNS denied before engine imports; native networking is not intercepted"
+  },
+  "peak_rss_bytes": 292880384,
+  "platform": {
+    "architecture": "arm64",
+    "macos": "27.0.1",
+    "python": "3.12.13",
+    "system": "Darwin"
+  },
+  "primary_functional_level": "1ply",
+  "requested_levels": [
+    "1ply",
+    "2ply",
+    "3ply",
+    "4ply"
+  ],
+  "rss_scope": "Whole worker process high-water RSS, imports, hashing, all sequential analyzers and cases; not per-request memory",
+  "schema_version": 1,
+  "status": "passed",
+  "thread_budgets": [
+    {
+      "level": "1ply",
+      "observed_thread_budgets": [],
+      "requested_threads": 2,
+      "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+      "serial_checker": true
+    },
+    {
+      "level": "2ply",
+      "observed_thread_budgets": [
+        2
+      ],
+      "requested_threads": 2,
+      "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+      "serial_checker": false
+    },
+    {
+      "level": "3ply",
+      "observed_thread_budgets": [
+        2
+      ],
+      "requested_threads": 2,
+      "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+      "serial_checker": false
+    },
+    {
+      "level": "4ply",
+      "observed_thread_budgets": [
+        2
+      ],
+      "requested_threads": 2,
+      "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+      "serial_checker": false
+    },
+    {
+      "level": "1ply",
+      "observed_thread_budgets": [],
+      "requested_threads": 4,
+      "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+      "serial_checker": true
+    },
+    {
+      "level": "2ply",
+      "observed_thread_budgets": [
+        4
+      ],
+      "requested_threads": 4,
+      "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+      "serial_checker": false
+    },
+    {
+      "level": "3ply",
+      "observed_thread_budgets": [
+        4
+      ],
+      "requested_threads": 4,
+      "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+      "serial_checker": false
+    },
+    {
+      "level": "4ply",
+      "observed_thread_budgets": [
+        4
+      ],
+      "requested_threads": 4,
+      "scope": "Python ThreadPoolExecutor limits and native checker_play_nply n_threads as requested; not a census of simultaneous native threads",
+      "serial_checker": false
+    }
+  ],
+  "worker_seconds": 30.68871479202062
+}

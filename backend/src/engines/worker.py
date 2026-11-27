@@ -136,6 +136,12 @@ class Runtime:
         record = distribution.read_text('RECORD')
         if not record:
             raise ValueError('Missing NeonGammon wheel RECORD')
+        console_script = self.integrity['RELEASES'][value['neongammon']].get('console_script')
+        if console_script:
+            # pip generates this launcher with the venv's interpreter path.
+            # The sidecar invokes that interpreter directly.
+            entry = f'../../../bin/{console_script},'
+            record = ''.join(line for line in record.splitlines(keepends=True) if not line.startswith(entry))
         manifest = {k: value[k] for k in ('identity_sha256', 'neongammon', 'numpy', 'production_model', 'strategy')}
         manifest['record_sha256'] = hashlib.sha256(record.encode()).hexdigest()
         return {'package_version': value['neongammon'],

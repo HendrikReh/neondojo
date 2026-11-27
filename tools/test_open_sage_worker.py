@@ -644,6 +644,7 @@ class BatchTests(unittest.TestCase):
                     self.runtime.integrity['identity'] = lambda *args: dict(manifest)
                     self.runtime.integrity['validate_versions'] = PROBE.validate_versions
                     self.runtime.integrity['ProbeError'] = PROBE.ProbeError
+                    self.runtime.integrity['RELEASES'] = PROBE.RELEASES
                     distribution = Mock()
                     distribution.read_text.return_value = 'original RECORD'
                     with patch('importlib.metadata.distribution', return_value=distribution):
@@ -720,7 +721,7 @@ class InstalledFilesGuardTests(unittest.TestCase):
         runtime.sage, runtime.native = sage, SimpleNamespace(__file__=str(self.root / 'bgbot_cpp.so'))
         self.hashes = Mock(wraps=PROBE.identity)
         runtime.integrity = {name: getattr(PROBE, name) for name in (
-            'validate_versions', 'ProbeError', 'locked_paths', 'stat_snapshot')}
+            'validate_versions', 'ProbeError', 'RELEASES', 'locked_paths', 'stat_snapshot')}
         runtime.integrity['identity'] = self.hashes
         runtime.integrity['validate_result'] = lambda result, validator: validator(result.probs.to_list())
         runtime.analyzer = SimpleNamespace(cube_action=lambda *args, **kwargs: SimpleNamespace(
@@ -739,6 +740,13 @@ class InstalledFilesGuardTests(unittest.TestCase):
         with self.assertRaises(Exception):
             self.runtime.dispatch(self.cube)
         self.assertEqual(self.hashes.call_count, hashed + 1, 'a changed file must force the complete check')
+
+    def test_generated_console_launcher_is_independent_of_install_path(self):
+        record = self.record.read_text()
+        self.record.write_text(record + '../../../bin/neongammon,sha256=first,304\n')
+        fingerprint = self.runtime.check_identity()
+        self.record.write_text(record + '../../../bin/neongammon,sha256=second,315\n')
+        self.assertEqual(self.runtime.check_identity(), fingerprint)
 
     def test_unchanged_installation_is_not_hashed_again(self):
         hashed = self.hashes.call_count
