@@ -83,6 +83,7 @@ pub(super) async fn persist_session_with_report(
         }
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
+    state.browse_wake.notify_one();
     Ok(Json(present_with_results(current, sgf.to_owned()).await?))
 }
 
@@ -100,13 +101,13 @@ pub(super) async fn recent_sessions(pool: &sqlx::PgPool) -> ApiResult<Vec<(PlayS
 }
 
 pub(super) async fn insert_saved_session(
-    pool: &sqlx::PgPool,
+    state: &AppState,
     session: &mut PlaySession,
     pinned_path: &str,
 ) -> ApiResult<()> {
     let sgf = "";
     let native_id = "";
-    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     library::lock_bot_database(&mut tx).await?;
     sqlx::query(
         "INSERT INTO play_sessions(id,state,gnubg_path,sgf,native_id) VALUES($1,$2,$3,$4,$5)",
@@ -135,5 +136,6 @@ pub(super) async fn insert_saved_session(
         .await
         .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
+    state.browse_wake.notify_one();
     Ok(())
 }

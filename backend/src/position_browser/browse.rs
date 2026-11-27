@@ -162,6 +162,7 @@ pub(super) async fn search(
             .map_err(anyhow::Error::from)?
     {
         return Err(crate::browse_indexes::preparing(
+            &s,
             "The saved game-plan index",
         ));
     }
@@ -169,7 +170,10 @@ pub(super) async fn search(
         .await
         .map_err(anyhow::Error::from)?
     {
-        return Err(crate::browse_indexes::preparing("The saved analysis index"));
+        return Err(crate::browse_indexes::preparing(
+            &s,
+            "The saved analysis index",
+        ));
     }
     let mut sql = QueryBuilder::<Postgres>::new("");
     push_browse_query(&mut sql, &filters, direction, limit, offset, anchor);

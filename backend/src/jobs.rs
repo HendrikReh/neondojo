@@ -158,6 +158,7 @@ pub(crate) async fn cancel(state: &AppState, id: Uuid) -> Result<Option<(bool, J
     tx.commit().await?;
     state.running_jobs.cancel(id);
     state.wake.notify_one();
+    state.browse_wake.notify_one();
     Ok(Some((true, job)))
 }
 
@@ -298,6 +299,7 @@ async fn claim(state: &AppState) -> Result<Option<Claimed>> {
     let expired: Vec<Uuid> = sqlx::query_scalar(RECOVER_EXPIRED)
         .fetch_all(&mut *tx)
         .await?;
+    let recovered = !expired.is_empty();
     for id in expired {
         sqlx::query("UPDATE match_analysis_timing SET active_started_at=NULL,active_elapsed_ms=0 WHERE job_id=$1")
             .bind(id)
@@ -325,6 +327,9 @@ async fn claim(state: &AppState) -> Result<Option<Claimed>> {
             .await?;
     }
     tx.commit().await?;
+    if recovered {
+        state.browse_wake.notify_one();
+    }
     Ok(job.map(|job| Claimed { job, token }))
 }
 

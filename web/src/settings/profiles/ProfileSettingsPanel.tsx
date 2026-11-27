@@ -212,30 +212,33 @@ export default function ProfileSettingsPanel() {
       )}
       <div className="profile-list" role="list" aria-label={t('profiles')}>
         {config.profiles.map((profile) => (
-          <ActionButton
-            key={profile.id}
-            type="button"
-            icon="view"
-            label={
-              profile.id === activeProfile.id
-                ? `${profile.name} · ${t('active')}`
-                : profile.name
-            }
-            disabled={config.busy}
-            aria-pressed={profile.id === selected.id}
-            onClick={() => {
-              setSelectedId(profile.id);
-              setError(undefined);
-            }}
-          >
-            <strong>{profile.name}</strong>
-            {profile.id === activeProfile.id && <span> · {t('active')}</span>}
-            {profile.updated_at && (
-              <time dateTime={profile.updated_at}>
-                {dateFormat.format(new Date(profile.updated_at))}
-              </time>
-            )}
-          </ActionButton>
+          <div key={profile.id} role="listitem" className="profile-list-item">
+            <ActionButton
+              type="button"
+              icon="view"
+              label={
+                profile.id === activeProfile.id
+                  ? `${profile.name} · ${t('active')}`
+                  : profile.name
+              }
+              disabled={config.busy}
+              aria-pressed={profile.id === selected.id}
+              onClick={() => {
+                setSelectedId(profile.id);
+                setError(undefined);
+              }}
+            >
+              <strong>{profile.name}</strong>
+              {profile.id === activeProfile.id && (
+                <span> · {t('active')}</span>
+              )}
+              {profile.updated_at && (
+                <time dateTime={profile.updated_at}>
+                  {dateFormat.format(new Date(profile.updated_at))}
+                </time>
+              )}
+            </ActionButton>
+          </div>
         ))}
       </div>
       <div className="profile-actions profile-settings-actions">

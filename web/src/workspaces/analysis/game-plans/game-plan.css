@@ -69,6 +69,6 @@
   padding: 1px 5px;
   background: var(--ui-surface);
   color: var(--ui-text);
-  border: 1px solid var(--ui-border);
+  border: 1px solid var(--ui-control-border);
   font: inherit;
 }

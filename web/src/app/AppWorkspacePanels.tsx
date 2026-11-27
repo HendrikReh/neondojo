@@ -6,7 +6,6 @@ import { useWorkspaceText } from '../shared/i18n/workspace-messages';
 import type { AppSettings } from '../settings/settings-api';
 import type { MatchAnalysisEngine } from '../workspaces/analysis/match/useMatchAnalysis';
 import type { LibraryMatch } from '../workspaces/library/library-api';
-import MatchDatabase from '../workspaces/library/MatchDatabase';
 import type { useBenchmarkActivity } from '../workspaces/extras/useBenchmarkActivity';
 import type { useMatchImporter } from './useMatchImporter';
 import type { useAppNavigation } from './useAppNavigation';
@@ -18,6 +17,9 @@ const AnalysisWorkspace = lazy(
   () => import('../workspaces/analysis/AnalysisWorkspace'),
 );
 const PlayWorkspace = lazy(() => import('../workspaces/play/PlayWorkspace'));
+const MatchDatabase = lazy(
+  () => import('../workspaces/library/MatchDatabase'),
+);
 const PlayerDirectory = lazy(
   () => import('../workspaces/players/PlayerDirectory'),
 );
@@ -237,33 +239,41 @@ export default function AppWorkspacePanels({
         aria-labelledby="workspace-tab-database"
         hidden={view !== 'database'}
       >
-        <MatchDatabase
-          visible={view === 'database'}
-          uploading={importer.uploading}
-          bulkAnalysisProgress={bulkAnalysisProgress}
-          revisions={{
-            library: nav.revision,
-            analysis: assessmentRevision,
-            annotation: nav.annotationRevision,
-          }}
-          context={{
-            databaseId: nav.databaseId,
-            currentPosition: navigation.position,
-            requestedPositionSearch: nav.requestedPositionSearch,
-            selectedMatchId: navigation.match?.id,
-          }}
-          callbacks={{
-            onDatabase: nav.setDatabaseId,
-            onOpen: nav.openMatch,
-            onAnalyzeMatches: onSelectForAnalysis,
-            onPosition: nav.openPosition,
-            onAnnotation: nav.openAnnotation,
-            onImport: importer.chooseFiles,
-            onImportFolder: importer.chooseFolder,
-            onOpenPlay: (id, resume) => nav.openPlaySession(id, resume),
-            onChanged: nav.handleLibraryChanged,
-          }}
-        />
+        <LazyPanel>
+          {nav.opened('database') && (
+            <MountHidden visible={view === 'database'}>
+              {(visible) => (
+                <MatchDatabase
+                  visible={visible}
+                  uploading={importer.uploading}
+                  bulkAnalysisProgress={bulkAnalysisProgress}
+                  revisions={{
+                    library: nav.revision,
+                    analysis: assessmentRevision,
+                    annotation: nav.annotationRevision,
+                  }}
+                  context={{
+                    databaseId: nav.databaseId,
+                    currentPosition: navigation.position,
+                    requestedPositionSearch: nav.requestedPositionSearch,
+                    selectedMatchId: navigation.match?.id,
+                  }}
+                  callbacks={{
+                    onDatabase: nav.setDatabaseId,
+                    onOpen: nav.openMatch,
+                    onAnalyzeMatches: onSelectForAnalysis,
+                    onPosition: nav.openPosition,
+                    onAnnotation: nav.openAnnotation,
+                    onImport: importer.chooseFiles,
+                    onImportFolder: importer.chooseFolder,
+                    onOpenPlay: (id, resume) => nav.openPlaySession(id, resume),
+                    onChanged: nav.handleLibraryChanged,
+                  }}
+                />
+              )}
+            </MountHidden>
+          )}
+        </LazyPanel>
         {view === 'database' && analysisDialogs}
       </div>
       <div

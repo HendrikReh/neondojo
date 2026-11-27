@@ -11,7 +11,7 @@
 .played-preview-button {
   font-size: var(--font-size-control);
   padding: 7px 9px;
-  border: 1px solid var(--ui-border);
+  border: 1px solid var(--ui-control-border);
   border-radius: 6px;
 }
 .played-preview-button[aria-pressed='true'] {

@@ -47,6 +47,67 @@ it('defines the approved six palettes and stable semantic status colors', () => 
   }
 });
 
+const baseCss: string = readFileSync(
+  new URL('./base.css', import.meta.url),
+  'utf8',
+);
+
+function relativeLuminance(hex: string) {
+  const value = hex.replace('#', '');
+  const channels = [0, 2, 4].map((offset) => {
+    const channel = parseInt(value.slice(offset, offset + 2), 16) / 255;
+    return channel <= 0.04045
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * channels[0]! + 0.7152 * channels[1]! + 0.0722 * channels[2]!;
+}
+
+function contrastRatio(first: string, second: string) {
+  const a = relativeLuminance(first);
+  const b = relativeLuminance(second);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+function tokenHex(block: string, token: string) {
+  const match = block.match(new RegExp(`${token}:\\s*(#[0-9a-fA-F]{6})\\b`));
+  expect(match, `missing ${token}`).not.toBeNull();
+  return match![1]!;
+}
+
+it('meets WCAG 2.1 SC 1.4.11 (>= 3:1) for interactive control borders across all six palettes', () => {
+  for (const theme of ['graphite', 'club', 'paper']) {
+    for (const mode of ['light', 'dark']) {
+      const block = css.match(
+        new RegExp(
+          `\\[data-ui-theme='${theme}'\\]\\[data-ui-mode='${mode}'\\]\\s*\\{([^}]+)\\}`,
+        ),
+      )?.[1];
+      expect(block).toBeDefined();
+      const controlBorder = tokenHex(block!, '--ui-control-border');
+      const surface = tokenHex(block!, '--ui-surface');
+      const surfaceAlt = tokenHex(block!, '--ui-surface-alt');
+      const bg = tokenHex(block!, '--ui-bg');
+      expect(
+        contrastRatio(controlBorder, surface),
+        `${theme} ${mode} control border vs surface`,
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        contrastRatio(controlBorder, surfaceAlt),
+        `${theme} ${mode} control border vs surface-alt`,
+      ).toBeGreaterThanOrEqual(3);
+      expect(
+        contrastRatio(controlBorder, bg),
+        `${theme} ${mode} control border vs bg`,
+      ).toBeGreaterThanOrEqual(3);
+    }
+  }
+  expect(baseCss).toMatch(/button\s*\{[^}]*var\(--ui-control-border\)/);
+  expect(baseCss).toMatch(/input,\s*select\s*\{[^}]*var\(--ui-control-border\)/);
+  expect(baseCss).toMatch(/textarea\s*\{[^}]*var\(--ui-control-border\)/);
+  expect(baseCss).toMatch(/\.search-box\s*\{[^}]*var\(--ui-control-border\)/);
+});
+
 it('retains the original board and checker palette independently of interface tokens', () => {
   expect(boardCss).toContain('--frame: #234b3d');
   expect(boardCss).toContain('--felt: #e3dec7');

@@ -96,8 +96,9 @@ export function useAnalysisBoardResize(
       const viewportWidth = window.innerWidth;
       // The footer and the page body's bottom padding sit below the grid, so
       // the grid ends where they still fit in the window.
+      const shell = grid.closest('.app-shell');
       const body = grid.closest('.app-body');
-      const footer = body?.querySelector(':scope > .app-footer');
+      const footer = shell?.querySelector(':scope > .app-footer');
       const below =
         (body ? parseFloat(getComputedStyle(body).paddingBottom) || 0 : 0) +
         (footer?.getBoundingClientRect().height ?? 0);
@@ -134,9 +135,7 @@ export function useAnalysisBoardResize(
     const shell = grid.closest('.app-shell');
     const header = shell?.querySelector('.app-header');
     if (header) observer.observe(header);
-    const footer = grid
-      .closest('.app-body')
-      ?.querySelector(':scope > .app-footer');
+    const footer = shell?.querySelector(':scope > .app-footer');
     if (footer) observer.observe(footer);
     if (shell) observer.observe(shell);
     window.addEventListener('resize', measure);

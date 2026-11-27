@@ -96,6 +96,7 @@ pub(super) fn version() -> String {
 }
 
 pub(super) async fn require_current(
+    state: &crate::api::AppState,
     connection: &mut PgConnection,
     database: Option<Uuid>,
     player: &[String],
@@ -111,7 +112,10 @@ pub(super) async fn require_current(
         .await
         .map_err(anyhow::Error::from)?;
     if pending {
-        return Err(crate::browse_indexes::preparing("The decision index"));
+        return Err(crate::browse_indexes::preparing(
+            state,
+            "The decision index",
+        ));
     }
     Ok(())
 }

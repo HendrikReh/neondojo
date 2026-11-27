@@ -936,7 +936,8 @@
   flex-shrink: 0;
 }
 @media (min-width: 2100px) and (min-height: 1100px) {
-  .app-body-play:has(.play-layout) {
+  .app-body-play:has(.play-layout),
+  .app-shell:has(> .app-body-play .play-layout) > .app-footer {
     max-width: none;
   }
 

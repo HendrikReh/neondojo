@@ -106,6 +106,7 @@ export function useLibraryQuery({
   const { databases, error: databaseError } = useDatabases(
     `${revision}:${localRevision}`,
     {
+      enabled: visible,
       onLoad: (list) => {
         if (databaseId && !list.some((d) => d.id === databaseId))
           onDatabase('');

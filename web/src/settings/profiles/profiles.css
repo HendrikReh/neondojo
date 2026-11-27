@@ -134,7 +134,11 @@
   max-height: 10rem;
   overflow: auto;
 }
-.profile-list > .action-button {
+.profile-list-item {
+  display: flex;
+  flex-direction: column;
+}
+.profile-list .action-button {
   justify-content: start;
   text-align: left;
   overflow-wrap: anywhere;

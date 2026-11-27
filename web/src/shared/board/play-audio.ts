@@ -1,8 +1,16 @@
 import type { PlaySound } from './play-sound-events';
+import {
+  onPlaySoundsChanged,
+  playSoundsStorageKey,
+  readPlaySounds,
+  savePlaySounds,
+} from './play-sound-preferences';
 import moveRecording from '../../assets/play-sounds/checker-move.wav';
 import rollRecording from '../../assets/play-sounds/rolling-dice.wav';
 import hitRecording from '../../assets/play-sounds/checker-hit.wav';
 import cubeRecording from '../../assets/play-sounds/cube-double.wav';
+
+export { playSoundsStorageKey, readPlaySounds, savePlaySounds };
 export const playSoundFiles: Record<PlaySound, string> = {
   move: moveRecording,
   roll: rollRecording,
@@ -10,32 +18,10 @@ export const playSoundFiles: Record<PlaySound, string> = {
   bear_off: moveRecording,
   cube: cubeRecording,
 };
-export const playSoundsStorageKey = 'neondojo.play-sounds';
-let enabledInMemory = true;
 
-export function readPlaySounds(storage?: Pick<Storage, 'getItem'>): boolean {
-  try {
-    const value = (storage ?? localStorage).getItem(playSoundsStorageKey);
-    return value === 'off' ? false : value === 'on' ? true : enabledInMemory;
-  } catch {
-    return enabledInMemory;
-  }
-}
-export function savePlaySounds(
-  enabled: boolean,
-  storage?: Pick<Storage, 'setItem'>,
-) {
-  enabledInMemory = enabled;
-  try {
-    (storage ?? localStorage).setItem(
-      playSoundsStorageKey,
-      enabled ? 'on' : 'off',
-    );
-  } catch {
-    // This browser session still honors the preference without storage.
-  }
+onPlaySoundsChanged((enabled) => {
   if (!enabled) stopPlaySounds();
-}
+});
 
 let context: AudioContext | undefined;
 let ready: Promise<void> | undefined;

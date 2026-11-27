@@ -1,8 +1,14 @@
-import { useEffect, useRef, type KeyboardEvent } from 'react';
+import {
+  useEffect,
+  useRef,
+  type FocusEvent,
+  type KeyboardEvent,
+} from 'react';
 
 /**
- * Makes a `<details>` behave like a popover: a pointer press outside closes
- * it, and Escape closes it and returns focus to its summary.
+ * Makes a `<details>` behave like a popover: a pointer press outside or
+ * moving keyboard focus outside closes it, and Escape closes it and returns
+ * focus to its summary.
  */
 export function useDetailsDismiss() {
   const ref = useRef<HTMLDetailsElement>(null);
@@ -18,6 +24,9 @@ export function useDetailsDismiss() {
     document.addEventListener('pointerdown', close);
     return () => document.removeEventListener('pointerdown', close);
   }, []);
+  function close() {
+    if (ref.current) ref.current.open = false;
+  }
   function onKeyDown(event: KeyboardEvent<HTMLDetailsElement>) {
     if (event.key === 'Escape' && ref.current?.open) {
       event.preventDefault();
@@ -25,5 +34,14 @@ export function useDetailsDismiss() {
       ref.current.querySelector('summary')?.focus();
     }
   }
-  return { ref, onKeyDown };
+  function onBlur(event: FocusEvent<HTMLDetailsElement>) {
+    if (
+      ref.current?.open &&
+      event.relatedTarget instanceof Node &&
+      !event.currentTarget.contains(event.relatedTarget)
+    ) {
+      ref.current.open = false;
+    }
+  }
+  return { ref, onKeyDown, onBlur, close };
 }

@@ -23,7 +23,10 @@ import {
 } from './configuration/configuration-model';
 import { isAnalysisDepth } from '../shared/engine/analysis-depth';
 import { useLatest } from '../shared/hooks/useLatest';
-import { readPlaySounds, savePlaySounds } from '../shared/board/play-audio';
+import {
+  readPlaySounds,
+  savePlaySounds,
+} from '../shared/board/play-sound-preferences';
 import { useI18n, type Locale } from '../shared/i18n/i18n';
 import type { Theme } from '../shared/board/themes';
 import {
@@ -496,6 +499,7 @@ export function useSettingsDraft({
     setDraftBoard(initialPreferences.board);
     setDraftAppearance(initialPreferences.appearance);
     setDraftSounds(initialSounds);
+    resetThresholds(initialThresholds, initialPreferences.locale);
     setSaveError(null);
     setRecoveryError(null);
     resetInstallationCheck();

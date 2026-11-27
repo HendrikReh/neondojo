@@ -1,4 +1,4 @@
-import { lazy, useEffect, useState } from 'react';
+import { lazy, useEffect, useId, useState } from 'react';
 import { useConfirmedConfiguration } from '../settings/configuration/ConfigurationProvider';
 import { useWorkspaceSession } from '../shared/hooks/useWorkspaceSession';
 import ProfileSelector from '../settings/profiles/ProfileSelector';
@@ -48,6 +48,7 @@ const views: AppView[] = [
 export default function App() {
   useButtonShortcuts();
   const helpMenu = useDetailsDismiss();
+  const helpNewTabId = useId();
   const confirmed = useConfirmedConfiguration();
   const [settingsCategory, setSettingsCategory] = useState<
     'general' | 'play' | 'profiles'
@@ -242,6 +243,9 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-to-main" href="#main-content">
+        {t('app.skipToMain')}
+      </a>
       <header className="app-header">
         <a
           className="brand"
@@ -278,22 +282,36 @@ export default function App() {
             className="app-help text-navigation"
             ref={helpMenu.ref}
             onKeyDown={helpMenu.onKeyDown}
+            onBlur={helpMenu.onBlur}
           >
             <summary>{t('app.help')}</summary>
+            <span id={helpNewTabId} className="sr-only">
+              {t('app.opensInNewTab')}
+            </span>
             <div className="app-help-links">
               <a
                 href="https://hendrikreh.github.io/neondojo/user-guide/"
                 target="_blank"
                 rel="noreferrer"
+                aria-describedby={helpNewTabId}
+                onClick={helpMenu.close}
               >
-                {t('app.neondojoManual')}
+                <span>{t('app.neondojoManual')}</span>
+                <span className="app-help-external" aria-hidden="true">
+                  ↗
+                </span>
               </a>
               <a
                 href="https://hendrikreh.github.io/neongammon/"
                 target="_blank"
                 rel="noreferrer"
+                aria-describedby={helpNewTabId}
+                onClick={helpMenu.close}
               >
-                {t('app.neongammonManual')}
+                <span>{t('app.neongammonManual')}</span>
+                <span className="app-help-external" aria-hidden="true">
+                  ↗
+                </span>
               </a>
             </div>
           </details>
@@ -323,7 +341,11 @@ export default function App() {
           {w('globalBusy')}
         </p>
       )}
-      <main className={`app-body app-body-${nav.view}`}>
+      <main
+        id="main-content"
+        tabIndex={-1}
+        className={`app-body app-body-${nav.view}`}
+      >
         <AppNotices
           error={nav.error || nav.navigation.error}
           settingsError={settingsError}
@@ -358,13 +380,13 @@ export default function App() {
             setSettingsOpen(true);
           }}
         />
-        <AppFooter
-          key={footerEngine}
-          engine={footerEngine}
-          settingsOpen={settingsOpen}
-          settingsVersion={settings?.version}
-        />
       </main>
+      <AppFooter
+        key={footerEngine}
+        engine={footerEngine}
+        settingsOpen={settingsOpen}
+        settingsVersion={settings?.version}
+      />
       <LazyPanel quiet>
         {(settingsOpen || settingsOpened) && (
           <SettingsDialog

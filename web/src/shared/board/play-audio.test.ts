@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { expect, it, vi } from 'vitest';
 import {
   readPlaySounds,
@@ -6,6 +7,7 @@ import {
   unlockPlayAudio,
   playSoundFiles,
 } from './play-audio';
+import { onPlaySoundsChanged } from './play-sound-preferences';
 it('maps game events to the supplied recordings and reuses movement for bear-off', () => {
   expect(playSoundFiles.move).toMatch(/checker-move\.wav$/);
   expect(playSoundFiles.roll).toMatch(/rolling-dice\.wav$/);
@@ -60,4 +62,25 @@ it('uses the supplied cube recording for doubling alerts', () => {
   expect((playSoundFiles as Record<string, string>).cube).toMatch(
     /cube-double\.wav$/,
   );
+});
+
+it('keeps sound preference persistence separate from WAV assets and Web Audio', () => {
+  const source = readFileSync(
+    new URL('./play-sound-preferences.ts', import.meta.url),
+    'utf8',
+  );
+  expect(source).not.toMatch(/\.wav|AudioContext|play-audio/);
+  const events: boolean[] = [];
+  const unsubscribe = onPlaySoundsChanged((enabled) => events.push(enabled));
+  try {
+    const values = new Map<string, string>();
+    const storage = {
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+    savePlaySounds(false, storage);
+    savePlaySounds(true, storage);
+    expect(events).toEqual([false, true]);
+  } finally {
+    unsubscribe();
+  }
 });

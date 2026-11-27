@@ -24,7 +24,21 @@ test('short workspaces keep the status bar at the bottom and follow the configur
   );
   await page.goto('/');
   const footer = page.locator('.app-footer');
+  await expect(page.locator('main footer')).toHaveCount(0);
+  await expect(page.getByRole('contentinfo')).toBeVisible();
   await expect(footer).toContainText('NeonGammon connected');
+
+  // Skip-to-main link is the first keyboard stop, becomes visible on focus,
+  // and moves focus into the main landmark when activated.
+  await page.keyboard.press('Tab');
+  const skip = page.getByRole('link', { name: 'Skip to main content' });
+  await expect(skip).toBeFocused();
+  await expect(skip).toBeVisible();
+  const skipBox = (await skip.boundingBox())!;
+  expect(skipBox.width).toBeGreaterThan(80);
+  expect(skipBox.height).toBeGreaterThan(20);
+  await page.keyboard.press('Enter');
+  await expect(page.locator('main#main-content')).toBeFocused();
   const tab = (name: string) => page.getByRole('tab', { name, exact: true });
   for (const [workspace, name] of [
     ['Extras', 'Versions'],

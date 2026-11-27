@@ -273,22 +273,59 @@ test('header tabs follow the workspace order with mouse and keyboard', async ({
   }
   await page.keyboard.press('Tab');
   await expect(help).toBeFocused();
+  await expect(help).toHaveCSS('list-style-type', 'none');
   const extrasBox = (await tabs.last().boundingBox())!;
   const helpBox = (await help.boundingBox())!;
   expect(helpBox.x).toBe(extrasBox.x + extrasBox.width + 20);
   expect(helpBox.y).toBe(extrasBox.y);
   await page.keyboard.press('Enter');
+  const menuBox = (await page.locator('.app-help-links').boundingBox())!;
+  expect(menuBox.x).toBeGreaterThanOrEqual(helpBox.x - 1);
+  expect(menuBox.x).toBeGreaterThan(extrasBox.x + extrasBox.width);
   for (const [name, href] of manuals) {
     const link = page.getByRole('link', { name, exact: true });
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute('href', href);
     await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAccessibleDescription('Öffnet in einem neuen Tab');
+    await expect(link.locator('.app-help-external')).toHaveText('↗');
+    await expect(link.locator('.app-help-external')).toHaveAttribute(
+      'aria-hidden',
+      'true',
+    );
     await page.keyboard.press('Tab');
     await expect(link).toBeFocused();
   }
+  // Tabbing past the last manual link closes the Help disclosure.
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.app-help')).not.toHaveAttribute('open', '');
+  await expect(page.getByRole('link', { name: manuals[0][0] })).toBeHidden();
+
+  // Escape closes and returns focus to the summary trigger.
+  await help.click();
+  await expect(page.getByRole('link', { name: manuals[0][0] })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(help).toBeFocused();
   await expect(page.getByRole('link', { name: manuals[0][0] })).toBeHidden();
+
+  // Clicking a manual link closes the Help disclosure cleanly.
+  await help.click();
+  const firstManual = page.getByRole('link', {
+    name: manuals[0][0],
+    exact: true,
+  });
+  await expect(firstManual).toBeVisible();
+  await page.evaluate(() => {
+    document.querySelector('.app-help-links a')?.addEventListener(
+      'click',
+      (event) => event.preventDefault(),
+      { once: true },
+    );
+  });
+  await firstManual.click();
+  await expect(page.locator('.app-help')).not.toHaveAttribute('open', '');
+  await expect(firstManual).toBeHidden();
+
   await help.click();
   await expect(page.getByRole('link', { name: manuals[0][0] })).toBeVisible();
   await tabs.last().click();
@@ -296,6 +333,31 @@ test('header tabs follow the workspace order with mouse and keyboard', async ({
   await page.keyboard.press('Home');
   await expect(tabs.first()).toBeFocused();
   await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
+});
+
+test('Home and Analysis startup defer /api/databases until Match database opens', async ({
+  page,
+}) => {
+  let databaseRequests = 0;
+  page.on('request', (req) => {
+    if (new URL(req.url()).pathname === '/api/databases') databaseRequests++;
+  });
+  await seedLocale(page, 'en');
+  await page.goto('/');
+  await expect(
+    page.getByRole('heading', { name: 'Home', exact: true }),
+  ).toBeVisible();
+  await page.waitForLoadState('networkidle');
+  expect(databaseRequests).toBe(0);
+
+  await page.getByRole('tab', { name: 'Analysis', exact: true }).click();
+  await page.waitForLoadState('networkidle');
+  expect(databaseRequests).toBe(0);
+
+  await page.getByRole('tab', { name: 'Match database', exact: true }).click();
+  await expect
+    .poll(() => databaseRequests)
+    .toBeGreaterThanOrEqual(1);
 });
 
 test('text tabs retain keyboard focus, selection and desktop containment', async ({
@@ -316,6 +378,22 @@ test('text tabs retain keyboard focus, selection and desktop containment', async
     await expect(
       overviewPanel.getByRole('tab', { name, exact: true }),
     ).toBeVisible();
+  // Every AnalysisPanel sub-tab points to a real role="tabpanel" with matching aria-labelledby.
+  const resultsTabs = overviewPanel
+    .getByRole('tablist', { name: 'Results', exact: true })
+    .getByRole('tab');
+  const resultsTabCount = await resultsTabs.count();
+  expect(resultsTabCount).toBe(4);
+  for (let i = 0; i < resultsTabCount; i++) {
+    const tab = resultsTabs.nth(i);
+    const tabId = await tab.getAttribute('id');
+    const controls = await tab.getAttribute('aria-controls');
+    expect(tabId).toBeTruthy();
+    expect(controls).toBeTruthy();
+    const panel = page.locator(`[id="${controls}"]`);
+    await expect(panel).toHaveAttribute('role', 'tabpanel');
+    await expect(panel).toHaveAttribute('aria-labelledby', tabId!);
+  }
   await overview.focus();
   await page.keyboard.press('ArrowRight');
   const statistics = positionDetails.getByRole('tab', {
@@ -325,6 +403,17 @@ test('text tabs retain keyboard focus, selection and desktop containment', async
   await expect(statistics).toBeFocused();
   await activeText(statistics, color);
   await expect(statistics).toHaveCSS('outline-style', 'solid');
+  // Switching away from Checker keeps #inspector-panel-overview as a hidden tabpanel,
+  // never leaving an unroled id on .analysis-grid.
+  await expect(page.locator('.analysis-grid')).not.toHaveAttribute(
+    'id',
+    'inspector-panel-overview',
+  );
+  await expect(page.locator('#inspector-panel-overview')).toHaveAttribute(
+    'role',
+    'tabpanel',
+  );
+  await expect(page.locator('#inspector-panel-overview')).toBeHidden();
   await page.getByRole('tab', { name: 'Notes', exact: true }).click();
   const scopes = page.locator('.notes-scope-tabs [role="tab"]');
   await scopes.first().focus();

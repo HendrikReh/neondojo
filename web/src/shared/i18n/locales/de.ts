@@ -249,6 +249,8 @@ export default {
     'app.help': 'Hilfe',
     'app.neondojoManual': 'NeonDojo-Handbuch',
     'app.neongammonManual': 'NeonGammon-Handbuch',
+    'app.opensInNewTab': 'Öffnet in einem neuen Tab',
+    'app.skipToMain': 'Zum Hauptinhalt springen',
     'app.home': 'NeonDojo-Startseite',
     'app.importPlain': 'Match importieren',
     'app.dropZoneTitle': 'Match-Dateien oder Ordner hier ablegen',
