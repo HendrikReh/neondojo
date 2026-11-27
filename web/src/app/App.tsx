@@ -882,6 +882,7 @@ export default function App() {
                   onBookmarkChanged={bookmarkChanged}
                   deckRevision={deckRevision}
                   onDeckChanged={deckChanged}
+                  onStudy={openStudyDeck}
                   theme={theme}
                   onOpenPosition={(id) => {
                     setDetail('overview');

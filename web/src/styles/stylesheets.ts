@@ -4,12 +4,12 @@
 // document the dependency; those later imports add nothing, whether the
 // component is bundled with the app or loaded on demand.
 //
-// The order reproduces the cascade the app had before workspaces were loaded
-// lazily. Global rules (style.css) still come after the components, and many
-// component rules rely on that, so moving a file changes computed styles.
+// Base rules load before component rules. Desktop layout, typography and
+// text navigation come later so their shared rules apply across workspaces.
 // stylesheets.test.ts checks that every stylesheet is listed exactly once.
 // ui-appearance.css is linked from index.html ahead of all of them.
 
+import './style.css';
 import '../shared/ui/action-controls.css';
 import '../settings/profiles/profiles.css';
 import '../workspaces/extras/benchmark.css';
@@ -49,7 +49,6 @@ import '../settings/settings.css';
 import '../app/workspace.css';
 import '../app/home.css';
 import '../workspaces/positions/decision-search.css';
-import './style.css';
 import '../shared/board/board-finishes.css';
 import './desktop-analysis.css';
 import './typography.css';

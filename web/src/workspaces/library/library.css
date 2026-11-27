@@ -274,9 +274,16 @@
   background: var(--ui-surface);
   border-color: var(--ui-border);
 }
-.library-batch-bar strong {
-  font-size: var(--font-size-table);
+.library-batch-summary {
+  display: grid;
   margin-right: auto;
+}
+.library-batch-summary strong {
+  font-size: var(--font-size-table);
+}
+.library-batch-summary small {
+  color: var(--ui-muted);
+  font-size: var(--font-size-meta);
 }
 /* Single-match, batch and destructive actions form separate sections. */
 .library-batch-group {
@@ -401,11 +408,17 @@
   cursor: col-resize !important;
   user-select: none;
 }
-.match-database .match-list.database-table-wrap {
-  max-height: max(300px, calc(100dvh - 390px));
+.database-table-wrap {
   overflow: auto;
-  padding: 0;
   border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--ui-surface);
+}
+.match-database .match-list.database-table-wrap {
+  display: block;
+  max-height: max(300px, calc(100dvh - 390px));
+  margin: 0;
+  padding: 0;
   border-radius: 9px;
 }
 .match-database .database-table {
@@ -606,12 +619,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ui-muted);
-}
-.library-pr-help {
-  font-size: var(--font-size-meta);
-  line-height: 1.5;
-  color: var(--ui-muted);
-  margin-top: 12px;
 }
 .library-modal-overlay {
   position: fixed;

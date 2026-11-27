@@ -138,6 +138,7 @@ export default function DecisionSearch({
   onBookmarkChanged,
   deckRevision,
   onDeckChanged,
+  onStudy,
   theme,
   onOpenPosition,
   onOpenCubeDecision,
@@ -148,6 +149,7 @@ export default function DecisionSearch({
   onBookmarkChanged: () => void;
   deckRevision: number;
   onDeckChanged: () => void;
+  onStudy: (deckId: string) => void;
   theme: Theme;
   onOpenPosition: (id: string) => void;
   /** Opens a cube decision, which has no position of its own, in its game. */
@@ -375,7 +377,7 @@ export default function DecisionSearch({
         onDeckCreated={onDeckChanged}
       />
       {deckOutcome?.key === pageKey && (
-        <DecisionDeckStatus outcome={deckOutcome} />
+        <DecisionDeckStatus outcome={deckOutcome} onStudy={onStudy} />
       )}
     </>
   );
@@ -802,7 +804,10 @@ export default function DecisionSearch({
                   </div>
                   {deckOutcome?.key ===
                     mistakeReferenceKey(preview.reference) && (
-                    <DecisionDeckStatus outcome={deckOutcome} />
+                    <DecisionDeckStatus
+                      outcome={deckOutcome}
+                      onStudy={onStudy}
+                    />
                   )}
                   <CubeContextLine
                     matchId={preview.position.gnubg_match_id}

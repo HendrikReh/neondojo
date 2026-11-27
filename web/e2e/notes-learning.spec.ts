@@ -231,7 +231,12 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     name: 'Positionen als Lernkarten',
     exact: true,
   });
-  await add.getByLabel('Deckname', { exact: true }).fill(`Practice ${suffix}`);
+  const deckName = add.getByLabel('Deckname', { exact: true });
+  const newDeck = add.getByRole('button', { name: 'Neues Deck', exact: true });
+  await expect(deckName).toBeHidden();
+  await newDeck.press('Enter');
+  await expect(newDeck).toHaveAttribute('aria-expanded', 'true');
+  await deckName.fill(`Practice ${suffix}`);
   const createdResponse = page.waitForResponse(
     (r) =>
       r.request().method() === 'POST' &&
@@ -241,6 +246,8 @@ test('an analyzed annotated position becomes a shared study card and a downloada
     .getByRole('button', { name: 'Deck erstellen', exact: true })
     .click();
   const deck = await (await createdResponse).json();
+  await expect(deckName).toBeHidden();
+  await expect(newDeck).toBeFocused();
   await expect(add.getByLabel('Deck auswählen', { exact: true })).toHaveValue(
     deck.id,
   );
@@ -539,6 +546,7 @@ test('a whole-match deck trains checker, double and response cards with the sele
     name: 'Positionen als Lernkarten',
     exact: true,
   });
+  await add.getByRole('button', { name: 'Neues Deck', exact: true }).click();
   await add.getByLabel('Deckname', { exact: true }).fill(`Bulk ${suffix}`);
   const created = page.waitForResponse(
     (r) =>

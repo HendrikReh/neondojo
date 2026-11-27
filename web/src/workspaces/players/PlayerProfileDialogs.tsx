@@ -1,3 +1,4 @@
+import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useState } from 'react';
 import { request } from '../../shared/http/api';
 import type { components } from '../../generated-api';
@@ -178,16 +179,19 @@ export function PlayerEditDialog({
         <>
           <p role="alert">{t('discardQuestion')}</p>
           <div className="library-dialog-actions">
-            <button
+            <ActionButton
+              icon="edit"
+              label={t('keepEditing')}
               type="button"
               autoFocus
               onClick={() => setConfirmDiscard(false)}
-            >
-              {t('keepEditing')}
-            </button>
-            <button type="button" onClick={onClose}>
-              {t('discard')}
-            </button>
+            />
+            <ActionButton
+              icon="clear"
+              label={t('discard')}
+              type="button"
+              onClick={onClose}
+            />
           </div>
         </>
       ) : (
@@ -250,7 +254,9 @@ export function PlayerEditDialog({
           {saved && <p role="status">{t('saved')}</p>}
           {error !== undefined && <p role="alert">{formatError(error)}</p>}
           {conflict && (
-            <button
+            <ActionButton
+              icon="refresh"
+              label={t('reload')}
               type="button"
               disabled={busy}
               onClick={async () => {
@@ -260,17 +266,16 @@ export function PlayerEditDialog({
                   onChanged(latest);
                 }
               }}
-            >
-              {t('reload')}
-            </button>
+            />
           )}
           <div className="library-dialog-actions">
-            <button
+            <ActionButton
+              type="submit"
+              icon="save"
+              label={t('save')}
               className="primary"
               disabled={busy || !(nameChanged || alias.trim())}
-            >
-              {t('save')}
-            </button>
+            />
           </div>
         </form>
       )}
@@ -353,7 +358,12 @@ export function PlayerMergeDialog({
         {sourceError !== undefined ? (
           <p role="alert">
             {formatError(sourceError)}{' '}
-            <button onClick={retry}>{t('retry')}</button>
+            <ActionButton
+              type="button"
+              icon="refresh"
+              label={t('retry')}
+              onClick={retry}
+            />
           </p>
         ) : sourceId && !candidate ? (
           <p role="status">{t('loading')}</p>
@@ -389,7 +399,9 @@ export function PlayerMergeDialog({
         )}
         {error !== undefined && <p role="alert">{formatError(error)}</p>}
         {conflict && (
-          <button
+          <ActionButton
+            icon="refresh"
+            label={t('reload')}
             type="button"
             disabled={busy}
             onClick={async () => {
@@ -402,15 +414,19 @@ export function PlayerMergeDialog({
                 setRefresh((n) => n + 1);
               }
             }}
-          >
-            {t('reload')}
-          </button>
+          />
         )}
         <div className="library-dialog-actions">
-          <button type="button" disabled={busy} onClick={onClose}>
-            {l('cancel')}
-          </button>
-          <button
+          <ActionButton
+            icon="cancel"
+            label={l('cancel')}
+            type="button"
+            disabled={busy}
+            onClick={onClose}
+          />
+          <ActionButton
+            icon="merge"
+            label={t('merge')}
             type="button"
             className="danger"
             disabled={
@@ -428,9 +444,7 @@ export function PlayerMergeDialog({
               });
               if (merged) onMerged(merged);
             }}
-          >
-            {t('merge')}
-          </button>
+          />
         </div>
       </div>
     </LibraryDialog>

@@ -518,6 +518,7 @@ test('a pre-filled player lists its decisions at once and hits join a deck one b
     name: 'Add page to deck',
     exact: true,
   });
+  await expect(addPage).toHaveAttribute('data-action-icon', 'deck');
   await addPage.click();
   const pageDialog = page.getByRole('dialog', {
     name: 'Add page to deck',
@@ -535,4 +536,13 @@ test('a pre-filled player lists its decisions at once and hits join a deck one b
   );
   await expect(addPage).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath('decision-added.png') });
+  await search.getByRole('button', { name: 'Study this deck' }).click();
+  await expect(
+    page.getByRole('tab', { name: 'Flashcards & Anki' }),
+  ).toHaveAttribute('aria-selected', 'true');
+  await expect(
+    page
+      .getByRole('region', { name: 'Study', exact: true })
+      .getByLabel('Choose deck'),
+  ).toHaveValue(deck.id);
 });

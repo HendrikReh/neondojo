@@ -21,10 +21,12 @@ export default function UnanalyzedMatches({
   if (!page.unanalyzed_matches) return null;
   return (
     <p className="unanalyzed-matches" data-unanalyzed-matches>
-      {t('unanalyzed', {
-        missing: page.unanalyzed_matches,
-        total: page.player_matches,
-      })}{' '}
+      <span>
+        {t('unanalyzed', {
+          missing: page.unanalyzed_matches,
+          total: page.player_matches,
+        })}
+      </span>
       <ActionButton
         type="button"
         icon="analysis"

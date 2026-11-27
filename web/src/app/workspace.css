@@ -6,7 +6,7 @@
   background: var(--ui-bg);
 }
 .app-shell [hidden] {
-  display: none !important;
+  display: none;
 }
 .app-header {
   display: flex;
@@ -429,18 +429,6 @@
   font-size: var(--font-size-table);
   color: var(--ui-muted);
   margin: 18px 0 10px;
-}
-.match-database .match-list {
-  display: block;
-  max-height: none;
-  margin: 0;
-  overflow: visible;
-}
-.database-table-wrap {
-  overflow: auto !important;
-  border: 1px solid var(--ui-border);
-  border-radius: 10px;
-  background: var(--ui-surface);
 }
 .database-table {
   width: 100%;
