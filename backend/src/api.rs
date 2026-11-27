@@ -37,6 +37,10 @@ pub struct AppState {
     job_notifications: Arc<crate::job_events::JobNotifications>,
     pub shutdown: CancellationToken,
     imports: Arc<Semaphore>,
+    /// Serialize on-demand evaluations without holding a database lock.
+    pub(crate) practice_evaluation: Arc<tokio::sync::Mutex<()>>,
+    pub(crate) play_warmup: Arc<Semaphore>,
+    pub(crate) opening_books: Arc<crate::opening_book::LookupCache>,
     pub(crate) backup: Arc<crate::database_backup::Access>,
     pub(crate) anki_connection: Arc<crate::learning::AnkiConnection>,
     /// How often a running analysis job renews its lease.
@@ -56,6 +60,9 @@ impl AppState {
             job_notifications: Arc::default(),
             shutdown: CancellationToken::new(),
             imports: Arc::new(Semaphore::new(2)),
+            practice_evaluation: Arc::default(),
+            play_warmup: Arc::new(Semaphore::new(1)),
+            opening_books: Arc::default(),
             backup: Arc::default(),
             anki_connection: Arc::default(),
             job_heartbeat: crate::jobs::DEFAULT_HEARTBEAT,

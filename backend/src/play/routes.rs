@@ -62,7 +62,7 @@ pub(super) async fn get_session(
 ) -> ApiResult<Json<PlaySession>> {
     let row = saved(&state, id).await?;
     let session = present_with_results(row.state.0, row.sgf).await?;
-    open_sage::schedule_warmup(&session, &state.shutdown);
+    open_sage::schedule_warmup(&session, &state);
     Ok(Json(session))
 }
 
@@ -301,7 +301,7 @@ async fn start_session(
         .await
         .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    open_sage::schedule_warmup(&session, &state.shutdown);
+    open_sage::schedule_warmup(&session, &state);
     Ok((StatusCode::CREATED, Json(session)))
 }
 

@@ -22,7 +22,7 @@ mod lookup;
 mod routes;
 mod sqlite_book;
 pub(crate) use keys::canonical_keys;
-use lookup::*;
+pub(crate) use lookup::LookupCache;
 pub use lookup::{lookup, lookup_with_rules};
 pub use routes::OpeningBookDoc;
 pub(crate) use routes::routes;

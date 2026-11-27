@@ -120,6 +120,6 @@ pub(super) async fn transition(
     session.version += 1;
     session.paused = pausing;
     let session = present_with_results(session, saved.sgf).await?;
-    super::open_sage::schedule_warmup(&session, &state.shutdown);
+    super::open_sage::schedule_warmup(&session, state);
     Ok(Json(session))
 }

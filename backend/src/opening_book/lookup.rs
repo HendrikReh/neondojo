@@ -119,123 +119,146 @@ pub async fn lookup_with_rules(
     expected_engine_version: Option<&str>,
     beaver: Option<bool>,
 ) -> Result<BookLookup> {
-    let finish = |mut result: BookLookup| {
-        result.provider = config.provider.clone();
-        result
-    };
-    if config.provider == "off" {
-        return Ok(finish(BookLookup::miss("Opening book is off")));
-    }
-    if !matches!(
-        config.provider.as_str(),
-        "automatic" | "backgammondb" | "xg"
-    ) {
-        return Ok(finish(BookLookup::miss(
-            "Unsupported opening book provider",
-        )));
-    }
-    let canonical = match canonical_keys(position) {
-        Ok((key, _)) => key,
-        Err(error) => {
-            return Ok(finish(BookLookup::miss(format!(
-                "Unsupported position context: {error:#}"
-            ))));
-        }
-    };
-    let money = canonical.split(':').nth(8) == Some("0");
-    if money && beaver.is_none() {
-        return Ok(finish(BookLookup::miss(
-            "Money-game beaver rule is not recorded; no book context assumed",
-        )));
-    }
-    let mut result = if matches!(config.provider.as_str(), "automatic" | "backgammondb")
-        && (!money || beaver == Some(false))
-    {
-        lookup_bgdb(config, position, expected_engine_version).await?
-    } else {
-        BookLookup::miss(if config.provider == "xg" {
-            "No XG position reference for this board and rule context"
-        } else {
-            "BackgammonDB has no beaver-rule entries"
-        })
-    };
-    // Native jobs must never be fulfilled with a different engine's reference.
-    if matches!(config.provider.as_str(), "automatic" | "xg") && expected_engine_version.is_none() {
-        match crate::xg_book::lookup(&config.xg_path, position, beaver).await {
-            Ok(Some(reference)) => {
-                result.hit = true;
-                result.reason = None;
-                result.xg_position = Some(reference);
-            }
-            Ok(None) => {}
-            Err(error) if config.provider == "xg" => {
-                result.reason = Some(format!("XG opening book unavailable: {error:#}"))
-            }
-            Err(error) => {
-                tracing::debug!(error=?error,"Optional XG position reference unavailable")
-            }
-        }
-    }
-    Ok(finish(result))
+    LookupCache::default()
+        .lookup(config, position, expected_engine_version, beaver)
+        .await
 }
 
-/// Beaver rules are not encoded by a GNUbg Match ID. Resolve them once from
-/// immutable source metadata rather than treating different money rules alike.
-pub(super) async fn source_beaver_rule(
-    pool: &sqlx::PgPool,
-    position: &Position,
-) -> Result<Option<bool>> {
-    use crate::backgammon::ids::{Field, MatchId};
-    let length = MatchId::decode(&position.gnubg_match_id)
-        .context("Invalid GNUbg Match ID")?
-        .get(Field::LENGTH);
-    if length > 0 {
-        return Ok(Some(false));
-    }
-    let row: Option<(MatchFormat, String, i32)> =
-        sqlx::query_as("SELECT format,sha256,octet_length(original) FROM matches WHERE id=$1")
-            .bind(position.match_uuid)
-            .fetch_optional(pool)
-            .await?;
-    let Some((format, sha, length)) = row else {
-        return Ok(None);
-    };
-    match format.beaver_rule() {
-        BeaverRule::Off => Ok(Some(false)),
-        BeaverRule::InOriginal(read) => {
-            type Rules = std::collections::HashMap<(Uuid, String), Option<bool>>;
-            static RULES: std::sync::OnceLock<std::sync::Mutex<Rules>> = std::sync::OnceLock::new();
-            let cache = RULES.get_or_init(|| std::sync::Mutex::new(Rules::new()));
-            let key = (position.match_uuid, sha);
-            if let Some(rule) = cache
-                .lock()
-                .map_err(|_| anyhow::anyhow!("Book rule cache unavailable"))?
-                .get(&key)
-                .copied()
-            {
-                return Ok(rule);
-            }
-            // Bound the legacy source read separately from the 64 MiB XG
-            // decompression limit. Larger sources miss without an assumption.
-            if length > 16 * 1024 * 1024 {
-                return Ok(None);
-            }
-            let original: Vec<u8> = sqlx::query_scalar("SELECT original FROM matches WHERE id=$1")
-                .bind(position.match_uuid)
-                .fetch_one(pool)
-                .await?;
-            let rule = tokio::task::spawn_blocking(move || read(&original))
-                .await?
-                .ok();
-            let mut cache = cache
-                .lock()
-                .map_err(|_| anyhow::anyhow!("Book rule cache unavailable"))?;
-            if cache.len() >= 128 {
-                cache.clear();
-            }
-            cache.insert(key, rule);
-            Ok(rule)
+#[derive(Default)]
+pub(crate) struct LookupCache {
+    pub(crate) xg: crate::xg_book::Cache,
+    rules: std::sync::Mutex<std::collections::HashMap<(Uuid, String), Option<bool>>>,
+}
+
+impl LookupCache {
+    pub(super) async fn lookup(
+        &self,
+        config: &BookConfig,
+        position: &Position,
+        expected_engine_version: Option<&str>,
+        beaver: Option<bool>,
+    ) -> Result<BookLookup> {
+        let finish = |mut result: BookLookup| {
+            result.provider = config.provider.clone();
+            result
+        };
+        if config.provider == "off" {
+            return Ok(finish(BookLookup::miss("Opening book is off")));
         }
-        BeaverRule::Unknown => Ok(None),
+        if !matches!(
+            config.provider.as_str(),
+            "automatic" | "backgammondb" | "xg"
+        ) {
+            return Ok(finish(BookLookup::miss(
+                "Unsupported opening book provider",
+            )));
+        }
+        let canonical = match canonical_keys(position) {
+            Ok((key, _)) => key,
+            Err(error) => {
+                return Ok(finish(BookLookup::miss(format!(
+                    "Unsupported position context: {error:#}"
+                ))));
+            }
+        };
+        let money = canonical.split(':').nth(8) == Some("0");
+        if money && beaver.is_none() {
+            return Ok(finish(BookLookup::miss(
+                "Money-game beaver rule is not recorded; no book context assumed",
+            )));
+        }
+        let mut result = if matches!(config.provider.as_str(), "automatic" | "backgammondb")
+            && (!money || beaver == Some(false))
+        {
+            lookup_bgdb(config, position, expected_engine_version).await?
+        } else {
+            BookLookup::miss(if config.provider == "xg" {
+                "No XG position reference for this board and rule context"
+            } else {
+                "BackgammonDB has no beaver-rule entries"
+            })
+        };
+        // Native jobs must never be fulfilled with a different engine's reference.
+        if matches!(config.provider.as_str(), "automatic" | "xg")
+            && expected_engine_version.is_none()
+        {
+            match self.xg.lookup(&config.xg_path, position, beaver).await {
+                Ok(Some(reference)) => {
+                    result.hit = true;
+                    result.reason = None;
+                    result.xg_position = Some(reference);
+                }
+                Ok(None) => {}
+                Err(error) if config.provider == "xg" => {
+                    result.reason = Some(format!("XG opening book unavailable: {error:#}"))
+                }
+                Err(error) => {
+                    tracing::debug!(error=?error,"Optional XG position reference unavailable")
+                }
+            }
+        }
+        Ok(finish(result))
+    }
+
+    /// Beaver rules are not encoded by a GNUbg Match ID. Resolve them once from
+    /// immutable source metadata rather than treating different money rules alike.
+    pub(super) async fn source_beaver_rule(
+        &self,
+        pool: &sqlx::PgPool,
+        position: &Position,
+    ) -> Result<Option<bool>> {
+        use crate::backgammon::ids::{Field, MatchId};
+        let length = MatchId::decode(&position.gnubg_match_id)
+            .context("Invalid GNUbg Match ID")?
+            .get(Field::LENGTH);
+        if length > 0 {
+            return Ok(Some(false));
+        }
+        let row: Option<(MatchFormat, String, i32)> =
+            sqlx::query_as("SELECT format,sha256,octet_length(original) FROM matches WHERE id=$1")
+                .bind(position.match_uuid)
+                .fetch_optional(pool)
+                .await?;
+        let Some((format, sha, length)) = row else {
+            return Ok(None);
+        };
+        match format.beaver_rule() {
+            BeaverRule::Off => Ok(Some(false)),
+            BeaverRule::InOriginal(read) => {
+                let key = (position.match_uuid, sha);
+                if let Some(rule) = self
+                    .rules
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Book rule cache unavailable"))?
+                    .get(&key)
+                    .copied()
+                {
+                    return Ok(rule);
+                }
+                // Bound the legacy source read separately from the 64 MiB XG
+                // decompression limit. Larger sources miss without an assumption.
+                if length > 16 * 1024 * 1024 {
+                    return Ok(None);
+                }
+                let original: Vec<u8> =
+                    sqlx::query_scalar("SELECT original FROM matches WHERE id=$1")
+                        .bind(position.match_uuid)
+                        .fetch_one(pool)
+                        .await?;
+                let rule = tokio::task::spawn_blocking(move || read(&original))
+                    .await?
+                    .ok();
+                let mut cache = self
+                    .rules
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Book rule cache unavailable"))?;
+                if cache.len() >= 128 {
+                    cache.clear();
+                }
+                cache.insert(key, rule);
+                Ok(rule)
+            }
+            BeaverRule::Unknown => Ok(None),
+        }
     }
 }

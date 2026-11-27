@@ -11,9 +11,6 @@ use anyhow::{Context, Result, ensure};
 
 pub(crate) mod evaluation;
 
-// Serialize on-demand practice evaluations without holding a database lock.
-pub(crate) static EVALUATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
-
 pub(crate) fn checker_turn(position: &Position, steps: &[PlayStep]) -> Option<[i32; 26]> {
     if steps.len() > 4 || !matches!(position.player, 0 | 1) {
         return None;

@@ -5,7 +5,7 @@ use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, OnceLock},
+    sync::{Arc, Mutex},
     time::SystemTime,
 };
 use utoipa::ToSchema;
@@ -71,32 +71,9 @@ const LICENSE: &str = "Public domain; preserve and display each entry's rollout 
 const MAX_FILE: usize = 16 * 1024 * 1024;
 
 pub async fn status(path: &str) -> XgBookStatus {
-    let path = if path.is_empty() {
-        default_path()
-    } else {
-        path.to_owned()
-    };
-    let task_path = path.clone();
-    match tokio::task::spawn_blocking(move || load(&task_path).map(|book| book.status.clone()))
-        .await
-    {
-        Ok(Ok(status)) => status,
-        result => XgBookStatus {
-            available: false,
-            path,
-            book_version: None,
-            entries: 0,
-            notes: String::new(),
-            source_url: SOURCE_URL.into(),
-            license: LICENSE.into(),
-            error: Some(match result {
-                Ok(Err(error)) => format!("{error:#}"),
-                Err(error) => error.to_string(),
-                _ => unreachable!(),
-            }),
-        },
-    }
+    Cache::default().status(path).await
 }
+
 /// A reference for the board before this roll, never a ranked answer to its dice.
 /// Money lookups require the source's actual beaver rule; unknown is a miss.
 pub async fn lookup(
@@ -104,53 +81,107 @@ pub async fn lookup(
     position: &crate::model::Position,
     beaver: Option<bool>,
 ) -> Result<Option<XgPositionResult>> {
-    let position = position.clone();
-    let path = if path.is_empty() {
-        default_path()
-    } else {
-        path.into()
-    };
-    tokio::task::spawn_blocking(move || {
-        let (key, position_key) = Key::from_position(&position, beaver)?;
-        let book = load(&path)?;
-        Ok(book.result(&key, position_key))
-    })
-    .await
-    .context("XG opening book reader task failed")?
+    Cache::default().lookup(path, position, beaver).await
 }
 
 pub async fn install_from_path(destination: &str, source: &str) -> Result<XgBookStatus> {
-    let destination = destination.to_owned();
-    let source = source.to_owned();
-    tokio::task::spawn_blocking(move || {
-        use std::{fs, path::Path};
-        let source = Path::new(&source);
-        let destination = Path::new(&destination);
-        load(source.to_str().context("Invalid XG source path")?)?;
-        if fs::canonicalize(source).ok() == fs::canonicalize(destination).ok()
-            && destination.exists()
+    Cache::default()
+        .install_from_path(destination, source)
+        .await
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct Cache(Arc<Mutex<HashMap<String, Cached>>>);
+
+impl Cache {
+    pub(crate) async fn status(&self, path: &str) -> XgBookStatus {
+        let path = if path.is_empty() {
+            default_path()
+        } else {
+            path.to_owned()
+        };
+        let task_path = path.clone();
+        let cache = self.clone();
+        match tokio::task::spawn_blocking(move || {
+            cache.load(&task_path).map(|book| book.status.clone())
+        })
+        .await
         {
-            return Ok(
-                load(destination.to_str().context("Invalid XG destination")?)?
-                    .status
-                    .clone(),
-            );
+            Ok(Ok(status)) => status,
+            result => XgBookStatus {
+                available: false,
+                path,
+                book_version: None,
+                entries: 0,
+                notes: String::new(),
+                source_url: SOURCE_URL.into(),
+                license: LICENSE.into(),
+                error: Some(match result {
+                    Ok(Err(error)) => format!("{error:#}"),
+                    Err(error) => error.to_string(),
+                    _ => unreachable!(),
+                }),
+            },
         }
-        let parent = destination
-            .parent()
-            .context("Invalid XG destination directory")?;
-        crate::opening_book::install_validated_copy(source, destination, parent, |path| {
-            load(path.to_str().context("Invalid temporary XG path")?)?;
-            Ok(())
-        })?;
-        Ok(
-            load(destination.to_str().context("Invalid XG destination")?)?
+    }
+    pub(crate) async fn lookup(
+        &self,
+        path: &str,
+        position: &crate::model::Position,
+        beaver: Option<bool>,
+    ) -> Result<Option<XgPositionResult>> {
+        let position = position.clone();
+        let path = if path.is_empty() {
+            default_path()
+        } else {
+            path.into()
+        };
+        let cache = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let (key, position_key) = Key::from_position(&position, beaver)?;
+            let book = cache.load(&path)?;
+            Ok(book.result(&key, position_key))
+        })
+        .await
+        .context("XG opening book reader task failed")?
+    }
+
+    pub(crate) async fn install_from_path(
+        &self,
+        destination: &str,
+        source: &str,
+    ) -> Result<XgBookStatus> {
+        let destination = destination.to_owned();
+        let source = source.to_owned();
+        let cache = self.clone();
+        tokio::task::spawn_blocking(move || {
+            use std::{fs, path::Path};
+            let source = Path::new(&source);
+            let destination = Path::new(&destination);
+            cache.load(source.to_str().context("Invalid XG source path")?)?;
+            if fs::canonicalize(source).ok() == fs::canonicalize(destination).ok()
+                && destination.exists()
+            {
+                return Ok(cache
+                    .load(destination.to_str().context("Invalid XG destination")?)?
+                    .status
+                    .clone());
+            }
+            let parent = destination
+                .parent()
+                .context("Invalid XG destination directory")?;
+            crate::opening_book::install_validated_copy(source, destination, parent, |path| {
+                cache.load(path.to_str().context("Invalid temporary XG path")?)?;
+                Ok(())
+            })?;
+            Ok(cache
+                .load(destination.to_str().context("Invalid XG destination")?)?
                 .status
-                .clone(),
-        )
-    })
-    .await
-    .context("XG book installer task failed")?
+                .clone())
+        })
+        .await
+        .context("XG book installer task failed")?
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -450,44 +481,47 @@ struct Cached {
     modified: SystemTime,
     book: Arc<Book>,
 }
-static CACHE: OnceLock<Mutex<HashMap<String, Cached>>> = OnceLock::new();
-fn load(path: &str) -> Result<Arc<Book>> {
-    let metadata =
-        std::fs::metadata(path).with_context(|| format!("Cannot open XG book at {path}"))?;
-    ensure!(
-        metadata.is_file() && metadata.len() <= MAX_FILE as u64,
-        "XG book exceeds 16 MiB limit or is not a file"
-    );
-    let modified = metadata.modified()?;
-    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    {
-        let cache = cache
+
+impl Cache {
+    fn load(&self, path: &str) -> Result<Arc<Book>> {
+        let metadata =
+            std::fs::metadata(path).with_context(|| format!("Cannot open XG book at {path}"))?;
+        ensure!(
+            metadata.is_file() && metadata.len() <= MAX_FILE as u64,
+            "XG book exceeds 16 MiB limit or is not a file"
+        );
+        let modified = metadata.modified()?;
+        {
+            let cache = self
+                .0
+                .lock()
+                .map_err(|_| anyhow::anyhow!("XG book cache is unavailable"))?;
+            if let Some(cached) = cache.get(path)
+                && cached.length == metadata.len()
+                && cached.modified == modified
+            {
+                return Ok(cached.book.clone());
+            }
+        }
+        let bytes = std::fs::read(path)?;
+        let book = Arc::new(Book::parse(&bytes, path)?);
+        let mut cache = self
+            .0
             .lock()
             .map_err(|_| anyhow::anyhow!("XG book cache is unavailable"))?;
-        if let Some(cached) = cache.get(path)
-            && cached.length == metadata.len()
-            && cached.modified == modified
-        {
-            return Ok(cached.book.clone());
+        if cache.len() >= 4 {
+            cache.clear();
         }
+        cache.insert(
+            path.into(),
+            Cached {
+                length: metadata.len(),
+                modified,
+                book: book.clone(),
+            },
+        );
+        Ok(book)
     }
-    let bytes = std::fs::read(path)?;
-    let book = Arc::new(Book::parse(&bytes, path)?);
-    let mut cache = cache
-        .lock()
-        .map_err(|_| anyhow::anyhow!("XG book cache is unavailable"))?;
-    if cache.len() >= 4 {
-        cache.clear();
-    }
-    cache.insert(
-        path.into(),
-        Cached {
-            length: metadata.len(),
-            modified,
-            book: book.clone(),
-        },
-    );
-    Ok(book)
 }
 
 #[cfg(test)]

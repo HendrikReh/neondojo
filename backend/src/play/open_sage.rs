@@ -4,6 +4,7 @@ use super::{
     rules_process::RulesProcess,
 };
 use crate::{
+    api::AppState,
     engine::Engine,
     engines::{EngineCost, SageCheckerCandidate, SageDifficulty, SageEngine, VerifiedBatch},
 };
@@ -11,15 +12,9 @@ use anyhow::{Context, Result, ensure};
 use sha2::{Digest, Sha256};
 use std::{collections::HashMap, time::Duration};
 
-use tokio::sync::Semaphore;
-use tokio_util::sync::CancellationToken;
-
-// Session reads can arrive in bursts. Keep at most one speculative task
-// pending, including while an analysis or benchmark holds the engine gate.
-static WARMUP: Semaphore = Semaphore::const_new(1);
 const TURN_TIMEOUT: Duration = Duration::from_secs(180);
 
-pub(super) fn schedule_warmup(session: &PlaySession, shutdown: &CancellationToken) {
+pub(super) fn schedule_warmup(session: &PlaySession, state: &AppState) {
     if session.paused
         || session.money_session_ended
         || matches!(session.phase, PlayPhase::MatchOver)
@@ -33,11 +28,13 @@ pub(super) fn schedule_warmup(session: &PlaySession, shutdown: &CancellationToke
     else {
         return;
     };
-    let Ok(permit) = WARMUP.try_acquire() else {
+    // Session reads can arrive in bursts. Keep one speculative task pending
+    // even while an analysis or benchmark holds the engine gate.
+    let Ok(permit) = state.play_warmup.clone().try_acquire_owned() else {
         return;
     };
     let snapshot = snapshot.clone();
-    let shutdown = shutdown.clone();
+    let shutdown = state.shutdown.clone();
     tokio::spawn(async move {
         let _permit = permit;
         tokio::select! {
