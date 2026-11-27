@@ -13,7 +13,10 @@ import {
   readUiAppearance,
   saveUiAppearance,
 } from '../appearance/ui-appearance';
-import { readPlaySounds, savePlaySounds } from '../../shared/board/play-audio';
+import {
+  readPlaySounds,
+  savePlaySounds,
+} from '../../shared/board/play-sound-preferences';
 import { readVisibleColumns } from '../../workspaces/library/library-column-preferences';
 import { isCollectionScope } from '../../workspaces/study/flashcards/card-search-api';
 import { LIBRARY_RESIZABLE_LAYOUT as LIBRARY_COLUMN_LAYOUT } from '../../workspaces/library/library-columns';

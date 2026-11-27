@@ -348,9 +348,6 @@ export default function AnalysisWorkspace({
         className={`analysis-grid${boardResize.dragging ? ' analysis-resizing' : ''}`}
         ref={analysisGrid}
         style={gridStyle}
-        id="inspector-panel-overview"
-        role={overview ? 'tabpanel' : undefined}
-        aria-labelledby={overview ? 'inspector-tab-overview' : undefined}
       >
         <AnalysisMoveHistoryPane
           match={match}

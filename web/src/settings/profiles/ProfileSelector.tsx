@@ -1,6 +1,7 @@
 import ActionButton from '../../shared/ui/ActionButton';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { lazy, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
+import LazyPanel from '../../app/LazyPanel';
 import { useConfiguration } from '../configuration/ConfigurationProvider';
 import type { ConfigurationProfile } from '../configuration/configuration-api';
 import { useConfigurationErrors } from './configuration-error-messages';
@@ -10,8 +11,9 @@ import Tooltip from '../../shared/ui/Tooltip';
 import ActionIcon from '../../shared/ui/action-icons';
 import { useDetailsDismiss } from '../../shared/hooks/useDetailsDismiss';
 import ProfileActionDialog from './ProfileActionDialog';
-import ProfileChangesDialog from './ProfileChangesDialog';
 import './profiles.css';
+
+const ProfileChangesDialog = lazy(() => import('./ProfileChangesDialog'));
 
 export default function ProfileSelector({
   onManage,
@@ -247,7 +249,9 @@ export default function ProfileSelector({
         config.activeProfile &&
         config.current &&
         createPortal(
-          <ProfileChangesDialog onClose={closeChanges} />,
+          <LazyPanel quiet>
+            <ProfileChangesDialog onClose={closeChanges} />
+          </LazyPanel>,
           document.body,
         )}
       {pending && (

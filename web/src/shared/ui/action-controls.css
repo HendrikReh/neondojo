@@ -38,7 +38,11 @@ a.action-button--compact {
    their solid .danger buttons more specifically. */
 .action-button.danger:not(:disabled) {
   color: var(--ui-danger-text);
-  border-color: color-mix(in srgb, var(--ui-danger-text) 45%, var(--ui-border));
+  border-color: color-mix(
+    in srgb,
+    var(--ui-danger-text) 45%,
+    var(--ui-control-border)
+  );
 }
 .action-button.danger:hover:not(:disabled) {
   background: var(--ui-danger-bg);

@@ -34,7 +34,7 @@
   min-height: 95px;
   resize: vertical;
   padding: 10px;
-  border: 1px solid var(--ui-border);
+  border: 1px solid var(--ui-control-border);
   border-radius: 6px;
   font: inherit;
 }

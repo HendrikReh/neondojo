@@ -106,82 +106,92 @@ export default function AnalysisInspectorPane({
   return (
     <aside className="position-inspector">
       <div
+        id="inspector-panel-overview"
         className="overview-evaluation"
-        role="region"
-        aria-label={w('evaluation')}
-        hidden={!overview || !!cubeBoard}
+        role="tabpanel"
+        aria-labelledby="inspector-tab-overview"
+        hidden={!overview}
       >
-        {reviewingCheckers && (
-          <div className="checker-statistics-review">
-            <div>
-              <MatchDecisionFilters
-                review={matchReview}
-                match={match}
-                games={games}
-                gameNo={gameNo}
+        <div role="region" aria-label={w('evaluation')} hidden={!!cubeBoard}>
+          {reviewingCheckers && (
+            <div className="checker-statistics-review">
+              <div>
+                <MatchDecisionFilters
+                  review={matchReview}
+                  match={match}
+                  games={games}
+                  gameNo={gameNo}
+                />
+              </div>
+              <ActionButton
+                type="button"
+                icon="clear"
+                label={statistics('closeCheckerReview')}
+                onClick={onCloseCheckerReview}
               />
+              {checkerReview && (
+                <BoardDecisionComparison
+                  played={checkerReview.played}
+                  best={checkerReview.best}
+                  context={[
+                    checkerReview.evaluation_status === 'evaluated'
+                      ? t(severityLabels[checkerReview.severity])
+                      : undefined,
+                    sourceText(
+                      checkerReview.source === 'imported'
+                        ? 'imported'
+                        : 'engine',
+                    ),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                  loss={
+                    checkerReview.evaluation_status === 'evaluated'
+                      ? checkerReview.equity_loss
+                      : null
+                  }
+                  source={[checkerReview.engine, checkerReview.depth]
+                    .filter(Boolean)
+                    .join(' · ')}
+                />
+              )}
             </div>
-            <ActionButton
-              type="button"
-              icon="clear"
-              label={statistics('closeCheckerReview')}
-              onClick={onCloseCheckerReview}
-            />
-            {checkerReview && (
-              <BoardDecisionComparison
-                played={checkerReview.played}
-                best={checkerReview.best}
-                context={[
-                  checkerReview.evaluation_status === 'evaluated'
-                    ? t(severityLabels[checkerReview.severity])
-                    : undefined,
-                  sourceText(
-                    checkerReview.source === 'imported' ? 'imported' : 'engine',
-                  ),
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-                loss={
-                  checkerReview.evaluation_status === 'evaluated'
-                    ? checkerReview.equity_loss
-                    : null
-                }
-                source={[checkerReview.engine, checkerReview.depth]
-                  .filter(Boolean)
-                  .join(' · ')}
-              />
-            )}
-          </div>
+          )}
+          {!!jobs.error && (
+            <p className="error" role="alert">
+              {formatError(jobs.error)}
+            </p>
+          )}
+          <AnalysisPanel
+            positionJobs={jobs}
+            calculation={calculation}
+            catalog={catalog}
+            active={calculationActive}
+            resultsVisible={active && overview && !cubeBoard && !loading}
+            observedMatchId={
+              sourceAvailable && gameLoaded ? match.id : undefined
+            }
+            gameNo={gameNo}
+            defaultPlies={defaultPlies}
+            positionId={position?.id}
+            position={position ?? undefined}
+            players={match}
+            playerName={
+              position
+                ? position.player === 0
+                  ? match.white
+                  : match.black
+                : undefined
+            }
+            openingBookRevision={openingBookRevision}
+            analysisRevision={catalogRevision}
+            onPreview={onPreview}
+            selectedPreview={selectedPreview}
+          />
+        </div>
+        {cube && cubeBoard && (
+          <CubeReviewEvaluation decision={cube} players={match} />
         )}
-        {!!jobs.error && (
-          <p className="error" role="alert">
-            {formatError(jobs.error)}
-          </p>
-        )}
-        <AnalysisPanel
-          positionJobs={jobs}
-          calculation={calculation}
-          catalog={catalog}
-          active={calculationActive}
-          resultsVisible={active && overview && !cubeBoard && !loading}
-          observedMatchId={sourceAvailable && gameLoaded ? match.id : undefined}
-          gameNo={gameNo}
-          defaultPlies={defaultPlies}
-          positionId={position?.id}
-          position={position ?? undefined}
-          players={match}
-          playerName={
-            position
-              ? position.player === 0
-                ? match.white
-                : match.black
-              : undefined
-          }
-          openingBookRevision={openingBookRevision}
-          analysisRevision={catalogRevision}
-          onPreview={onPreview}
-          selectedPreview={selectedPreview}
-        />
       </div>
       {sourceAvailable && (
         <div
@@ -200,7 +210,7 @@ export default function AnalysisInspectorPane({
           />
         </div>
       )}
-      {cube && cubeBoard && (
+      {!overview && cube && cubeBoard && (
         <div className="overview-evaluation">
           <CubeReviewEvaluation decision={cube} players={match} />
         </div>

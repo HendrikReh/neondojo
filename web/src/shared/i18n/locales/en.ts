@@ -243,6 +243,8 @@ export default {
     'app.help': 'Help',
     'app.neondojoManual': 'NeonDojo manual',
     'app.neongammonManual': 'NeonGammon manual',
+    'app.opensInNewTab': 'Opens in a new tab',
+    'app.skipToMain': 'Skip to main content',
     'app.home': 'NeonDojo home',
     'app.importPlain': 'Import match',
     'app.dropZoneTitle': 'Drop match files or a folder here',

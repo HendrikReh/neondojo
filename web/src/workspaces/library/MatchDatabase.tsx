@@ -161,6 +161,9 @@ export default function MatchDatabase({
   }, [requestedPositionSearch]);
 
   const error = query.error || query.databaseError;
+  // Before MountHidden enables the first fetch, treat an unloaded page as
+  // pending so the toolbar does not flash "0 Matches" or an empty state.
+  const loading = query.loading || (!query.result && !query.error);
   function changeDatabase(id: string) {
     onDatabase(id);
     selectionState.clearSelection();
@@ -221,7 +224,7 @@ export default function MatchDatabase({
           <LibrarySearchPanels
             searchId={searchId}
             visible={visible}
-            loading={query.loading}
+            loading={loading}
             databaseId={databaseId}
             databases={query.databases}
             annotationRevision={annotationRevision}
@@ -256,7 +259,7 @@ export default function MatchDatabase({
             </p>
           )}
           <LibraryToolbar
-            loading={query.loading}
+            loading={loading}
             total={query.total}
             hasPositionFilter={Boolean(query.filters.position_id)}
             activeDatabase={active}
@@ -304,7 +307,7 @@ export default function MatchDatabase({
                 sort={query.sort}
                 direction={query.direction}
                 onSort={query.sortBy}
-                loading={query.loading}
+                loading={loading}
                 selected={selectionState.selected}
                 onSelect={selectionState.changeSelection}
                 selectionHintId={selectionHintId}
@@ -313,7 +316,7 @@ export default function MatchDatabase({
                 openingDisabled={rowOpeningDisabled}
                 onOpen={openMatchRow}
               />
-              {!query.items.length && !query.loading && !query.error && (
+              {!query.items.length && !loading && !query.error && (
                 <div className="library-empty">
                   <p role="status">{l('noMatches')}</p>
                   {query.hasFilters && (
@@ -343,7 +346,7 @@ export default function MatchDatabase({
               <SearchPagination
                 page={query.page}
                 lastPage={query.lastPage}
-                busy={query.loading}
+                busy={loading}
                 onPageChange={query.setPage}
               />
               <p className="fineprint">{l('prHelp')}</p>

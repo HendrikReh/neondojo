@@ -286,7 +286,7 @@
 .settings-save {
   background: var(--ui-accent);
   color: var(--ui-accent-text);
-  border-color: var(--ui-border);
+  border-color: var(--ui-accent);
 }
 .settings-save:hover:not(:disabled) {
   background: var(--ui-accent-hover);

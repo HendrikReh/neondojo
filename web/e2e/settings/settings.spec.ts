@@ -1100,3 +1100,73 @@ backendTest(
     ).toBe(true);
   },
 );
+
+test('discarding a settings draft resets error thresholds and every other draft field, and profile list uses listitem roles', async ({
+  page,
+}) => {
+  const backend = await settingsBackend(page);
+  await page.goto('/');
+  const { dialog } = await openSettings(page);
+
+  const playerName = dialog.getByLabel('Player name', { exact: true });
+  const initialPlayerName = await playerName.inputValue();
+  const language = dialog.getByLabel('Language', { exact: true });
+  const initialLanguage = await language.inputValue();
+
+  await playerName.fill('Unsaved Player');
+  await language.selectOption('de');
+
+  await dialog.getByRole('button', { name: 'Analysis', exact: true }).click();
+  const questionable = dialog.getByLabel('Questionable', { exact: true });
+  const blunder = dialog.getByLabel('Blunder', { exact: true });
+  const initialQuestionable = await questionable.inputValue();
+  const initialBlunder = await blunder.inputValue();
+  await questionable.fill('0.031');
+  await blunder.fill('0.125');
+
+  const applyButton = dialog.getByRole('button', {
+    name: 'Apply',
+    exact: true,
+  });
+  await expect(applyButton).toBeEnabled();
+
+  await dialog
+    .getByRole('button', { name: 'Manage opening books', exact: true })
+    .click();
+  const guard = page.getByRole('dialog', { name: 'Unapplied settings' });
+  await expect(guard).toBeVisible();
+  await guard
+    .getByRole('button', { name: 'Discard draft', exact: true })
+    .click();
+
+  const bookDialog = page.getByRole('dialog', { name: 'Opening books' });
+  await expect(bookDialog).toBeVisible();
+  await bookDialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(bookDialog).toBeHidden();
+
+  await expect(questionable).toHaveValue(initialQuestionable);
+  await expect(blunder).toHaveValue(initialBlunder);
+  await expect(applyButton).toBeHidden();
+
+  await dialog.getByRole('button', { name: 'General', exact: true }).click();
+  await expect(playerName).toHaveValue(initialPlayerName);
+  await expect(language).toHaveValue(initialLanguage);
+
+  // Profiles list wraps every item in role="listitem".
+  await dialog.getByRole('button', { name: 'Profiles', exact: true }).click();
+  const profileList = dialog.getByRole('list', {
+    name: 'Profiles',
+    exact: true,
+  });
+  await expect(profileList).toBeVisible();
+  await expect(profileList.locator(':scope > button')).toHaveCount(0);
+  await expect(
+    profileList.locator(':scope > [role="listitem"] > button'),
+  ).toHaveCount(1);
+
+  // Closing Settings now succeeds immediately without re-opening the draft guard.
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await expect(guard).toBeHidden();
+  expect(backend.writes).toHaveLength(0);
+});

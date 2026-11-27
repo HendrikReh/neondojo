@@ -247,7 +247,7 @@
   min-width: 0;
   box-sizing: border-box;
   width: 100%;
-  border: 1px solid var(--ui-border);
+  border: 1px solid var(--ui-control-border);
   border-radius: 6px;
   background: var(--ui-surface);
   color: var(--ui-text);
@@ -326,7 +326,7 @@
 .library-column-picker summary {
   cursor: pointer;
   padding: 4px 8px;
-  border: 1px solid var(--ui-border);
+  border: 1px solid var(--ui-control-border);
   border-radius: 5px;
   font-size: var(--font-size-table);
   background: var(--ui-surface);
