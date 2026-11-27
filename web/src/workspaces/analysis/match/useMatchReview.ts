@@ -1,41 +1,29 @@
 import configurationOptions from '../../../../../shared/configuration-options.json' with { type: 'json' };
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  sessionFields,
-  useWorkspaceSession,
-} from '../../../shared/hooks/useWorkspaceSession';
 import { useEpoch, useLatest } from '../../../shared/hooks/useLatest';
 import { useSearchPages } from '../../../shared/hooks/useSearchPages';
-import { request, type Match } from '../../../shared/http/api';
+import type { Match } from '../../../shared/http/api';
 import { useConfirmedConfiguration } from '../../../settings/configuration/ConfigurationProvider';
 import {
   canOpenReviewDecision,
   findReviewNeighbor,
   reviewDecisions,
-  reviewEmptyReason,
   type ReviewDecision,
-  type ReviewEmptyReason,
   type ReviewListEntry,
   type ReviewNavigationOrigin,
 } from '../review-decisions-api';
-import {
-  analysisStatisticsPath,
-  type MatchAnalysisStatistics,
-} from '../analysis-catalog-api';
 import type { AnalysisCatalog } from '../useAnalysisCatalog';
 import {
-  buildStatisticsFilter,
   decisionFilterQuery,
   type DecisionKind,
-  type MatchDecisionFilter,
-  type StatisticsAction,
 } from './match-statistics-api';
+import { useMatchStatistics } from './useMatchStatistics';
+import { useMatchReviewFilters } from './useMatchReviewFilters';
+import {
+  useCubeAutoSelection,
+  useEmptyReviewReason,
+} from './useCubeReviewSelection';
 
-const defaultFilter = {
-  player: '',
-  severity: '',
-  errors_only: true,
-};
 const reviewPageSize = 50;
 
 /** The board the review steps through; undefined while it is not steppable. */
@@ -93,68 +81,25 @@ export function useMatchReview({
     match && catalog.selected?.job?.kind === 'match'
       ? catalog.selected.job
       : undefined;
-  const errorsToggle = useRef<HTMLInputElement>(null);
-  const resetButton = useRef<HTMLButtonElement>(null);
   const filterScope = `${visit}:${analysisId ?? ''}:${scoped ? (gameNo ?? 'none') : 'match'}`;
-  const [cubeFilters, setCubeFilters] = useWorkspaceSession(
-    'analysis.cubeReview',
-    undefined,
-    defaultFilter,
-    (value) => sessionFields(value, defaultFilter),
-  );
-  const [checkerReview, setCheckerReview] = useState({
+
+  const filters = useMatchReviewFilters({
     visit,
-    filter: defaultFilter,
+    filterScope,
+    reviewKind,
+    scoped,
+    gameNo,
+    onShowReview,
+    onGame,
   });
-  const checkerFilters =
-    checkerReview.visit === visit ? checkerReview.filter : defaultFilter;
-  const [selectedGames, setSelectedGames] = useState<
-    Partial<Record<DecisionKind, { scope: string; game?: number }>>
-  >({});
-  const selectedGame = selectedGames[reviewKind];
-  const selected: MatchDecisionFilter = {
-    ...(reviewKind === 'cube' ? cubeFilters : checkerFilters),
-    kind: reviewKind,
-    // A single-game job always has this scope, including after reset or a
-    // metric action. Keep the visible selection and request explicit.
-    game_no: scoped
-      ? gameNo
-      : selectedGame?.scope === filterScope
-        ? selectedGame.game
-        : undefined,
-  };
+  const { selected } = filters;
   const {
     player,
     severity,
     game_no: filteredGame,
     errors_only: errorsOnly,
   } = selected;
-  function setSelection(
-    kind: DecisionKind,
-    filter: Omit<MatchDecisionFilter, 'kind'>,
-  ) {
-    setSelectedGames((games) => ({
-      ...games,
-      [kind]: { scope: filterScope, game: filter.game_no },
-    }));
-    const saved = {
-      player: filter.player,
-      severity: filter.severity ?? '',
-      errors_only: filter.errors_only,
-    };
-    if (kind === 'cube') setCubeFilters(saved);
-    else setCheckerReview({ visit, filter: saved });
-  }
-  const updateFilter = (patch: Partial<Omit<MatchDecisionFilter, 'kind'>>) =>
-    setSelection(reviewKind, { ...selected, ...patch });
-  function selectMetric(action: StatisticsAction) {
-    const filter = buildStatisticsFilter(action);
-    const kind = filter.kind === 'cube' ? 'cube' : 'checker';
-    setSelection(kind, filter);
-    if (action.gameNo !== undefined && action.gameNo !== gameNo)
-      onGame(action.gameNo);
-    onShowReview(kind);
-  }
+
   const thresholds =
     confirmed?.analysis.error_thresholds ??
     configurationOptions.analysis_error_thresholds;
@@ -169,43 +114,8 @@ export function useMatchReview({
         thresholdKey,
       ])
     : '';
+  const stats = useMatchStatistics(matchId, analysisId, statisticsKey);
 
-  const [statisticsResult, setStatisticsResult] = useState<{
-    key: string;
-    value: MatchAnalysisStatistics;
-  }>();
-  const [statisticsError, setStatisticsError] = useState<{
-    key: string;
-    error: unknown;
-  }>();
-  const [statisticsLoaded, setStatisticsLoaded] = useState<string>();
-  const statistics =
-    statisticsResult?.key === statisticsKey
-      ? statisticsResult.value
-      : undefined;
-  useEffect(() => {
-    if (!matchId || !analysisId) return;
-    const abort = new AbortController();
-    void request<MatchAnalysisStatistics>(
-      analysisStatisticsPath(matchId, analysisId),
-      {
-        signal: abort.signal,
-      },
-    )
-      .then((value) => {
-        if (abort.signal.aborted || value.analysis_id !== analysisId) return;
-        setStatisticsResult({ key: statisticsKey, value });
-        setStatisticsError(undefined);
-      })
-      .catch((error) => {
-        if (!abort.signal.aborted)
-          setStatisticsError({ key: statisticsKey, error });
-      })
-      .finally(() => {
-        if (!abort.signal.aborted) setStatisticsLoaded(statisticsKey);
-      });
-    return () => abort.abort();
-  }, [matchId, analysisId, statisticsKey]);
   const filter = decisionFilterQuery(selected);
   const scopeGame = scoped ? gameNo : undefined;
   // Checker steps through its errors on the board without the review filters.
@@ -224,6 +134,7 @@ export function useMatchReview({
   const loadDecisionPage = useCallback(
     (signal: AbortSignal, page: number) =>
       reviewDecisions(matchId!, selected, { analysisId, page, signal }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [matchId, analysisId, filter],
   );
   const decisions = useSearchPages({
@@ -234,6 +145,7 @@ export function useMatchReview({
     loadPage: loadDecisionPage,
   });
   const { items: rows, loading, error: pageError } = decisions;
+
   const reviewIdentity = (intent?: number, cubeId?: string) =>
     JSON.stringify([reviewScope, reviewRevision, intent, cubeId]);
   const cubeId =
@@ -340,55 +252,23 @@ export function useMatchReview({
     }
     return true;
   }
-  // Opening Cube without a reviewed decision shows the first matching one
-  // from the board position on, as Next error would. An existing selection
-  // is kept, and this happens once per visit, so returning to the checker
-  // move stays put.
-  const cubeReview = showResults && reviewKind === 'cube' && !!boardReview;
-  const awaitingCubeSelection = useRef(false);
-  useEffect(() => {
-    awaitingCubeSelection.current = cubeReview;
-  }, [cubeReview, visit]);
-  useEffect(() => {
-    if (!awaitingCubeSelection.current || !cubeReview) return;
-    if (cubeId) {
-      awaitingCubeSelection.current = false;
-      return;
-    }
-    // An empty page keeps waiting: the decisions of a just-finished analysis
-    // arrive with a later revision, and the first page can precede it.
-    if (
-      !showDecisions ||
-      loading ||
-      pageError ||
-      boardReview?.busy ||
-      currentJump?.busy ||
-      !decisions.result ||
-      decisions.total === 0
-    )
-      return;
-    awaitingCubeSelection.current = false;
-    const { intent, currentIntent } = boardReview;
-    void navigateReview('next').then((finished) => {
-      // A revision that arrives during the search, such as the first loaded
-      // configuration, ends it. Unless the board moved, land on the decisions
-      // of that revision instead.
-      if (!finished && currentIntent() === intent)
-        awaitingCubeSelection.current = true;
-    });
-    // The loaded page and the selection decide; the callbacks are current.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    cubeReview,
+
+  useCubeAutoSelection({
+    active: showResults && reviewKind === 'cube' && !!boardReview,
+    visit,
     cubeId,
-    showDecisions,
-    loading,
-    pageError,
-    boardReview?.busy,
-    currentJump?.busy,
-    decisions.result,
-    decisions.total,
-  ]);
+    ready:
+      showDecisions &&
+      !loading &&
+      !pageError &&
+      !boardReview?.busy &&
+      !currentJump?.busy &&
+      Boolean(decisions.result) &&
+      decisions.total > 0,
+    boardReview,
+    navigateNext: () => navigateReview('next'),
+  });
+
   const narrowed = !!(player || severity || filteredGame !== scopeGame);
   const emptyPage =
     showDecisions &&
@@ -398,72 +278,29 @@ export function useMatchReview({
     decisions.total === 0
       ? decisions.result
       : undefined;
-  const [emptyReview, setEmptyReview] = useState<{
-    key: string;
-    reason?: ReviewEmptyReason;
-    error?: unknown;
-  }>();
-  const emptyKey = emptyPage?.key;
-  const emptyState = emptyReview?.key === emptyKey ? emptyReview : undefined;
-  useEffect(() => {
-    if (!matchId || !emptyKey) return;
-    const abort = new AbortController();
-    void reviewEmptyReason(
-      matchId,
-      { game_no: scopeGame, errors_only: errorsOnly, kind: reviewKind },
-      { analysisId, narrowed, signal: abort.signal },
-    ).then(
-      (reason) => {
-        if (!abort.signal.aborted) setEmptyReview({ key: emptyKey, reason });
-      },
-      (error) => {
-        if (!abort.signal.aborted) setEmptyReview({ key: emptyKey, error });
-      },
-    );
-    return () => abort.abort();
-  }, [
-    emptyKey,
+  const empty = useEmptyReviewReason({
     matchId,
     analysisId,
+    emptyKey: emptyPage?.key,
     scopeGame,
     errorsOnly,
     reviewKind,
     narrowed,
     thresholdKey,
-  ]);
+  });
 
   return {
     scoped,
     analysisId,
     job,
-    selected,
     thresholds,
-    updateFilter,
-    resetFilters: () => setSelection(reviewKind, defaultFilter),
-    removeSelectionFilters: () => {
-      setSelection(reviewKind, { ...defaultFilter, errors_only: errorsOnly });
-      resetButton.current?.focus();
-    },
-    showAllDecisions: () => {
-      updateFilter({ errors_only: false });
-      errorsToggle.current?.focus();
-    },
-    errorsToggle,
-    resetButton,
-    selectMetric,
     onGame,
-    statistics,
-    statisticsLoading: !!analysisId && statisticsLoaded !== statisticsKey,
-    statisticsError:
-      statisticsError?.key === statisticsKey
-        ? statisticsError.error
-        : undefined,
+    ...filters,
+    ...stats,
     loading,
     pageError,
     retry: decisions.retry,
-    emptyReason: emptyState?.reason,
-    emptyError: emptyState?.error,
-    emptyPending: !!emptyPage && !emptyState,
+    ...empty,
     navigation: boardReview &&
       (!directCheckerReview || (!pageError && decisions.total > 0)) && {
         kind: reviewKind,

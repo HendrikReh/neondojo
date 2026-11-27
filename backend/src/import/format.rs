@@ -88,7 +88,7 @@ impl MatchFormat {
         gnubg: impl Future<Output = Result<Engine>>,
     ) -> Result<Result<ConvertedMatch>> {
         let read: Read<ConvertedMatch> = match self {
-            Self::Mat => return Ok(gnubg.await?.import_mat(bytes.as_ref()).await),
+            Self::Mat => return Ok(super::mat::import_mat(&gnubg.await?, bytes.as_ref()).await),
             Self::Sgf => |bytes| {
                 let sgf = std::str::from_utf8(bytes).context("SGF must be UTF-8")?;
                 Ok(sgf.to_owned().into())

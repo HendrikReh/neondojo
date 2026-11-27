@@ -1,11 +1,6 @@
 import { useWorkspaceSession } from '../../shared/hooks/useWorkspaceSession';
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ComponentProps,
-  type KeyboardEvent,
-} from 'react';
+import { TabList, useRovingTabs } from '../../shared/ui/TabList';
+import { useEffect, useState, type ComponentProps } from 'react';
 import LearningWorkspace from './flashcards/LearningPanel';
 import StudyOverview from './StudyOverview';
 import StudyReports from './reports/StudyReports';
@@ -49,7 +44,11 @@ export default function StudyWorkspace({
   );
   // The player the overview shows, offered to the list when it has none.
   const [overviewPlayer, setOverviewPlayer] = useState<string>();
-  const tabs = useRef<Partial<Record<Area, HTMLButtonElement | null>>>({});
+  const roving = useRovingTabs<Area>({
+    items: areas,
+    active: area,
+    onSelect: setArea,
+  });
   const token = props.requestedDeck?.token;
   useEffect(() => {
     if (token !== undefined) setArea('cards');
@@ -59,55 +58,30 @@ export default function StudyWorkspace({
   }, [requestedAssessment]);
   function openArea(next: Area) {
     setArea(next);
-    tabs.current[next]?.focus();
-  }
-  function navigate(event: KeyboardEvent<HTMLButtonElement>, current: Area) {
-    let next: Area;
-    if (event.key === 'Home') next = areas[0];
-    else if (event.key === 'End') next = areas[areas.length - 1];
-    else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight')
-      next =
-        areas[
-          (areas.indexOf(current) +
-            (event.key === 'ArrowRight' ? 1 : -1) +
-            areas.length) %
-            areas.length
-        ];
-    else return;
-    event.preventDefault();
-    openArea(next);
+    roving.focusTab(next);
   }
   const visible = props.visible ?? true;
   return (
     <div className="study-workspace">
-      <nav
+      <TabList
+        as="nav"
         className="study-tabs text-navigation"
-        role="tablist"
-        aria-label={t('navigation')}
-      >
-        {areas.map((item) => (
-          <button
-            key={item}
-            type="button"
-            role="tab"
-            id={`study-tab-${item}`}
-            aria-controls={`study-panel-${item}`}
-            aria-selected={area === item}
-            tabIndex={area === item ? 0 : -1}
-            ref={(el) => {
-              tabs.current[item] = el;
-            }}
-            onClick={() => setArea(item)}
-            onKeyDown={(event) => navigate(event, item)}
-          >
-            {item === 'overview'
+        ariaLabel={t('navigation')}
+        active={area}
+        onSelect={setArea}
+        roving={roving}
+        tabs={areas.map((item) => ({
+          value: item,
+          id: `study-tab-${item}`,
+          controls: `study-panel-${item}`,
+          label:
+            item === 'overview'
               ? overviewText('tab')
               : item === 'practice'
                 ? p('practiceHistory')
-                : t(item)}
-          </button>
-        ))}
-      </nav>
+                : t(item),
+        }))}
+      />
       <div
         role="tabpanel"
         id="study-panel-overview"

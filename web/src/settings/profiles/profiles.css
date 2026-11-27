@@ -182,21 +182,6 @@
   position-try-fallbacks: flip-block, flip-inline;
   margin: 4px 0 0;
   max-width: min(16rem, 90vw);
-  padding: 6px;
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  background: var(--ui-surface);
-  color: var(--ui-text);
-  box-shadow: 0 8px 24px var(--ui-shadow);
-}
-.profile-settings-menu:popover-open {
-  display: grid;
-  gap: 4px;
-}
-.profile-settings-menu .action-button {
-  justify-content: flex-start;
-  border-color: transparent;
-  background: transparent;
 }
 .profile-settings-menu .profile-help {
   margin: 4px 8px;

@@ -1,15 +1,9 @@
-import {
-  useCallback,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from 'react';
+import { useLayoutEffect, useState, type RefObject } from 'react';
 import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
 import { useWorkspaceDefaults } from '../../settings/configuration/ConfigurationProvider';
 import { useWorkspaceLayout } from '../../shared/hooks/useWorkspaceSession';
+import { usePaneSplitter } from '../../shared/hooks/usePaneSplitter';
 import { useBoardReviewText } from '../../shared/board/board-review-messages';
-import Tooltip from '../../shared/ui/Tooltip';
 
 const limits = configurationOptions.analysis_board_width;
 const desktopDefaultWidth = 420;
@@ -35,30 +29,6 @@ const defaultWidths: BoardWidths = {
   analysis_notes_board_width: null,
 };
 
-type Drag = {
-  pointer: number;
-  target: HTMLElement;
-  startX: number;
-  startWidth: number;
-  width: number;
-  frame?: number;
-};
-
-// A drag writes the width straight to the grid's CSS variable and the
-// separator's value once per frame. React state changes only when the drag
-// starts and ends, so pointer moves do not re-render the analysis workspace.
-function showWidth(grid: HTMLElement | null, drag: Drag, width: number) {
-  grid?.style.setProperty('--analysis-board-width', `${width}px`);
-  drag.target.setAttribute('aria-valuenow', String(width));
-}
-
-function stopDrag(grid: HTMLElement | null, drag: Drag, width: number) {
-  if (drag.frame !== undefined) cancelAnimationFrame(drag.frame);
-  showWidth(grid, drag, width);
-  if (drag.target.hasPointerCapture(drag.pointer))
-    drag.target.releasePointerCapture(drag.pointer);
-}
-
 export function useAnalysisBoardResize(
   gridRef: RefObject<HTMLDivElement | null>,
   active: boolean,
@@ -71,19 +41,24 @@ export function useAnalysisBoardResize(
     'analysis.boardWidths',
     legacy && {
       analysis_board_width: legacy.appearance.analysis_board_width,
-      analysis_overview_board_width: legacy.appearance.analysis_overview_board_width,
-      analysis_errors_board_width: legacy.appearance.analysis_errors_board_width,
-      analysis_statistics_board_width: legacy.appearance.analysis_statistics_board_width,
+      analysis_overview_board_width:
+        legacy.appearance.analysis_overview_board_width,
+      analysis_errors_board_width:
+        legacy.appearance.analysis_errors_board_width,
+      analysis_statistics_board_width:
+        legacy.appearance.analysis_statistics_board_width,
       analysis_notes_board_width: legacy.appearance.analysis_notes_board_width,
     },
     defaultWidths,
     (value) => {
-      if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+      if (typeof value !== 'object' || value === null || Array.isArray(value))
+        return undefined;
       const widths = value as Partial<BoardWidths>;
       const result = { ...defaultWidths };
       for (const key of Object.values(boardWidthFields)) {
         const width = widths[key];
-        if (typeof width === 'number' && Number.isFinite(width)) result[key] = clamp(width, limits.max);
+        if (typeof width === 'number' && Number.isFinite(width))
+          result[key] = clamp(width, limits.max);
       }
       return result;
     },
@@ -99,19 +74,7 @@ export function useAnalysisBoardResize(
     max: limits.max,
     defaultWidth: desktopDefaultWidth,
   });
-  const [dragging, setDragging] = useState(false);
-  const drag = useRef<Drag | undefined>(undefined);
   const width = clamp(preferred ?? geometry.defaultWidth, geometry.max);
-  const cancel = useCallback(() => {
-    const previous = drag.current;
-    drag.current = undefined;
-    setDragging(false);
-    if (previous) stopDrag(gridRef.current, previous, previous.startWidth);
-  }, [gridRef]);
-
-  useLayoutEffect(() => {
-    cancel();
-  }, [active, layout, preferred, cancel]);
 
   useLayoutEffect(() => {
     const grid = gridRef.current;
@@ -126,7 +89,10 @@ export function useAnalysisBoardResize(
         3 * gap -
         8 -
         400;
-      const max = Math.max(limits.min, Math.floor(Math.min(available, limits.max)));
+      const max = Math.max(
+        limits.min,
+        Math.floor(Math.min(available, limits.max)),
+      );
       const viewportWidth = window.innerWidth;
       // The footer and the page body's bottom padding sit below the grid, so
       // the grid ends where they still fit in the window.
@@ -168,7 +134,9 @@ export function useAnalysisBoardResize(
     const shell = grid.closest('.app-shell');
     const header = shell?.querySelector('.app-header');
     if (header) observer.observe(header);
-    const footer = grid.closest('.app-body')?.querySelector(':scope > .app-footer');
+    const footer = grid
+      .closest('.app-body')
+      ?.querySelector(':scope > .app-footer');
     if (footer) observer.observe(footer);
     if (shell) observer.observe(shell);
     window.addEventListener('resize', measure);
@@ -178,108 +146,24 @@ export function useAnalysisBoardResize(
     };
   }, [gridRef, active, layout]);
 
-  useLayoutEffect(
-    () => () => {
-      const previous = drag.current;
-      drag.current = undefined;
-      if (previous?.frame !== undefined) cancelAnimationFrame(previous.frame);
-      if (previous?.target.hasPointerCapture(previous.pointer))
-        previous.target.releasePointerCapture(previous.pointer);
-    },
-    [],
-  );
+  const { dragging, handle } = usePaneSplitter({
+    containerRef: gridRef,
+    cssVar: '--analysis-board-width',
+    width,
+    min: limits.min,
+    max: geometry.max,
+    direction: 'right',
+    active,
+    resetKey: `${layout}:${preferred ?? ''}`,
+    onCommit: (nextWidth) => setPreferred(nextWidth),
+    onReset: () => setPreferred(null),
+    ariaLabel: text('resizeBoard'),
+    ariaControls: 'analysis-board-panel',
+    helpText: text('resizeBoardHelp'),
+    className: 'analysis-board-resizer',
+    hidden: !active,
+  });
 
-  const handle = (
-    <Tooltip
-      as="span"
-      role="separator"
-      tabIndex={0}
-      aria-label={text('resizeBoard')}
-      aria-orientation="vertical"
-      aria-controls="analysis-board-panel"
-      aria-valuemin={limits.min}
-      aria-valuemax={geometry.max}
-      aria-valuenow={width}
-      text={text('resizeBoardHelp')}
-      className="analysis-board-resizer"
-      hidden={!active}
-      onPointerDown={(event) => {
-        if (event.button !== 0 || !event.isPrimary || drag.current) return;
-        event.preventDefault();
-        event.stopPropagation();
-        event.currentTarget.focus();
-        event.currentTarget.setPointerCapture(event.pointerId);
-        drag.current = {
-          pointer: event.pointerId,
-          target: event.currentTarget,
-          startX: event.clientX,
-          startWidth: width,
-          width,
-        };
-        setDragging(true);
-      }}
-      onPointerMove={(event) => {
-        const current = drag.current;
-        if (!current || current.pointer !== event.pointerId) return;
-        current.width = clamp(
-          current.startWidth + event.clientX - current.startX,
-          geometry.max,
-        );
-        current.frame ??= requestAnimationFrame(() => {
-          current.frame = undefined;
-          if (drag.current === current)
-            showWidth(gridRef.current, current, current.width);
-        });
-      }}
-      onPointerUp={(event) => {
-        const current = drag.current;
-        if (!current || current.pointer !== event.pointerId) return;
-        drag.current = undefined;
-        stopDrag(gridRef.current, current, current.width);
-        setDragging(false);
-        if (current.width !== current.startWidth) setPreferred(current.width);
-      }}
-      onPointerCancel={cancel}
-      onLostPointerCapture={cancel}
-      onDoubleClick={() => {
-        cancel();
-        setPreferred(null);
-      }}
-      onKeyDown={(event) => {
-        if (
-          ![
-            'ArrowLeft',
-            'ArrowRight',
-            'Home',
-            'End',
-            'Enter',
-            'Escape',
-          ].includes(event.key)
-        )
-          return;
-        event.preventDefault();
-        event.stopPropagation();
-        if (event.key === 'Escape') {
-          cancel();
-          return;
-        }
-        if (drag.current) return;
-        if (event.key === 'Enter') {
-          setPreferred(null);
-          return;
-        }
-        const step = event.shiftKey ? 50 : 10;
-        const next =
-          event.key === 'Home'
-            ? limits.min
-            : event.key === 'End'
-              ? geometry.max
-              : width + (event.key === 'ArrowLeft' ? -step : step);
-        const nextWidth = clamp(next, geometry.max);
-        if (nextWidth !== width) setPreferred(nextWidth);
-      }}
-    />
-  );
   return {
     width,
     viewportSpace: geometry.viewportSpace,

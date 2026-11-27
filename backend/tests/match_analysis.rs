@@ -253,7 +253,7 @@ async fn full_match_analysis_is_persisted_paginated_and_replayable(pool: PgPool)
     let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
     // Deliberately weak opening 31, then a second game with independent context.
     let mat = b"7 point match\n\n Game 1\n Alice : 0                         Bob : 0\n 1) 31: 24/21 6/5                  42: 8/4 6/4\n\n Game 2\n Alice : 1                         Bob : 0\n 1) 31: 8/5 6/5                    42: 8/4 6/4\n";
-    let sgf = engine.normalize_mat(mat).await.unwrap();
+    let sgf = import::mat::normalize_mat(&engine, mat).await.unwrap();
     let parsed = import::parse_sgf(&sgf).unwrap();
     let imported = store::import_match(&pool, "two-games.mat", "mat", mat, &sgf, &parsed)
         .await

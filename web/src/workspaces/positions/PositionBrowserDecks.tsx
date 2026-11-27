@@ -1,10 +1,13 @@
 import ActionButton from '../../shared/ui/ActionButton';
-import { useEffect, useRef, useState, useId, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useIsMounted } from '../../shared/hooks/useIsMounted';
 import { useLatest } from '../../shared/hooks/useLatest';
-import { request } from '../../shared/http/api';
 import { useI18n } from '../../shared/i18n/i18n';
+import CreateDeckForm from '../study/flashcards/CreateDeckForm';
 import { DeckDialog } from '../study/flashcards/DeckLibraryDialogs';
+import DeckSelectField from '../study/flashcards/DeckSelectField';
 import type { Deck } from '../study/flashcards/learning-api';
+import { savedDeck, useDecks } from '../study/flashcards/useDecks';
 import {
   transferPositions,
   loadPositionAnalysisReadiness,
@@ -54,6 +57,7 @@ export function PositionTransferOutcomes({
     </div>
   );
 }
+
 export default function PositionBrowserDecks({
   revision,
   selected,
@@ -75,14 +79,16 @@ export default function PositionBrowserDecks({
   onOpen: (id: string) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
-  const deckCountId = useId();
   const p = usePositionText(),
     { formatError } = useI18n();
-  const [decks, setDecks] = useState<Deck[]>([]),
-    [deckId, setDeckId] = useState(''),
-    [name, setName] = useState(''),
+  const {
+    decks,
+    error: deckError,
+    addDeck,
+    replaceDeck,
+  } = useDecks(revision);
+  const [deckId, setDeckId] = useState(savedDeck),
     [busy, setBusy] = useState(false),
-    [deckError, setDeckError] = useState<unknown>(),
     [error, setError] = useState<unknown>(),
     [readiness, setReadiness] = useState<{
       selection: ReadonlySet<string>;
@@ -93,36 +99,20 @@ export default function PositionBrowserDecks({
     [result, setResult] = useState<PositionTransferResult>(),
     [resultDeck, setResultDeck] = useState<Deck>(),
     [resultNames, setResultNames] = useState<Record<string, string>>({});
-  const live = useRef(true),
+  const mounted = useIsMounted(),
     generation = useRef(0),
     changed = useLatest(onChanged),
     busyChanged = useLatest(onBusyChange);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
+  const chosenDeck = decks.find((deck) => deck.id === deckId) ?? decks[0];
+
+  useEffect(
+    () => () => {
       generation.current++;
       busyChanged.current(false);
-    };
-  }, []);
-  useEffect(() => {
-    const abort = new AbortController();
-    void request<Deck[]>('/decks', { signal: abort.signal })
-      .then((items) => {
-        if (abort.signal.aborted) return;
-        setDeckError(undefined);
-        setDecks(items);
-        setDeckId((previous) =>
-          items.some((deck) => deck.id === previous)
-            ? previous
-            : (items[0]?.id ?? ''),
-        );
-      })
-      .catch((error) => {
-        if (!abort.signal.aborted) setDeckError(error);
-      });
-    return () => abort.abort();
-  }, [revision]);
+    },
+    [busyChanged],
+  );
+
   useEffect(() => {
     if (!transferOpen || !selected.size) {
       setReadiness(undefined);
@@ -135,49 +125,30 @@ export default function PositionBrowserDecks({
         if (!abort.signal.aborted)
           setReadiness({ selection: selected, summary });
       })
-      .catch((error) => {
-        if (!abort.signal.aborted) setReadiness({ selection: selected, error });
+      .catch((failure) => {
+        if (!abort.signal.aborted)
+          setReadiness({ selection: selected, error: failure });
       });
     return () => abort.abort();
   }, [transferOpen, selected, readinessAttempt]);
+
   const check = readiness?.selection === selected ? readiness : undefined;
   const summary = check?.summary;
   const ready = summary
     ? selected.size - summary.analysis_required - summary.unavailable
     : 0;
   const analysisTarget = summary?.first_analysis_required;
+
   function setWorking(value: boolean) {
     setBusy(value);
     busyChanged.current(value);
   }
-  async function create() {
-    const version = ++generation.current;
-    setWorking(true);
-    setError(undefined);
-    try {
-      const deck = await request<Deck>('/decks', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() }),
-      });
-      if (!live.current || version !== generation.current) return;
-      setDecks((previous) => [
-        ...previous.filter((item) => item.id !== deck.id),
-        deck,
-      ]);
-      setDeckId(deck.id);
-      setName('');
-      changed.current();
-    } catch (error) {
-      if (live.current && version === generation.current) setError(error);
-    } finally {
-      if (live.current && version === generation.current) setWorking(false);
-    }
-  }
+
   async function add() {
-    if (!deckId || ready <= 0 || busy) return;
+    if (!chosenDeck || ready <= 0 || busy) return;
     const version = ++generation.current,
-      id = deckId,
+      targetDeck = chosenDeck,
+      id = targetDeck.id,
       ids = [...selected];
     const names = Object.fromEntries(
       hits
@@ -192,46 +163,20 @@ export default function PositionBrowserDecks({
     setResult(undefined);
     try {
       const value = await transferPositions(id, ids);
-      if (!live.current || version !== generation.current) return;
+      if (!mounted.current || version !== generation.current) return;
       setResult(value);
-      setResultDeck(decks.find((deck) => deck.id === id));
+      setResultDeck(targetDeck);
       setResultNames(names);
-      setDecks((previous) =>
-        previous.map((deck) =>
-          deck.id === id ? { ...deck, card_count: value.total } : deck,
-        ),
-      );
+      replaceDeck({ ...targetDeck, card_count: value.total });
       onCloseTransfer();
       changed.current();
-    } catch (error) {
-      if (live.current && version === generation.current) setError(error);
+    } catch (failure) {
+      if (mounted.current && version === generation.current) setError(failure);
     } finally {
-      if (live.current && version === generation.current) setWorking(false);
+      if (mounted.current && version === generation.current) setWorking(false);
     }
   }
-  const chosenDeck = decks.find((deck) => deck.id === deckId);
-  const deckPicker = (countId: string) => (
-    <label>
-      <span>{p('chooseDeck')}</span>
-      <select
-        aria-label={p('chooseDeck')}
-        aria-describedby={countId}
-        value={deckId}
-        disabled={busy}
-        onChange={(event) => setDeckId(event.target.value)}
-      >
-        {!decks.length && <option value="">—</option>}
-        {decks.map((deck) => (
-          <option key={deck.id} value={deck.id}>
-            {deck.name}
-          </option>
-        ))}
-      </select>
-      <small id={countId}>
-        {p('deckCount', { count: chosenDeck?.card_count ?? 0 })}
-      </small>
-    </label>
-  );
+
   return (
     <>
       {result && (
@@ -278,7 +223,7 @@ export default function PositionBrowserDecks({
                 }
                 type="button"
                 className="primary"
-                disabled={!deckId || busy}
+                disabled={!chosenDeck || busy}
                 onClick={() => void add()}
               />
             ) : (
@@ -339,31 +284,30 @@ export default function PositionBrowserDecks({
           {ready > 0 && (
             <>
               <div className="position-deck-controls">
-                {deckPicker(`${deckCountId}-transfer`)}
-              </div>
-              <form
-                className="position-create-deck"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void create();
-                }}
-              >
-                <label>
-                  <span>{p('deckName')}</span>
-                  <input
-                    value={name}
-                    maxLength={120}
-                    disabled={busy}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                </label>
-                <ActionButton
-                  type="submit"
-                  icon="add"
-                  label={p('createDeck')}
-                  disabled={!name.trim() || busy}
+                <DeckSelectField
+                  decks={decks}
+                  value={chosenDeck?.id ?? ''}
+                  onChange={setDeckId}
+                  label={p('chooseDeck')}
+                  disabled={busy}
+                  countText={p('deckCount', {
+                    count: chosenDeck?.card_count ?? 0,
+                  })}
                 />
-              </form>
+              </div>
+              <CreateDeckForm
+                className="position-create-deck"
+                label={p('deckName')}
+                buttonLabel={p('createDeck')}
+                showLabel
+                disabled={busy}
+                onBusyChange={setWorking}
+                onCreated={(deck) => {
+                  addDeck(deck);
+                  setDeckId(deck.id);
+                  changed.current();
+                }}
+              />
               {(!!deckError || !!error) && (
                 <p role="alert" className="error">
                   {formatError(deckError ?? error)}

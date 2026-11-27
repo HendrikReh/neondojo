@@ -180,7 +180,7 @@ export default function SimilarPositions({
               >
                 <thead>
                   <tr>
-                    <th scope="col">{p('similarMatch')}</th>
+                    <th scope="col">{p('groupMatch')}</th>
                     <th scope="col">{p('player')}</th>
                     <th scope="col">{p('gameNumber')}</th>
                     <th scope="col">{p('moveNumber')}</th>

@@ -2,6 +2,11 @@ import ActionButton from './ActionButton';
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useLatest } from '../hooks/useLatest';
 import { useLibraryText } from '../../workspaces/library/library-messages';
+import {
+  lockBodyScroll,
+  resolveInitialFocus,
+  trapTabKey,
+} from './ModalDialog';
 
 export default function LibraryDialog({
   title,
@@ -30,19 +35,7 @@ export default function LibraryDialog({
     const previous = document.activeElement as HTMLElement | null;
     const layer = native ? nativeLayer.current : null;
     layer?.showModal();
-    const controls = () =>
-      Array.from(
-        box.current?.querySelectorAll<HTMLElement>(
-          'button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href],[tabindex="0"]',
-        ) ?? [],
-      ).filter((el) => el.getClientRects().length > 0);
-    const initial =
-      initialFocus === 'first-field'
-        ? controls().find((control) => control.matches('input,select,textarea'))
-        : initialFocus === 'first-control'
-          ? controls()[0]
-          : undefined;
-    (initial ?? box.current)?.focus();
+    resolveInitialFocus(box.current, initialFocus)?.focus();
     function key(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -50,39 +43,18 @@ export default function LibraryDialog({
         if (!pending.current) close.current();
       }
       if (e.key === 'Tab') {
-        const list = controls(),
-          first = list[0],
-          last = list.at(-1);
-        if (!first) {
-          e.preventDefault();
-          box.current?.focus();
-        } else if (
-          e.shiftKey &&
-          (document.activeElement === first ||
-            !box.current?.contains(document.activeElement))
-        ) {
-          e.preventDefault();
-          last?.focus();
-        } else if (
-          !e.shiftKey &&
-          (document.activeElement === last ||
-            !box.current?.contains(document.activeElement))
-        ) {
-          e.preventDefault();
-          first.focus();
-        }
+        trapTabKey(e, box.current, document.activeElement, box.current);
       }
     }
     document.addEventListener('keydown', key, true);
-    const overflow = document.body.style.overflow;
-    if (lockScroll) document.body.style.overflow = 'hidden';
+    const unlock = lockScroll ? lockBodyScroll() : undefined;
     return () => {
       document.removeEventListener('keydown', key, true);
-      if (lockScroll) document.body.style.overflow = overflow;
+      unlock?.();
       layer?.close();
       if (previous?.isConnected) previous.focus();
     };
-  }, [native, initialFocus, lockScroll]);
+  }, [native, initialFocus, lockScroll, close, pending]);
   const content = (
     <div
       className="library-modal-overlay"

@@ -1,6 +1,6 @@
-import ActionButton from '../../shared/ui/ActionButton';
 import { useMemo, useState, type ReactNode } from 'react';
 import Board from '../../shared/board/Board';
+import { MovePreviewViewToggle } from '../../shared/board/BoardViewToggle';
 import type { PlaySession } from './play-api';
 import type { Theme } from '../../shared/board/themes';
 import { projectMove, type BoardView } from '../../shared/board/move-preview';
@@ -68,34 +68,16 @@ export default function PlayMovePreview({
           className="play-decision-preview"
           aria-label={t('hintPreview')}
         >
-          <div
-            className="board-view-buttons text-navigation text-navigation--compact"
-            role="group"
-            aria-label={review('views')}
-          >
-            {(['before', 'arrows', 'after'] as BoardView[]).map((mode) => (
-              <button
-                type="button"
-                key={mode}
-                aria-pressed={view === mode}
-                disabled={mode !== 'before' && !projection?.ok}
-                onClick={() => setView(mode)}
-              >
-                {review(mode)}
-              </button>
-            ))}
-            <ActionButton
-              type="button"
-              disabled={selected === null}
-              onClick={() => {
-                setSelected(null);
-                setView('before');
-              }}
-              icon="reset"
-              label={review('reset')}
-              compact
-            ></ActionButton>
-          </div>
+          <MovePreviewViewToggle
+            value={view}
+            onChange={setView}
+            canPreview={Boolean(projection?.ok)}
+            resetDisabled={selected === null}
+            onReset={() => {
+              setSelected(null);
+              setView('before');
+            }}
+          />
           <div
             className="play-board play-decision-board"
             data-testid="move-preview-board"

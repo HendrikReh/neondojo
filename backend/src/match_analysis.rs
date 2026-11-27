@@ -18,17 +18,46 @@ pub(crate) use native::retain_hint_paths;
 use native::*;
 
 pub const PERFORMANCE_RATING_METHOD: &str = "gnubg_emg_500_v1";
+const CUBEFUL_RATING_PROFILE_SUFFIX: &str = "-ply cubeful deterministic";
+const RULE_AWARE_RATING_PROFILE_SUFFIX: &str = "-ply source cube rules deterministic";
+
+/// SQL predicate selecting a validated whole-match native PR result for library
+/// queries (`rawpr` from the match's selected completed whole-match job, `m`
+/// from `matches`, `ps` from `play_sessions`). Mirrors [`match_performance_rating`].
+macro_rules! rated_match_pr_where_sql {
+    () => {
+        concat!(
+            "rawpr.total_games>0 AND rawpr.completed_games=rawpr.total_games",
+            " AND NOT m.play_assisted AND (m.play_mode IS NULL OR (m.play_mode='competition' AND (ps.id IS NULL OR ",
+            crate::play::finished_session_sql!("ps"),
+            ")))",
+            " AND rawpr.result->>'total_games'=rawpr.total_games::text",
+            " AND rawpr.result->>'completed_games'=rawpr.total_games::text",
+            " AND rawpr.result->>'analyzed_moves'=rawpr.result->>'total_moves'",
+            " AND rawpr.result #>> '{players,0,unavailable}'='0'",
+            " AND rawpr.result #>> '{players,1,unavailable}'='0'",
+            " AND rawpr.result #>> '{performance_rating,method}'='gnubg_emg_500_v1'",
+            " AND rawpr.result #>> '{performance_rating,games}'=rawpr.total_games::text",
+            " AND rawpr.result #>> '{performance_rating,profile}' IN (",
+            "(rawpr.result->>'engine')||'; '||(rawpr.result->>'plies')||'-ply cubeful deterministic', ",
+            "(rawpr.result->>'engine')||'; '||(rawpr.result->>'plies')||'-ply source cube rules deterministic')",
+            " AND rawpr.result #>> '{performance_rating,players,0,player}'='0'",
+            " AND rawpr.result #>> '{performance_rating,players,1,player}'='1'"
+        )
+    };
+}
+pub(crate) use rated_match_pr_where_sql;
 
 pub(crate) fn performance_rating_value(loss: f64, decisions: i64) -> Option<f64> {
     (decisions > 0).then(|| 500.0 * loss / decisions as f64)
 }
 
 pub(crate) fn performance_rating_profile(engine: &str, plies: i32) -> String {
-    format!("{engine}; {plies}-ply cubeful deterministic")
+    format!("{engine}; {plies}{CUBEFUL_RATING_PROFILE_SUFFIX}")
 }
 
 pub(crate) fn rule_aware_rating_profile(engine: &str, plies: i32) -> String {
-    format!("{engine}; {plies}-ply source cube rules deterministic")
+    format!("{engine}; {plies}{RULE_AWARE_RATING_PROFILE_SUFFIX}")
 }
 
 /// Return a whole-result rating only with complete native statistical coverage.
@@ -299,20 +328,9 @@ pub(crate) fn cube_analysis_available(
     if !cube_enabled || board == crate::backgammon::initial_board() {
         return Ok(false);
     }
-    use crate::backgammon::ids::{Field, MatchId};
-    let id = MatchId::decode(match_id).context("Invalid imported Match ID")?;
-    let owner = id.get(Field::CUBE_OWNER);
-    if id.get(Field::CRAWFORD) != 0 || (owner != 3 && owner != player) {
-        return Ok(false);
-    }
-    let length = id.get(Field::LENGTH);
-    let score = id.get(if player == 0 {
-        Field::SCORE_0
-    } else {
-        Field::SCORE_1
-    });
-    let cube = 1 << id.get(Field::CUBE_LOG2);
-    Ok(length == 0 || score + cube < length)
+    let id =
+        crate::backgammon::ids::MatchId::decode(match_id).context("Invalid imported Match ID")?;
+    Ok(id.can_double(player))
 }
 
 /// Aggregate one validated decision consistently for native and imported statistics.

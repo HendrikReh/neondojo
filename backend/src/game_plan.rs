@@ -26,6 +26,20 @@ pub enum GamePlan {
     Anchoring,
 }
 
+impl GamePlan {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "opening" => Some(Self::Opening),
+            "pure_race" => Some(Self::PureRace),
+            "racing" => Some(Self::Racing),
+            "attacking" => Some(Self::Attacking),
+            "priming" => Some(Self::Priming),
+            "anchoring" => Some(Self::Anchoring),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct GamePlanRequest {
@@ -64,21 +78,22 @@ pub fn classify(board: &[i32; 26]) -> Result<GamePlans, String> {
     Ok(plans)
 }
 
+/// Classify a board slice for the player on roll (`0` = White, `1` = Black).
+pub(crate) fn classify_for_player(board: &[i32], player: i32) -> Option<GamePlan> {
+    let board: &[i32; 26] = board.try_into().ok()?;
+    let plans = classify(board).ok()?;
+    match player {
+        0 => Some(plans.white),
+        1 => Some(plans.black),
+        _ => None,
+    }
+}
+
 /// The pinned Open Sage rules alone, without NeonDojo's opening label.
 pub fn classify_reference(board: &[i32; 26]) -> Result<GamePlans, String> {
-    if board.iter().any(|&count| !(-15..=15).contains(&count)) {
-        return Err("Each board count must be between -15 and 15".into());
-    }
-    if board[0] > 0 || board[25] < 0 {
-        return Err(
-            "Black's bar at 0 must be nonpositive and White's bar at 25 nonnegative".into(),
-        );
-    }
+    crate::backgammon::board::validate(board).map_err(|err| err.to_string())?;
     let white_count: i32 = board.iter().map(|&count| count.max(0)).sum();
     let black_count: i32 = board.iter().map(|&count| (-count).max(0)).sum();
-    if white_count > 15 || black_count > 15 {
-        return Err("Each side may have at most 15 checkers, including the bar".into());
-    }
 
     // Open Sage's opponent bar is positive, unlike NeonDojo's absolute board.
     let mut white_board = *board;
@@ -134,23 +149,17 @@ fn is_race(board: &[i32; 26]) -> bool {
 }
 
 fn pip_counts(board: &[i32; 26]) -> (i32, i32) {
-    let mut player = 25 * board[25];
-    let mut opponent = 25 * board[0];
-    for (point, &count) in board.iter().enumerate().take(25).skip(1) {
-        if count > 0 {
-            player += point as i32 * count;
-        } else if count < 0 {
-            opponent -= (25 - point) as i32 * count;
-        }
-    }
+    let mut absolute = *board;
+    absolute[0] = -absolute[0];
+    let [player, opponent] = crate::backgammon::board::pip_counts(&absolute);
     (player, opponent)
 }
 
 pub(crate) fn absolute_pip_counts(board: &[i32; 26]) -> ([i32; 2], [i32; 2]) {
-    let mut relative = *board;
-    relative[0] = -relative[0];
-    let (white, black) = pip_counts(&relative);
-    ([white, black], [25 * relative[25], 25 * relative[0]])
+    (
+        crate::backgammon::board::pip_counts(board),
+        [25 * board[25].max(0), 25 * (-board[0]).max(0)],
+    )
 }
 
 // The branch order and thresholds match the pinned Open Sage implementation.

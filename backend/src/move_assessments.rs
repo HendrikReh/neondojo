@@ -211,54 +211,7 @@ pub(crate) fn after_checker_play(
     dice: [i32; 2],
     notation: &str,
 ) -> Option<[i32; 26]> {
-    if notation.trim().is_empty() || notation.len() > 160 {
-        return None;
-    }
-    let mut runs = Vec::new();
-    if !matches!(
-        notation.trim().to_lowercase().as_str(),
-        "cannot move" | "can't move" | "dance"
-    ) {
-        for token in notation.split_whitespace() {
-            let (path, count) = if let Some((path, count)) =
-                token.strip_suffix(')').and_then(|s| s.rsplit_once('('))
-            {
-                let count: usize = count.parse().ok()?;
-                if !(1..=4).contains(&count) {
-                    return None;
-                }
-                (path, count)
-            } else {
-                (token, 1)
-            };
-            let points: Option<Vec<usize>> = path
-                .split('/')
-                .map(|point| {
-                    let point = point.strip_suffix('*').unwrap_or(point);
-                    match point.to_lowercase().as_str() {
-                        "bar" => Some(25),
-                        "off" => Some(0),
-                        number => number
-                            .parse::<usize>()
-                            .ok()
-                            .filter(|p| (1..=24).contains(p)),
-                    }
-                })
-                .collect();
-            let points = points?;
-            if points.len() < 2 {
-                return None;
-            }
-            for _ in 0..count {
-                for pair in points.windows(2) {
-                    runs.push((pair[0], pair[1]));
-                }
-            }
-            if runs.len() > 4 {
-                return None;
-            }
-        }
-    }
+    let runs = crate::backgammon::notation::parse_steps(notation)?;
     crate::backgammon::expand_joined_play(&mut board, player, dice, &runs).ok()?;
     Some(board)
 }

@@ -16,7 +16,7 @@
 | [`backend/src/schema_migrations.rs`](../../backend/src/schema_migrations.rs), [`backend/src/database_backup.rs`](../../backend/src/database_backup.rs) | Baseline adoption, sequential migrations, and portable backups |
 | [`backend/src/store.rs`](../../backend/src/store.rs), [`backend/migrations/`](../../backend/migrations/)                       | SQLx persistence, schema, and search indexes                        |
 | [`web/src/`](../../web/src/)                                                                                             | React client, SVG board, and generated API types                    |
-| [`web/e2e/`](../../web/e2e/), [`web/playwright.setup.ts`](../../web/playwright.setup.ts) | Browser workflows; one isolated PostgreSQL database, backend and Vite server per Playwright worker ([`web/e2e/stack.ts`](../../web/e2e/stack.ts)) |
+| [`web/e2e/`](../../web/e2e/), [`web/playwright.setup.ts`](../../web/playwright.setup.ts) | Browser workflows; one isolated PostgreSQL database, backend and Vite server per Playwright worker ([`web/e2e/helpers/stack.ts`](../../web/e2e/helpers/stack.ts)) |
 
 The Rust backend runs independently of the browser. The CLI starts it through
 [`neondojo::runtime::start`](../../backend/src/runtime.rs). A host embedding the

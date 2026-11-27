@@ -11,6 +11,7 @@ import { useStudyText } from '../study-messages';
 import type { PlaySession } from '../../play/play-api';
 import { usePlayModeText } from '../../play/play-mode-messages';
 import { useI18n } from '../../../shared/i18n/i18n';
+import { formatPly } from '../../../shared/format/ply';
 import { prDigits } from '../../../shared/format/pr-format';
 export default function PlayLearningReview({
   session,
@@ -64,7 +65,7 @@ export default function PlayLearningReview({
         <p>
           <span>{t(session.play_mode ?? 'competition')}</span> ·{' '}
           {t(result.assisted ? 'assisted' : 'independent')} ·{' '}
-          {t('analysisDepth')}: {result.analysis_plies}-ply
+          {t('analysisDepth')}: {formatPly(result.analysis_plies, formatNumber)}
         </p>
         <p>
           {t('totalLoss')}: {number(result.first_attempt_loss)} ·{' '}

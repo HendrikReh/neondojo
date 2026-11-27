@@ -1,5 +1,8 @@
 //! Native BGBlitz BGF 1.0 transport and played-match conversion.
-use super::{match_context::MatchContext, sgf::escape_value};
+use super::{
+    match_context::MatchContext,
+    sgf::{coord::encode_point, escape_value},
+};
 use anyhow::{Context, Result, bail, ensure};
 use chrono::NaiveDate;
 use flate2::bufread::GzDecoder;
@@ -133,14 +136,6 @@ fn player(value: i32) -> Result<i32> {
         _ => bail!("BGF: invalid active player {value}"),
     }
 }
-fn coordinate(point: usize, side: i32) -> char {
-    match point {
-        0 => 'z',
-        25 => 'y',
-        _ if side == 0 => (b'a' + point as u8 - 1) as char,
-        _ => (b'x' + 1 - point as u8) as char,
-    }
-}
 fn checker(
     board: &mut [i32; 26],
     side: i32,
@@ -151,8 +146,8 @@ fn checker(
     let color = if side == 0 { 'W' } else { 'B' };
     let mut result = format!(";{color}[{}{}", dice[0], dice[1]);
     for (from, to) in steps {
-        result.push(coordinate(from, side));
-        result.push(coordinate(to, side));
+        result.push(encode_point(from, side)?);
+        result.push(encode_point(to, side)?);
     }
     result.push(']');
     Ok(result)
@@ -207,11 +202,11 @@ pub(super) fn read_match_context(input: &[u8]) -> Result<MatchContext> {
     Ok(decode(input)?.match_context())
 }
 
-/// Decode native BGF 1.0. Keep producer analysis as a separate SGF extension;
-/// the played line is still validated by independent legal replay.
-pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
-    let data = decode(input)?;
-    let context = data.match_context();
+const STANDARD_INITIAL_POINTS: [i32; 28] = [
+    2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, -5, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, -2, 0, 0, 0, 0,
+];
+
+fn validate_match_header(data: &MatchData) -> Result<[&str; 2]> {
     ensure!(
         data.game_mode == 0,
         "Only standard backgammon BGF matches are supported"
@@ -240,238 +235,285 @@ pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
         data.games.iter().map(|g| g.moves.len()).sum::<usize>() <= MAX_RECORDS,
         "BGF: too many move records"
     );
-    let names = [&data.name_green, &data.name_red];
+    let names = [data.name_green.as_str(), data.name_red.as_str()];
     ensure!(
         names
             .iter()
             .all(|n| n.chars().count() <= 1024 && !n.contains('\0')),
         "BGF: invalid player name"
     );
+    Ok(names)
+}
+
+struct BgfGameState {
+    board: [i32; 26],
+    cube: i32,
+    dropped: bool,
+    resigned: bool,
+    pending: Option<i32>,
+    winner: Option<i32>,
+    won: bool,
+}
+
+impl BgfGameState {
+    fn new() -> Self {
+        Self {
+            board: crate::backgammon::initial_board(),
+            cube: 1,
+            dropped: false,
+            resigned: false,
+            pending: None,
+            winner: None,
+            won: false,
+        }
+    }
+
+    fn apply_record(&mut self, record: &Move) -> Result<(String, Option<i32>, Option<i32>, bool)> {
+        ensure!(!self.won, "BGF: records after game-win marker");
+        ensure!(
+            ["move", "amove"].contains(&record.kind.as_str()),
+            "BGF: unsupported move record type {}",
+            record.kind
+        );
+        let side = player(record.player)?;
+        let color = if side == 0 { 'W' } else { 'B' };
+        if record.green != 7 {
+            ensure!(
+                self.pending.is_none() && self.winner.is_none(),
+                "BGF: checker play outside an active turn"
+            );
+            let pairs = runs(record)?;
+            let value = checker(&mut self.board, side, [record.green, record.red], &pairs)?;
+            let finished = if side == 0 {
+                !self.board.iter().any(|n| *n > 0)
+            } else {
+                !self.board.iter().any(|n| *n < 0)
+            };
+            return Ok((
+                value,
+                self.pending,
+                if finished { Some(side) } else { None },
+                false,
+            ));
+        }
+        if record.red == 5 {
+            ensure!(
+                self.pending.is_none() && self.winner.is_none(),
+                "BGF: dance outside an active turn"
+            );
+            ensure!(
+                record.from[1..] == [-1; 3] && record.to[1..] == [-1; 3],
+                "BGF: malformed dance dice"
+            );
+            return Ok((
+                checker(&mut self.board, side, [record.from[0], record.to[0]], &[])?,
+                self.pending,
+                self.winner,
+                false,
+            ));
+        }
+        empty_coordinates(record)?;
+        self.apply_control_action(record.red, side, color)
+    }
+
+    fn apply_control_action(
+        &self,
+        action: i32,
+        side: i32,
+        color: char,
+    ) -> Result<(String, Option<i32>, Option<i32>, bool)> {
+        match action {
+            1 => {
+                ensure!(
+                    self.pending.is_none() && self.winner.is_none(),
+                    "BGF: double outside active game"
+                );
+                Ok((format!(";{color}[double]"), Some(side), None, false))
+            }
+            2 | 3 => {
+                let doubler = self
+                    .pending
+                    .context("BGF: cube response without a double")?;
+                ensure!(
+                    side != doubler && self.winner.is_none(),
+                    "BGF: invalid cube responder"
+                );
+                Ok((
+                    format!(";{color}[{}]", if action == 2 { "take" } else { "drop" }),
+                    None,
+                    if action == 3 { Some(doubler) } else { None },
+                    false,
+                ))
+            }
+            4 => {
+                ensure!(
+                    self.pending.is_none() && self.winner.is_none_or(|w| w == side),
+                    "BGF: inconsistent game winner"
+                );
+                Ok((String::new(), None, Some(side), true))
+            }
+            9 => {
+                let opponent = 1 - side;
+                ensure!(
+                    self.pending.is_none() && self.winner.is_none_or(|w| w == opponent),
+                    "BGF: inconsistent resignation"
+                );
+                Ok((String::new(), None, Some(opponent), false))
+            }
+            6 | 8 => {
+                ensure!(self.winner.is_none(), "BGF: control record after game end");
+                Ok((String::new(), self.pending, self.winner, false))
+            }
+            action => bail!("BGF: unsupported control action {action}"),
+        }
+    }
+
+    fn result_points(&self, won_points: i32, side: i32) -> Option<i32> {
+        // BGBlitz can leave wonPoints=0 after a completed bear-off. A
+        // replayed terminal board or drop proves the award independently.
+        if self.dropped {
+            Some(self.cube)
+        } else if let Some(multiplier) =
+            crate::game_result::terminal_multiplier(&self.board, side, false)
+        {
+            self.cube.checked_mul(multiplier)
+        } else if self.resigned && (1..=32767).contains(&won_points) {
+            Some(won_points)
+        } else {
+            None
+        }
+    }
+}
+
+fn convert_game(
+    out: &mut String,
+    data: &MatchData,
+    context: &MatchContext,
+    names: [&str; 2],
+    game_index: usize,
+    game: &Game,
+) -> Result<()> {
+    ensure!(
+        game.game_mode == 0 && game.initial.game_mode == 0 && !game.initial.egyptian,
+        "BGF: unsupported game variant"
+    );
+    ensure!(
+        game.matchlen == data.matchlen
+            && [game.name_green.as_str(), game.name_red.as_str()] == names,
+        "BGF: game metadata changes match identity"
+    );
+    ensure!(
+        !game.lost_on_time && !game.was_forfeit,
+        "BGF: games decided by time or forfeit are not supported"
+    );
+    ensure!(
+        game.initial.points == STANDARD_INITIAL_POINTS
+            && game.initial.cube == 1
+            && game.initial.cube_owner == 0,
+        "BGF: custom starting positions/cube setups are not supported"
+    );
+    let scores = if data.matchlen == 0 {
+        [0, 0]
+    } else {
+        [game.score_green, game.score_red]
+    };
+    ensure!(
+        scores.iter().all(|s| (0..=32767).contains(s)),
+        "BGF: score exceeds GNUbg range"
+    );
+    let mut rules = Vec::new();
+    if data.use_crawford {
+        rules.push("Crawford");
+    }
+    if game.is_crawford {
+        rules.push("CrawfordGame");
+    }
+    if data.use_jacoby && data.matchlen == 0 {
+        rules.push("Jacoby");
+    }
+    out.push_str(&format!(
+        "(;FF[4]GM[6]CA[UTF-8]AP[Neondojo:BGF1]PW[{}]PB[{}]MI[length:{}][game:{game_index}][ws:{}][bs:{}]",
+        escape_value(names[0]),
+        escape_value(names[1]),
+        data.matchlen,
+        scores[0],
+        scores[1]
+    ));
+    if game_index == 0 {
+        context.write_sgf(out);
+    }
+    if !rules.is_empty() {
+        out.push_str(&format!("RU[{}]", rules.join(":")));
+    }
+    let root_end = out.len();
+    let mut state = BgfGameState::new();
+    for (move_index, record) in game.moves.iter().enumerate() {
+        let (value, next_pending, next_winner, next_won) = state
+            .apply_record(record)
+            .with_context(|| format!("BGF game {}, record {}", game_index + 1, move_index + 1))?;
+        if record.green == 7 {
+            match record.red {
+                2 => {
+                    state.cube = state
+                        .cube
+                        .checked_mul(2)
+                        .filter(|c| *c <= 32768)
+                        .context("BGF: cube exceeds GNUbg range")?;
+                }
+                3 => state.dropped = true,
+                9 => state.resigned = true,
+                _ => {}
+            }
+        }
+        out.push_str(&value);
+        if !value.is_empty() && !record.foreign.is_empty() {
+            out.push_str("BGA[");
+            out.push_str(&super::sgf::encode_retained_analysis(
+                &serde_json::to_value(&record.foreign)?,
+            )?);
+            out.push(']');
+        }
+        state.pending = next_pending;
+        state.winner = next_winner;
+        state.won = next_won;
+    }
+    ensure!(
+        state.pending.is_none(),
+        "BGF: unanswered cube offer in game {}",
+        game_index + 1
+    );
+    ensure!(
+        state.won || game_index + 1 == data.games.len(),
+        "BGF: unfinished game before another game"
+    );
+    if data.matchlen > 0
+        && state.won
+        && let Some(side) = state.winner
+    {
+        // Legal cube values can produce awards beyond SGF's supported
+        // result range. Keep the played line without inventing a result.
+        if let Some(points) = state
+            .result_points(game.won_points, side)
+            .filter(|p| (1..=32767).contains(p))
+        {
+            let color = if side == 0 { 'W' } else { 'B' };
+            let suffix = if state.resigned { "R" } else { "" };
+            out.insert_str(root_end, &format!("RE[{color}+{points}{suffix}]"));
+        }
+    }
+    out.push_str(")\n");
+    Ok(())
+}
+
+/// Decode native BGF 1.0. Keep producer analysis as a separate SGF extension;
+/// the played line is still validated by independent legal replay.
+pub fn bgf_to_sgf(input: &[u8]) -> Result<String> {
+    let data = decode(input)?;
+    let context = data.match_context();
+    let names = validate_match_header(&data)?;
     let mut out = String::new();
     for (game_index, game) in data.games.iter().enumerate() {
-        ensure!(
-            game.game_mode == 0 && game.initial.game_mode == 0 && !game.initial.egyptian,
-            "BGF: unsupported game variant"
-        );
-        ensure!(
-            game.matchlen == data.matchlen && [&game.name_green, &game.name_red] == names,
-            "BGF: game metadata changes match identity"
-        );
-        ensure!(
-            !game.lost_on_time && !game.was_forfeit,
-            "BGF: games decided by time or forfeit are not supported"
-        );
-        let standard = [
-            2, 0, 0, 0, 0, -5, 0, -3, 0, 0, 0, 5, -5, 0, 0, 0, 3, 0, 5, 0, 0, 0, 0, -2, 0, 0, 0, 0,
-        ];
-        ensure!(
-            game.initial.points == standard
-                && game.initial.cube == 1
-                && game.initial.cube_owner == 0,
-            "BGF: custom starting positions/cube setups are not supported"
-        );
-        let scores = if data.matchlen == 0 {
-            [0, 0]
-        } else {
-            [game.score_green, game.score_red]
-        };
-        ensure!(
-            scores.iter().all(|s| (0..=32767).contains(s)),
-            "BGF: score exceeds GNUbg range"
-        );
-        let mut rules = Vec::new();
-        if data.use_crawford {
-            rules.push("Crawford");
-        }
-        if game.is_crawford {
-            rules.push("CrawfordGame");
-        }
-        if data.use_jacoby && data.matchlen == 0 {
-            rules.push("Jacoby");
-        }
-        out.push_str(&format!("(;FF[4]GM[6]CA[UTF-8]AP[Neondojo:BGF1]PW[{}]PB[{}]MI[length:{}][game:{game_index}][ws:{}][bs:{}]",escape_value(names[0]),escape_value(names[1]),data.matchlen,scores[0],scores[1]));
-        if game_index == 0 {
-            context.write_sgf(&mut out);
-        }
-        if !rules.is_empty() {
-            out.push_str(&format!("RU[{}]", rules.join(":")));
-        }
-        let root_end = out.len();
-        let mut board = crate::backgammon::initial_board();
-        let mut cube = 1i32;
-        let mut dropped = false;
-        let mut resigned = false;
-        let mut pending = None;
-        let mut winner = None;
-        let mut won = false;
-        for (move_index, record) in game.moves.iter().enumerate() {
-            let mut apply = || -> Result<(String, Option<i32>, Option<i32>, bool)> {
-                ensure!(!won, "BGF: records after game-win marker");
-                ensure!(
-                    ["move", "amove"].contains(&record.kind.as_str()),
-                    "BGF: unsupported move record type {}",
-                    record.kind
-                );
-                let side = player(record.player)?;
-                let color = if side == 0 { 'W' } else { 'B' };
-                if record.green != 7 {
-                    ensure!(
-                        pending.is_none() && winner.is_none(),
-                        "BGF: checker play outside an active turn"
-                    );
-                    let pairs = runs(record)?;
-                    let value = checker(&mut board, side, [record.green, record.red], &pairs)?;
-                    let finished = if side == 0 {
-                        !board.iter().any(|n| *n > 0)
-                    } else {
-                        !board.iter().any(|n| *n < 0)
-                    };
-                    return Ok((
-                        value,
-                        pending,
-                        if finished { Some(side) } else { None },
-                        false,
-                    ));
-                }
-                if record.red == 5 {
-                    ensure!(
-                        pending.is_none() && winner.is_none(),
-                        "BGF: dance outside an active turn"
-                    );
-                    ensure!(
-                        record.from[1..] == [-1; 3] && record.to[1..] == [-1; 3],
-                        "BGF: malformed dance dice"
-                    );
-                    return Ok((
-                        checker(&mut board, side, [record.from[0], record.to[0]], &[])?,
-                        pending,
-                        winner,
-                        false,
-                    ));
-                }
-                empty_coordinates(record)?;
-                match record.red {
-                    1 => {
-                        ensure!(
-                            pending.is_none() && winner.is_none(),
-                            "BGF: double outside active game"
-                        );
-                        Ok((format!(";{color}[double]"), Some(side), None, false))
-                    }
-                    2 | 3 => {
-                        let doubler = pending.context("BGF: cube response without a double")?;
-                        ensure!(
-                            side != doubler && winner.is_none(),
-                            "BGF: invalid cube responder"
-                        );
-                        Ok((
-                            format!(
-                                ";{color}[{}]",
-                                if record.red == 2 { "take" } else { "drop" }
-                            ),
-                            None,
-                            if record.red == 3 { Some(doubler) } else { None },
-                            false,
-                        ))
-                    }
-                    4 => {
-                        ensure!(
-                            pending.is_none() && winner.is_none_or(|w| w == side),
-                            "BGF: inconsistent game winner"
-                        );
-                        Ok((String::new(), None, Some(side), true))
-                    }
-                    9 => {
-                        let opponent = 1 - side;
-                        ensure!(
-                            pending.is_none() && winner.is_none_or(|w| w == opponent),
-                            "BGF: inconsistent resignation"
-                        );
-                        Ok((String::new(), None, Some(opponent), false))
-                    }
-                    6 | 8 => {
-                        ensure!(winner.is_none(), "BGF: control record after game end");
-                        Ok((String::new(), pending, winner, false))
-                    }
-                    action => bail!("BGF: unsupported control action {action}"),
-                }
-            };
-            let (value, next_pending, next_winner, next_won) = apply().with_context(|| {
-                format!("BGF game {}, record {}", game_index + 1, move_index + 1)
-            })?;
-            if record.green == 7 {
-                match record.red {
-                    2 => {
-                        cube = cube
-                            .checked_mul(2)
-                            .filter(|c| *c <= 32768)
-                            .context("BGF: cube exceeds GNUbg range")?
-                    }
-                    3 => dropped = true,
-                    9 => resigned = true,
-                    _ => {}
-                }
-            }
-            out.push_str(&value);
-            if !value.is_empty() && !record.foreign.is_empty() {
-                out.push_str("BGA[");
-                out.push_str(&super::sgf::encode_retained_analysis(
-                    &serde_json::to_value(&record.foreign)?,
-                )?);
-                out.push(']');
-            }
-            pending = next_pending;
-            winner = next_winner;
-            won = next_won;
-        }
-        ensure!(
-            pending.is_none(),
-            "BGF: unanswered cube offer in game {}",
-            game_index + 1
-        );
-        ensure!(
-            won || game_index + 1 == data.games.len(),
-            "BGF: unfinished game before another game"
-        );
-        if data.matchlen > 0
-            && won
-            && let Some(side) = winner
-        {
-            // BGBlitz can leave wonPoints=0 after a completed bear-off. A
-            // replayed terminal board or drop proves the award independently.
-            let sign = if side == 0 { 1 } else { -1 };
-            let points = if dropped {
-                Some(cube)
-            } else if !board.iter().any(|n| n * sign > 0) {
-                let remaining: i32 = board.iter().map(|n| (-n * sign).max(0)).sum();
-                let loser_in_home = if side == 0 {
-                    board[0] < 0 || board[1..=6].iter().any(|n| *n < 0)
-                } else {
-                    board[25] > 0 || board[19..=24].iter().any(|n| *n > 0)
-                };
-                Some(
-                    cube * if remaining < 15 {
-                        1
-                    } else if loser_in_home {
-                        3
-                    } else {
-                        2
-                    },
-                )
-            } else if resigned && (1..=32767).contains(&game.won_points) {
-                Some(game.won_points)
-            } else {
-                None
-            };
-            // Legal cube values can produce awards beyond SGF's supported
-            // result range. Keep the played line without inventing a result.
-            if let Some(points) = points.filter(|p| (1..=32767).contains(p)) {
-                let color = if side == 0 { 'W' } else { 'B' };
-                let suffix = if resigned { "R" } else { "" };
-                out.insert_str(root_end, &format!("RE[{color}+{points}{suffix}]"));
-            }
-        }
-        out.push_str(")\n");
+        convert_game(&mut out, &data, &context, names, game_index, game)?;
     }
     super::parse_sgf(&out).context("BGF played-line validation failed")?;
     Ok(out)

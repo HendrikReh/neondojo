@@ -135,42 +135,22 @@ fn cube_exponent(cube: i32, owner: i32) -> Result<i32> {
     }
 }
 
-/// Cube value and owner (-1 centered, 0 White, 1 Black) before the event.
-fn cube_before(event: &SourceMove) -> Result<(i32, i32)> {
+/// Decoded Match ID, cube value, and owner (-1 centered, 0 White, 1 Black) before the event.
+fn cube_before(event: &SourceMove) -> Result<(MatchId, i32, i32)> {
     let id = MatchId::decode(&event.match_id).context("XG export: invalid stored Match ID")?;
     let owner = match id.get(Field::CUBE_OWNER) {
         3 => -1,
         owner @ (0 | 1) => owner,
         _ => bail!("XG export: invalid cube owner in stored Match ID"),
     };
-    Ok((1 << id.get(Field::CUBE_LOG2), owner))
+    let cube = 1 << id.get(Field::CUBE_LOG2);
+    Ok((id, cube, owner))
 }
 
 fn board_of(values: &[i32]) -> Result<[i32; 26]> {
     values
         .try_into()
         .context("XG export: stored board must have 26 points")
-}
-
-/// The mover-relative steps of a recorded checker play, in their recorded
-/// order when the stored notation lists them. Pairs are (from, to) with the
-/// bar at 25 and off at 0.
-fn recorded_pairs(notation: &str) -> Option<Vec<(usize, usize)>> {
-    if notation == "Cannot move" {
-        return Some(Vec::new());
-    }
-    let point = |label: &str| match label.trim_end_matches('*') {
-        "bar" => Some(25),
-        "off" => Some(0),
-        n => n.parse::<usize>().ok().filter(|p| (1..=24).contains(p)),
-    };
-    notation
-        .split_whitespace()
-        .map(|step| {
-            let (from, to) = step.split_once('/')?;
-            Some((point(from)?, point(to)?))
-        })
-        .collect()
 }
 
 /// XG Moves[]: zero-based From/To pairs with -1 as terminator. Bearing off
@@ -191,7 +171,7 @@ fn xg_moves(event: &SourceMove) -> Result<[i32; 8]> {
         return Ok(moves);
     }
     let reaching: Vec<_> = paths.iter().filter(|path| path.board == after).collect();
-    let recorded = recorded_pairs(&event.notation);
+    let recorded = crate::backgammon::notation::parse_steps(&event.notation);
     // Bear-offs can leave the die choice open. XG uses the larger die for a
     // final checker and, when both dice bear off from one point, plays the
     // smaller die first.
@@ -264,8 +244,8 @@ enum CubeAction {
     Resign,
 }
 
-struct Turn<'a> {
-    context: &'a GameContext,
+struct Turn {
+    match_id: MatchId,
     player: i32,
     board: [i32; 26],
     cube: i32,
@@ -339,12 +319,7 @@ fn move_record(turn: &Turn, event: &SourceMove, edited: bool) -> Result<Record> 
 /// opponent-owned cube, or when a doubled game cannot win the player more
 /// than the points they still need.
 fn can_double(turn: &Turn, rules: &SessionRules, opening: bool) -> bool {
-    let away = turn.context.length - turn.context.scores[turn.player as usize];
-    rules.cube_in_use
-        && !opening
-        && !turn.context.crawford
-        && (turn.owner == -1 || turn.owner == turn.player)
-        && (turn.context.length == 0 || away > turn.cube)
+    rules.cube_in_use && !opening && turn.match_id.can_double(turn.player)
 }
 
 /// XG termination codes: 0 drop, 1–3 single/gammon/backgammon, +100 resign.
@@ -374,7 +349,10 @@ fn write_game(
         None => initial,
     };
     let start_cube = match events.first() {
-        Some(event) => cube_before(event)?,
+        Some(event) => {
+            let (_, cube, owner) = cube_before(event)?;
+            (cube, owner)
+        }
         None => (1, -1),
     };
     let custom_start = start_board != initial || start_cube != (1, -1);
@@ -395,9 +373,9 @@ fn write_game(
     let mut index = 0;
     while let Some(event) = events.get(index) {
         index += 1;
-        let (cube, owner) = cube_before(event)?;
+        let (match_id, cube, owner) = cube_before(event)?;
         let turn = Turn {
-            context,
+            match_id,
             player: event.player,
             board: board_of(&event.board)?,
             cube,
@@ -525,7 +503,8 @@ fn match_header(
 /// Convert a stored, validated SGF match into a binary XG2 file.
 pub fn sgf_to_xg(sgf: &str, meta: &XgExportMetadata) -> Result<Vec<u8>> {
     let trees = sgf::parse_trees(sgf)?;
-    let (imported, contexts, events) = sgf::parse_sgf_events(sgf)?;
+    let mut events = Vec::new();
+    let (imported, contexts) = sgf::replay_trees(&trees, false, Some(&mut events))?;
     ensure!(!contexts.is_empty(), "XG export: the match has no games");
     let length = imported.match_length;
     ensure!(
@@ -537,7 +516,7 @@ pub fn sgf_to_xg(sgf: &str, meta: &XgExportMetadata) -> Result<Vec<u8>> {
     // CubeLimit is an exponent; XG's default allows cubes up to 1024.
     let mut cube_limit = 10;
     for event in &events {
-        cube_limit = cube_limit.max(cube_before(event)?.0.trailing_zeros() as i32 + 1);
+        cube_limit = cube_limit.max(cube_before(event)?.1.trailing_zeros() as i32 + 1);
     }
 
     let mut records = vec![match_header(

@@ -67,6 +67,8 @@ import PositionBookmarkButton from '../positions/PositionBookmarkButton';
 import ActionButton from '../../shared/ui/ActionButton';
 import { positionBookmarkMessages } from '../positions/position-bookmark-messages';
 import AnalysisWorkspace from './AnalysisWorkspace';
+import AnalysisBoardPane from './AnalysisBoardPane';
+import AnalysisInspectorPane from './AnalysisInspectorPane';
 import AnalysisPanel from './AnalysisPanel';
 import BoardReviewControls from './BoardReviewControls';
 import type { Position } from '../../shared/http/api';
@@ -83,6 +85,12 @@ function render(props: Partial<Props> = {}) {
 function elements(node: ReactNode): Element[] {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (!isValidElement<Record<string, unknown>>(node)) return [];
+  if (node.type === AnalysisBoardPane || node.type === AnalysisInspectorPane) {
+    const rendered = (node.type as (props: Record<string, unknown>) => ReactNode)(
+      node.props,
+    );
+    return [node, ...elements(rendered)];
+  }
   return [node, ...elements(node.props.children as ReactNode)];
 }
 function text(node: ReactNode): string {
@@ -377,23 +385,29 @@ it('uses the real source occurrence beside review controls during candidate and 
       failure: undefined,
       run: async () => {},
     },
+    revisions: {
+      openingBook: 0,
+      deck: 0,
+      bookmark: 3,
+    },
+    engine: {
+      defaultPlies: 2,
+      configured: true,
+    },
+    callbacks: {
+      onDetail: noop,
+      onOpenDatabase: noop,
+      onTrackJob: noop,
+      onNotesSaved: noop,
+      onMoveNotes: noop,
+      onDeckChanged: noop,
+      onPosition: noop,
+      onBookmarkChanged: changed,
+    },
     theme: 'forest',
-    defaultPlies: 2,
-    openingBookRevision: 0,
-    configured: true,
     detail: 'overview',
-    onDetail: noop,
-    onOpenDatabase: noop,
-    onTrackJob: noop,
-    onNotesSaved: noop,
-    onMoveNotes: noop,
     notesSuspended: false,
-    deckRevision: 0,
-    onDeckChanged: noop,
-    onPosition: noop,
     welcome: null,
-    bookmarkRevision: 3,
-    onBookmarkChanged: changed,
   } satisfies Parameters<typeof AnalysisWorkspace>[0];
   function workspace() {
     hooks.index = 0;

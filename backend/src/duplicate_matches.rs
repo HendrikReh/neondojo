@@ -132,16 +132,7 @@ pub async fn find(pool: &PgPool, q: DuplicateMatchQuery) -> ApiResult<DuplicateM
         })
         .transpose()?;
     if let Some(id) = q.database_id {
-        let exists: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM databases WHERE id=$1 AND NOT collection_only)",
-        )
-        .bind(id)
-        .fetch_one(pool)
-        .await
-        .map_err(anyhow::Error::from)?;
-        if !exists {
-            return Err(ApiError::missing());
-        }
+        crate::databases::require_library_database(pool, id).await?;
     }
     // The played record is stored per match by the database function
     // `played_record_fingerprint` (migration 0086), refreshed on every write to

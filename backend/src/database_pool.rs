@@ -1,5 +1,15 @@
-use sqlx::{Executor, postgres::PgPoolOptions};
+use sqlx::{Executor, PgPool, Postgres, Transaction, postgres::PgPoolOptions};
 use std::time::Duration;
+
+/// Opens a `REPEATABLE READ READ ONLY` snapshot transaction in a single round
+/// trip so multi-query browse/review reads observe a consistent database state.
+pub(crate) async fn begin_read_snapshot(
+    pool: &PgPool,
+) -> anyhow::Result<Transaction<'static, Postgres>> {
+    Ok(pool
+        .begin_with("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .await?)
+}
 
 /// Connections when `NEONDOJO_DB_MAX_CONNECTIONS` is unset. Up to eight
 /// parallel analysis jobs each sample progress, renew a lease and write
@@ -57,6 +67,22 @@ mod tests {
         for invalid in ["", "0", "-1", "ten", "1001"] {
             assert!(max_connections(Some(invalid)).is_err(), "{invalid:?}");
         }
+    }
+
+    #[sqlx::test(migrations = false)]
+    async fn begin_read_snapshot_opens_repeatable_read_only_transaction(db: PgPool) {
+        let mut tx = begin_read_snapshot(&db).await.unwrap();
+        let isolation: String = sqlx::query_scalar("SHOW transaction_isolation")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        let read_only: String = sqlx::query_scalar("SHOW transaction_read_only")
+            .fetch_one(&mut *tx)
+            .await
+            .unwrap();
+        assert_eq!(isolation, "repeatable read");
+        assert_eq!(read_only, "on");
+        tx.commit().await.unwrap();
     }
 
     #[sqlx::test(migrations = false)]

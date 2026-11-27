@@ -376,10 +376,12 @@ fn native_precision_preserves_exact_severity_thresholds() {
 async fn real_gnubg_analyzes_native_xg_and_mat_imports() {
     let engine = Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into()));
     let xg = crate::import::xg_to_sgf(include_bytes!("../../tests/fixtures/WC2014.xg")).unwrap();
-    let mat = engine
-        .normalize_mat(include_bytes!("../../tests/fixtures/WC2014.mat"))
-        .await
-        .unwrap();
+    let mat = crate::import::mat::normalize_mat(
+        &engine,
+        include_bytes!("../../tests/fixtures/WC2014.mat"),
+    )
+    .await
+    .unwrap();
     for source in [xg, mat] {
         let mut total = 0;
         for game_no in 1..=10 {

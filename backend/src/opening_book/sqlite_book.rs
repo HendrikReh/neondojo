@@ -222,7 +222,7 @@ pub(super) struct Play {
 
 pub(super) fn parse_checker(
     payload: serde_json::Value,
-    key: &str,
+    key: &CanonicalKey,
     plies: Option<i32>,
 ) -> Result<BookChecker> {
     #[derive(Deserialize)]
@@ -237,17 +237,7 @@ pub(super) fn parse_checker(
     let mut candidates = Vec::new();
     for (index, play) in entry.plays.into_iter().enumerate() {
         ensure!(play.cubeful_equity.is_finite(), "Invalid book equity");
-        let mut board: Vec<i32> = key
-            .split(':')
-            .next()
-            .context("Missing board")?
-            .bytes()
-            .map(|byte| match byte {
-                b'A'..=b'O' => i32::from(byte - b'A' + 1),
-                b'a'..=b'o' => -i32::from(byte - b'a' + 1),
-                _ => 0,
-            })
-            .collect();
+        let mut board = key.board;
         let mut notation = Vec::new();
         ensure!(
             !play.r#move.is_empty() && play.r#move.len() <= 4,
@@ -264,20 +254,7 @@ pub(super) fn parse_checker(
                 ensure!(board[to] >= -1, "Book move is blocked");
                 board[to] = board[to].max(0) + 1;
             }
-            notation.push(format!(
-                "{}/{}{}",
-                if from == 25 {
-                    "bar".into()
-                } else {
-                    from.to_string()
-                },
-                if to == 0 {
-                    "off".into()
-                } else {
-                    to.to_string()
-                },
-                if hit { "*" } else { "" }
-            ));
+            notation.push(crate::import::sgf::coord::format_step(from, to, hit));
         }
         candidates.push(Candidate {
             rank: index as i32 + 1,
@@ -335,18 +312,15 @@ pub(super) fn parse_cube(payload: serde_json::Value, plies: Option<i32>) -> Resu
     })
 }
 
-pub(super) fn context_name(key: &str) -> Result<String> {
-    let parts: Vec<_> = key.split(':').collect();
-    let length = parts[8].parse::<i32>()?;
-    if length == 0 {
-        return Ok(if parts[7] == "1" { "money" } else { "money-nj" }.into());
+pub(super) fn context_name(key: &CanonicalKey) -> String {
+    if key.is_money() {
+        return if key.is_jacoby() { "money" } else { "money-nj" }.into();
     }
-    let bottom = length - parts[5].parse::<i32>()?;
-    let top = length - parts[6].parse::<i32>()?;
-    Ok(format!(
+    let [bottom, top] = key.away();
+    format!(
         "{}a{}a{}",
         bottom.max(top),
         bottom.min(top),
-        if parts[7] == "1" { "c" } else { "" }
-    ))
+        if key.is_crawford() { "c" } else { "" }
+    )
 }

@@ -1473,7 +1473,7 @@ async fn anki_exports_update_monotonically_for_annotations_and_locales(pool: PgP
     assert_eq!(uploaded.status(), 200);
     let imported: Value =
         serde_json::from_slice(&uploaded.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    assert_eq!(imported, json!({"added":0,"updated":1,"total":1}));
+    assert_eq!(imported, json!({"added":1,"updated":0,"total":1}));
     let first = package_note(&before);
     let (a, b) = tokio::join!(
         export_bytes(app.clone(), id, "de"),
@@ -1941,4 +1941,139 @@ async fn nocube_statistics_and_cards_follow_source_rules(pool: PgPool) {
         5,
         "two distinct checker pairs and one cube offer"
     );
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn anki_package_import_counts_deck_memberships_and_preserves_existing_payload(pool: PgPool) {
+    let sgf = "(;GM[6]PW[Alice]PB[Bob];W[31hefe])";
+    let imported = store::import_match(
+        &pool,
+        "apkg-import-counts.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap();
+    let position = store::positions(&pool, Some(imported.r#match.id), None, None, 1)
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    let app = api::router(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let (status, job) = call(
+        app.clone(),
+        "POST",
+        "/api/jobs",
+        json!({"position_id":position.id,"kind":"analysis","plies":2}),
+    )
+    .await;
+    assert_eq!(status, 202, "{job}");
+    let job_id = Uuid::parse_str(job["id"].as_str().unwrap()).unwrap();
+    let result = json!({
+        "engine": "GNUbg",
+        "plies": 2,
+        "candidates": [{
+            "rank": 1,
+            "notation": "8/5 6/5",
+            "equity": 0.25,
+            "probabilities": [0.55, 0.15, 0.01, 0.45, 0.12, 0.01],
+            "plies": 2
+        }]
+    });
+    sqlx::query("UPDATE jobs SET status='completed',progress=100,result=$2 WHERE id=$1")
+        .bind(job_id)
+        .bind(&result)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let (_, source_deck) = call(
+        app.clone(),
+        "POST",
+        "/api/decks",
+        json!({"name":"Source deck"}),
+    )
+    .await;
+    let source_id = Uuid::parse_str(source_deck["id"].as_str().unwrap()).unwrap();
+    let (status, added) = call(
+        app.clone(),
+        "POST",
+        &format!("/api/decks/{source_id}/cards"),
+        json!({"position_id":position.id,"tags":["opening"]}),
+    )
+    .await;
+    assert_eq!(
+        (status, added),
+        (200, json!({"added":1,"updated":0,"total":1}))
+    );
+    let package = export_bytes(app.clone(), source_id, "en").await;
+
+    let (_, target_deck) = call(
+        app.clone(),
+        "POST",
+        "/api/decks",
+        json!({"name":"Target deck"}),
+    )
+    .await;
+    let target_id = target_deck["id"].as_str().unwrap();
+    let upload = |bytes: Vec<u8>| {
+        let app = app.clone();
+        let uri = format!("/api/decks/{target_id}/import.apkg");
+        async move {
+            let boundary = "neondojo-import-count-test";
+            let mut body = format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"deck.apkg\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+            )
+            .into_bytes();
+            body.extend_from_slice(&bytes);
+            body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method("POST")
+                        .uri(uri)
+                        .header(
+                            "content-type",
+                            format!("multipart/form-data; boundary={boundary}"),
+                        )
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let status = response.status().as_u16();
+            let value: Value =
+                serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes())
+                    .unwrap();
+            (status, value)
+        }
+    };
+
+    // First import into an empty deck adds a new deck membership even though the shared card exists.
+    assert_eq!(
+        upload(package.clone()).await,
+        (200, json!({"added":1,"updated":0,"total":1}))
+    );
+    // Re-importing the exact same package into the same deck reports it as already present.
+    assert_eq!(
+        upload(package).await,
+        (200, json!({"added":0,"updated":1,"total":1}))
+    );
+
+    // Existing card kept its local provenance and version (not overwritten by portable source).
+    let (_, source_cards) = call(
+        app,
+        "GET",
+        &format!("/api/decks/{source_id}/cards"),
+        Value::Null,
+    )
+    .await;
+    let card = &source_cards["items"][0];
+    assert_eq!(card["version"], 0);
+    assert_eq!(card["source"]["kind"], "analysis");
+    assert_eq!(card["source"]["position_id"], json!(position.id));
 }

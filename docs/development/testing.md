@@ -14,7 +14,7 @@ npm run test:themes --prefix web
 npm run build --prefix web
 ```
 
-After changing an API contract, run `npm run api:types --prefix web` before the frontend checks. It regenerates [OpenAPI](../openapi.json) and [the TypeScript types](../../web/src/generated-api.d.ts) from the Rust API. `typecheck:e2e` then checks the browser specs, their API mocks, and the components they mount against the regenerated types. Playwright itself only strips types, and its raw `route.fulfill({ json })` accepts any payload. Use [the E2E response helpers](../../web/e2e/api-fixtures.ts) to check mocks against the generated schema, for example `fulfillJson<'LibraryPage'>(route, { items: [] })` or `fulfillJsonList<'EngineInfo'>(route, engines)`. For `/api/settings` mocks, use `mockSettings` with `settingsFixture()` and override the fields the scenario needs. Its `respond` callback requires every serialized settings field, and `fail` accepts the API error body and HTTP status. Use `mockEngineCatalog(page)` to set deterministic engine availability. The core mock guard checks that inline JSON replies for settings, engine, play-session collection, and library-match collection routes use typed response helpers.
+After changing an API contract, run `npm run api:types --prefix web` before the frontend checks. It regenerates [OpenAPI](../openapi.json) and [the TypeScript types](../../web/src/generated-api.d.ts) from the Rust API. `typecheck:e2e` then checks the browser specs, their API mocks, and the components they mount against the regenerated types. Playwright itself only strips types, and its raw `route.fulfill({ json })` accepts any payload. Use [the E2E response helpers](../../web/e2e/helpers/api-fixtures.ts) to check mocks against the generated schema, for example `fulfillJson<'LibraryPage'>(route, { items: [] })` or `fulfillJsonList<'EngineInfo'>(route, engines)`. For `/api/settings` mocks, use `mockSettings` with `settingsFixture()` and override the fields the scenario needs. Its `respond` callback requires every serialized settings field, and `fail` accepts the API error body and HTTP status. Use `mockEngineCatalog(page)` to set deterministic engine availability. The core mock guard checks that inline JSON replies for settings, engine, play-session collection, and library-match collection routes use typed response helpers.
 
 The `test:themes` script discovers the Python tests under `tools/`, including tests for tools beyond theme preparation. Frontend `dev`, `build`, and `test` run `themes:prepare` automatically and abort if the untracked BGBlitz ZIP archives listed in `shared/configuration-options.json` are missing from `themes/` (such as in a fresh worktree); link or copy `themes/*.zip`, or set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally running without them. The variable leaves the tracked `shared/configuration-options.json` unchanged; only `--update-options` rewrites it.
 
@@ -41,7 +41,7 @@ The table shows median results from three cold Chrome 158 runs per build on macO
 
 The two phases together transferred 210,190 bytes after the change and 373,936 before. With Forest, the changed build transferred 169,368 bytes before the click and requested zero BGBlitz catalog bytes. The split reduces cold transfer and background parsing while moving some work to the first workspace visit. The local frame timings include network scheduling, application work and browser rendering.
 
-To repeat the observation, serve `web/dist` from the production build with a disposable backend, save German and BG Quantum, start a Chrome Performance recording with the network cache disabled, reload the welcome screen, then switch to **Spielen**. Inspect the JavaScript requests and V8 background parse events. The Playwright test in [themes-languages.spec.ts](../../web/e2e/themes-languages.spec.ts) also holds both initial downloads open and delays a runtime language switch.
+To repeat the observation, serve `web/dist` from the production build with a disposable backend, save German and BG Quantum, start a Chrome Performance recording with the network cache disabled, reload the welcome screen, then switch to **Spielen**. Inspect the JavaScript requests and V8 background parse events. The Playwright test in [themes-languages.spec.ts](../../web/e2e/settings/themes-languages.spec.ts) also holds both initial downloads open and delays a runtime language switch.
 
 ### Continuous integration
 
@@ -147,7 +147,7 @@ The November 8, 2026 rerun imported 33 of 42 files and rejected nine XG tourname
 
 ### Browser tests
 
-Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependencies. GNUbg workflows require a working local engine. Global setup builds the backend once. Each Playwright worker then starts its own Vite server on a local port and keeps it for all its spec files. For every spec file the worker creates a new database, starts a backend on it, verifies that the API is using it, and removes both before the next file. Global teardown drops any database that a crashed worker left behind. Vite serves HTTP and its development WebSocket on the same loopback port. The harness lives in [`web/e2e/stack.ts`](../../web/e2e/stack.ts) and [`web/e2e/test.ts`](../../web/e2e/test.ts).
+Playwright requires Google Chrome, `psql`, PostgreSQL, and the frontend dependencies. GNUbg workflows require a working local engine. Global setup builds the backend once. Each Playwright worker then starts its own Vite server on a local port and keeps it for all its spec files. For every spec file the worker creates a new database, starts a backend on it, verifies that the API is using it, and removes both before the next file. Global teardown drops any database that a crashed worker left behind. Vite serves HTTP and its development WebSocket on the same loopback port. The harness lives in [`web/e2e/helpers/stack.ts`](../../web/e2e/helpers/stack.ts) and [`web/e2e/helpers/test.ts`](../../web/e2e/helpers/test.ts).
 
 ```sh
 npm run test:e2e --prefix web
@@ -164,9 +164,9 @@ match analysis, automatic dice equity, and the Study overview with its two
 direct practice actions.
 
 ```sh
-npm run test:e2e --prefix web -- e2e/workflow.spec.ts
-npm run test:e2e --prefix web -- e2e/dice-equity.spec.ts
-npm run test:e2e --prefix web -- e2e/study-overview.spec.ts
+npm run test:e2e --prefix web -- e2e/analysis/workflow.spec.ts
+npm run test:e2e --prefix web -- e2e/analysis/dice-equity.spec.ts
+npm run test:e2e --prefix web -- e2e/study/study-overview.spec.ts
 ```
 
 The bulk analysis regression uses GNUbg to analyze a short match and the
@@ -174,7 +174,7 @@ ten-game WC2014 fixture. It reloads while an analysis is running and checks the
 restored progress and persisted job IDs in the disposable database.
 
 ```sh
-npm run test:e2e --prefix web -- e2e/analysis-calculation-controls.spec.ts --grep "reload resumes native bulk"
+npm run test:e2e --prefix web -- e2e/analysis/analysis-calculation-controls.spec.ts --grep "reload resumes native bulk"
 ```
 
 The default PostgreSQL connection targets the Compose instance. For another server or port, set `NEONDOJO_E2E_POSTGRES_URL` to a connection with `CREATEDB`. For tests that need prepared data, set `NEONDOJO_E2E_POSTGRES_TEMPLATE` to a dedicated fixture database named `neondojo_e2e_template_*`. The harness copies the template for each spec file. Unset the obsolete `NEONDOJO_TEST_URL` before running Playwright.
@@ -184,7 +184,7 @@ Coverage includes import and analysis, game selection and move pagination, searc
 The opt-in analysis estimate test covers all five ply depths for both game and match scope. It can reuse compatible benchmark runs from the test database template. When measurements are missing, it runs native benchmarks, which can take substantially longer than the standard browser checks.
 
 ```sh
-NEONDOJO_NATIVE_ESTIMATE=1 npm run test:e2e --prefix web -- e2e/analysis-time-estimate-native.spec.ts
+NEONDOJO_NATIVE_ESTIMATE=1 npm run test:e2e --prefix web -- e2e/analysis/analysis-time-estimate-native.spec.ts
 ```
 
 #### Opt-in browser specs
@@ -193,18 +193,18 @@ These specs skip unless their environment variable is set. Each still uses the d
 
 | Spec | Enable with | Requires |
 | --- | --- | --- |
-| `e2e/analysis-time-estimate-native.spec.ts` | `NEONDOJO_NATIVE_ESTIMATE=1` | GNUbg; may run native benchmarks |
-| `e2e/benchmark-native.spec.ts` | `NEONDOJO_NATIVE_BENCHMARK=1` | GNUbg with embedded Python for play-turn latency |
-| `e2e/play-native.spec.ts` | `NEONDOJO_NATIVE_PLAY_TEST=1` | GNUbg with embedded Python |
-| `e2e/play-full-match.spec.ts` | `NEONDOJO_FULL_MATCH_TEST=1` and `GNUBG_BIN=/absolute/path/to/gnubg` | GNUbg with embedded Python, see [Native play tests](#native-play-tests) |
-| `e2e/play-feedback-native.spec.ts` | `NEONDOJO_FEEDBACK_NATIVE_TEST=1` | GNUbg with embedded Python, see [Native feedback tests](#native-feedback-tests) |
-| `e2e/profile-native.spec.ts` | `NEONDOJO_PROFILE_NATIVE=1` | GNUbg with embedded Python for play sessions |
-| `e2e/open-sage-native.spec.ts` | `NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python` | NeonGammon and GNUbg, see [Local NeonGammon setup](../open-sage-local.md) |
-| `e2e/play-sage-difficulty.spec.ts` | `NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python` | NeonGammon 3.1.0 and GNUbg with embedded Python, see [Local NeonGammon setup](../open-sage-local.md) |
-| `e2e/anki-import.spec.ts` | `NEONDOJO_ANKI_PYTHON=/path/to/python` | Python with the Anki package |
-| `e2e/user-guide-screenshots.spec.ts` | `NEONDOJO_GUIDE_SCREENSHOTS=1` and `NEONDOJO_SAGE_PYTHON` | GNUbg with embedded Python, NeonGammon and `cwebp`, see [User guide screenshots](#user-guide-screenshots) |
+| `e2e/analysis/analysis-time-estimate-native.spec.ts` | `NEONDOJO_NATIVE_ESTIMATE=1` | GNUbg; may run native benchmarks |
+| `e2e/extras/benchmark-native.spec.ts` | `NEONDOJO_NATIVE_BENCHMARK=1` | GNUbg with embedded Python for play-turn latency |
+| `e2e/play/play-native.spec.ts` | `NEONDOJO_NATIVE_PLAY_TEST=1` | GNUbg with embedded Python |
+| `e2e/play/play-full-match.spec.ts` | `NEONDOJO_FULL_MATCH_TEST=1` and `GNUBG_BIN=/absolute/path/to/gnubg` | GNUbg with embedded Python, see [Native play tests](#native-play-tests) |
+| `e2e/play/play-feedback-native.spec.ts` | `NEONDOJO_FEEDBACK_NATIVE_TEST=1` | GNUbg with embedded Python, see [Native feedback tests](#native-feedback-tests) |
+| `e2e/settings/profile-native.spec.ts` | `NEONDOJO_PROFILE_NATIVE=1` | GNUbg with embedded Python for play sessions |
+| `e2e/analysis/open-sage-native.spec.ts` | `NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python` | NeonGammon and GNUbg, see [Local NeonGammon setup](../open-sage-local.md) |
+| `e2e/play/play-sage-difficulty.spec.ts` | `NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python` | NeonGammon 3.1.0 and GNUbg with embedded Python, see [Local NeonGammon setup](../open-sage-local.md) |
+| `e2e/study/anki-import.spec.ts` | `NEONDOJO_ANKI_PYTHON=/path/to/python` | Python with the Anki package |
+| `e2e/extras/user-guide-screenshots.spec.ts` | `NEONDOJO_GUIDE_SCREENSHOTS=1` and `NEONDOJO_SAGE_PYTHON` | GNUbg with embedded Python, NeonGammon and `cwebp`, see [User guide screenshots](#user-guide-screenshots) |
 
-Individual archive-dependent checks in `e2e/themes-languages.spec.ts`, `e2e/ui-themes.spec.ts`, and `e2e/play-checker-colour.spec.ts` also skip automatically when the corresponding local BGBlitz board archives are not installed.
+Individual archive-dependent checks in `e2e/settings/themes-languages.spec.ts`, `e2e/settings/ui-themes.spec.ts`, and `e2e/play/play-checker-colour.spec.ts` also skip automatically when the corresponding local BGBlitz board archives are not installed.
 
 ### User guide screenshots
 
@@ -213,7 +213,7 @@ The screenshots in [`docs/user-guide/images/`](../user-guide/images/) are genera
 ```sh
 NEONDOJO_GUIDE_SCREENSHOTS=1 \
 NEONDOJO_SAGE_PYTHON=/path/to/neongammon-venv/bin/python \
-  npm run test:e2e --prefix web -- e2e/user-guide-screenshots.spec.ts
+  npm run test:e2e --prefix web -- e2e/extras/user-guide-screenshots.spec.ts
 ```
 
 The captures use the default appearance unless you choose another one. The values are saved into the test profile before the seed starts, and the backend rejects invalid ones:
@@ -231,7 +231,7 @@ NEONDOJO_GUIDE_INTERFACE_THEME=graphite \
 NEONDOJO_GUIDE_DISPLAY_MODE=light \
 NEONDOJO_GUIDE_BOARD_THEME=bg-moon \
 NEONDOJO_GUIDE_SCREENSHOTS_DIR=/tmp/neondojo-guide-moon \
-  npm run test:e2e --prefix web -- e2e/user-guide-screenshots.spec.ts
+  npm run test:e2e --prefix web -- e2e/extras/user-guide-screenshots.spec.ts
 ```
 
 The user guide describes the default appearance, so write other variants to a separate directory.
@@ -253,7 +253,7 @@ The opt-in browser suite uses Playwright's test backend, native GNUbg with seede
 cd web
 NEONDOJO_FULL_MATCH_TEST=1 \
 GNUBG_BIN=/absolute/path/to/gnubg \
-npx playwright test e2e/play-full-match.spec.ts --output=/tmp/neondojo-full-match-results --reporter=line
+npx playwright test e2e/play/play-full-match.spec.ts --output=/tmp/neondojo-full-match-results --reporter=line
 ```
 
 ### Engine Duel process reuse
@@ -282,5 +282,5 @@ To verify mode switching and feedback with the configured GNUbg and an isolated 
 ```sh
 cd web
 NEONDOJO_FEEDBACK_NATIVE_TEST=1 \
-  npx playwright test e2e/play-feedback-native.spec.ts
+  npx playwright test e2e/play/play-feedback-native.spec.ts
 ```

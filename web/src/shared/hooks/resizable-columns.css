@@ -25,7 +25,9 @@
   background: var(--ui-accent-hover);
 }
 .resizing-table,
-.resizing-table * {
+.resizing-table *,
+.library-table-resizing,
+.library-table-resizing * {
   cursor: col-resize !important;
   user-select: none;
 }

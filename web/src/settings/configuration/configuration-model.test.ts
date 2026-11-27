@@ -284,3 +284,14 @@ it('upgrades the column order and action widths from an existing version 1 profi
   expect(upgraded.positions.column_widths).toEqual({ actions: 60 });
   expect(normalizeConfiguration(upgraded)).toEqual(upgraded);
 });
+
+it('accepts backend-aligned learning kind "anki" and library sort alias "match_no"', () => {
+  const current = structuredClone(defaultConfiguration);
+  current.learning.filters.kind = 'anki';
+  const normalized = normalizeConfiguration({
+    ...current,
+    library: { ...current.library, sort: 'match_no' },
+  });
+  expect(normalized.learning.filters.kind).toBe('anki');
+  expect(normalized.library.sort).toBe('id');
+});

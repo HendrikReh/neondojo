@@ -6,7 +6,7 @@ const css: string = readFileSync(
   'utf8',
 );
 const boardCss: string = readFileSync(
-  new URL('./style.css', import.meta.url),
+  new URL('../shared/board/board.css', import.meta.url),
   'utf8',
 );
 const boardPreviewCss: string = readFileSync(

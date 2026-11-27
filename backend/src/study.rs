@@ -6,7 +6,6 @@ use crate::{
 };
 use anyhow::Context;
 use axum::{Router, extract::State};
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -113,15 +112,8 @@ async fn list_reports(
     }
     let cursor: Option<Cursor> = query
         .after
-        .map(|encoded| {
-            if encoded.len() > 512 {
-                return Err(ApiError::invalid("Invalid report cursor"));
-            }
-            let bytes = URL_SAFE_NO_PAD
-                .decode(encoded)
-                .map_err(|_| ApiError::invalid("Invalid report cursor"))?;
-            serde_json::from_slice(&bytes).map_err(|_| ApiError::invalid("Invalid report cursor"))
-        })
+        .as_deref()
+        .map(|encoded| crate::cursor::decode(encoded, 512, "Invalid report cursor"))
         .transpose()?;
     if cursor
         .as_ref()
@@ -191,16 +183,11 @@ async fn list_reports(
     }
     let next_cursor = if has_more {
         let last = rows.last().context("Study report page has no cursor row")?;
-        Some(
-            URL_SAFE_NO_PAD.encode(
-                serde_json::to_vec(&Cursor {
-                    updated_at: last.page_updated_at,
-                    id: last.page_id,
-                    grouped,
-                })
-                .map_err(anyhow::Error::from)?,
-            ),
-        )
+        Some(crate::cursor::encode(&Cursor {
+            updated_at: last.page_updated_at,
+            id: last.page_id,
+            grouped,
+        })?)
     } else {
         None
     };

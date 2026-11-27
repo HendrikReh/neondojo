@@ -344,6 +344,60 @@ pub(super) fn build_review(
 fn native_close_cube(optimal: f64, take: f64) -> bool {
     (optimal as f32 - (take as f32).min(1.0)) < 0.16_f32
 }
+pub(super) fn forced_pass_alternative() -> PlayAlternative {
+    PlayAlternative {
+        rating_decisions: 0,
+        action: "pass".into(),
+        move_index: None,
+        notation: "pass".into(),
+        loss: 0.0,
+        equity: None,
+        probabilities: None,
+    }
+}
+
+pub(super) fn cube_alternatives(
+    phase: &PlayPhase,
+    no_double: f64,
+    take: f64,
+    pass: f64,
+    probabilities: [f64; 6],
+    rating_decisions: impl Fn(&str) -> i32,
+) -> Vec<PlayAlternative> {
+    let response = matches!(phase, PlayPhase::DoubleResponse);
+    let probabilities = if response {
+        crate::engine::flip_probabilities(probabilities)
+    } else {
+        probabilities
+    }
+    .to_vec();
+    let values = if response {
+        [("take", -take), ("drop", -pass)]
+    } else {
+        [("roll", no_double), ("double", take.min(pass))]
+    };
+    let best = values
+        .iter()
+        .map(|(_, equity)| *equity)
+        .fold(f64::NEG_INFINITY, f64::max);
+    values
+        .into_iter()
+        .map(|(action, equity)| PlayAlternative {
+            rating_decisions: rating_decisions(action),
+            action: action.into(),
+            move_index: None,
+            notation: if action == "roll" {
+                "No double".into()
+            } else {
+                action.into()
+            },
+            loss: crate::match_analysis::normalized_loss(equity, best),
+            equity: Some(equity),
+            probabilities: Some(probabilities.clone()),
+        })
+        .collect()
+}
+
 pub(super) async fn analyze_decision(
     session: &PlaySession,
     path: &str,
@@ -375,15 +429,7 @@ pub(super) async fn analyze_decision(
         .await?;
     if matches!(session.phase, PlayPhase::Move) {
         if session.legal_moves.is_empty() {
-            return Ok(vec![PlayAlternative {
-                rating_decisions: 0,
-                action: "pass".into(),
-                move_index: None,
-                notation: "pass".into(),
-                loss: 0.0,
-                equity: None,
-                probabilities: None,
-            }]);
+            return Ok(vec![forced_pass_alternative()]);
         }
         let (candidates, _) =
             crate::engine::parse_full_checker_hints(&output, session.analysis_plies, true)?;
@@ -419,7 +465,7 @@ pub(super) async fn analyze_decision(
         no_double,
         take,
         pass,
-        ..
+        probabilities,
     } = crate::engine::parse_cube_equities(&output)?;
     let native_values: Vec<f64> =
         serde_json::from_slice(&tokio::fs::read(directory.path().join("cube.json")).await?)?;
@@ -428,53 +474,15 @@ pub(super) async fn analyze_decision(
         "Invalid native cube values"
     );
     let close = native_close_cube(native_values[0], native_values[2]);
-    let probabilities = output
-        .lines()
-        .find_map(|line| {
-            let values: Vec<f64> = line
-                .split_whitespace()
-                .filter_map(|part| part.parse::<f64>().ok())
-                .collect();
-            (values.len() == 6 && values.iter().all(|v| (0.0..=1.0).contains(v))).then_some(values)
-        })
-        .context("GNUbg cube probabilities missing")?;
-    let probabilities = if matches!(session.phase, PlayPhase::DoubleResponse) {
-        vec![
-            probabilities[3],
-            probabilities[4],
-            probabilities[5],
-            probabilities[0],
-            probabilities[1],
-            probabilities[2],
-        ]
-    } else {
-        probabilities
-    };
-    let values = if matches!(session.phase, PlayPhase::DoubleResponse) {
-        vec![("take", -take), ("drop", -pass)]
-    } else {
-        vec![("roll", no_double), ("double", take.min(pass))]
-    };
-    let best = values
-        .iter()
-        .map(|(_, eq)| *eq)
-        .fold(f64::NEG_INFINITY, f64::max);
-    Ok(values
-        .into_iter()
-        .map(|(action, equity)| PlayAlternative {
-            rating_decisions: i32::from(action != "roll" || close),
-            action: action.into(),
-            move_index: None,
-            notation: if action == "roll" {
-                "No double".into()
-            } else {
-                action.into()
-            },
-            loss: crate::match_analysis::normalized_loss(equity, best),
-            equity: Some(equity),
-            probabilities: Some(probabilities.clone()),
-        })
-        .collect())
+    let probabilities = probabilities.context("GNUbg cube probabilities missing")?;
+    Ok(cube_alternatives(
+        &session.phase,
+        no_double,
+        take,
+        pass,
+        probabilities,
+        |action| i32::from(action != "roll" || close),
+    ))
 }
 
 #[cfg(test)]
@@ -845,5 +853,39 @@ mod tests {
         let pending = state.pending_decision.unwrap();
         assert!(!pending.warning);
         assert_eq!(pending.severity.as_deref(), Some("blunder"));
+    }
+
+    #[test]
+    fn cube_alternatives_flips_response_probabilities_and_sets_actions() {
+        let probs = [0.65, 0.2, 0.05, 0.35, 0.08, 0.01];
+        let offer = cube_alternatives(&PlayPhase::Roll, 0.4, 0.8, 1.0, probs, |action| {
+            i32::from(action != "roll")
+        });
+        assert_eq!(offer.len(), 2);
+        assert_eq!(offer[0].action, "roll");
+        assert_eq!(offer[0].notation, "No double");
+        assert_eq!(offer[0].rating_decisions, 0);
+        assert_eq!(offer[0].probabilities.as_deref(), Some(probs.as_slice()));
+        assert_eq!(offer[1].action, "double");
+        assert_eq!(offer[1].equity, Some(0.8));
+        assert_eq!(offer[1].loss, 0.0);
+        assert_eq!(offer[1].rating_decisions, 1);
+
+        let response = cube_alternatives(&PlayPhase::DoubleResponse, 0.4, 0.8, 1.0, probs, |_| 0);
+        assert_eq!(response[0].action, "take");
+        assert_eq!(response[0].equity, Some(-0.8));
+        assert_eq!(response[0].loss, 0.0);
+        assert_eq!(response[1].action, "drop");
+        assert_eq!(response[1].equity, Some(-1.0));
+        assert_eq!(
+            response[0].probabilities.as_deref(),
+            Some([0.35, 0.08, 0.01, 0.65, 0.2, 0.05].as_slice())
+        );
+
+        let pass = forced_pass_alternative();
+        assert_eq!(pass.action, "pass");
+        assert_eq!(pass.notation, "pass");
+        assert_eq!(pass.loss, 0.0);
+        assert!(pass.equity.is_none() && pass.probabilities.is_none());
     }
 }

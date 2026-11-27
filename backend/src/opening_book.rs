@@ -21,7 +21,10 @@ mod keys;
 mod lookup;
 mod routes;
 mod sqlite_book;
-pub(crate) use keys::canonical_keys;
+pub mod xg_book;
+use keys::CanonicalKey;
+#[cfg(test)]
+use keys::canonical_keys;
 pub(crate) use lookup::LookupCache;
 pub use lookup::{lookup, lookup_with_rules};
 pub use routes::OpeningBookDoc;
@@ -72,7 +75,7 @@ pub struct BookStatus {
 pub struct BookSettings {
     pub config: BookConfig,
     pub status: BookStatus,
-    pub xg_status: crate::xg_book::XgBookStatus,
+    pub xg_status: xg_book::XgBookStatus,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
@@ -121,7 +124,7 @@ pub struct BookLookup {
     pub cube: Option<BookCube>,
     pub provenance: Option<BookProvenance>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub xg_position: Option<crate::xg_book::XgPositionResult>,
+    pub xg_position: Option<xg_book::XgPositionResult>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -133,7 +136,7 @@ pub(crate) async fn load(pool: &sqlx::PgPool) -> Result<BookConfig> {
     sqlx::query("INSERT INTO opening_book_settings(singleton,path) VALUES(true,$1) ON CONFLICT(singleton) DO NOTHING")
         .bind(default_path()).execute(pool).await?;
     sqlx::query("UPDATE opening_book_settings SET xg_path=$1 WHERE singleton=true AND xg_path=''")
-        .bind(crate::xg_book::default_path())
+        .bind(xg_book::default_path())
         .execute(pool)
         .await?;
     Ok(sqlx::query_as(

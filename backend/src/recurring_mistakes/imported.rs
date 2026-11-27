@@ -1,9 +1,7 @@
 //! Bounded foreign catalogs; native checkpoint ownership is decided before projection.
 use super::{
     MistakePracticeQuestion, MistakeReference, MistakeSource, imported_projection,
-    source::{
-        CHOSEN, ELIGIBLE, MAX_DECISIONS, MAX_GAMES, MAX_SOURCE_BYTES, SourceDecision, TOO_BROAD,
-    },
+    source::{ELIGIBLE, MAX_DECISIONS, MAX_GAMES, MAX_SOURCE_BYTES, SourceDecision, TOO_BROAD},
 };
 use crate::{
     api::{ApiError, ApiResult},
@@ -133,7 +131,7 @@ pub(super) async fn load(
     native_games: usize,
     native_decisions: usize,
 ) -> ApiResult<Imported> {
-    let count: i64 = sqlx::query_scalar(&format!("{CHOSEN} SELECT count(*) {FOREIGN}"))
+    let count: i64 = sqlx::query_scalar(&format!("{ELIGIBLE} SELECT count(*) {FOREIGN}"))
         .bind(database)
         .bind(match_id)
         .bind(player.map(<[String]>::to_vec))
@@ -143,14 +141,14 @@ pub(super) async fn load(
     if count + native_games as i64 > MAX_GAMES as i64 {
         return Err(ApiError::invalid(TOO_BROAD));
     }
-    let games=sqlx::query_as(&format!("{CHOSEN} SELECT m.id AS match_id,g.game_no,g.cube_enabled,m.format,m.white,m.black {FOREIGN} ORDER BY m.id,g.game_no"))
+    let games=sqlx::query_as(&format!("{ELIGIBLE} SELECT m.id AS match_id,g.game_no,g.cube_enabled,m.format,m.white,m.black {FOREIGN} ORDER BY m.id,g.game_no"))
         .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
-    let events:Vec<ImportedEvent>=sqlx::query_as(&format!("{CHOSEN} SELECT e.*,p.ply AS checker_ply FROM eligible m JOIN match_moves e ON e.match_uuid=m.id LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no WHERE {DECISION_FORMATS} AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,e.game_no,e.move_no LIMIT {}",MAX_DECISIONS+1))
+    let events:Vec<ImportedEvent>=sqlx::query_as(&format!("{ELIGIBLE} SELECT e.*,p.ply AS checker_ply FROM eligible m JOIN match_moves e ON e.match_uuid=m.id LEFT JOIN positions p ON p.id=e.position_uuid AND p.match_uuid=e.match_uuid AND p.game_no=e.game_no WHERE {DECISION_FORMATS} AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,e.game_no,e.move_no LIMIT {}",MAX_DECISIONS+1))
         .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     if events.len() > MAX_DECISIONS {
         return Err(ApiError::invalid(TOO_BROAD));
     }
-    let rows:Vec<ImportedRow>=sqlx::query_as(&format!("{CHOSEN} SELECT a.id,a.match_uuid AS match_id,a.position_uuid,a.game_no,a.source_move_no,a.kind,a.data FROM eligible m JOIN primary_imported_analyses a ON a.match_uuid=m.id WHERE {DECISION_FORMATS} AND a.kind IN ('checker','cube') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,a.game_no,a.source_move_no,a.source_ordinal LIMIT {}",MAX_DECISIONS+1))
+    let rows:Vec<ImportedRow>=sqlx::query_as(&format!("{ELIGIBLE} SELECT a.id,a.match_uuid AS match_id,a.position_uuid,a.game_no,a.source_move_no,a.kind,a.data FROM eligible m JOIN primary_imported_analyses a ON a.match_uuid=m.id WHERE {DECISION_FORMATS} AND a.kind IN ('checker','cube') AND EXISTS(SELECT 1 FROM effective_analysis_selections selected WHERE selected.match_id=m.id AND selected.source='imported') ORDER BY m.id,a.game_no,a.source_move_no,a.source_ordinal LIMIT {}",MAX_DECISIONS+1))
         .bind(database).bind(match_id).bind(player.map(<[String]>::to_vec)).fetch_all(&mut **tx).await.map_err(anyhow::Error::from)?;
     if rows.len() + native_decisions > MAX_DECISIONS {
         return Err(ApiError::invalid(TOO_BROAD));
@@ -215,24 +213,12 @@ pub(super) fn reconstruct(imported: Imported) -> Vec<SourceDecision> {
             ) else {
                 continue;
             };
-            let Ok(board) = <&[i32; 26]>::try_from(p.position.board.as_slice()) else {
+            let Some(plan) = game_plan::classify_for_player(&p.position.board, p.decision.player)
+            else {
                 continue;
             };
-            let Ok(plans) = game_plan::classify(board) else {
-                continue;
-            };
-            let plan = if p.decision.player == 0 {
-                plans.white
-            } else {
-                plans.black
-            };
-            let kind = if p.decision.kind == "checker" {
-                "checker"
-            } else if matches!(p.decision.played.as_str(), "take" | "drop") {
-                "cube_response"
-            } else {
-                "cube_offer"
-            };
+            let kind =
+                crate::cube_context::decision_question_kind(&p.decision.kind, &p.decision.played);
             let method = if record.kind == "checker" {
                 record
                     .candidates

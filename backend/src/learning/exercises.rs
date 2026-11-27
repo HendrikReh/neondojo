@@ -119,16 +119,7 @@ fn score_positions(content: &CardContent) -> ApiResult<Vec<Position>> {
         );
         position.dice = vec![0, 0];
         position.notation.clear();
-        if practice::cube_context(&position, response).is_ok()
-            && (response
-                || crate::match_analysis::cube_analysis_available(
-                    &position.board,
-                    &position.gnubg_match_id,
-                    position.player,
-                    position.cube_enabled != Some(false),
-                )
-                .unwrap_or(false))
-        {
+        if crate::cube_context::is_cube_practice_eligible(&position, response) {
             positions.push(position);
         }
     }

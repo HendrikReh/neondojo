@@ -17,7 +17,6 @@ export default {
   notes: 'Notes',
   cards: 'Study cards',
   nextError: 'Next error',
-  databaseTitle: 'Match database',
   databaseDescription:
     'Find matches and positions, read notes and open a match for analysis.',
   welcomeTitle: 'Your next move starts here.',

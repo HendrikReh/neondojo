@@ -148,10 +148,10 @@ NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test inte
 NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python cargo test -p neondojo sage_executes_reference_checker_turns_using_gnubg_rules --lib -- --ignored --test-threads=1
 OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test integration open_sage_settings:: -- --ignored --test-threads=1
 OPEN_SAGE_TEST_PYTHON=/path/to/venv/bin/python cargo test -p neondojo --test integration open_sage_play:: -- --ignored --test-threads=1
-NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python npm run test:e2e --prefix web -- e2e/open-sage-native.spec.ts e2e/play-sage-difficulty.spec.ts
+NEONDOJO_SAGE_PYTHON=/path/to/venv/bin/python npm run test:e2e --prefix web -- e2e/analysis/open-sage-native.spec.ts e2e/play/play-sage-difficulty.spec.ts
 ```
 
-Run these groups one at a time and with `--test-threads=1`. A combined run of `cargo test --workspace -- --include-ignored` with the Sage variables set makes the process tests in `engines::process` fail, because they share the global worker with the real engine tests. The browser specs skip themselves without `NEONDOJO_SAGE_PYTHON` and use the Playwright harness's own database and backend ([Browser tests](development/testing.md#browser-tests)); `e2e/play-sage-difficulty.spec.ts` checks the 3.1.0 opponent presets.
+Run these groups one at a time and with `--test-threads=1`. A combined run of `cargo test --workspace -- --include-ignored` with the Sage variables set makes the process tests in `engines::process` fail, because they share the global worker with the real engine tests. The browser specs skip themselves without `NEONDOJO_SAGE_PYTHON` and use the Playwright harness's own database and backend ([Browser tests](development/testing.md#browser-tests)); `e2e/play/play-sage-difficulty.spec.ts` checks the 3.1.0 opponent presets.
 
 The probe and the worker reject earlier `bgsage` builds already at the version check; no test needs the original wheel or an earlier fork.
 
@@ -246,7 +246,7 @@ Verified on November 20, 2026 with `NEONDOJO_SAGE_PYTHON` and `OPEN_SAGE_TEST_PY
 
 - Ignored library tests in `engines::`, `play::open_sage`, `engine_matches::` and `practice::evaluation`: 15 passed.
 - `--test open_sage`: 2 passed; `--test open_sage_settings`: 7 passed; `--test open_sage_play`: 4 passed.
-- `e2e/open-sage-native.spec.ts`: 2 passed, including 4-ply for one game and for the whole match.
+- `e2e/analysis/open-sage-native.spec.ts`: 2 passed, including 4-ply for one game and for the whole match.
 
 ## Engine contract and adapter
 

@@ -121,11 +121,7 @@ async fn search(
     Path(id): Path<Uuid>,
     Query(query): Query<SimilarQuery>,
 ) -> ApiResult<Json<SimilarPositions>> {
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     let target: Target = sqlx::query_as(&format!(
         "SELECT p.board,p.player,coalesce(m.source_match_id,m.id) AS source_match,
                 CASE WHEN NOT m.collection_only THEN m.sha256 END AS source_hash,
@@ -413,14 +409,10 @@ fn pips(profile: &CheckerProfile) -> (i32, i32) {
 type CheckerProfile = [[i32; 25]; 2];
 
 fn profile(board: &[i32], player: i32) -> Option<CheckerProfile> {
-    if board.len() != 26
-        || !matches!(player, 0 | 1)
-        || board[0] > 0
-        || board[25] < 0
-        || board.iter().any(|n| !(-15..=15).contains(n))
-    {
+    if !matches!(player, 0 | 1) {
         return None;
     }
+    let board = crate::backgammon::board::validate_slice(board).ok()?;
     let mut profiles = [[0; 25]; 2];
     let mut remaining = [0; 2];
     // Each side's bar is point 25, and its borne-off checkers are at 0.
@@ -431,9 +423,6 @@ fn profile(board: &[i32], player: i32) -> Option<CheckerProfile> {
         remaining[1] += (-board[25 - point]).max(0);
         profiles[0][point - 1] = remaining[0];
         profiles[1][point - 1] = remaining[1];
-    }
-    if remaining.iter().any(|count| *count > 15) {
-        return None;
     }
     if player == 1 {
         profiles.swap(0, 1);

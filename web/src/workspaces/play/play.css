@@ -77,21 +77,6 @@
   position-try-fallbacks: flip-block, flip-inline;
   margin: 4px 0 0;
   max-width: min(18rem, 90vw);
-  padding: 6px;
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  background: var(--ui-surface);
-  color: var(--ui-text);
-  box-shadow: 0 8px 24px var(--ui-shadow);
-}
-.play-menu:popover-open {
-  display: grid;
-  gap: 4px;
-}
-.play-menu .action-button {
-  justify-content: flex-start;
-  border-color: transparent;
-  background: transparent;
 }
 /* Name, score and pip count sit together and stay readable beside the board. */
 .play-live-board > .board-shell > .player-bar {
@@ -604,9 +589,6 @@
 .play-feedback-result[data-severity='blunder'],
 .play-feedback-result[data-severity='very_bad'] {
   color: var(--ui-danger-text);
-}
-.play-hint {
-  margin-bottom: 12px;
 }
 
 .play-mode-control {

@@ -3,6 +3,7 @@ import ActionButton from '../../shared/ui/ActionButton';
 import LibraryDialog from '../../shared/ui/LibraryDialog';
 import { depthLabel } from '../../shared/engine/analysis-depth';
 import { engineDisplayName } from '../../shared/engine/engine-version';
+import { formatPly } from '../../shared/format/ply';
 import { useI18n } from '../../shared/i18n/i18n';
 import type { EngineInfo } from '../../settings/settings-api';
 import {
@@ -71,7 +72,7 @@ function EngineChoice({
         >
           {!depths.includes(value.plies) && (
             <option value={value.plies} disabled>
-              {number(value.plies)}-ply · {text('unavailable')}
+              {formatPly(value.plies, number)} · {text('unavailable')}
             </option>
           )}
           {depths.map((depth) => (

@@ -69,18 +69,7 @@ pub(super) fn prepare(
                 .join(" ");
             let image = board_svg(&content)?;
             let mut portable = content;
-            portable.position.id = Uuid::nil();
-            portable.position.match_uuid = Uuid::nil();
-            portable.source = CardSource {
-                kind: "anki".into(),
-                job_id: None,
-                analysis_id: None,
-                imported_analysis_id: None,
-                match_id: Uuid::nil(),
-                position_id: None,
-                game_no: 1,
-                decision_no: None,
-            };
+            CardSource::strip_local_refs(&mut portable);
             let structured = serde_json::to_string(&portable)?;
             Ok(ExportCard {
                 id,

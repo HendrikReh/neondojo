@@ -25,7 +25,10 @@ import time
 if 'RELEASES' not in globals():  # Rust embeds the same file in the worker.
     RELEASES = json.loads((Path(__file__).resolve().parents[1] / 'shared/neongammon-releases.json').read_text())
 SUPPORTED_VERSIONS = tuple(RELEASES)
+SUPPORTED_LEVELS = ('1ply', '2ply', '3ply', '4ply')
+DEFAULT_LEVELS = ('1ply', '2ply')
 NUMPY_VERSION = '2.5.4'
+PROBABILITY_EPSILON = 1e-7
 # The requested thread budget is the engine's only parallelism, as in the
 # application worker (SINGLE_THREADED_MATH in backend/src/engines/process.rs).
 SINGLE_THREADED_MATH = {'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1', 'VECLIB_MAXIMUM_THREADS': '1'}
@@ -100,12 +103,20 @@ def observe_thread_budgets(sage, call):
     return result, observed
 
 
-def validate_probabilities(values):
-    require(len(values) == 5 and all(math.isfinite(x) and 0 <= x <= 1 for x in values),
+def normalize_probabilities(values, *, epsilon=PROBABILITY_EPSILON):
+    # Native float32 accumulation can exceed exact probability endpoints by
+    # ~7.45e-9 (WC2014 game 5 bearoff). Bound rounding below one float32 epsilon;
+    # larger errors and inconsistent nesting still fail closed.
+    require(len(values) == 5 and all(math.isfinite(x) and -epsilon <= x <= 1 + epsilon for x in values),
             'Non-finite or out-of-range probabilities')
-    win, gw, bw, gl, bl = values
+    win, gw, bw, gl, bl = (min(1.0, max(0.0, x)) for x in values)
     require(bw <= gw <= win and bl <= gl <= 1 - win + 1e-12,
             'Inconsistent nested probabilities')
+    return [win, gw, bw, 1 - win, gl, bl]
+
+
+def validate_probabilities(values, *, epsilon=PROBABILITY_EPSILON):
+    normalize_probabilities(values, epsilon=epsilon)
 
 
 def validate_result(result, probability_validator=validate_probabilities):
@@ -213,13 +224,323 @@ def stat_snapshot(paths):
     return tuple(snapshot)
 
 
+def normalize_levels(levels):
+    selected = list(dict.fromkeys(levels)) if levels else list(DEFAULT_LEVELS)
+    invalid = [level for level in selected if level not in SUPPORTED_LEVELS]
+    require(not invalid, f"Unsupported probe level(s): {', '.join(invalid)}. Supported: {', '.join(SUPPORTED_LEVELS)}.")
+    return selected
+
+
+def opening_boards(sage):
+    opening = list(sage.STARTING_BOARD)
+    five_point = opening.copy()
+    five_point[8] -= 1
+    five_point[6] -= 1
+    five_point[5] += 2
+    return opening, five_point
+
+
+def load_and_verify_engine(report):
+    import_start = time.perf_counter()
+    try:
+        import neongammon as sage
+        import bgbot_cpp as native
+    except (ImportError, OSError) as error:
+        raise ProbeError(
+            'NeonGammon dependency/native library unavailable. Install the locked wheels into native Python 3.12; '
+            'import failure: ' + type(error).__name__
+        ) from None
+    report['import_seconds'] = time.perf_counter() - import_start
+    report['identity'] = identity(sage, native)
+    validate_versions(report['identity'])
+    for name in ('checker_play', 'cube_action', 'cube_decision', 'post_move_analytics'):
+        require(callable(getattr(sage.BgBotAnalyzer, name, None)), f'Missing API {name}')
+    require('force_boards' in inspect.signature(sage.BgBotAnalyzer.checker_play).parameters,
+            'Missing force_boards capability; this build cannot evaluate filtered played moves.')
+    report['capabilities'] = ['checker_play', 'cube_action', 'cube_decision', 'post_move_analytics', 'force_boards']
+    return sage, native
+
+
+def run_check(report, name, function):
+    start = time.perf_counter()
+    try:
+        detail = function()
+        report['checks'].append({'name': name, 'status': 'passed',
+                                 'seconds': time.perf_counter() - start, 'detail': detail})
+    except Exception as error:
+        report['checks'].append({'name': name, 'status': 'failed',
+                                 'seconds': time.perf_counter() - start,
+                                 'error': str(error) if isinstance(error, ProbeError) else type(error).__name__})
+
+
+def check_opening_31_five_point(sage, analyzer):
+    opening, five_point = opening_boards(sage)
+    legal = sage.possible_moves(opening, 3, 1)
+    require(five_point in legal, 'Opening 8/5 6/5 missing from legal moves')
+    result = analyzer.checker_play(opening, 3, 1, jacoby=True, beaver=False)
+    require(result.moves and result.moves[0].board == five_point, 'Opening 31 does not choose 8/5 6/5')
+    require({tuple(move.board) for move in result.moves} == {tuple(board) for board in legal},
+            'Checker result does not cover legal candidates')
+    for move in result.moves:
+        validate_result(move)
+    return {'best_board': five_point, 'candidates': len(result.moves),
+            'best_equity': result.moves[0].equity, 'level': result.eval_level}
+
+
+def check_public_move_notation(sage):
+    from neongammon.text_export import compute_move_notation
+    opening, five_point = opening_boards(sage)
+    require(compute_move_notation(opening, five_point, 3, 1) == '8/5 6/5', 'Opening notation mismatch')
+    before = [0] * 26
+    before[25], before[6], before[24], before[23] = 1, 14, -1, -14
+    after = before.copy()
+    after[25], after[0], after[24], after[22] = 0, 1, 0, 1
+    require(after in sage.possible_moves(before, 1, 2), 'Independent bar-hit reference is not generated as legal')
+    notation = compute_move_notation(before, after, 1, 2)
+    require(notation == 'bar/24* 24/22', 'Bar-hit notation mismatch: ' + notation)
+    blocked = before.copy()
+    blocked[24], blocked[23] = -2, -13
+    require(sage.possible_moves(blocked, 1, 2) == [blocked], 'Blocked notation fixture not a forced pass')
+    require(compute_move_notation(blocked, blocked, 1, 2) == '', 'Pass notation must be empty')
+    bearoff = [0] * 26
+    bearoff[1], bearoff[24] = 2, -2
+    borne_off = bearoff.copy()
+    borne_off[1] = 0
+    require(compute_move_notation(bearoff, borne_off, 1, 1) == '1/off(2)', 'Bearoff notation mismatch')
+    return {'opening': '8/5 6/5', 'bar_hit': notation, 'pass': '', 'bearoff': '1/off(2)'}
+
+
+def check_both_perspectives_and_bars(sage, analyzer):
+    board = [0] * 26
+    board[0], board[25], board[6], board[24] = 2, 1, 14, -13
+    expected = [0] * 26
+    expected[0], expected[25], expected[19], expected[1] = 1, 2, -14, 13
+    require(sage.flip_board(board) == expected, 'Asymmetric points/bars flip differs from independent reference')
+    require(sage.flip_board(expected) == board, 'Perspective flip is not involutive')
+    for current in (board, expected):
+        result = analyzer.checker_play(current, 2, 1, beaver=False)
+        require(result.moves, 'Bar entry incorrectly produces no moves')
+        for move in result.moves:
+            validate_result(move)
+            require(move.board[25] < current[25], 'Bar entry did not use own bar')
+    return {'own_bar_index': 25, 'opponent_bar_index': 0, 'both_bars_nonnegative': True}
+
+
+def check_money_jacoby_cube_owners(sage, analyzer):
+    _, five_point = opening_boards(sage)
+    values = []
+    for jacoby in (False, True):
+        for owner in ('centered', 'player', 'opponent'):
+            result = analyzer.cube_action(five_point, cube_value=1 if owner == 'centered' else 2,
+                                          cube_owner=owner, jacoby=jacoby, beaver=False)
+            validate_result(result)
+            require(not result.is_beaver, 'Beaver returned although disabled')
+            require(abs(result.equity_dp - 1) < 1e-8, 'Money pass equity is not +1 current cube')
+            values.append({'jacoby': jacoby, 'owner': owner, 'no_double': result.equity_nd,
+                           'double_take': result.equity_dt, 'double_pass': result.equity_dp})
+    return values
+
+
+def check_match_and_crawford(sage, analyzer):
+    opening, five_point = opening_boards(sage)
+    values = []
+    for away1, away2, crawford in ((5, 3, False), (1, 3, True), (3, 1, True), (1, 3, False)):
+        context = dict(away1=away1, away2=away2, is_crawford=crawford, beaver=False)
+        result = analyzer.cube_action(five_point, **context)
+        validate_result(result)
+        if crawford:
+            require(not sage.can_double_match(away1, away2, 1, 'centered', True), 'Crawford permits doubling')
+            require(not result.should_double, 'Crawford cube evaluation recommends double')
+        played = analyzer.checker_play(opening, 3, 1, **context)
+        for move in played.moves:
+            validate_result(move)
+        values.append({'away1': away1, 'away2': away2, 'crawford': crawford,
+                       'no_double': result.equity_nd, 'double_take': result.equity_dt,
+                       'double_pass': result.equity_dp, 'action': result.optimal_action})
+    return values
+
+
+def check_forced_pass_post_move(sage, analyzer):
+    board = [0] * 26
+    board[25], board[6] = 1, 14
+    for point in range(19, 25):
+        board[point] = -2
+    board[18] = -3
+    require(sage.possible_moves(board, 3, 1) == [board], 'Blocked bar must return only the unchanged pass board')
+    moves = analyzer.checker_play(board, 3, 1, beaver=False).moves
+    require(len(moves) == 1 and moves[0].board == board,
+            'Blocked bar checker result must evaluate the unchanged pass board')
+    validate_result(moves[0])
+    result = analyzer.post_move_analytics(board, jacoby=True)
+    validate_result(result)
+    return {'pass_post_move_equity': result.cubeful_equity, 'probs': result.probs.to_list()}
+
+
+def check_bearoff_terminal_and_post_move(sage, analyzer):
+    board = [0] * 26
+    board[1], board[24] = 2, -2
+    result = analyzer.checker_play(board, 1, 1, beaver=False)
+    require(result.moves, 'Bearoff produced no moves')
+    winner = result.moves[0]
+    require(sage.check_game_over(winner.board) == 1, 'Two last checkers did not bear off for a single win')
+    validate_result(winner)
+    post = analyzer.post_move_analytics(winner.board, jacoby=False)
+    validate_result(post)
+    require(post.probs.to_list() == [1, 0, 0, 0, 0], 'Terminal single win probabilities incorrect')
+    require(abs(post.cubeful_equity - 1) < 1e-8, 'Terminal single win equity incorrect')
+    return {'probs': post.probs.to_list(), 'equity': post.cubeful_equity}
+
+
+def check_match_equity_units(sage, analyzer):
+    winning = [0] * 26
+    winning[24] = -1
+    values = []
+    for context in ({'jacoby': False}, {'away1': 5, 'away2': 3},
+                    {'away1': 1, 'away2': 3, 'is_crawford': True}):
+        for board, equity, probs in ((winning, 1, [1, 0, 0, 0, 0]),
+                                     (sage.flip_board(winning), -1, [0, 0, 0, 0, 0])):
+            result = analyzer.post_move_analytics(board, **context)
+            validate_result(result)
+            require(result.probs.to_list() == probs, 'Terminal match probabilities incorrect')
+            require(abs(result.cubeful_equity - equity) < 1e-8, 'Terminal match equity is not normalized +/-1')
+            values.append({'context': context, 'cubeful_equity': result.cubeful_equity,
+                           'probs': result.probs.to_list()})
+    return values
+
+
+def check_cube_equity_units(sage, analyzer):
+    board = [0] * 26
+    board[1], board[24] = 1, -1
+    money = analyzer.cube_action(board, cube_value=2, cube_owner='player', jacoby=False, beaver=False)
+    validate_result(money)
+    require(all(abs(actual - expected) < 1e-5 for actual, expected in
+                ((money.equity_nd, 1), (money.equity_dt, 2), (money.equity_dp, 1))),
+            'Money cube values are not in pre-offer cube units')
+    require(not money.should_take and -money.equity_dp > -money.equity_dt,
+            'Responder perspective must prefer drop (-1) over take (-2)')
+    matches = []
+    for cube in (1, 2):
+        result = analyzer.cube_action(board, cube_value=cube, cube_owner='player',
+                                       away1=1, away2=3, jacoby=False, beaver=False)
+        validate_result(result)
+        require(all(abs(value - 1) < 1e-5 for value in
+                    (result.equity_nd, result.equity_dt, result.equity_dp)),
+                'Match-winning cube values must saturate at normalized +1')
+        matches.append({'cube': cube, 'no_double': result.equity_nd,
+                        'double_take': result.equity_dt, 'double_pass': result.equity_dp})
+    return {'money': {'no_double': money.equity_nd, 'double_take': money.equity_dt,
+                      'double_pass': money.equity_dp}, 'match': matches,
+            'response_perspective': 'Negate original offer equity_dt/equity_dp; do not flip board and recompute'}
+
+
+def check_forced_played_move_2ply(sage):
+    opening, _ = opening_boards(sage)
+    deep = sage.BgBotAnalyzer(eval_level='2ply', cubeful=False, parallel_threads=2, filter_max_moves=1, filter_threshold=.001)
+    first = deep.checker_play(opening, 3, 1, beaver=False)
+    pruned = [move for move in first.moves if move.eval_level != '2-ply']
+    require(pruned, 'Fixture does not exercise a filtered-out played move')
+    played = pruned[-1].board
+    forced = deep.checker_play(opening, 3, 1, beaver=False, force_boards=[played])
+    actual = next((move for move in forced.moves if move.board == played), None)
+    require(actual is not None and actual.eval_level == '2-ply', 'Played move not evaluated at requested depth')
+    validate_result(actual)
+    cubeful = sage.BgBotAnalyzer(eval_level='2ply', parallel_threads=2, filter_max_moves=1, filter_threshold=.001)
+    cf_result = cubeful.checker_play(opening, 3, 1, beaver=False, force_boards=[played])
+    # From fork release 2.0.20261119 cubeful 2-ply also prunes the
+    # filter's losers to 1-ply. The played move must reach full depth;
+    # NeonDojo discards the other partially searched candidates.
+    cf_full = [move for move in cf_result.moves if move.eval_level == '2-ply']
+    require(cf_full, 'No cubeful candidate evaluated at full depth')
+    require(any(move.board == played for move in cf_full), 'Cubeful played move not evaluated at full depth')
+    for move in cf_result.moves:
+        validate_result(move)
+    return {'cubeful_all_candidates_full_depth': len(cf_full) == len(cf_result.moves),
+            'cubeful_full_depth_candidates': len(cf_full), 'played_board': played,
+            'before_level': pruned[-1].eval_level, 'after_level': actual.eval_level, 'equity': actual.equity}
+
+
+LEVEL_CHECKS = (
+    ('opening_31_five_point', check_opening_31_five_point),
+    ('both_perspectives_and_bars', check_both_perspectives_and_bars),
+    ('money_jacoby_cube_owners_beaver_disabled', check_money_jacoby_cube_owners),
+    ('match_and_crawford', check_match_and_crawford),
+    ('forced_pass_post_move', check_forced_pass_post_move),
+    ('bearoff_terminal_and_post_move', check_bearoff_terminal_and_post_move),
+    ('match_equity_units', check_match_equity_units),
+    ('cube_equity_units_and_response_perspective', check_cube_equity_units),
+)
+
+
+def run_level_checks(sage, levels, report):
+    init_start = time.perf_counter()
+    analyzer = sage.BgBotAnalyzer(eval_level=levels[0], parallel_threads=2)
+    report['first_analyzer_init_seconds'] = time.perf_counter() - init_start
+    first_name, first_check = LEVEL_CHECKS[0]
+    run_check(report, first_name, lambda: first_check(sage, analyzer))
+    run_check(report, 'public_move_notation', lambda: check_public_move_notation(sage))
+    for name, check_fn in LEVEL_CHECKS[1:]:
+        run_check(report, name, lambda fn=check_fn, eng=analyzer: fn(sage, eng))
+    run_check(report, 'forced_played_move_2ply', lambda: check_forced_played_move_2ply(sage))
+
+    for level in levels[1:]:
+        level_analyzer = sage.BgBotAnalyzer(eval_level=level, parallel_threads=2)
+        for name, check_fn in LEVEL_CHECKS:
+            run_check(report, f'{name}_{level}', lambda fn=check_fn, eng=level_analyzer: fn(sage, eng))
+
+
+def run_thread_budget_checks(sage, levels, report):
+    opening, _ = opening_boards(sage)
+    report['thread_budgets'] = []
+    for threads in (2, 4):
+        for level in levels:
+            def thread_case(threads=threads, level=level):
+                engine = sage.BgBotAnalyzer(eval_level=level, parallel_threads=threads)
+                _, observed = observe_thread_budgets(
+                    sage, lambda: engine.checker_play(opening, 3, 1, beaver=False))
+                serial = level == '1ply' and getattr(sage.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
+                detail = {'level': level, 'requested_threads': threads, 'serial_checker': serial,
+                          'observed_thread_budgets': observed,
+                          'scope': 'Python ThreadPoolExecutor limits and native checker_play_nply n_threads '
+                                   'as requested; not a census of simultaneous native threads'}
+                report['thread_budgets'].append(detail)
+                validate_thread_budget(threads, observed, serial=serial)
+                return detail
+            run_check(report, f'thread_budget_{level}_{threads}', thread_case)
+
+
+def run_benchmarks(sage, levels, report):
+    opening, _ = opening_boards(sage)
+    report['benchmarks'] = []
+    for threads in (2, 4):
+        for level in levels:
+            start = time.perf_counter()
+            bench = sage.BgBotAnalyzer(eval_level=level, parallel_threads=threads)
+            init = time.perf_counter() - start
+            bench.checker_play(opening, 3, 1, beaver=False)
+            samples = []
+            for _ in range(3):
+                start = time.perf_counter()
+                result = bench.checker_play(opening, 3, 1, beaver=False)
+                samples.append(time.perf_counter() - start)
+                for move in result.moves:
+                    validate_result(move)
+            report['benchmarks'].append({
+                'requested_threads': threads, 'level': level,
+                'scope': 'opening 31 checker_play; one warmup, three sequential calls; default move filter',
+                'init_seconds': init, 'warm_seconds': samples,
+            })
+
+
 def run_worker(skip_platform=False, levels=None):
-    levels = levels or ['1ply', '2ply']
+    selected = list(dict.fromkeys(levels)) if levels else list(DEFAULT_LEVELS)
     started = time.perf_counter()
     report = {'schema_version': 1, 'status': 'failed', 'checks': [],
-              'requested_levels': levels, 'primary_functional_level': levels[0],
-              'excluded_profiles': {'3ply': 'Not validated or benchmarked', '4ply': 'Not validated or benchmarked',
-                                    **({'1ply': 'Not requested in this probe run'} if '1ply' not in levels else {})},
+              'requested_levels': selected, 'primary_functional_level': selected[0],
+              'excluded_profiles': {
+                  level: 'Not requested in this probe run'
+                  for level in SUPPORTED_LEVELS
+                  if level not in selected
+              },
               'platform': {'system': platform.system(), 'architecture': platform.machine(),
                            'python': platform.python_version(), 'macos': platform.mac_ver()[0]},
               'offline': {'python_network_audit': True,
@@ -227,269 +548,13 @@ def run_worker(skip_platform=False, levels=None):
               'measured_at_utc': datetime.now(timezone.utc).isoformat()}
     deny_network()
     try:
+        selected = normalize_levels(selected)
         if not skip_platform:
             validate_platform(platform.system(), platform.machine(), sys.version_info)
-        import_start = time.perf_counter()
-        try:
-            import neongammon as sage
-            import bgbot_cpp as native
-        except (ImportError, OSError) as error:
-            raise ProbeError('NeonGammon dependency/native library unavailable. Install the locked wheels into native Python 3.12; import failure: ' + type(error).__name__) from None
-        report['import_seconds'] = time.perf_counter() - import_start
-        report['identity'] = identity(sage, native)
-        validate_versions(report['identity'])
-        for name in ('checker_play', 'cube_action', 'cube_decision', 'post_move_analytics'):
-            require(callable(getattr(sage.BgBotAnalyzer, name, None)), f'Missing API {name}')
-        require('force_boards' in inspect.signature(sage.BgBotAnalyzer.checker_play).parameters,
-                'Missing force_boards capability; this build cannot evaluate filtered played moves.')
-        report['capabilities'] = ['checker_play', 'cube_action', 'cube_decision', 'post_move_analytics', 'force_boards']
-
-        def check(name, function):
-            start = time.perf_counter()
-            try:
-                detail = function()
-                report['checks'].append({'name': name, 'status': 'passed',
-                                         'seconds': time.perf_counter() - start, 'detail': detail})
-            except Exception as error:
-                report['checks'].append({'name': name, 'status': 'failed',
-                                         'seconds': time.perf_counter() - start,
-                                         'error': str(error) if isinstance(error, ProbeError) else type(error).__name__})
-
-        init_start = time.perf_counter()
-        analyzer = sage.BgBotAnalyzer(eval_level=levels[0], parallel_threads=2)
-        report['first_analyzer_init_seconds'] = time.perf_counter() - init_start
-        opening = list(sage.STARTING_BOARD)
-        five_point = opening.copy()
-        five_point[8] -= 1
-        five_point[6] -= 1
-        five_point[5] += 2
-
-        def opening_case():
-            legal = sage.possible_moves(opening, 3, 1)
-            require(five_point in legal, 'Opening 8/5 6/5 missing from legal moves')
-            result = analyzer.checker_play(opening, 3, 1, jacoby=True, beaver=False)
-            require(result.moves and result.moves[0].board == five_point, 'Opening 31 does not choose 8/5 6/5')
-            require({tuple(move.board) for move in result.moves} == {tuple(board) for board in legal}, 'Checker result does not cover legal candidates')
-            for move in result.moves:
-                validate_result(move)
-            return {'best_board': five_point, 'candidates': len(result.moves),
-                    'best_equity': result.moves[0].equity, 'level': result.eval_level}
-        check('opening_31_five_point', opening_case)
-
-        def notation_case():
-            from neongammon.text_export import compute_move_notation
-            require(compute_move_notation(opening, five_point, 3, 1) == '8/5 6/5', 'Opening notation mismatch')
-            before = [0] * 26
-            before[25], before[6], before[24], before[23] = 1, 14, -1, -14
-            after = before.copy()
-            after[25], after[0], after[24], after[22] = 0, 1, 0, 1
-            require(after in sage.possible_moves(before, 1, 2), 'Independent bar-hit reference is not generated as legal')
-            notation = compute_move_notation(before, after, 1, 2)
-            require(notation == 'bar/24* 24/22', 'Bar-hit notation mismatch: ' + notation)
-            blocked = before.copy()
-            blocked[24], blocked[23] = -2, -13
-            require(sage.possible_moves(blocked, 1, 2) == [blocked], 'Blocked notation fixture not a forced pass')
-            require(compute_move_notation(blocked, blocked, 1, 2) == '', 'Pass notation must be empty')
-            bearoff = [0] * 26
-            bearoff[1], bearoff[24] = 2, -2
-            borne_off = bearoff.copy()
-            borne_off[1] = 0
-            require(compute_move_notation(bearoff, borne_off, 1, 1) == '1/off(2)', 'Bearoff notation mismatch')
-            return {'opening': '8/5 6/5', 'bar_hit': notation, 'pass': '', 'bearoff': '1/off(2)'}
-        check('public_move_notation', notation_case)
-
-        def perspective_case():
-            board = [0] * 26
-            board[0], board[25], board[6], board[24] = 2, 1, 14, -13
-            expected = [0] * 26
-            expected[0], expected[25], expected[19], expected[1] = 1, 2, -14, 13
-            require(sage.flip_board(board) == expected, 'Asymmetric points/bars flip differs from independent reference')
-            require(sage.flip_board(expected) == board, 'Perspective flip is not involutive')
-            for current in (board, expected):
-                result = analyzer.checker_play(current, 2, 1, beaver=False)
-                require(result.moves, 'Bar entry incorrectly produces no moves')
-                for move in result.moves:
-                    validate_result(move)
-                    require(move.board[25] < current[25], 'Bar entry did not use own bar')
-            return {'own_bar_index': 25, 'opponent_bar_index': 0, 'both_bars_nonnegative': True}
-        check('both_perspectives_and_bars', perspective_case)
-
-        def money_case():
-            values = []
-            for jacoby in (False, True):
-                for owner in ('centered', 'player', 'opponent'):
-                    result = analyzer.cube_action(five_point, cube_value=1 if owner == 'centered' else 2,
-                                                  cube_owner=owner, jacoby=jacoby, beaver=False)
-                    validate_result(result)
-                    require(not result.is_beaver, 'Beaver returned although disabled')
-                    require(abs(result.equity_dp - 1) < 1e-8, 'Money pass equity is not +1 current cube')
-                    values.append({'jacoby': jacoby, 'owner': owner, 'no_double': result.equity_nd,
-                                   'double_take': result.equity_dt, 'double_pass': result.equity_dp})
-            return values
-        check('money_jacoby_cube_owners_beaver_disabled', money_case)
-
-        def match_case():
-            values = []
-            for away1, away2, crawford in ((5, 3, False), (1, 3, True), (3, 1, True), (1, 3, False)):
-                context = dict(away1=away1, away2=away2, is_crawford=crawford, beaver=False)
-                result = analyzer.cube_action(five_point, **context)
-                validate_result(result)
-                if crawford:
-                    require(not sage.can_double_match(away1, away2, 1, 'centered', True), 'Crawford permits doubling')
-                    require(not result.should_double, 'Crawford cube evaluation recommends double')
-                played = analyzer.checker_play(opening, 3, 1, **context)
-                for move in played.moves:
-                    validate_result(move)
-                values.append({'away1': away1, 'away2': away2, 'crawford': crawford,
-                               'no_double': result.equity_nd, 'double_take': result.equity_dt,
-                               'double_pass': result.equity_dp, 'action': result.optimal_action})
-            return values
-        check('match_and_crawford', match_case)
-
-        def pass_case():
-            board = [0] * 26
-            board[25], board[6] = 1, 14
-            for point in range(19, 25):
-                board[point] = -2
-            board[18] = -3
-            require(sage.possible_moves(board, 3, 1) == [board], 'Blocked bar must return only the unchanged pass board')
-            moves = analyzer.checker_play(board, 3, 1, beaver=False).moves
-            require(len(moves) == 1 and moves[0].board == board, 'Blocked bar checker result must evaluate the unchanged pass board')
-            validate_result(moves[0])
-            result = analyzer.post_move_analytics(board, jacoby=True)
-            validate_result(result)
-            return {'pass_post_move_equity': result.cubeful_equity, 'probs': result.probs.to_list()}
-        check('forced_pass_post_move', pass_case)
-
-        def bearoff_case():
-            board = [0] * 26
-            board[1], board[24] = 2, -2
-            result = analyzer.checker_play(board, 1, 1, beaver=False)
-            require(result.moves, 'Bearoff produced no moves')
-            winner = result.moves[0]
-            require(sage.check_game_over(winner.board) == 1, 'Two last checkers did not bear off for a single win')
-            validate_result(winner)
-            post = analyzer.post_move_analytics(winner.board, jacoby=False)
-            validate_result(post)
-            require(post.probs.to_list() == [1, 0, 0, 0, 0], 'Terminal single win probabilities incorrect')
-            require(abs(post.cubeful_equity - 1) < 1e-8, 'Terminal single win equity incorrect')
-            return {'probs': post.probs.to_list(), 'equity': post.cubeful_equity}
-        check('bearoff_terminal_and_post_move', bearoff_case)
-
-        def equity_units_case():
-            winning = [0] * 26
-            winning[24] = -1
-            values = []
-            for context in ({'jacoby': False}, {'away1': 5, 'away2': 3},
-                            {'away1': 1, 'away2': 3, 'is_crawford': True}):
-                for board, equity, probs in ((winning, 1, [1, 0, 0, 0, 0]),
-                                             (sage.flip_board(winning), -1, [0, 0, 0, 0, 0])):
-                    result = analyzer.post_move_analytics(board, **context)
-                    validate_result(result)
-                    require(result.probs.to_list() == probs, 'Terminal match probabilities incorrect')
-                    require(abs(result.cubeful_equity - equity) < 1e-8, 'Terminal match equity is not normalized +/-1')
-                    values.append({'context': context, 'cubeful_equity': result.cubeful_equity,
-                                   'probs': result.probs.to_list()})
-            return values
-        check('match_equity_units', equity_units_case)
-
-        def cube_units_case():
-            board = [0] * 26
-            board[1], board[24] = 1, -1
-            money = analyzer.cube_action(board, cube_value=2, cube_owner='player', jacoby=False, beaver=False)
-            validate_result(money)
-            require(all(abs(actual - expected) < 1e-5 for actual, expected in
-                        ((money.equity_nd, 1), (money.equity_dt, 2), (money.equity_dp, 1))),
-                    'Money cube values are not in pre-offer cube units')
-            require(not money.should_take and -money.equity_dp > -money.equity_dt,
-                    'Responder perspective must prefer drop (-1) over take (-2)')
-            matches = []
-            for cube in (1, 2):
-                result = analyzer.cube_action(board, cube_value=cube, cube_owner='player',
-                                               away1=1, away2=3, jacoby=False, beaver=False)
-                validate_result(result)
-                require(all(abs(value - 1) < 1e-5 for value in
-                            (result.equity_nd, result.equity_dt, result.equity_dp)),
-                        'Match-winning cube values must saturate at normalized +1')
-                matches.append({'cube': cube, 'no_double': result.equity_nd,
-                                'double_take': result.equity_dt, 'double_pass': result.equity_dp})
-            return {'money': {'no_double': money.equity_nd, 'double_take': money.equity_dt,
-                              'double_pass': money.equity_dp}, 'match': matches,
-                    'response_perspective': 'Negate original offer equity_dt/equity_dp; do not flip board and recompute'}
-        check('cube_equity_units_and_response_perspective', cube_units_case)
-
-        def force_case():
-            deep = sage.BgBotAnalyzer(eval_level='2ply', cubeful=False, parallel_threads=2, filter_max_moves=1, filter_threshold=.001)
-            first = deep.checker_play(opening, 3, 1, beaver=False)
-            pruned = [move for move in first.moves if move.eval_level != '2-ply']
-            require(pruned, 'Fixture does not exercise a filtered-out played move')
-            played = pruned[-1].board
-            forced = deep.checker_play(opening, 3, 1, beaver=False, force_boards=[played])
-            actual = next((move for move in forced.moves if move.board == played), None)
-            require(actual is not None and actual.eval_level == '2-ply', 'Played move not evaluated at requested depth')
-            validate_result(actual)
-            cubeful = sage.BgBotAnalyzer(eval_level='2ply', parallel_threads=2, filter_max_moves=1, filter_threshold=.001)
-            cf_result = cubeful.checker_play(opening, 3, 1, beaver=False, force_boards=[played])
-            # From fork release 2.0.20261119 cubeful 2-ply also prunes the
-            # filter's losers to 1-ply. The played move must reach full depth;
-            # NeonDojo discards the other partially searched candidates.
-            cf_full = [move for move in cf_result.moves if move.eval_level == '2-ply']
-            require(cf_full, 'No cubeful candidate evaluated at full depth')
-            require(any(move.board == played for move in cf_full), 'Cubeful played move not evaluated at full depth')
-            for move in cf_result.moves:
-                validate_result(move)
-            return {'cubeful_all_candidates_full_depth': len(cf_full) == len(cf_result.moves),
-                    'cubeful_full_depth_candidates': len(cf_full), 'played_board': played,
-                    'before_level': pruned[-1].eval_level, 'after_level': actual.eval_level, 'equity': actual.equity}
-        check('forced_played_move_2ply', force_case)
-
-        if len(levels) > 1:
-            for level in levels[1:]:
-                analyzer = sage.BgBotAnalyzer(eval_level=level, parallel_threads=2)
-                for name, case in (('opening_31_five_point', opening_case),
-                                   ('both_perspectives_and_bars', perspective_case),
-                                   ('money_jacoby_cube_owners_beaver_disabled', money_case),
-                                   ('match_and_crawford', match_case),
-                                   ('forced_pass_post_move', pass_case),
-                                   ('bearoff_terminal_and_post_move', bearoff_case),
-                                   ('match_equity_units', equity_units_case),
-                                   ('cube_equity_units_and_response_perspective', cube_units_case)):
-                    check(name + '_' + level, case)
-
-        report['thread_budgets'] = []
-        for threads in (2, 4):
-            for level in levels:
-                def thread_case(threads=threads, level=level):
-                    engine = sage.BgBotAnalyzer(eval_level=level, parallel_threads=threads)
-                    _, observed = observe_thread_budgets(
-                        sage, lambda: engine.checker_play(opening, 3, 1, beaver=False))
-                    serial = level == '1ply' and getattr(sage.analyzer, 'SERIAL_CUBEFUL_1PLY', False) is True
-                    detail = {'level': level, 'requested_threads': threads, 'serial_checker': serial,
-                              'observed_thread_budgets': observed,
-                              'scope': 'Python ThreadPoolExecutor limits and native checker_play_nply n_threads '
-                                       'as requested; not a census of simultaneous native threads'}
-                    report['thread_budgets'].append(detail)
-                    validate_thread_budget(threads, observed, serial=serial)
-                    return detail
-                check(f'thread_budget_{level}_{threads}', thread_case)
-
-        report['benchmarks'] = []
-        for threads in (2, 4):
-            for level in levels:
-                start = time.perf_counter()
-                bench = sage.BgBotAnalyzer(eval_level=level, parallel_threads=threads)
-                init = time.perf_counter() - start
-                bench.checker_play(opening, 3, 1, beaver=False)
-                samples = []
-                for _ in range(3):
-                    start = time.perf_counter()
-                    result = bench.checker_play(opening, 3, 1, beaver=False)
-                    samples.append(time.perf_counter() - start)
-                    for move in result.moves:
-                        validate_result(move)
-                report['benchmarks'].append({'requested_threads': threads, 'level': level,
-                    'scope': 'opening 31 checker_play; one warmup, three sequential calls; default move filter',
-                    'init_seconds': init, 'warm_seconds': samples})
+        sage, _ = load_and_verify_engine(report)
+        run_level_checks(sage, selected, report)
+        run_thread_budget_checks(sage, selected, report)
+        run_benchmarks(sage, selected, report)
         report['status'] = 'passed' if all(c['status'] == 'passed' for c in report['checks']) else 'failed'
     except Exception as error:
         report['error'] = str(error) if isinstance(error, ProbeError) else type(error).__name__
@@ -502,8 +567,8 @@ def run_worker(skip_platform=False, levels=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path)
-    parser.add_argument('--levels', nargs='+', choices=('1ply', '2ply'), default=['1ply', '2ply'],
-                        help='Explicit compatibility scope; 1ply requires a build with bounded candidate threads')
+    parser.add_argument('--levels', nargs='+', choices=SUPPORTED_LEVELS, default=list(DEFAULT_LEVELS),
+                        help='Explicit compatibility scope (1ply-4ply; defaults to 1ply 2ply for fast checks)')
     parser.add_argument('--timeout', type=float, default=300)
     parser.add_argument('--worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--skip-platform-check', action='store_true', help=argparse.SUPPRESS)

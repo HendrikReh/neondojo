@@ -1,4 +1,9 @@
 import { request } from '../../../shared/http/api';
+import {
+  isNonNegativeFinite as finite,
+  isRecord as object,
+  isSafeIntegerAtLeast as integer,
+} from '../../../shared/http/guards';
 import type { components } from '../../../generated-api';
 
 export type RemainingTime = Required<
@@ -16,12 +21,6 @@ const states: RemainingState[] = [
   'completed',
   'failed',
 ];
-const object = (v: unknown): v is Record<string, unknown> =>
-  !!v && typeof v === 'object' && !Array.isArray(v);
-const integer = (v: unknown): v is number =>
-  typeof v === 'number' && Number.isSafeInteger(v) && v >= 0;
-const finite = (v: unknown): v is number =>
-  typeof v === 'number' && Number.isFinite(v) && v >= 0;
 function parseRemaining(value: unknown): RemainingTime {
   if (
     !object(value) ||

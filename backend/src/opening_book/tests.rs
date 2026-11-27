@@ -184,7 +184,7 @@ fn book(compressed: bool) -> (tempfile::TempDir, BookConfig) {
             version: 0,
             provider: "backgammondb".into(),
             path: path.to_string_lossy().into_owned(),
-            xg_path: crate::xg_book::default_path(),
+            xg_path: xg_book::default_path(),
         },
     )
 }
@@ -323,7 +323,7 @@ async fn installs_valid_book_atomically_and_rejects_invalid_source() {
     let dest = tempfile::tempdir().unwrap();
     let destination = BookConfig {
         version: 0,
-        xg_path: crate::xg_book::default_path(),
+        xg_path: xg_book::default_path(),
         provider: "automatic".into(),
         path: dest
             .path()
@@ -350,7 +350,7 @@ async fn released_full_book_serves_real_scores_both_movers_and_cube() {
         version: 0,
         provider: "backgammondb".into(),
         path: std::env::var("NEONDOJO_OPENING_BOOK").unwrap_or_else(|_| default_path()),
-        xg_path: crate::xg_book::default_path(),
+        xg_path: xg_book::default_path(),
     };
     let state = status(&config).await;
     assert!(state.available, "{:?}", state.error);
@@ -538,7 +538,7 @@ async fn xg_provider_and_automatic_keep_references_separate_from_candidates() {
         version: 0,
         provider: "xg".into(),
         path: default_path(),
-        xg_path: crate::xg_book::default_path(),
+        xg_path: xg_book::default_path(),
     };
     let result = lookup(&config, &position, None).await.unwrap();
     assert!(result.hit, "{:?}", result.reason);

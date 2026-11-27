@@ -1,8 +1,11 @@
 //! The SGF GNUbg writes for a MAT transcript, made explicit and dated.
 
 use crate::backgammon::{expand_joined_play, initial_board};
-use crate::import::sgf::{one, parse_sgf, parse_trees, serialize_trees, setup};
-use anyhow::{Context, Result, bail, ensure};
+use crate::import::sgf::{
+    coord::{decode_point, encode_point},
+    one, parse_sgf, parse_trees, serialize_trees, setup,
+};
+use anyhow::{Context, Result, ensure};
 
 /// The match date a MAT transcript declares in a `; [EventDate "YYYY.MM.DD"]`
 /// header comment. A transcript without a valid declaration has no date.
@@ -64,34 +67,21 @@ pub(crate) fn normalize_native_sgf(
                     "MAT: malformed native checker move {value}"
                 );
                 let dice = [i32::from(bytes[0] - b'0'), i32::from(bytes[1] - b'0')];
-                let point = |c: u8| -> Result<usize> {
-                    match c {
-                        b'a'..=b'x' => Ok(if player == 0 {
-                            usize::from(c - b'a' + 1)
-                        } else {
-                            usize::from(b'x' - c + 1)
-                        }),
-                        b'y' => Ok(25),
-                        b'z' => Ok(0),
-                        _ => bail!("MAT: invalid native checker coordinate"),
-                    }
-                };
                 let runs = bytes[2..]
                     .chunks_exact(2)
-                    .map(|pair| Ok((point(pair[0])?, point(pair[1])?)))
+                    .map(|pair| {
+                        Ok((
+                            decode_point(pair[0], player)?,
+                            decode_point(pair[1], player)?,
+                        ))
+                    })
                     .collect::<Result<Vec<_>>>()?;
                 let steps = expand_joined_play(&mut board, player, dice, &runs)
                     .with_context(|| format!("MAT game {}, checker ply {}", game + 1, ply + 1))?;
-                let coordinate = |p: usize| match p {
-                    25 => 'y',
-                    0 => 'z',
-                    _ if player == 0 => char::from(b'a' + p as u8 - 1),
-                    _ => char::from(b'x' + 1 - p as u8),
-                };
                 let mut expanded = value[..2].to_owned();
                 for (from, to) in steps {
-                    expanded.push(coordinate(from));
-                    expanded.push(coordinate(to));
+                    expanded.push(encode_point(from, player)?);
+                    expanded.push(encode_point(to, player)?);
                 }
                 node.insert(property.to_owned(), vec![expanded]);
                 ply += 1;

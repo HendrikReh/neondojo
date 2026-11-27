@@ -1,7 +1,6 @@
 import {
   configurationApi,
   ConfigurationConflict,
-  isDecided,
   type ConfigurationApi,
   type ConfigurationProfile,
   type ConfigurationState,
@@ -14,12 +13,29 @@ import {
   type ProfileConfiguration,
 } from './configuration-model';
 import { restoreConfigurationField } from '../profiles/profile-changes';
+import {
+  configurationJournalKey,
+  readConfigurationJournalRaw,
+  recoverConfigurationJournal,
+  writeConfigurationJournal,
+  type StorageAccess,
+} from './configuration-journal';
+import { createProfileOperations } from './configuration-profile-ops';
+import {
+  applyConfigurationWithRebase,
+  mutateConfigurationWithReconciliation,
+  writeConfigurationWithReconciliation,
+  type PendingConflict,
+} from './configuration-reconcile';
 
-export const configurationJournalKey = 'neondojo.configuration-pending.v1';
-type StorageAccess = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
-type PendingConflict = { configuration: ProfileConfiguration; error: unknown };
+export { configurationJournalKey };
+
 export type ConfigurationStatus =
-  'loading' | 'ready' | 'saving' | 'error' | 'conflict';
+  | 'loading'
+  | 'ready'
+  | 'saving'
+  | 'error'
+  | 'conflict';
 export interface ConfigurationSnapshot {
   confirmed: ConfigurationState | null;
   current: ProfileConfiguration | null;
@@ -35,6 +51,7 @@ export interface ConfigurationSnapshot {
   initializationWarnings: ConfigurationIssue[];
   availabilityIssues: ConfigurationIssue[];
 }
+
 export class ConfigurationStore {
   private snapshot: ConfigurationSnapshot = {
     confirmed: null,
@@ -66,17 +83,61 @@ export class ConfigurationStore {
   private deferredDesired: ProfileConfiguration | undefined;
   private deferredBaseRevision: number | undefined;
   private loading: Promise<void> | undefined;
+  private readonly profileOps: ReturnType<typeof createProfileOperations>;
+
+  createProfile: (name: string) => Promise<void>;
+  overwriteProfile: (profile: ConfigurationProfile) => Promise<void>;
+  renameProfile: (profile: ConfigurationProfile, name: string) => Promise<void>;
+  deleteProfile: (profile: ConfigurationProfile) => Promise<void>;
+  activateProfile: (
+    profile: ConfigurationProfile,
+    sourceAction: 'keep' | 'save_current',
+  ) => Promise<void>;
+  restoreProfile: (
+    profile?: Pick<ConfigurationProfile, 'id' | 'revision'> | null,
+  ) => Promise<void>;
+  saveConflictAsNewProfile: (name: string) => Promise<void>;
+
   constructor(
     private api: ConfigurationApi = configurationApi,
     private storage?: StorageAccess,
-  ) {}
+  ) {
+    this.profileOps = createProfileOperations({
+      api: this.api,
+      getConfirmed: () => this.snapshot.confirmed,
+      getCurrent: () => this.snapshot.current,
+      getActiveProfile: () => this.snapshot.activeProfile,
+      getLocalGeneration: () => this.localGeneration,
+      requireActiveProfile: (profile) => this.requireActiveProfile(profile),
+      flushNow: () => this.flushNow(),
+      mutate: (path, method, body, reset) =>
+        this.mutate(path, method, body, reset),
+      accept: (state, generation, reset) =>
+        this.accept(state, generation, reset),
+      refreshAuxiliary: async () => {
+        await this.loadProfiles();
+        await this.loadAvailability();
+      },
+      operation: (fn) => this.operation(fn),
+    });
+    this.createProfile = this.profileOps.createProfile;
+    this.overwriteProfile = this.profileOps.overwriteProfile;
+    this.renameProfile = this.profileOps.renameProfile;
+    this.deleteProfile = this.profileOps.deleteProfile;
+    this.activateProfile = this.profileOps.activateProfile;
+    this.restoreProfile = this.profileOps.restoreProfile;
+    this.saveConflictAsNewProfile = this.profileOps.saveConflictAsNewProfile;
+  }
+
   subscribe = (fn: () => void) => {
     this.listeners.add(fn);
     return () => {
       this.listeners.delete(fn);
     };
   };
+
   getSnapshot = () => this.snapshot;
+
   private publish(patch: Partial<ConfigurationSnapshot>) {
     this.snapshot = { ...this.snapshot, ...patch };
     if (this.snapshot.current && this.snapshot.activeProfile)
@@ -86,39 +147,27 @@ export class ConfigurationStore {
       );
     this.listeners.forEach((fn) => fn());
   }
-  private getStorage() {
-    if (this.storage) return this.storage;
-    try {
-      return globalThis.localStorage;
-    } catch {
-      return undefined;
-    }
-  }
+
   private journal() {
     if (!this.snapshot.confirmed) return;
-    try {
-      const storage = this.getStorage();
-      if (!storage) return;
-      if (
-        this.localGeneration === this.acceptedGeneration &&
-        !this.deferredDesired
-      )
-        storage.removeItem(configurationJournalKey);
-      else if (this.snapshot.confirmed && this.snapshot.current)
-        storage.setItem(
-          configurationJournalKey,
-          JSON.stringify({
-            base_revision:
+    const clear =
+      this.localGeneration === this.acceptedGeneration && !this.deferredDesired;
+    const entry = clear
+      ? null
+      : this.snapshot.current
+        ? {
+            baseRevision:
               this.deferredBaseRevision ??
               this.recoveryBaseRevision ??
               this.snapshot.confirmed.revision,
             configuration: this.deferredDesired ?? this.snapshot.current,
-          }),
-        );
-    } catch {
+          }
+        : undefined;
+    if (entry === undefined) return;
+    if (!writeConfigurationJournal(this.storage, entry))
       this.publish({ storageError: true });
-    }
   }
+
   private accept(
     state: ConfigurationState,
     generation: number,
@@ -152,6 +201,7 @@ export class ConfigurationStore {
     });
     this.journal();
   }
+
   private fail(error: unknown) {
     this.publish({
       error,
@@ -165,23 +215,27 @@ export class ConfigurationStore {
     });
     this.journal();
   }
+
   private enqueue<T>(fn: () => Promise<T>): Promise<T> {
     const result = this.queue.then(fn, fn);
     this.queue = result.catch(() => {});
     return result;
   }
+
   private cancelTimer() {
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = undefined;
     }
   }
+
   private async loadProfiles() {
     const profiles = await this.api.listProfiles();
     this.publish({
       profiles: profiles.sort((a, b) => a.name.localeCompare(b.name)),
     });
   }
+
   private async loadAvailability() {
     if (!this.api.availability) return;
     try {
@@ -192,6 +246,7 @@ export class ConfigurationStore {
       /* A transient availability check does not discard the saved configuration. */
     }
   }
+
   private replayDeferred() {
     const pending = this.deferredUpdaters;
     this.deferredUpdaters = [];
@@ -203,32 +258,18 @@ export class ConfigurationStore {
     this.deferredBaseRevision = undefined;
     this.journal();
   }
-  private async writeCurrent(
+
+  private writeCurrent(
     revision: number,
     configuration: ProfileConfiguration,
   ) {
-    try {
-      return await this.api.write(revision, configuration);
-    } catch (error) {
-      if (isDecided(error)) throw error;
-      try {
-        const remote = await this.api.read();
-        if (remote.revision > revision) {
-          if (
-            !isConfigurationDirty(remote.current_configuration, configuration)
-          )
-            return remote;
-          throw new ConfigurationConflict(
-            'uncertain_result',
-            'Settings changed after an interrupted save',
-          );
-        }
-      } catch (reconciliation) {
-        if (isDecided(reconciliation)) throw reconciliation;
-      }
-      throw error;
-    }
+    return writeConfigurationWithReconciliation(
+      this.api,
+      revision,
+      configuration,
+    );
   }
+
   load = (): Promise<void> => {
     if (this.loading) return this.loading;
     this.loading = this.enqueue(async () => {
@@ -244,36 +285,25 @@ export class ConfigurationStore {
             state = await this.api.initialize();
           else throw error;
         }
-        let rawJournal: string | null | undefined;
-        try {
-          rawJournal = this.getStorage()?.getItem(configurationJournalKey);
-        } catch {
-          this.publish({ storageError: true });
-        }
+        const readResult = readConfigurationJournalRaw(this.storage);
+        if (!readResult.ok) this.publish({ storageError: true });
         this.accept(state, this.localGeneration, true);
-        try {
-          const raw = rawJournal;
-          if (raw) {
-            const saved = JSON.parse(raw);
-            const pending = normalizeConfiguration(saved.configuration);
-            if (isConfigurationDirty(state.current_configuration, pending)) {
-              this.localGeneration++;
-              this.publish({ current: pending });
-              if (saved.base_revision !== state.revision) {
-                this.recoveryBaseRevision = saved.base_revision;
-                this.fail(
-                  new ConfigurationConflict(
-                    'journal_conflict',
-                    'Saved local changes conflict with newer settings',
-                  ),
-                );
-              } else await this.flushNow();
-            } else this.journal();
-          }
-        } catch (error) {
-          if (isDecided(error)) throw error;
-          this.publish({ storageError: true });
-        }
+        await recoverConfigurationJournal({
+          raw: readResult.ok ? readResult.raw : undefined,
+          serverRevision: state.revision,
+          serverConfiguration: state.current_configuration,
+          onRecovered: (configuration) => {
+            this.localGeneration++;
+            this.publish({ current: configuration });
+          },
+          onConflict: (baseRevision, error) => {
+            this.recoveryBaseRevision = baseRevision;
+            this.fail(error);
+          },
+          onFlush: () => this.flushNow(),
+          onClean: () => this.journal(),
+          onStorageError: () => this.publish({ storageError: true }),
+        });
         await this.loadProfiles();
         await this.loadAvailability();
         this.replayDeferred();
@@ -285,6 +315,7 @@ export class ConfigurationStore {
     });
     return this.loading;
   };
+
   updateCurrent = (
     updater: (current: ProfileConfiguration) => ProfileConfiguration,
   ) => {
@@ -315,6 +346,7 @@ export class ConfigurationStore {
         void this.flush().catch(() => {});
       }, 300);
   };
+
   private async flushNow() {
     this.cancelTimer();
     if (this.snapshot.status === 'conflict') throw this.snapshot.error;
@@ -337,84 +369,40 @@ export class ConfigurationStore {
     if (this.snapshot.status === 'error')
       this.publish({ status: 'ready', error: null });
   }
+
   flush = () => this.enqueue(() => this.flushNow());
+
   applyCurrent = (
     updater: (current: ProfileConfiguration) => ProfileConfiguration,
     { rebaseOnConflict = false } = {},
   ) =>
-    this.operation(async () => {
-      let pending: PendingConflict | undefined;
-      let base = this.snapshot.confirmed;
-      try {
-        await this.flushNow();
-        base = this.snapshot.confirmed;
-      } catch (error) {
-        if (!rebaseOnConflict || this.snapshot.status !== 'conflict')
-          throw error;
-        base = await this.api.read();
-        if (this.localGeneration !== this.acceptedGeneration)
-          pending = { configuration: this.snapshot.current!, error };
-      }
-      if (!base) throw new Error('Configuration is not loaded');
+    this.operation(() =>
+      applyConfigurationWithRebase({
+        api: this.api,
+        updater,
+        rebaseOnConflict,
+        flushNow: () => this.flushNow(),
+        getState: () => ({
+          confirmed: this.snapshot.confirmed,
+          current: this.snapshot.current,
+          status: this.snapshot.status,
+          hasUnsyncedEdits: this.localGeneration !== this.acceptedGeneration,
+        }),
+        onSaving: () => this.publish({ status: 'saving', error: null }),
+        onAccept: (state, reset, pending) => {
+          if (!pending) this.localGeneration++;
+          this.accept(
+            state,
+            pending ? this.acceptedGeneration : this.localGeneration,
+            reset,
+            pending,
+          );
+        },
+        onRefreshProfiles: () => this.loadProfiles(),
+        onRefreshAvailability: () => this.loadAvailability(),
+      }),
+    );
 
-      // An explicit settings draft can be saved while unrelated autosaved edits
-      // still need conflict recovery. Apply the draft to both versions separately.
-      if (pending)
-        pending.configuration = normalizeConfiguration(
-          updater(structuredClone(pending.configuration)),
-        );
-      for (let canRetry = rebaseOnConflict; ; canRetry = false) {
-        const current = base.current_configuration;
-        const proposed = normalizeConfiguration(
-          updater(structuredClone(current)),
-        );
-        let state = base;
-        try {
-          if (isConfigurationDirty(current, proposed)) {
-            if (!pending) this.publish({ status: 'saving', error: null });
-            state = await this.writeCurrent(base.revision, proposed);
-          }
-        } catch (error) {
-          if (
-            !canRetry ||
-            !isConflict(error) ||
-            error.code !== 'revision_conflict'
-          )
-            throw error;
-          const remote = await this.api.read();
-          if (remote.revision <= base.revision) throw error;
-          base = remote;
-          continue;
-        }
-        const confirmed = this.snapshot.confirmed;
-        if (state === confirmed && this.snapshot.status === 'ready')
-          return current;
-        if (
-          pending &&
-          !isConfigurationDirty(
-            state.current_configuration,
-            pending.configuration,
-          )
-        )
-          pending = undefined;
-        if (!pending) this.localGeneration++;
-        this.accept(
-          state,
-          pending ? this.acceptedGeneration : this.localGeneration,
-          confirmed?.revision !== base.revision,
-          pending,
-        );
-        if (state.active_profile.id !== confirmed?.active_profile.id) {
-          try {
-            await this.loadProfiles();
-          } catch {
-            /* Keep the previous list until the next refresh. */
-          }
-        }
-        await this.loadAvailability();
-        return state.current_configuration;
-      }
-    });
   restoreProfileField = (
     profile: Pick<ConfigurationProfile, 'id' | 'revision'>,
     path: string,
@@ -423,6 +411,7 @@ export class ConfigurationStore {
       const active = this.requireActiveProfile(profile);
       return restoreConfigurationField(active.configuration, current, path);
     });
+
   private requireActiveProfile(
     profile: Pick<ConfigurationProfile, 'id' | 'revision'> | null,
   ) {
@@ -439,6 +428,7 @@ export class ConfigurationStore {
       );
     return active;
   }
+
   private operation<T>(fn: () => Promise<T>): Promise<T> {
     if (this.snapshot.busy)
       return Promise.reject(
@@ -458,6 +448,7 @@ export class ConfigurationStore {
       }
     });
   }
+
   private async mutate(
     path: string,
     method: string,
@@ -466,122 +457,23 @@ export class ConfigurationStore {
   ) {
     const generation = this.localGeneration;
     this.publish({ status: 'saving', error: null });
+    const state = await mutateConfigurationWithReconciliation(
+      this.api,
+      this.snapshot.confirmed?.revision ?? 0,
+      path,
+      method,
+      body,
+    );
+    this.accept(state, generation, reset);
+    // A failed list refresh cannot undo an already committed operation.
     try {
-      const state = await this.api.mutate(path, method, body);
-      this.accept(state, generation, reset);
-      // A failed list refresh cannot undo an already committed operation.
-      try {
-        await this.loadProfiles();
-      } catch {
-        /* Existing list remains available for retry. */
-      }
-      await this.loadAvailability();
-    } catch (error) {
-      if (!isDecided(error)) {
-        try {
-          const remote = await this.api.read();
-          if (remote.revision !== (this.snapshot.confirmed?.revision ?? 0))
-            throw new ConfigurationConflict(
-              'uncertain_result',
-              'The server changed after an interrupted request. Reload the server state to reconcile.',
-            );
-        } catch (reconciliation) {
-          if (isDecided(reconciliation)) throw reconciliation;
-        }
-      }
-      throw error;
+      await this.loadProfiles();
+    } catch {
+      /* Existing list remains available for retry. */
     }
+    await this.loadAvailability();
   }
-  createProfile = (name: string) =>
-    this.operation(async () => {
-      await this.flushNow();
-      await this.mutate(
-        '/profiles',
-        'POST',
-        {
-          name,
-          expected_state_revision: this.snapshot.confirmed!.revision,
-          configuration: this.snapshot.current,
-        },
-        true,
-      );
-    });
-  overwriteProfile = (profile: ConfigurationProfile) =>
-    this.operation(async () => {
-      await this.flushNow();
-      await this.mutate(
-        `/profiles/${encodeURIComponent(profile.id)}/snapshot`,
-        'PUT',
-        {
-          expected_state_revision: this.snapshot.confirmed!.revision,
-          expected_profile_revision: profile.revision,
-          configuration: this.snapshot.current,
-        },
-      );
-    });
-  renameProfile = (profile: ConfigurationProfile, name: string) =>
-    this.operation(async () => {
-      await this.flushNow();
-      await this.mutate(
-        `/profiles/${encodeURIComponent(profile.id)}`,
-        'PATCH',
-        {
-          name,
-          expected_state_revision: this.snapshot.confirmed!.revision,
-          expected_profile_revision: profile.revision,
-        },
-      );
-    });
-  deleteProfile = (profile: ConfigurationProfile) =>
-    this.operation(async () => {
-      await this.flushNow();
-      await this.mutate(
-        `/profiles/${encodeURIComponent(profile.id)}`,
-        'DELETE',
-        {
-          expected_state_revision: this.snapshot.confirmed!.revision,
-          expected_profile_revision: profile.revision,
-        },
-      );
-    });
-  activateProfile = (
-    profile: ConfigurationProfile,
-    sourceAction: 'keep' | 'save_current',
-  ) =>
-    this.operation(async () => {
-      await this.flushNow();
-      if (profile.id === this.snapshot.activeProfile?.id) return;
-      await this.mutate(
-        `/profiles/${encodeURIComponent(profile.id)}/activate`,
-        'POST',
-        {
-          expected_state_revision: this.snapshot.confirmed!.revision,
-          expected_target_revision: profile.revision,
-          expected_source_revision: this.snapshot.activeProfile!.revision,
-          source_action: sourceAction,
-          current_configuration: this.snapshot.current,
-        },
-        true,
-      );
-    });
-  restoreProfile = (
-    profile: Pick<ConfigurationProfile, 'id' | 'revision'> | null = this
-      .snapshot.activeProfile,
-  ) =>
-    this.operation(async () => {
-      this.requireActiveProfile(profile);
-      await this.flushNow();
-      this.requireActiveProfile(profile);
-      await this.mutate(
-        '/configuration/restore-profile',
-        'POST',
-        {
-          expected_state_revision: this.snapshot.confirmed!.revision,
-          expected_profile_revision: this.snapshot.activeProfile!.revision,
-        },
-        true,
-      );
-    });
+
   refresh = () => {
     if (!this.snapshot.ready) return this.load();
     return this.enqueue(async () => {
@@ -608,6 +500,7 @@ export class ConfigurationStore {
       }
     });
   };
+
   reloadServer = () =>
     this.operation(async () => {
       const state = await this.api.read();
@@ -617,21 +510,7 @@ export class ConfigurationStore {
       await this.loadProfiles();
       await this.loadAvailability();
     });
-  saveConflictAsNewProfile = (name: string) =>
-    this.operation(async () => {
-      if (!this.snapshot.current)
-        throw new Error('Configuration is not loaded');
-      const local = this.snapshot.current;
-      const remote = await this.api.read();
-      const state = await this.api.mutate('/profiles', 'POST', {
-        name,
-        expected_state_revision: remote.revision,
-        configuration: local,
-      });
-      this.accept(state, this.localGeneration, true);
-      await this.loadProfiles();
-      await this.loadAvailability();
-    });
+
   dispose = () => {
     this.cancelTimer();
     this.journal();

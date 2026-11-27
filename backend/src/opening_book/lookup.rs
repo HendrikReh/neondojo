@@ -6,7 +6,7 @@ use crate::import::{BeaverRule, MatchFormat};
 /// All SQLite, file IO and decompression run off Tokio's executor threads.
 pub(super) async fn lookup_bgdb(
     config: &BookConfig,
-    position: &Position,
+    canonical: CanonicalKey,
     expected_engine_version: Option<&str>,
 ) -> Result<BookLookup> {
     if config.provider == "off" {
@@ -15,14 +15,8 @@ pub(super) async fn lookup_bgdb(
     if !matches!(config.provider.as_str(), "automatic" | "backgammondb") {
         return Ok(BookLookup::miss("Unsupported opening book provider"));
     }
-    let (checker_key, cube_key) = match canonical_keys(position) {
-        Ok(keys) => keys,
-        Err(error) => {
-            return Ok(BookLookup::miss(format!(
-                "Unsupported position context: {error:#}"
-            )));
-        }
-    };
+    let checker_key = canonical.checker_xgid();
+    let cube_key = canonical.cube_xgid();
     let config = config.clone();
     let expected = expected_engine_version.map(str::to_owned);
     tokio::task::spawn_blocking(move || {
@@ -53,7 +47,7 @@ pub(super) async fn lookup_bgdb(
             }
             let checker = book
                 .get(&checker_key)?
-                .map(|payload| parse_checker(payload, &checker_key, book.top_ply))
+                .map(|payload| parse_checker(payload, &canonical, book.top_ply))
                 .transpose()?;
             let cube = cube_key
                 .as_deref()
@@ -62,7 +56,7 @@ pub(super) async fn lookup_bgdb(
                 .flatten()
                 .map(|payload| parse_cube(payload, book.cube_ply))
                 .transpose()?;
-            let context = context_name(&checker_key)?;
+            let context = context_name(&canonical);
             let depth = book
                 .status
                 .contexts
@@ -126,7 +120,7 @@ pub async fn lookup_with_rules(
 
 #[derive(Default)]
 pub(crate) struct LookupCache {
-    pub(crate) xg: crate::xg_book::Cache,
+    pub(crate) xg: xg_book::Cache,
     rules: std::sync::Mutex<std::collections::HashMap<(Uuid, String), Option<bool>>>,
 }
 
@@ -153,15 +147,15 @@ impl LookupCache {
                 "Unsupported opening book provider",
             )));
         }
-        let canonical = match canonical_keys(position) {
-            Ok((key, _)) => key,
+        let canonical = match CanonicalKey::from_position(position) {
+            Ok(key) => key,
             Err(error) => {
                 return Ok(finish(BookLookup::miss(format!(
                     "Unsupported position context: {error:#}"
                 ))));
             }
         };
-        let money = canonical.split(':').nth(8) == Some("0");
+        let money = canonical.is_money();
         if money && beaver.is_none() {
             return Ok(finish(BookLookup::miss(
                 "Money-game beaver rule is not recorded; no book context assumed",
@@ -170,7 +164,7 @@ impl LookupCache {
         let mut result = if matches!(config.provider.as_str(), "automatic" | "backgammondb")
             && (!money || beaver == Some(false))
         {
-            lookup_bgdb(config, position, expected_engine_version).await?
+            lookup_bgdb(config, canonical, expected_engine_version).await?
         } else {
             BookLookup::miss(if config.provider == "xg" {
                 "No XG position reference for this board and rule context"
@@ -182,7 +176,11 @@ impl LookupCache {
         if matches!(config.provider.as_str(), "automatic" | "xg")
             && expected_engine_version.is_none()
         {
-            match self.xg.lookup(&config.xg_path, position, beaver).await {
+            match self
+                .xg
+                .lookup_canonical(&config.xg_path, canonical, beaver)
+                .await
+            {
                 Ok(Some(reference)) => {
                     result.hit = true;
                     result.reason = None;

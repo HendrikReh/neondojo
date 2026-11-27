@@ -9,7 +9,7 @@ import { dateTimeFormat, numberFormat } from '../../shared/i18n/i18n-core';
 export function libraryAnalysisStatus(status: string | null, locale: Locale) {
   const key: LibraryMessageKey =
     status === 'imported'
-      ? 'importedAnalysisStatus'
+      ? 'importedFile'
       : status &&
           ['completed', 'queued', 'running', 'failed', 'partial'].includes(
             status,

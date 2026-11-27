@@ -59,17 +59,10 @@ fn finite(value: &str) -> Option<f64> {
     value.parse::<f64>().ok().filter(|n| n.is_finite())
 }
 pub(crate) fn sgf_notation(value: &str, player: i32) -> String {
-    let point = |c: u8| match c {
-        b'y' => "bar".into(),
-        b'z' => "off".into(),
-        b'a'..=b'x' => {
-            if player == 0 {
-                (i32::from(c - b'a') + 1).to_string()
-            } else {
-                (i32::from(b'x' - c) + 1).to_string()
-            }
-        }
-        _ => "?".into(),
+    let point = |c: u8| {
+        crate::import::sgf::coord::decode_point(c, player)
+            .map(crate::import::sgf::coord::format_point)
+            .unwrap_or(std::borrow::Cow::Borrowed("?"))
     };
     let moves: Vec<_> = value
         .as_bytes()

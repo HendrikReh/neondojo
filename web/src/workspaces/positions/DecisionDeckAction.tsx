@@ -1,11 +1,13 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useState } from 'react';
 import type { components } from '../../generated-api';
+import { useIsMounted } from '../../shared/hooks/useIsMounted';
 import { request } from '../../shared/http/api';
 import { useI18n } from '../../shared/i18n/i18n';
 import ActionButton from '../../shared/ui/ActionButton';
 import type { Deck } from '../study/flashcards/learning-api';
 import CreateDeckForm from '../study/flashcards/CreateDeckForm';
 import { DeckDialog } from '../study/flashcards/DeckLibraryDialogs';
+import DeckSelectField from '../study/flashcards/DeckSelectField';
 import { savedDeck, useDecks } from '../study/flashcards/useDecks';
 import { useDecisionSearchText } from './decision-search-messages';
 import { usePositionText } from './position-browser-messages';
@@ -159,19 +161,12 @@ function DecisionDeckDialog({
   const p = usePositionText();
   const t = useDecisionSearchText();
   const { formatError } = useI18n();
-  const countId = useId();
   const { decks, error: deckError, addDeck } = useDecks(revision);
   const [deckId, setDeckId] = useState(savedDeck);
   const chosen = decks.find((deck) => deck.id === deckId) ?? decks[0];
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
-  const live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-    };
-  }, []);
+  const mounted = useIsMounted();
   async function add() {
     if (!chosen || busy) return;
     setBusy(true);
@@ -187,11 +182,11 @@ function DecisionDeckDialog({
           } satisfies components['schemas']['AddDecisions']),
         },
       );
-      if (live.current) onAdded({ id: chosen.id, name: chosen.name }, result);
+      if (mounted.current) onAdded({ id: chosen.id, name: chosen.name }, result);
     } catch (error) {
-      if (live.current) setError(error);
+      if (mounted.current) setError(error);
     } finally {
-      if (live.current) setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   }
   return (
@@ -216,26 +211,14 @@ function DecisionDeckDialog({
       }
     >
       <div className="position-deck-controls">
-        <label>
-          <span>{p('chooseDeck')}</span>
-          <select
-            aria-label={p('chooseDeck')}
-            aria-describedby={countId}
-            value={chosen?.id ?? ''}
-            disabled={busy}
-            onChange={(event) => setDeckId(event.target.value)}
-          >
-            {!decks.length && <option value="">—</option>}
-            {decks.map((deck) => (
-              <option key={deck.id} value={deck.id}>
-                {deck.name}
-              </option>
-            ))}
-          </select>
-          <small id={countId}>
-            {p('deckCount', { count: chosen?.card_count ?? 0 })}
-          </small>
-        </label>
+        <DeckSelectField
+          decks={decks}
+          value={chosen?.id ?? ''}
+          onChange={setDeckId}
+          label={p('chooseDeck')}
+          disabled={busy}
+          countText={p('deckCount', { count: chosen?.card_count ?? 0 })}
+        />
       </div>
       <CreateDeckForm
         onCreated={(deck) => {

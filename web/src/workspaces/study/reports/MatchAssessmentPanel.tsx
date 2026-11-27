@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { engineDisplayName } from '../../../shared/engine/engine-version';
+import { formatPly } from '../../../shared/format/ply';
+import { usePolling } from '../../../shared/hooks/usePolling';
 import ActionButton from '../../../shared/ui/ActionButton';
 import LearningDecisionPreview from './LearningDecisionPreview';
 import { humanReviewDecisions } from './learning-review-positions';
@@ -53,46 +55,52 @@ export default function MatchAssessmentPanel({
     session,
     visible && Boolean(entry),
   );
+  const pollCycle = useRef({ explicit: false, attempt: false });
   useEffect(() => {
     if (!visible) return;
-    const abort = new AbortController();
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const explicit =
       request.language === locale && request.attempt > consumedStart.current;
-    let attempt = explicit || autoStart.current === locale;
+    pollCycle.current = {
+      explicit,
+      attempt: explicit || autoStart.current === locale,
+    };
     setError(undefined);
     setState(undefined);
     setPending(true);
-    async function poll() {
+  }, [reportId, locale, request, reportVersion, visible]);
+  usePolling(
+    async (signal) => {
       try {
-        let next = await studyAssessment(reportId, locale, abort.signal);
-        if (abort.signal.aborted) return;
+        let next = await studyAssessment(reportId, locale, signal);
+        if (signal.aborted) return false;
+        const { explicit, attempt } = pollCycle.current;
         const shouldStart =
           attempt &&
           next.availability === 'ready' &&
           (!next.job || (explicit && next.job.status === 'failed'));
-        attempt = false;
+        pollCycle.current.attempt = false;
         consumedStart.current = request.attempt;
         autoStart.current = undefined;
         if (shouldStart)
-          next = await studyAssessment(reportId, locale, abort.signal, {
+          next = await studyAssessment(reportId, locale, signal, {
             report_version: reportVersion,
           });
-        if (abort.signal.aborted) return;
+        if (signal.aborted) return false;
         setState(next);
-        if (active(next)) timer = setTimeout(() => void poll(), 1500);
+        return active(next);
       } catch (failure) {
-        if (!abort.signal.aborted) setError(failure);
+        if (!signal.aborted) setError(failure);
+        return false;
       } finally {
-        if (!abort.signal.aborted) setPending(false);
+        if (!signal.aborted) setPending(false);
       }
-    }
-    void poll();
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-    };
-  }, [reportId, locale, request, reportVersion, visible]);
+    },
+    {
+      active: visible,
+      intervalMs: 1500,
+      deps: [reportId, locale, request, reportVersion],
+    },
+  );
 
   const startJob = () => {
     setRequest((current) => ({
@@ -176,7 +184,7 @@ export default function MatchAssessmentPanel({
             <p className="match-assessment-context">
               {t('basis')} · {state?.job?.model}
               {session.review &&
-                ` · ${formatNumber(session.review.analysis_plies)}-ply`}
+                ` · ${formatPly(session.review.analysis_plies, formatNumber)}`}
             </p>
             <p className="match-assessment-summary">{output.summary}</p>
             <section>

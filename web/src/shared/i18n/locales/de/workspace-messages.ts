@@ -17,7 +17,6 @@ export default {
   notes: 'Notizen',
   cards: 'Lernkarten',
   nextError: 'Nächster Fehler',
-  databaseTitle: 'Matchdatenbank',
   databaseDescription:
     'Matches und Positionen finden, Notizen lesen und ein Match zur Analyse öffnen.',
   welcomeTitle: 'Dein nächster Zug beginnt hier.',

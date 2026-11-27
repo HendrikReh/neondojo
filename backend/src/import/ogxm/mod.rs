@@ -170,12 +170,7 @@ fn steps_to_sgf(
     for die in dice {
         available[usize::from(die)] += if dice[0] == dice[1] { 2 } else { 1 };
     }
-    let coordinate = |point| match point {
-        0 => 'z',
-        25 => 'y',
-        _ if seat == 0 => char::from(b'a' + point - 1),
-        _ => char::from(b'y' - point),
-    };
+    let player = i32::try_from(seat).context("Invalid OGXM seat")?;
     let mut out = String::new();
     for &step in steps {
         let (from, pips) = (step & 31, step >> 5);
@@ -192,8 +187,11 @@ fn steps_to_sgf(
             );
             available[usize::from(pips)] -= 1;
         }
-        out.push(coordinate(from));
-        out.push(coordinate(from.saturating_sub(pips)));
+        out.push(super::sgf::coord::encode_point(usize::from(from), player)?);
+        out.push(super::sgf::coord::encode_point(
+            usize::from(from.saturating_sub(pips)),
+            player,
+        )?);
     }
     Ok(out)
 }

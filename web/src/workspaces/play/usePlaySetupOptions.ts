@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import configurationOptions from '../../../../shared/configuration-options.json' with { type: 'json' };
 import {
   preferredDepth,
   type DepthEngine,
 } from '../../shared/engine/analysis-depth';
+import { unlockPlayAudio } from '../../shared/board/play-audio';
+import { useLatestCallback } from '../../shared/hooks/useLatest';
 import { useConfirmedConfiguration } from '../../settings/configuration/ConfigurationProvider';
 import { defaultConfiguration } from '../../settings/configuration/configuration-model';
 import {
@@ -11,8 +13,10 @@ import {
   type AppSettings,
   type EngineInfo,
 } from '../../settings/settings-api';
-import type { SageDifficulty } from './play-api';
+import { createPlaySession, type SageDifficulty } from './play-api';
 import type { PlayMode } from './play-mode-messages';
+import type { PlayDialogState } from './usePlayDialogs';
+import type { usePlaySession } from './usePlaySession';
 
 /** Choices made in the new-match dialog; unset fields use the saved defaults. */
 export interface PlaySetupOptions {
@@ -100,6 +104,35 @@ export function usePlaySetupOptions(settings: AppSettings | undefined) {
 
 export type PlaySetupChoices = ReturnType<typeof usePlaySetupOptions>;
 
+/** Builds the create-session request from the resolved new-match choices. */
+export function startPlaySessionFromChoices(choices: PlaySetupChoices) {
+  const {
+    options,
+    human,
+    length,
+    mode,
+    automatic,
+    botEngine,
+    botDifficulty,
+    botPlies,
+    botTopTwo,
+  } = choices;
+  return createPlaySession(human, length, {
+    play_mode: mode,
+    training_auto_analysis: automatic,
+    ...(options.name === undefined ? {} : { human_name: options.name }),
+    ...(botDifficulty
+      ? { play_engine: 'bgsage', play_difficulty: botDifficulty }
+      : options.engine === undefined && options.plies === undefined
+        ? {}
+        : {
+            play_engine: botEngine,
+            play_plies: botPlies,
+            play_top_two: botTopTwo,
+          }),
+  });
+}
+
 /** The engines the new-match dialog offers, loaded each time it opens. */
 export function usePlayEngines(setupOpen: boolean) {
   const [engines, setEngines] = useState<EngineInfo[]>([]);
@@ -116,4 +149,73 @@ export function usePlayEngines(setupOpen: boolean) {
     return () => abort.abort();
   }, [setupOpen]);
   return engines;
+}
+
+/** Coordinates the new-match dialog lifecycle, focus policy, and submission. */
+export function usePlayMatchSetup({
+  visible,
+  settings,
+  setupRequest,
+  playSession,
+  dialogs,
+  animating,
+}: {
+  visible: boolean;
+  settings?: AppSettings;
+  setupRequest?: number;
+  playSession: ReturnType<typeof usePlaySession>;
+  dialogs: PlayDialogState;
+  animating: boolean;
+}) {
+  const choices = usePlaySetupOptions(settings);
+  // Only a setup the user opened takes the focus; an automatic one leaves it.
+  const [focusSetup, setFocusSetup] = useState(false);
+  const open = visible && playSession.setup;
+  const engines = usePlayEngines(open);
+
+  function openSetup() {
+    setFocusSetup(true);
+    choices.setOptions({});
+    dialogs.setPauseWarning(false);
+    dialogs.setForfeitOpen(false);
+    playSession.setSetup(true);
+    playSession.setError(undefined);
+  }
+
+  const consumedSetup = useRef(0);
+  const openRequestedSetup = useLatestCallback(openSetup);
+  useEffect(() => {
+    if (
+      !visible ||
+      !setupRequest ||
+      consumedSetup.current === setupRequest ||
+      playSession.busy ||
+      animating ||
+      playSession.isLocked()
+    )
+      return;
+    consumedSetup.current = setupRequest;
+    openRequestedSetup();
+  }, [
+    visible,
+    setupRequest,
+    playSession.busy,
+    animating,
+    playSession.isLocked,
+    openRequestedSetup,
+  ]);
+
+  const closeSetup = () => {
+    if (playSession.isLocked()) return;
+    playSession.setSetup(false);
+    playSession.setError(undefined);
+  };
+
+  const create = (event: FormEvent) => {
+    event.preventDefault();
+    unlockPlayAudio();
+    void playSession.run(() => startPlaySessionFromChoices(choices));
+  };
+
+  return { choices, engines, open, focusSetup, openSetup, closeSetup, create };
 }

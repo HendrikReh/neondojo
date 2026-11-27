@@ -15,6 +15,16 @@ pub enum CardKind {
     CubeResponse,
 }
 impl CardKind {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "anki" => Some(Self::Anki),
+            "checker" => Some(Self::Checker),
+            "cube_offer" => Some(Self::CubeOffer),
+            "cube_response" => Some(Self::CubeResponse),
+            _ => None,
+        }
+    }
+
     pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Anki => "anki",
@@ -30,6 +40,16 @@ pub enum CardReviewState {
     New,
     Due,
     Reviewed,
+}
+impl CardReviewState {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "new" => Some(Self::New),
+            "due" => Some(Self::Due),
+            "reviewed" => Some(Self::Reviewed),
+            _ => None,
+        }
+    }
 }
 #[derive(Debug, Default, Serialize, Deserialize, IntoParams, ToSchema)]
 #[serde(deny_unknown_fields)]
@@ -86,7 +106,6 @@ impl CardQuery {
         for (value, max) in [
             (&mut self.q, 200),
             (&mut self.player, 240),
-            (&mut self.tag, 64),
             (&mut self.topics, 650),
             (&mut self.comment, 200),
             (&mut self.position_id, 14),
@@ -103,8 +122,11 @@ impl CardQuery {
                 }
             }
         }
-        if let Some(tag) = &mut self.tag {
-            *tag = tag.to_lowercase();
+        if let Some(tag) = self.tag.take() {
+            let normalized = crate::annotations::normalize_tag(&tag)?;
+            if !normalized.is_empty() {
+                self.tag = Some(normalized);
+            }
         }
         if let Some(topics) = &mut self.topics {
             let tags = super::topics::tags(topics.split(',').map(str::to_owned).collect())?;
@@ -113,12 +135,11 @@ impl CardQuery {
             }
             *topics = tags.into_iter().collect::<Vec<_>>().join(",");
         }
-        if self.position_id.as_ref().is_some_and(|id| {
-            id.len() != 14
-                || !id
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b"+/".contains(&b))
-        }) {
+        if self
+            .position_id
+            .as_deref()
+            .is_some_and(|id| !crate::engine::valid_id(id, 14))
+        {
             return Err(ApiError::invalid(
                 "position_id must be a 14-character GNUbg checker ID",
             ));
@@ -261,15 +282,9 @@ pub(super) async fn prepare_game_plans(pool: &PgPool, query: &CardQuery) -> ApiR
             let plan = serde_json::from_value::<Position>(position)
                 .ok()
                 .and_then(|position| {
-                    let board: [i32; 26] = position.board.try_into().ok()?;
-                    let plans = crate::game_plan::classify(&board).ok()?;
-                    let plan = match position.player {
-                        0 => plans.white,
-                        1 => plans.black,
-                        _ => return None,
-                    };
-                    Some(crate::position_game_plans::label(plan))
-                });
+                    crate::game_plan::classify_for_player(&position.board, position.player)
+                })
+                .map(crate::position_game_plans::label);
             row.push_bind(id).push_bind(classifier).push_bind(plan);
         });
         sql.push(" ON CONFLICT DO NOTHING");
@@ -306,17 +321,7 @@ pub(super) async fn load(
     let limit = q.limit.unwrap_or(50);
     let offset = crate::search::page_offset(q.page, q.after.is_some(), limit)?;
     prepare_game_plans(&state.pool, &q).await?;
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-    // These bounded pages do not amortize JIT startup. Correlated note scopes can
-    // exceed PostgreSQL's estimated-cost threshold even for a tiny collection.
-    sqlx::query("SET LOCAL jit=off")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     if let Some(id) = deck {
         require_deck(&mut *tx, id).await?;
     }

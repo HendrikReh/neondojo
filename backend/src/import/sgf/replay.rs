@@ -1,3 +1,4 @@
+use super::coord::{decode_point, format_step};
 use super::parser::{Node, number, one, parse_trees};
 use crate::backgammon::{apply_checker_turn, ids, initial_board, local_board, valid_board};
 use crate::import::{ImportedMatch, ImportedPosition};
@@ -56,36 +57,10 @@ pub(crate) fn play(board: &mut [i32; 26], player: i32, value: &str) -> Result<([
     let mut notation = Vec::new();
     let mut local = local_board(board, player);
     for pair in bytes[2..].chunks_exact(2) {
-        let point = |c: u8| -> Result<usize> {
-            match c {
-                b'a'..=b'x' => Ok(if player == 0 {
-                    usize::from(c - b'a' + 1)
-                } else {
-                    usize::from(b'x' - c + 1)
-                }),
-                b'y' => Ok(25),
-                b'z' => Ok(0),
-                _ => bail!("SGF: invalid move coordinate"),
-            }
-        };
-        let from = point(pair[0])?;
-        let to = point(pair[1])?;
+        let from = decode_point(pair[0], player)?;
+        let to = decode_point(pair[1], player)?;
         let hit = to > 0 && to < 25 && local[to] == -1;
-        let label = |p: usize| {
-            if p == 25 {
-                "bar".to_owned()
-            } else if p == 0 {
-                "off".to_owned()
-            } else {
-                p.to_string()
-            }
-        };
-        notation.push(format!(
-            "{}/{}{}",
-            label(from),
-            label(to),
-            if hit { "*" } else { "" }
-        ));
+        notation.push(format_step(from, to, hit));
         pairs.push((from, to));
         // Intermediate board is only for hit notation; apply_pairs validates all steps.
         if (1..=25).contains(&from) && to < 25 {
@@ -204,10 +179,18 @@ fn offered(match_id: &str, doubler: i32) -> Result<String> {
 fn parse_sgf_context(
     input: &str,
     native_setup_turn: bool,
-    mut source_moves: Option<&mut Vec<SourceMove>>,
+    source_moves: Option<&mut Vec<SourceMove>>,
 ) -> Result<(ImportedMatch, Vec<GameContext>)> {
     let trees = parse_trees(input)?;
-    let mut contexts = Vec::new();
+    replay_trees(&trees, native_setup_turn, source_moves)
+}
+
+pub(crate) fn replay_trees(
+    trees: &[Vec<Node>],
+    native_setup_turn: bool,
+    mut source_moves: Option<&mut Vec<SourceMove>>,
+) -> Result<(ImportedMatch, Vec<GameContext>)> {
+    let mut contexts = Vec::with_capacity(trees.len());
     let mut result_cubes = Vec::with_capacity(trees.len());
     let mut result = ImportedMatch {
         players: ["White".into(), "Black".into()],
@@ -218,314 +201,422 @@ fn parse_sgf_context(
     let mut previous_scores = [0, 0];
     for (game_index, nodes) in trees.iter().enumerate() {
         let root = &nodes[0];
-        ensure!(
-            one(root, "GM")? == Some("6"),
-            "Only backgammon SGF (GM[6]) is supported"
-        );
-        if let Some(ff) = one(root, "FF")? {
-            ensure!(ff == "4" || ff == "3", "Unsupported SGF version {ff}");
-        }
-        if let Some(ca) = one(root, "CA")? {
-            ensure!(
-                ["UTF-8", "UTF8", "ISO-8859-1", "US-ASCII"].contains(&ca.to_uppercase().as_str()),
-                "Unsupported SGF character encoding {ca}"
-            );
-        }
-        let mut length = result.match_length;
-        let mut scores = previous_scores;
-        if let Some(mi) = root.get("MI") {
-            for field in mi {
-                let (key, value) = field
-                    .split_once(':')
-                    .context("SGF: malformed MI property")?;
-                match key.to_ascii_lowercase().as_str() {
-                    "length" => length = number(value, "match length")?,
-                    "ws" => scores[0] = number(value, "white score")?,
-                    "bs" => scores[1] = number(value, "black score")?,
-                    "game" => {
-                        number(value, "game number")?;
-                    }
-                    _ => {}
-                }
-            }
-        }
-        if game_index == 0 {
-            result.match_length = length;
-        }
-        ensure!(
-            length == result.match_length,
-            "SGF collection contains different match lengths"
-        );
-        ensure!(
-            length == 0 || scores.iter().all(|s| *s < length),
-            "SGF game starts after the match is over"
-        );
-        for (i, property) in ["PW", "PB"].iter().enumerate() {
-            if let Some(name) = one(root, property)? {
-                let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
-                if game_index == 0 {
-                    result.players[i] = name;
-                } else {
-                    ensure!(
-                        result.players[i] == name,
-                        "SGF collection changes player names/colors between games"
-                    );
-                }
-            }
-        }
-        let mut crawford = false;
-        let mut jacoby = false;
-        // GNUbg's "set cube use off", e.g. cubeless money duels.
-        let mut no_cube = false;
-        if let Some(rules) = one(root, "RU")? {
-            for rule in rules.split(':') {
-                match rule.trim() {
-                    "" | "Crawford" | "Backgammon" | "Standard" => {}
-                    "CrawfordGame" => crawford = true,
-                    "Jacoby" => jacoby = true,
-                    "NoCube" => no_cube = true,
-                    other => bail!("Unsupported backgammon rule/variant: {other}"),
-                }
-            }
-        }
-        ensure!(!crawford || length > 0, "Crawford game in a money session");
-        ensure!(!jacoby || length == 0, "Jacoby rule in a point match");
-        let mut context = GameContext {
-            length,
-            scores,
-            crawford,
-            jacoby,
-            cube_enabled: !no_cube,
-            decision_ids: Vec::new(),
-        };
-        let mut board = initial_board();
-        let mut cube = 1i32;
-        let mut owner = -1;
-        let mut pending = None;
-        let mut expected_turn = None;
-        let mut ended = false;
-        let mut dropped_by = None;
-        let mut terminal_checker = false;
-        let mut terminal_evidence = None;
-        let mut ply = 0;
-        let mut move_no = 0;
+        let context = parse_game_header(root, game_index, &mut result, previous_scores)?;
+        let mut replay = GameReplay::new(context);
         for (node_index, node) in nodes.iter().enumerate() {
-            ensure!(
-                node_index == 0
-                    || !["GM", "MI", "RU", "PW", "PB"]
-                        .iter()
-                        .any(|key| node.contains_key(*key)),
-                "SGF game metadata outside the root node is not supported"
-            );
-            setup(node, &mut board)?;
-            if let Some(cv) = one(node, "CV")? {
-                cube = cv.parse().context("SGF: invalid cube value")?;
-                ensure!(
-                    cube > 0 && cube <= 32768 && (cube as u32).is_power_of_two(),
-                    "SGF: cube must be a power of two"
-                );
-            }
-            let cp = one(node, "CP")?.filter(|v| matches!(*v, "c" | "w" | "b"));
-            if let Some(co) = one(node, "CO")?.or(cp) {
-                owner = match co {
-                    "c" => -1,
-                    "w" => 0,
-                    "b" => 1,
-                    "n" if crawford => -1,
-                    _ => bail!("Unsupported SGF cube owner {co}"),
-                };
-            }
-            if native_setup_turn && ["AE", "AW", "AB"].iter().any(|key| node.contains_key(*key)) {
-                expected_turn = None;
-            } else if let Some(pl) = one(node, "PL")? {
-                expected_turn = Some(match pl {
-                    "W" => 0,
-                    "B" => 1,
-                    _ => bail!("SGF: invalid PL"),
-                });
-            }
-            let white = one(node, "W")?;
-            let black = one(node, "B")?;
-            ensure!(
-                white.is_none() || black.is_none(),
-                "SGF node contains moves for both players"
-            );
-            let Some((player, value)) = white.map(|v| (0, v)).or(black.map(|v| (1, v))) else {
+            replay.apply_node_setup(node_index, node, native_setup_turn)?;
+            let Some((player, value)) = node_action(node)? else {
                 continue;
             };
-            ensure!(!ended, "SGF contains moves after a cube drop");
-            move_no += 1;
-            let before_event = board;
-            let pending_before = pending;
-            let cube_before = cube;
-            let owner_before = owner;
-            if matches!(value, "double" | "take" | "drop") {
-                ensure!(
-                    !no_cube,
-                    "SGF cube action in a game played without the cube"
-                );
-                context.decision_ids.push((
-                    ids::position_id(&board, player),
-                    ids::match_id(
-                        length,
-                        scores,
-                        cube,
-                        owner,
-                        crawford,
-                        jacoby,
-                        player,
-                        [0, 0],
-                    ),
-                ));
-            }
-            match value {
-                "double" => {
-                    ensure!(!crawford, "SGF contains a double in a Crawford game");
-                    ensure!(pending.is_none(), "Beavers/raccoons are not supported");
-                    ensure!(
-                        owner == -1 || owner == player,
-                        "SGF: player doubles an opponent-owned cube"
-                    );
-                    ensure!(
-                        expected_turn.is_none_or(|turn| turn == player),
-                        "SGF: wrong player doubles"
-                    );
-                    ensure!(cube < 32768, "SGF: cube exceeds GNUbg ID range");
-                    pending = Some(player);
+            replay.apply_action(
+                game_index,
+                player,
+                value,
+                &mut result.positions,
+                source_moves.as_deref_mut(),
+            )?;
+        }
+        if let Some(moves) = source_moves.as_deref_mut() {
+            replay.record_resignation(root, game_index, moves)?;
+        }
+        let (game, context, result_cube, next_scores) = replay.finish(root, game_index)?;
+        result_cubes.push(result_cube);
+        result.games.push(game);
+        contexts.push(context);
+        previous_scores = next_scores;
+    }
+    infer_results_from_following_scores(&mut result.games, trees, &result_cubes);
+    Ok((result, contexts))
+}
+
+fn parse_game_header(
+    root: &Node,
+    game_index: usize,
+    result: &mut ImportedMatch,
+    previous_scores: [i32; 2],
+) -> Result<GameContext> {
+    ensure!(
+        one(root, "GM")? == Some("6"),
+        "Only backgammon SGF (GM[6]) is supported"
+    );
+    if let Some(ff) = one(root, "FF")? {
+        ensure!(ff == "4" || ff == "3", "Unsupported SGF version {ff}");
+    }
+    if let Some(ca) = one(root, "CA")? {
+        ensure!(
+            ["UTF-8", "UTF8", "ISO-8859-1", "US-ASCII"].contains(&ca.to_uppercase().as_str()),
+            "Unsupported SGF character encoding {ca}"
+        );
+    }
+    let mut length = result.match_length;
+    let mut scores = previous_scores;
+    if let Some(mi) = root.get("MI") {
+        for field in mi {
+            let (key, value) = field
+                .split_once(':')
+                .context("SGF: malformed MI property")?;
+            match key.to_ascii_lowercase().as_str() {
+                "length" => length = number(value, "match length")?,
+                "ws" => scores[0] = number(value, "white score")?,
+                "bs" => scores[1] = number(value, "black score")?,
+                "game" => {
+                    number(value, "game number")?;
                 }
-                "take" | "drop" => {
-                    let doubler = pending
-                        .take()
-                        .context("SGF: cube response without a double")?;
-                    ensure!(
-                        player != doubler,
-                        "SGF: player responds to their own double"
-                    );
-                    if value == "take" {
-                        cube *= 2;
-                        owner = player;
-                        expected_turn = Some(doubler);
-                    } else {
-                        ended = true;
-                        dropped_by = Some(player);
-                        terminal_evidence = Some((board, cube, owner));
-                    }
-                }
-                _ => {
-                    ensure!(pending.is_none(), "SGF: checker move before cube response");
-                    ensure!(
-                        expected_turn.is_none_or(|turn| turn == player),
-                        "SGF: non-alternating checker moves"
-                    );
-                    let before = board;
-                    ensure!(
-                        before.iter().any(|n| *n > 0) && before.iter().any(|n| *n < 0),
-                        "SGF: checker move after a player has borne off every checker"
-                    );
-                    let (dice, notation) = play(&mut board, player, value).with_context(|| {
-                        format!("game {}, checker ply {}", game_index + 1, ply + 1)
-                    })?;
-                    terminal_checker =
-                        !board.iter().any(|n| *n > 0) || !board.iter().any(|n| *n < 0);
-                    if terminal_checker {
-                        terminal_evidence = Some((board, cube, owner));
-                    }
-                    ply += 1;
-                    context.decision_ids.push((
-                        ids::position_id(&before, player),
-                        ids::match_id(length, scores, cube, owner, crawford, jacoby, player, dice),
-                    ));
-                    result.positions.push(ImportedPosition {
-                        cube_enabled: !no_cube,
-                        game_no: game_index as i32 + 1,
-                        ply,
-                        player,
-                        dice,
-                        board: before.to_vec(),
-                        position_id: ids::position_id(&before, player),
-                        match_id: ids::match_id(
-                            length, scores, cube, owner, crawford, jacoby, player, dice,
-                        ),
-                        notation,
-                    });
-                    expected_turn = Some(1 - player);
-                }
-            }
-            if let Some(moves) = source_moves.as_deref_mut() {
-                let checker = !matches!(value, "double" | "take" | "drop");
-                let (dice, notation) = if checker {
-                    let position = result
-                        .positions
-                        .last()
-                        .context("SGF: missing checker snapshot")?;
-                    (position.dice, position.notation.clone())
-                } else {
-                    (
-                        [0, 0],
-                        match value {
-                            "double" => "Double",
-                            "take" => "Take",
-                            _ => "Drop",
-                        }
-                        .to_owned(),
-                    )
-                };
-                let mut match_id = ids::match_id(
-                    length,
-                    scores,
-                    cube_before,
-                    owner_before,
-                    crawford,
-                    jacoby,
-                    player,
-                    dice,
-                );
-                if let Some(doubler) = pending_before {
-                    match_id = offered(&match_id, doubler)?;
-                }
-                let after_turn = if checker {
-                    1 - player
-                } else {
-                    pending.or(pending_before).unwrap_or(player)
-                };
-                let mut after_match_id = ids::match_id(
-                    length,
-                    scores,
-                    cube,
-                    owner,
-                    crawford,
-                    jacoby,
-                    after_turn,
-                    [0, 0],
-                );
-                if let Some(doubler) = pending {
-                    after_match_id = offered(&after_match_id, doubler)?;
-                }
-                moves.push(SourceMove {
-                    game_no: game_index as i32 + 1,
-                    move_no,
-                    kind: if checker { "checker" } else { "cube" },
-                    player,
-                    notation,
-                    checker_ply: checker.then_some(ply),
-                    board: before_event.to_vec(),
-                    dice,
-                    position_id: ids::position_id(&before_event, pending_before.unwrap_or(player)),
-                    match_id,
-                    after_board: board.to_vec(),
-                    after_match_id,
-                });
+                _ => {}
             }
         }
-        // GNUbg writes MOVE_RESIGN only as the result's R suffix and restores
-        // it as a final source event after replaying the explicit move nodes.
-        // Preserve the existing checker and analysis-context import contracts.
-        if let Some(moves) = source_moves.as_deref_mut()
-            && let Some((winner, points)) = one(root, "RE")?.and_then(|r| r.split_once('+'))
+    }
+    if game_index == 0 {
+        result.match_length = length;
+    }
+    ensure!(
+        length == result.match_length,
+        "SGF collection contains different match lengths"
+    );
+    ensure!(
+        length == 0 || scores.iter().all(|s| *s < length),
+        "SGF game starts after the match is over"
+    );
+    for (i, property) in ["PW", "PB"].iter().enumerate() {
+        if let Some(name) = one(root, property)? {
+            let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+            if game_index == 0 {
+                result.players[i] = name;
+            } else {
+                ensure!(
+                    result.players[i] == name,
+                    "SGF collection changes player names/colors between games"
+                );
+            }
+        }
+    }
+    let mut crawford = false;
+    let mut jacoby = false;
+    // GNUbg's "set cube use off", e.g. cubeless money duels.
+    let mut no_cube = false;
+    if let Some(rules) = one(root, "RU")? {
+        for rule in rules.split(':') {
+            match rule.trim() {
+                "" | "Crawford" | "Backgammon" | "Standard" => {}
+                "CrawfordGame" => crawford = true,
+                "Jacoby" => jacoby = true,
+                "NoCube" => no_cube = true,
+                other => bail!("Unsupported backgammon rule/variant: {other}"),
+            }
+        }
+    }
+    ensure!(!crawford || length > 0, "Crawford game in a money session");
+    ensure!(!jacoby || length == 0, "Jacoby rule in a point match");
+    Ok(GameContext {
+        length,
+        scores,
+        crawford,
+        jacoby,
+        cube_enabled: !no_cube,
+        decision_ids: Vec::new(),
+    })
+}
+
+fn node_action(node: &Node) -> Result<Option<(i32, &str)>> {
+    let white = one(node, "W")?;
+    let black = one(node, "B")?;
+    ensure!(
+        white.is_none() || black.is_none(),
+        "SGF node contains moves for both players"
+    );
+    Ok(white.map(|v| (0, v)).or(black.map(|v| (1, v))))
+}
+
+struct MoveSnapshot {
+    board: [i32; 26],
+    pending: Option<i32>,
+    cube: i32,
+    owner: i32,
+}
+
+struct GameReplay {
+    context: GameContext,
+    board: [i32; 26],
+    cube: i32,
+    owner: i32,
+    pending: Option<i32>,
+    expected_turn: Option<i32>,
+    ended: bool,
+    dropped_by: Option<i32>,
+    terminal_checker: bool,
+    terminal_evidence: Option<([i32; 26], i32, i32)>,
+    ply: i32,
+    move_no: i32,
+}
+
+impl GameReplay {
+    fn new(context: GameContext) -> Self {
+        Self {
+            context,
+            board: initial_board(),
+            cube: 1,
+            owner: -1,
+            pending: None,
+            expected_turn: None,
+            ended: false,
+            dropped_by: None,
+            terminal_checker: false,
+            terminal_evidence: None,
+            ply: 0,
+            move_no: 0,
+        }
+    }
+
+    fn match_id(&self, cube: i32, owner: i32, player: i32, dice: [i32; 2]) -> String {
+        ids::match_id(
+            self.context.length,
+            self.context.scores,
+            cube,
+            owner,
+            self.context.crawford,
+            self.context.jacoby,
+            player,
+            dice,
+        )
+    }
+
+    fn apply_node_setup(
+        &mut self,
+        node_index: usize,
+        node: &Node,
+        native_setup_turn: bool,
+    ) -> Result<()> {
+        ensure!(
+            node_index == 0
+                || !["GM", "MI", "RU", "PW", "PB"]
+                    .iter()
+                    .any(|key| node.contains_key(*key)),
+            "SGF game metadata outside the root node is not supported"
+        );
+        setup(node, &mut self.board)?;
+        if let Some(cv) = one(node, "CV")? {
+            self.cube = cv.parse().context("SGF: invalid cube value")?;
+            ensure!(
+                self.cube > 0 && self.cube <= 32768 && (self.cube as u32).is_power_of_two(),
+                "SGF: cube must be a power of two"
+            );
+        }
+        let cp = one(node, "CP")?.filter(|v| matches!(*v, "c" | "w" | "b"));
+        if let Some(co) = one(node, "CO")?.or(cp) {
+            self.owner = match co {
+                "c" => -1,
+                "w" => 0,
+                "b" => 1,
+                "n" if self.context.crawford => -1,
+                _ => bail!("Unsupported SGF cube owner {co}"),
+            };
+        }
+        if native_setup_turn && ["AE", "AW", "AB"].iter().any(|key| node.contains_key(*key)) {
+            self.expected_turn = None;
+        } else if let Some(pl) = one(node, "PL")? {
+            self.expected_turn = Some(match pl {
+                "W" => 0,
+                "B" => 1,
+                _ => bail!("SGF: invalid PL"),
+            });
+        }
+        Ok(())
+    }
+
+    fn apply_action(
+        &mut self,
+        game_index: usize,
+        player: i32,
+        value: &str,
+        positions: &mut Vec<ImportedPosition>,
+        source_moves: Option<&mut Vec<SourceMove>>,
+    ) -> Result<()> {
+        ensure!(!self.ended, "SGF contains moves after a cube drop");
+        self.move_no += 1;
+        let before = MoveSnapshot {
+            board: self.board,
+            pending: self.pending,
+            cube: self.cube,
+            owner: self.owner,
+        };
+        if matches!(value, "double" | "take" | "drop") {
+            self.apply_cube_action(player, value)?;
+        } else {
+            self.apply_checker_action(game_index, player, value, positions)?;
+        }
+        if let Some(moves) = source_moves {
+            self.record_source_move(game_index, player, value, &before, positions, moves)?;
+        }
+        Ok(())
+    }
+
+    fn apply_cube_action(&mut self, player: i32, value: &str) -> Result<()> {
+        ensure!(
+            self.context.cube_enabled,
+            "SGF cube action in a game played without the cube"
+        );
+        self.context.decision_ids.push((
+            ids::position_id(&self.board, player),
+            self.match_id(self.cube, self.owner, player, [0, 0]),
+        ));
+        match value {
+            "double" => {
+                ensure!(
+                    !self.context.crawford,
+                    "SGF contains a double in a Crawford game"
+                );
+                ensure!(self.pending.is_none(), "Beavers/raccoons are not supported");
+                ensure!(
+                    self.owner == -1 || self.owner == player,
+                    "SGF: player doubles an opponent-owned cube"
+                );
+                ensure!(
+                    self.expected_turn.is_none_or(|turn| turn == player),
+                    "SGF: wrong player doubles"
+                );
+                ensure!(self.cube < 32768, "SGF: cube exceeds GNUbg ID range");
+                self.pending = Some(player);
+            }
+            "take" | "drop" => {
+                let doubler = self
+                    .pending
+                    .take()
+                    .context("SGF: cube response without a double")?;
+                ensure!(
+                    player != doubler,
+                    "SGF: player responds to their own double"
+                );
+                if value == "take" {
+                    self.cube *= 2;
+                    self.owner = player;
+                    self.expected_turn = Some(doubler);
+                } else {
+                    self.ended = true;
+                    self.dropped_by = Some(player);
+                    self.terminal_evidence = Some((self.board, self.cube, self.owner));
+                }
+            }
+            _ => unreachable!("apply_cube_action called with non-cube value"),
+        }
+        Ok(())
+    }
+
+    fn apply_checker_action(
+        &mut self,
+        game_index: usize,
+        player: i32,
+        value: &str,
+        positions: &mut Vec<ImportedPosition>,
+    ) -> Result<()> {
+        ensure!(
+            self.pending.is_none(),
+            "SGF: checker move before cube response"
+        );
+        ensure!(
+            self.expected_turn.is_none_or(|turn| turn == player),
+            "SGF: non-alternating checker moves"
+        );
+        let before = self.board;
+        ensure!(
+            before.iter().any(|n| *n > 0) && before.iter().any(|n| *n < 0),
+            "SGF: checker move after a player has borne off every checker"
+        );
+        let (dice, notation) = play(&mut self.board, player, value)
+            .with_context(|| format!("game {}, checker ply {}", game_index + 1, self.ply + 1))?;
+        self.terminal_checker =
+            !self.board.iter().any(|n| *n > 0) || !self.board.iter().any(|n| *n < 0);
+        if self.terminal_checker {
+            self.terminal_evidence = Some((self.board, self.cube, self.owner));
+        }
+        self.ply += 1;
+        let position_id = ids::position_id(&before, player);
+        let match_id = self.match_id(self.cube, self.owner, player, dice);
+        self.context
+            .decision_ids
+            .push((position_id.clone(), match_id.clone()));
+        positions.push(ImportedPosition {
+            cube_enabled: self.context.cube_enabled,
+            game_no: game_index as i32 + 1,
+            ply: self.ply,
+            player,
+            dice,
+            board: before.to_vec(),
+            position_id,
+            match_id,
+            notation,
+        });
+        self.expected_turn = Some(1 - player);
+        Ok(())
+    }
+
+    fn record_source_move(
+        &self,
+        game_index: usize,
+        player: i32,
+        value: &str,
+        before: &MoveSnapshot,
+        positions: &[ImportedPosition],
+        moves: &mut Vec<SourceMove>,
+    ) -> Result<()> {
+        let checker = !matches!(value, "double" | "take" | "drop");
+        let (dice, notation) = if checker {
+            let position = positions.last().context("SGF: missing checker snapshot")?;
+            (position.dice, position.notation.clone())
+        } else {
+            (
+                [0, 0],
+                match value {
+                    "double" => "Double",
+                    "take" => "Take",
+                    _ => "Drop",
+                }
+                .to_owned(),
+            )
+        };
+        let mut match_id = self.match_id(before.cube, before.owner, player, dice);
+        if let Some(doubler) = before.pending {
+            match_id = offered(&match_id, doubler)?;
+        }
+        let after_turn = if checker {
+            1 - player
+        } else {
+            self.pending.or(before.pending).unwrap_or(player)
+        };
+        let mut after_match_id = self.match_id(self.cube, self.owner, after_turn, [0, 0]);
+        if let Some(doubler) = self.pending {
+            after_match_id = offered(&after_match_id, doubler)?;
+        }
+        moves.push(SourceMove {
+            game_no: game_index as i32 + 1,
+            move_no: self.move_no,
+            kind: if checker { "checker" } else { "cube" },
+            player,
+            notation,
+            checker_ply: checker.then_some(self.ply),
+            board: before.board.to_vec(),
+            dice,
+            position_id: ids::position_id(&before.board, before.pending.unwrap_or(player)),
+            match_id,
+            after_board: self.board.to_vec(),
+            after_match_id,
+        });
+        Ok(())
+    }
+
+    /// GNUbg writes MOVE_RESIGN only as the result's R suffix and restores
+    /// it as a final source event after replaying the explicit move nodes.
+    /// Preserve the existing checker and analysis-context import contracts.
+    fn record_resignation(
+        &self,
+        root: &Node,
+        game_index: usize,
+        moves: &mut Vec<SourceMove>,
+    ) -> Result<()> {
+        if let Some((winner, points)) = one(root, "RE")?.and_then(|r| r.split_once('+'))
             && points.ends_with(['R', 'r'])
         {
             ensure!(
-                pending.is_none() && !ended,
+                self.pending.is_none() && !self.ended,
                 "SGF: resignation after cube offer or drop"
             );
             let player = match winner {
@@ -533,86 +624,86 @@ fn parse_sgf_context(
                 "B" => 0,
                 _ => bail!("SGF: invalid resignation winner"),
             };
+            let match_id = self.match_id(self.cube, self.owner, player, [0, 0]);
             moves.push(SourceMove {
                 game_no: game_index as i32 + 1,
-                move_no: move_no + 1,
+                move_no: self.move_no + 1,
                 kind: "resign",
                 player,
                 notation: "Resign".to_owned(),
-                after_board: board.to_vec(),
-                after_match_id: ids::match_id(
-                    length,
-                    scores,
-                    cube,
-                    owner,
-                    crawford,
-                    jacoby,
-                    player,
-                    [0, 0],
-                ),
+                after_board: self.board.to_vec(),
+                after_match_id: match_id.clone(),
                 checker_ply: None,
-                board: board.to_vec(),
+                board: self.board.to_vec(),
                 dice: [0, 0],
-                position_id: ids::position_id(&board, player),
-                match_id: ids::match_id(
-                    length,
-                    scores,
-                    cube,
-                    owner,
-                    crawford,
-                    jacoby,
-                    player,
-                    [0, 0],
-                ),
+                position_id: ids::position_id(&self.board, player),
+                match_id,
             });
         }
-        let (result_board, result_cube, result_owner) =
-            terminal_evidence.unwrap_or((board, cube, owner));
+        Ok(())
+    }
+
+    fn finish(
+        self,
+        root: &Node,
+        game_index: usize,
+    ) -> Result<(crate::model::MatchGame, GameContext, i32, [i32; 2])> {
+        let (result_board, result_cube, result_owner) = self
+            .terminal_evidence
+            .unwrap_or((self.board, self.cube, self.owner));
+        let recorded = one(root, "RE")?;
         let outcome = crate::game_result::derive(
             &result_board,
             result_cube,
-            jacoby && result_owner == -1,
-            scores,
-            terminal_checker,
-            dropped_by,
-            one(root, "RE")?,
+            self.context.jacoby && result_owner == -1,
+            self.context.scores,
+            self.terminal_checker,
+            self.dropped_by,
+            recorded,
         );
-        result_cubes.push(result_cube);
-        result.games.push(crate::model::MatchGame {
-            cube_enabled: Some(!no_cube),
-            result: outcome.clone(),
+        let next_scores = next_scores_from_result(self.context.scores, recorded)?;
+        let game = crate::model::MatchGame {
+            cube_enabled: Some(self.context.cube_enabled),
+            result: outcome,
             game_no: game_index as i32 + 1,
-            position_count: ply,
-            white_score: scores[0],
-            black_score: scores[1],
-            crawford,
-        });
-        contexts.push(context);
-        previous_scores = scores;
-        if let Some(re) = one(root, "RE")?
-            && let Some((winner, points)) = re.split_once('+')
-        {
-            let digits = points
-                .chars()
-                .take_while(char::is_ascii_digit)
-                .collect::<String>();
-            if !digits.is_empty() {
-                let n = number(&digits, "result points")?;
-                let side = match winner {
-                    "W" => 0,
-                    "B" => 1,
-                    _ => bail!("SGF: invalid winner"),
-                };
-                previous_scores[side] = previous_scores[side]
-                    .checked_add(n)
-                    .context("Score overflow")?;
-            }
+            position_count: self.ply,
+            white_score: self.context.scores[0],
+            black_score: self.context.scores[1],
+            crawford: self.context.crawford,
+        };
+        Ok((game, self.context, result_cube, next_scores))
+    }
+}
+
+fn next_scores_from_result(mut scores: [i32; 2], recorded: Option<&str>) -> Result<[i32; 2]> {
+    if let Some(re) = recorded
+        && let Some((winner, points)) = re.split_once('+')
+    {
+        let digits = points
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>();
+        if !digits.is_empty() {
+            let n = number(&digits, "result points")?;
+            let side = match winner {
+                "W" => 0,
+                "B" => 1,
+                _ => bail!("SGF: invalid winner"),
+            };
+            scores[side] = scores[side].checked_add(n).context("Score overflow")?;
         }
     }
+    Ok(scores)
+}
+
+fn infer_results_from_following_scores(
+    games: &mut [crate::model::MatchGame],
+    trees: &[Vec<Node>],
+    result_cubes: &[i32],
+) {
     // Read only explicit next-root score fields. Inferred results must never
     // feed previous_scores or alter position/match IDs during source replay.
-    for (index, (game, (next, cube))) in result
-        .games
+    for (index, (game, (next, &cube))) in games
         .iter_mut()
         .zip(trees.iter().skip(1).zip(result_cubes))
         .enumerate()
@@ -629,7 +720,6 @@ fn parse_sgf_context(
             );
         }
     }
-    Ok((result, contexts))
 }
 
 fn consecutive_declared_games(current: &Node, next: &Node) -> bool {

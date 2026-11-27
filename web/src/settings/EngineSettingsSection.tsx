@@ -53,7 +53,7 @@ function ParallelJobsField({
           }
         >
           <option value="">
-            {t('defaultParallelJobs', { count: defaultJobs })}
+            {t('defaultThreads', { count: defaultJobs })}
           </option>
           {retained && (
             <option value={value} disabled>

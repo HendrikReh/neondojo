@@ -807,4 +807,63 @@ mod tests {
             assert_eq!(actual, expected, "{}", case["name"]);
         }
     }
+
+    #[test]
+    fn normalization_aligns_with_domain_validators() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/configuration-normalization.json"
+        ))
+        .unwrap();
+
+        // (a) learning.filters.kind accepts CardKind::Anki ("anki").
+        let mut anki_filter = fixture["base"].clone();
+        anki_filter["learning"]["filters"]["kind"] = serde_json::json!("anki");
+        let normalized =
+            validation::normalize(serde_json::from_value(anki_filter).unwrap()).unwrap();
+        assert_eq!(normalized.learning.filters.kind, "anki");
+
+        // (b) library.sort accepts "match_no" alias and match_points accepts > 32767.
+        let mut library_alias = fixture["base"].clone();
+        library_alias["library"]["sort"] = serde_json::json!("match_no");
+        library_alias["library"]["filters"]["match_points_min"] = serde_json::json!("50000");
+        library_alias["library"]["filters"]["match_points_max"] = serde_json::json!("100000");
+        let normalized =
+            validation::normalize(serde_json::from_value(library_alias).unwrap()).unwrap();
+        assert_eq!(normalized.library.sort, "match_no");
+        assert_eq!(normalized.library.filters.match_points_min, "50000");
+        assert_eq!(normalized.library.filters.match_points_max, "100000");
+
+        let mut negative_points = fixture["base"].clone();
+        negative_points["library"]["filters"]["match_points_min"] = serde_json::json!("-1");
+        assert!(validation::normalize(serde_json::from_value(negative_points).unwrap()).is_err());
+
+        // (c) All tag filters use annotations::normalize_tag (collapse whitespace + reject controls).
+        let mut tags = fixture["base"].clone();
+        tags["library"]["filters"]["tag"] = serde_json::json!("  Cube   Error  ");
+        tags["learning"]["filters"]["tag"] = serde_json::json!("  Opening   Play ");
+        tags["annotations"]["filters"] =
+            serde_json::json!({"q": "", "tag": "  Late   Game ", "kind": ""});
+        let normalized = validation::normalize(serde_json::from_value(tags).unwrap()).unwrap();
+        assert_eq!(normalized.library.filters.tag, "cube error");
+        assert_eq!(normalized.learning.filters.tag, "opening play");
+        assert_eq!(normalized.annotations.filters.unwrap().tag, "late game");
+
+        let mut control_tag = fixture["base"].clone();
+        control_tag["library"]["filters"]["tag"] = serde_json::json!("cube\terror");
+        assert!(validation::normalize(serde_json::from_value(control_tag).unwrap()).is_err());
+
+        // (d) position_id validation rejects non-14-char base64 IDs and accepts valid ones.
+        let mut valid_pos = fixture["base"].clone();
+        valid_pos["library"]["filters"]["position_id"] = serde_json::json!("4HPwATDgc/ABMA");
+        valid_pos["learning"]["filters"]["position_id"] = serde_json::json!("4HPwATDgc/ABMA");
+        assert!(validation::normalize(serde_json::from_value(valid_pos).unwrap()).is_ok());
+
+        let mut bad_pos = fixture["base"].clone();
+        bad_pos["learning"]["filters"]["position_id"] = serde_json::json!("4HPwATDgc_ABMA");
+        let err = validation::normalize(serde_json::from_value(bad_pos).unwrap()).unwrap_err();
+        assert_eq!(
+            err.1.issues.unwrap()[0].path,
+            "learning.filters.position_id"
+        );
+    }
 }

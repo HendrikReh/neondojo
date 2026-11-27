@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { request } from '../../../shared/http/api';
+import { useEffect, useState } from 'react';
+import { useEpoch, useLatest } from '../../../shared/hooks/useLatest';
+import { request, requestResponse, saveBlob } from '../../../shared/http/api';
 import { AppError } from '../../../shared/i18n/i18n-core';
 import { useI18n } from '../../../shared/i18n/i18n';
 import { useCardPracticeText } from './card-practice-messages';
@@ -9,7 +10,7 @@ import type { AddCardsResult, Deck, ImportedAnkiDeck } from './learning-api';
 
 export type AnkiTransfers = ReturnType<typeof useAnkiTransfers>;
 
-/** Imports Anki packages, sends decks to Anki and syncs reviews, one at a time. */
+/** Imports/exports Anki packages, sends decks to Anki and syncs reviews. */
 export function useAnkiTransfers({
   deckId,
   onImported,
@@ -22,6 +23,8 @@ export function useAnkiTransfers({
 }) {
   const practiceT = useCardPracticeText();
   const { locale, formatError, formatNumber } = useI18n();
+  const session = useEpoch(deckId);
+  const liveSession = useLatest(session);
   const [ankiImportProgress, setAnkiImportProgress] = useState<{
     file: string;
     current: number;
@@ -31,7 +34,35 @@ export function useAnkiTransfers({
   const [ankiError, setAnkiError] = useState<string>();
   const [sendingAnki, setSendingAnki] = useState(false);
   const [syncingAnki, setSyncingAnki] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<unknown>(null);
   const ankiBusy = !!ankiImportProgress || sendingAnki || syncingAnki;
+
+  useEffect(() => {
+    setExporting(false);
+    setExportError(null);
+  }, [deckId]);
+
+  async function exportDeck(deck: Deck) {
+    const owner = session;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const response = await requestResponse(
+        `/decks/${deck.id}/export.apkg?locale=${locale}`,
+      );
+      // An explicitly started download completes even when another deck is selected.
+      saveBlob(
+        await response.blob(),
+        `${(deck.name || 'NeonDojo').replace(/[^\p{L}\p{N}_ -]/gu, '_')}.apkg`,
+      );
+    } catch (failure) {
+      if (liveSession.current === owner) setExportError(failure);
+    } finally {
+      if (liveSession.current === owner) setExporting(false);
+    }
+  }
+
   async function importAnki(files: File[], external = false) {
     if (!files.length || ankiBusy || (!external && isCollectionScope(deckId)))
       return;
@@ -165,8 +196,17 @@ export function useAnkiTransfers({
     progress: ankiImportProgress,
     sending: sendingAnki,
     syncing: syncingAnki,
+    exporting,
+    exportError,
     notice: ankiNotice,
     error: ankiError,
+    exportDeck,
+    clearExport: () => {
+      liveSession.current = -1;
+      setExporting(false);
+      setExportError(null);
+    },
+    clearExportError: () => setExportError(null),
     importPackages: importAnki,
     send: sendToAnki,
     sync: syncReviews,

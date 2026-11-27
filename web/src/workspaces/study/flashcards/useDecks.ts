@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useIsMounted } from '../../../shared/hooks/useIsMounted';
 import { request } from '../../../shared/http/api';
 import { ALL_CARDS } from './card-search-api';
 import type { VersionedDeck } from './deck-management-api';
@@ -23,12 +24,12 @@ export function useDecks(revision: number) {
   const [settledRevision, setSettledRevision] = useState<number>();
   const [error, setError] = useState<unknown>(null);
   const requestId = useRef(0);
-  const live = useRef(true);
+  const mounted = useIsMounted();
   async function refresh(signal?: AbortSignal) {
     const id = ++requestId.current;
     try {
       const data = await request<VersionedDeck[]>('/decks', { signal });
-      if (live.current && !signal?.aborted && id === requestId.current) {
+      if (mounted.current && !signal?.aborted && id === requestId.current) {
         setDecks(data);
         setReady(true);
         setSettledRevision(revision);
@@ -36,17 +37,15 @@ export function useDecks(revision: number) {
       }
       return data;
     } catch (error) {
-      if (live.current && !signal?.aborted && id === requestId.current)
+      if (mounted.current && !signal?.aborted && id === requestId.current)
         setError(error);
       throw error;
     }
   }
   useEffect(() => {
-    live.current = true;
     const abort = new AbortController();
     void refresh(abort.signal).catch(() => {});
     return () => {
-      live.current = false;
       abort.abort();
       ++requestId.current;
     };

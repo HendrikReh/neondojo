@@ -11,7 +11,6 @@ use crate::{
     recurring_mistakes::{imported_projection, source},
 };
 use axum::{Router, extract::State, routing::get};
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgConnection, Postgres, postgres::PgArguments, query::QueryAs};
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -179,7 +178,7 @@ pub(crate) async fn load_all_review(
     let query = all_review_query(analysis_id, game_no, kind);
     review_bounds(&query, ALL_REVIEW_MAX)?;
     prepare_review(&state.pool, id).await?;
-    let mut tx = begin_review_snapshot(&state.pool).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     let items = read_all_review(&mut tx, id, &query).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(items)
@@ -243,15 +242,6 @@ pub(crate) async fn prepare_review(pool: &sqlx::PgPool, id: Uuid) -> ApiResult<(
     Ok(())
 }
 
-pub(crate) async fn begin_review_snapshot(
-    pool: &sqlx::PgPool,
-) -> ApiResult<sqlx::Transaction<'static, Postgres>> {
-    Ok(pool
-        .begin_with("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .await
-        .map_err(anyhow::Error::from)?)
-}
-
 fn review_bounds(query: &ReviewQuery, max_limit: i64) -> ApiResult<(i64, Option<i64>)> {
     let limit = query.limit.unwrap_or(50);
     if !(1..=max_limit).contains(&limit)
@@ -279,7 +269,7 @@ async fn load_review_bounded(
 ) -> ApiResult<ReviewDecisionPage> {
     let (limit, offset) = review_bounds(&query, max_limit)?;
     prepare_review(&state.pool, id).await?;
-    let mut tx = begin_review_snapshot(&state.pool).await?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     match read_review(&mut tx, id, &query, limit, offset, rebuild).await? {
         ReviewRead::Page(page) => {
             tx.commit().await.map_err(anyhow::Error::from)?;
@@ -315,14 +305,21 @@ struct StaleHits {
     format: MatchFormat,
 }
 
-async fn read_review(
+struct ReviewScope {
+    format: MatchFormat,
+    analysis_id: Option<String>,
+    imported: bool,
+    job: Option<Box<Job>>,
+    game: Option<i32>,
+    thresholds: ErrorThresholds,
+    scope: String,
+}
+
+async fn resolve_review_scope(
     tx: &mut PgConnection,
     id: Uuid,
     query: &ReviewQuery,
-    limit: i64,
-    offset: Option<i64>,
-    rebuild: bool,
-) -> ApiResult<ReviewRead> {
+) -> ApiResult<ReviewScope> {
     let (format, revision): (MatchFormat, i64) =
         sqlx::query_as("SELECT format,source_revision FROM matches WHERE id=$1")
             .bind(id)
@@ -400,129 +397,162 @@ async fn read_review(
         "cube-before-checker",
     ))
     .map_err(anyhow::Error::from)?;
-    let cursor = if let Some(after) = &query.after {
-        let invalid = || {
-            ApiError::invalid(
-                "Invalid review cursor or changed filters/checkpoints; restart pagination",
-            )
-        };
-        if after.len() > 4096 {
-            return Err(invalid());
-        }
-        let bytes = URL_SAFE_NO_PAD.decode(after).map_err(|_| invalid())?;
-        let c: Cursor = serde_json::from_slice(&bytes).map_err(|_| invalid())?;
-        if c.scope != scope {
-            return Err(invalid());
-        }
-        Some(c)
-    } else {
-        None
+    Ok(ReviewScope {
+        format,
+        analysis_id,
+        imported,
+        job,
+        game,
+        thresholds,
+        scope,
+    })
+}
+
+fn decode_review_cursor(after: Option<&str>, scope: &str) -> ApiResult<Option<Cursor>> {
+    const INVALID: &str =
+        "Invalid review cursor or changed filters/checkpoints; restart pagination";
+    let Some(after) = after else {
+        return Ok(None);
     };
-    if let Some(job) = job.as_ref().filter(|j| j.kind == "analysis") {
-        let position = sqlx::query_as::<_, crate::model::Position>(
-            "SELECT * FROM positions WHERE id=$1 AND match_uuid=$2",
-        )
-        .bind(job.position_uuid)
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-        let mut items = Vec::new();
-        if let Some(position) = position.filter(|p| game.is_none_or(|g| g == p.game_no))
-            && job.status == "completed"
-            && let Some(analysis) = job
-                .result
-                .as_ref()
-                .and_then(|r| serde_json::from_value::<crate::engine::Analysis>(r.clone()).ok())
-            && analysis.plies == job.plies
-            && let Some(mut decision) = crate::move_assessments::hint_decision(&position, &analysis)
-        {
-            let severity = if decision.evaluation_status == "evaluated" {
-                thresholds.classify(decision.equity_loss)
-            } else {
-                MoveSeverity::None
-            };
-            decision.severity = severity.as_str().into();
-            if query.player.is_none_or(|p| p == position.player)
-                && query.kind.as_deref().is_none_or(|k| k == "checker")
-                && (!query.errors_only || severity != MoveSeverity::None)
-                && query.severity.is_none_or(|s| s == severity)
-            {
-                items.push(ReviewDecision {
-                    id: format!("hint:{}", job.id),
-                    position_uuid: Some(position.id),
-                    move_id: None,
-                    review_position: None,
-                    next_checker_no: None,
-                    game_no: position.game_no,
-                    decision,
-                    source: crate::move_assessments::AssessmentSource::Native,
-                    engine: analysis.engine,
-                    depth: Some(format!("{}-ply", job.plies)),
-                    depth_plies: Some(job.plies),
-                    job_id: Some(job.id),
-                });
-            }
-        }
-        let total = items.len() as i64;
-        if offset.is_some_and(|offset| offset > 0) || query.after.is_some() {
-            items.clear();
-        }
-        return Ok(ReviewRead::Page(ReviewDecisionPage {
-            items,
-            next_cursor: None,
-            total: query.page.map(|_| total),
-        }));
+    let cursor: Cursor = crate::cursor::decode(after, crate::cursor::DEFAULT_MAX_LEN, INVALID)?;
+    if cursor.scope != scope {
+        return Err(ApiError::invalid(INVALID));
     }
-    // Numbered pages count and select in the narrow hit set under this read
-    // snapshot and project only their own decisions. Cursor pages and batch
-    // consumers scan the analysis below.
-    if let (Some(offset), Some(analysis_id)) = (offset, analysis_id.as_deref())
-        && limit <= HIT_PAGE_LIMIT
+    Ok(Some(cursor))
+}
+
+async fn load_single_position_review(
+    tx: &mut PgConnection,
+    id: Uuid,
+    query: &ReviewQuery,
+    job: &Job,
+    game: Option<i32>,
+    thresholds: ErrorThresholds,
+    offset: Option<i64>,
+) -> ApiResult<ReviewDecisionPage> {
+    let position = sqlx::query_as::<_, crate::model::Position>(
+        "SELECT * FROM positions WHERE id=$1 AND match_uuid=$2",
+    )
+    .bind(job.position_uuid)
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let mut items = Vec::new();
+    if let Some(position) = position.filter(|p| game.is_none_or(|g| g == p.game_no))
+        && job.status == "completed"
+        && let Some(analysis) = job
+            .result
+            .as_ref()
+            .and_then(|r| serde_json::from_value::<crate::engine::Analysis>(r.clone()).ok())
+        && analysis.plies == job.plies
+        && let Some(mut decision) = crate::move_assessments::hint_decision(&position, &analysis)
     {
-        let current = hits_fingerprint(&mut *tx, id, analysis_id, job_id).await?;
-        let stored: Option<String> = sqlx::query_scalar(
-            "SELECT fingerprint FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
-        )
-        .bind(id)
-        .bind(analysis_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-        if stored.as_deref() == Some(current.as_str()) {
-            let page = HitPage {
-                match_id: id,
-                analysis_id,
-                job_id,
-                imported,
-                format,
-                job: job.as_deref(),
-                game,
-                query,
-                thresholds,
-                offset,
-                limit,
-            };
-            if let Some(page) = page.load(&mut *tx).await? {
-                return Ok(ReviewRead::Page(page));
-            }
-        } else if rebuild {
-            return Ok(ReviewRead::StaleHits(StaleHits {
-                analysis_id: analysis_id.to_owned(),
-                job,
-                imported,
-                format,
-            }));
+        let severity = if decision.evaluation_status == "evaluated" {
+            thresholds.classify(decision.equity_loss)
+        } else {
+            MoveSeverity::None
+        };
+        decision.severity = severity.as_str().into();
+        if query.player.is_none_or(|p| p == position.player)
+            && query.kind.as_deref().is_none_or(|k| k == "checker")
+            && (!query.errors_only || severity != MoveSeverity::None)
+            && query.severity.is_none_or(|s| s == severity)
+        {
+            items.push(ReviewDecision {
+                id: format!("hint:{}", job.id),
+                position_uuid: Some(position.id),
+                move_id: None,
+                review_position: None,
+                next_checker_no: None,
+                game_no: position.game_no,
+                decision,
+                source: crate::move_assessments::AssessmentSource::Native,
+                engine: analysis.engine,
+                depth: Some(format!("{}-ply", job.plies)),
+                depth_plies: Some(job.plies),
+                job_id: Some(job.id),
+            });
         }
     }
-    let mut cursor = cursor;
+    let total = items.len() as i64;
+    if offset.is_some_and(|offset| offset > 0) || query.after.is_some() {
+        items.clear();
+    }
+    Ok(ReviewDecisionPage {
+        items,
+        next_cursor: None,
+        total: query.page.map(|_| total),
+    })
+}
+
+async fn try_load_hit_page(
+    tx: &mut PgConnection,
+    id: Uuid,
+    query: &ReviewQuery,
+    resolved: &ReviewScope,
+    offset: i64,
+    limit: i64,
+    rebuild: bool,
+) -> ApiResult<Option<ReviewRead>> {
+    let Some(analysis_id) = resolved.analysis_id.as_deref() else {
+        return Ok(None);
+    };
+    let job_id = resolved.job.as_ref().map(|j| j.id);
+    let current = hits_fingerprint(&mut *tx, id, analysis_id, job_id).await?;
+    let stored: Option<String> = sqlx::query_scalar(
+        "SELECT fingerprint FROM review_hit_sets WHERE match_id=$1 AND analysis_id=$2",
+    )
+    .bind(id)
+    .bind(analysis_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    if stored.as_deref() == Some(current.as_str()) {
+        let page = HitPage {
+            match_id: id,
+            analysis_id,
+            job_id,
+            imported: resolved.imported,
+            format: resolved.format,
+            job: resolved.job.as_deref(),
+            game: resolved.game,
+            query,
+            thresholds: resolved.thresholds,
+            offset,
+            limit,
+        };
+        if let Some(page) = page.load(&mut *tx).await? {
+            return Ok(Some(ReviewRead::Page(page)));
+        }
+    } else if rebuild {
+        return Ok(Some(ReviewRead::StaleHits(StaleHits {
+            analysis_id: analysis_id.to_owned(),
+            job: resolved.job.clone(),
+            imported: resolved.imported,
+            format: resolved.format,
+        })));
+    }
+    Ok(None)
+}
+
+async fn scan_review_pages(
+    tx: &mut PgConnection,
+    id: Uuid,
+    query: &ReviewQuery,
+    resolved: &ReviewScope,
+    mut cursor: Option<Cursor>,
+    limit: i64,
+    offset: Option<i64>,
+) -> ApiResult<ReviewDecisionPage> {
+    let job_id = resolved.job.as_ref().map(|j| j.id);
     let mut items = Vec::new();
     let mut matched = 0;
     loop {
         let rows = review_rows_query()
             .bind(id)
             .bind(job_id)
-            .bind(game)
+            .bind(resolved.game)
             .bind(query.player)
             .bind(&query.kind)
             .bind(cursor.as_ref().map(|c| c.game))
@@ -530,13 +560,15 @@ async fn read_review(
             .bind(cursor.as_ref().map(|c| c.kind == "checker"))
             .bind(cursor.as_ref().map(|c| &c.id))
             .bind(SCAN_LIMIT + 1)
-            .bind(imported)
+            .bind(resolved.imported)
             .bind(None::<Vec<String>>)
             .fetch_all(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
-        let job = job.clone();
-        let scope = scope.clone();
+        let job = resolved.job.clone();
+        let scope = resolved.scope.clone();
+        let format = resolved.format;
+        let thresholds = resolved.thresholds;
         let severity = query.severity;
         let errors_only = query.errors_only;
         let (batch, continuation, count) = tokio::task::spawn_blocking(move || {
@@ -582,17 +614,53 @@ async fn read_review(
         matched += count;
         if offset.is_none() || continuation.is_none() {
             let next_cursor = continuation
-                .map(|c| serde_json::to_vec(&c).map(|bytes| URL_SAFE_NO_PAD.encode(bytes)))
-                .transpose()
-                .map_err(anyhow::Error::from)?;
-            return Ok(ReviewRead::Page(ReviewDecisionPage {
+                .map(|c| crate::cursor::encode(&c))
+                .transpose()?;
+            return Ok(ReviewDecisionPage {
                 items,
                 next_cursor,
                 total: offset.map(|_| matched),
-            }));
+            });
         }
         cursor = continuation;
     }
+}
+
+async fn read_review(
+    tx: &mut PgConnection,
+    id: Uuid,
+    query: &ReviewQuery,
+    limit: i64,
+    offset: Option<i64>,
+    rebuild: bool,
+) -> ApiResult<ReviewRead> {
+    let resolved = resolve_review_scope(&mut *tx, id, query).await?;
+    let cursor = decode_review_cursor(query.after.as_deref(), &resolved.scope)?;
+    if let Some(job) = resolved.job.as_ref().filter(|j| j.kind == "analysis") {
+        let page = load_single_position_review(
+            &mut *tx,
+            id,
+            query,
+            job,
+            resolved.game,
+            resolved.thresholds,
+            offset,
+        )
+        .await?;
+        return Ok(ReviewRead::Page(page));
+    }
+    // Numbered pages count and select in the narrow hit set under this read
+    // snapshot and project only their own decisions. Cursor pages and batch
+    // consumers scan the analysis below.
+    if let Some(offset) = offset
+        && limit <= HIT_PAGE_LIMIT
+        && let Some(hit_read) =
+            try_load_hit_page(&mut *tx, id, query, &resolved, offset, limit, rebuild).await?
+    {
+        return Ok(hit_read);
+    }
+    let page = scan_review_pages(&mut *tx, id, query, &resolved, cursor, limit, offset).await?;
+    Ok(ReviewRead::Page(page))
 }
 
 #[cfg(test)]

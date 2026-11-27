@@ -28,11 +28,7 @@ pub(crate) async fn resolve_selection(
     if !crate::imported_analysis::ensure_catalog(pool, match_id).await? {
         return Err(ApiError::missing());
     }
-    let mut tx = pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
     let result = resolve_selection_on(&mut tx, match_id, requested).await?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(result)

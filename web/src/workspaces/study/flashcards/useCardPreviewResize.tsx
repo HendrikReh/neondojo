@@ -1,5 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
-import Tooltip from '../../../shared/ui/Tooltip';
+import { usePaneSplitter } from '../../../shared/hooks/usePaneSplitter';
 import { useCardSearchText } from './card-search-messages';
 
 const storageKey = 'neondojo.cardPreviewWidth';
@@ -22,20 +22,12 @@ export function useCardPreviewResize(visible: boolean) {
   const text = useCardSearchText();
   const previewId = useId();
   const layout = useRef<HTMLDivElement>(null);
-  const drag = useRef<{ pointerId: number; x: number; width: number }>(null);
   const [preferred, setPreferred] = useState(readWidth);
-  const [pendingWidth, setPendingWidth] = useState<number>();
   const [maxWidth, setMaxWidth] = useState(defaultWidth);
-  const clamp = (width: number) =>
-    Math.max(minWidth, Math.min(maxWidth, Math.round(width)));
-  const width = clamp(pendingWidth ?? preferred);
+  const width = Math.max(minWidth, Math.min(maxWidth, Math.round(preferred)));
 
   useLayoutEffect(() => {
-    if (!visible || !layout.current) {
-      drag.current = null;
-      setPendingWidth(undefined);
-      return;
-    }
+    if (!visible || !layout.current) return;
     const node = layout.current;
     const measure = () => {
       setMaxWidth(
@@ -57,71 +49,22 @@ export function useCardPreviewResize(visible: boolean) {
     }
   }
 
-  function cancel() {
-    drag.current = null;
-    setPendingWidth(undefined);
-  }
-
-  const divider = (
-    <Tooltip
-      as="span"
-      role="separator"
-      tabIndex={0}
-      aria-label={text('resizePreview')}
-      aria-orientation="vertical"
-      aria-controls={previewId}
-      aria-valuemin={minWidth}
-      aria-valuemax={maxWidth}
-      aria-valuenow={width}
-      text={text('resizePreviewHelp')}
-      className="learning-preview-divider"
-      data-dragging={pendingWidth !== undefined}
-      onPointerDown={(event) => {
-        if (!event.isPrimary || event.button !== 0 || drag.current) return;
-        event.preventDefault();
-        event.currentTarget.focus({ preventScroll: true });
-        event.currentTarget.setPointerCapture(event.pointerId);
-        drag.current = { pointerId: event.pointerId, x: event.clientX, width };
-        setPendingWidth(width);
-      }}
-      onPointerMove={(event) => {
-        const start = drag.current;
-        if (start?.pointerId === event.pointerId)
-          setPendingWidth(clamp(start.width + start.x - event.clientX));
-      }}
-      onPointerUp={(event) => {
-        const start = drag.current;
-        if (start?.pointerId !== event.pointerId) return;
-        const next = clamp(start.width + start.x - event.clientX);
-        if (next !== start.width) save(next);
-        cancel();
-      }}
-      onLostPointerCapture={cancel}
-      onDoubleClick={() => save(defaultWidth)}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape' && drag.current) {
-          event.preventDefault();
-          const { pointerId } = drag.current;
-          cancel();
-          event.currentTarget.releasePointerCapture(pointerId);
-          return;
-        }
-        if (drag.current) return;
-        const step = event.shiftKey ? 50 : 10;
-        const widths: Record<string, number> = {
-          ArrowLeft: width + step,
-          ArrowRight: width - step,
-          Home: minWidth,
-          End: maxWidth,
-          Enter: defaultWidth,
-        };
-        if (!Object.hasOwn(widths, event.key)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        save(clamp(widths[event.key]));
-      }}
-    />
-  );
+  const { handle: divider } = usePaneSplitter({
+    containerRef: layout,
+    cssVar: '--card-preview-width',
+    width,
+    min: minWidth,
+    max: maxWidth,
+    direction: 'left',
+    active: visible,
+    onCommit: save,
+    onReset: () => save(defaultWidth),
+    ariaLabel: text('resizePreview'),
+    ariaControls: previewId,
+    helpText: text('resizePreviewHelp'),
+    className: 'learning-preview-divider',
+    preventFocusScroll: true,
+  });
 
   return { layout, previewId, width, divider };
 }

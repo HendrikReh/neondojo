@@ -1,6 +1,7 @@
 import type { Job, MatchAnalysisSummary } from '../../../shared/http/api';
 
 import type { components } from '../../../generated-api';
+import { formatPly } from '../../../shared/format/ply';
 import { errorGrades } from '../../../shared/review/move-severity';
 
 type Schema = components['schemas'];
@@ -77,7 +78,7 @@ export function nativePerformanceRating(
     !rating ||
     rating.method !== 'gnubg_emg_500_v1' ||
     rating.profile !==
-      `${summary.engine}; ${summary.plies}-ply cubeful deterministic` ||
+      `${summary.engine}; ${formatPly(summary.plies)} cubeful deterministic` ||
     rating.games <= 0 ||
     rating.games !== summary.completed_games
   )

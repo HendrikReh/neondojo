@@ -47,59 +47,18 @@ pub(in crate::learning) async fn import(
     .await
     .map_err(anyhow::Error::from)?
     .map_err(|error| ApiError::invalid(format!("Cannot import this Anki package: {error}")))?;
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SELECT id FROM decks WHERE id=$1 FOR UPDATE")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?
-        .ok_or_else(ApiError::missing)?;
-    let mut added = 0;
-    let mut updated = 0;
-    let mut memberships = 0;
-    for (content, tags) in cards {
-        let signature = card_signature(&content);
-        let new_id = Uuid::new_v4();
-        let payload = serde_json::to_value(content).map_err(anyhow::Error::from)?;
-        let inserted: Option<Uuid> = sqlx::query_scalar("INSERT INTO learning_cards(id,signature,payload) VALUES($1,$2,$3) ON CONFLICT(signature) DO NOTHING RETURNING id")
-            .bind(new_id).bind(&signature).bind(payload).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
-        let mut card: topics::CardTags = sqlx::query_as(
-            "SELECT id,tags,tags_version FROM learning_cards WHERE signature=$1 FOR UPDATE",
-        )
-        .bind(signature)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
-        topics::update_card(&mut tx, &mut card, &tags, &BTreeSet::new()).await?;
-        memberships += sqlx::query(
-            "INSERT INTO deck_cards(deck_id,card_id) VALUES($1,$2) ON CONFLICT DO NOTHING",
-        )
-        .bind(id)
-        .bind(card.id)
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?
-        .rows_affected();
-        if inserted.is_some() {
-            added += 1;
-        } else {
-            updated += 1;
-        }
-    }
-    let total = check_deck_capacity(&mut tx, id).await?;
-    if memberships > 0 {
-        sqlx::query("UPDATE decks SET version=version+1 WHERE id=$1")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?;
-    }
-    tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(AddCardsResult {
-        added,
-        updated,
-        total,
-    }))
+    let unique: BTreeMap<_, _> = cards
+        .into_iter()
+        .map(|(content, tags)| (card_signature(&content), (content, tags)))
+        .collect();
+    let written = write_cards_with_policy(
+        &state.pool,
+        id,
+        unique,
+        CardConflictPolicy::PreserveExistingPayload,
+    )
+    .await?;
+    Ok(Json(written.summary()))
 }
 
 pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTreeSet<String>)>> {
@@ -192,18 +151,7 @@ pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTr
             _ => false,
         };
         anyhow::ensure!(valid, "Invalid or unscorable backgammon decision");
-        position.id = Uuid::nil();
-        position.match_uuid = Uuid::nil();
-        content.source = CardSource {
-            kind: "anki".into(),
-            job_id: None,
-            analysis_id: None,
-            imported_analysis_id: None,
-            match_id: Uuid::nil(),
-            position_id: None,
-            game_no: 1,
-            decision_no: None,
-        };
+        CardSource::strip_local_refs(&mut content);
         let tags: String = row.get(1)?;
         let tags = topics::tags(tags.split_whitespace().map(str::to_owned).collect())
             .map_err(|e| anyhow::anyhow!("{}", e.1.error))?;

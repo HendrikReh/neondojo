@@ -226,12 +226,8 @@ async fn list(
          AND ($1='' OR lower({DISPLAY_NAME}) LIKE $2 OR EXISTS (SELECT 1 {MATCHING_ALIAS}))"
     );
     let pattern = literal_pattern(search);
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     let total = if offset.is_some() {
-        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-            .execute(&mut *tx)
-            .await
-            .map_err(anyhow::Error::from)?;
         Some(
             sqlx::query_scalar(&format!(
                 "SELECT count(*) FROM player_profiles p WHERE {filters}"

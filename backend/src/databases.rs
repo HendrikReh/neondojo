@@ -11,13 +11,12 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::{PgPool, Postgres, QueryBuilder, Row};
 use std::{
-    collections::{BTreeSet, HashMap, HashSet},
+    collections::{HashMap, HashSet},
     io::{Cursor, Write},
 };
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -33,8 +32,14 @@ pub use actions::explain_any_active;
 use actions::*;
 pub use browse::browse;
 use browse::*;
+pub(crate) use browse::{
+    DATE_FIELDS, MATCH_TYPES, RESULT_STATES, sort_spec, valid_match_points_range,
+};
 use repo::*;
-pub(crate) use repo::{database_matches, require_library_destination};
+pub(crate) use repo::{
+    database_matches, require_library_database, require_library_database_invalid,
+    require_library_destination,
+};
 pub use routes::{DatabaseDoc, routes};
 pub use source_metadata::{SourceMetadata, backfill_source_metadata, source_metadata};
 

@@ -89,196 +89,10 @@ pub(super) async fn create_session(
     State(state): State<AppState>,
     Json(request): Json<CreatePlaySession>,
 ) -> ApiResult<(StatusCode, Json<PlaySession>)> {
-    crate::engine::try_play_start(start_session(state, request))
+    let session = crate::engine::try_play_start(start_session(state, request))
         .await
-        .ok_or_else(benchmark_conflict)?
-}
-
-fn benchmark_conflict() -> ApiError {
-    ApiError(
-        StatusCode::CONFLICT,
-        "A benchmark is using the engines; retry after it finishes".into(),
-    )
-}
-
-async fn start_session(
-    state: AppState,
-    request: CreatePlaySession,
-) -> ApiResult<(StatusCode, Json<PlaySession>)> {
-    if !(0..=1).contains(&request.human_player) || !(0..=25).contains(&request.match_length) {
-        return Err(ApiError::invalid(
-            "human_player must be 0 or 1 and match_length must be 0 (money game) or 1..25",
-        ));
-    }
-    let (mut settings, error_thresholds) = crate::settings::load_play_settings(&state).await?;
-    request.apply_match_choices(&mut settings)?;
-    if request
-        .tutor_threshold
-        .is_some_and(|v| !v.is_finite() || v <= 0.0 || v > 1.0)
-    {
-        return Err(ApiError::invalid(
-            "tutor_threshold must be greater than 0 and at most 1",
-        ));
-    }
-    if crate::benchmarks::has_live_run(&state.pool).await? {
-        return Err(benchmark_conflict());
-    }
-    let pinned_path = resolve_binary_async(&settings.gnubg_path)
-        .await
-        .map_err(native_error)?;
-    let engine = Engine::new(pinned_path.clone()).interactive();
-    let rules_version = engine.version().await.map_err(native_error)?;
-    let rules = crate::settings::EngineSnapshot {
-        engine_id: EngineId::Gnubg.id().into(),
-        gnubg_path: pinned_path.clone(),
-        engine_version: Some(rules_version),
-        // The rules process plays the bot's turns itself when the bot is GNUbg.
-        gnubg_threads: settings.gnubg_play_threads.filter(|_| {
-            EngineId::parse(&settings.play_engine).is_some_and(EngineId::is_rules_engine)
-        }),
-        gnubg_move_filter: None,
-        open_sage: None,
-    };
-    let play_snapshot = async |id: &str,
-                               gnubg_threads: Option<i32>,
-                               sage_threads: u32,
-                               plies: i32|
-           -> ApiResult<crate::settings::EngineSnapshot> {
-        if id == EngineId::Gnubg.id() {
-            return Ok(crate::settings::EngineSnapshot {
-                gnubg_threads: gnubg_threads.filter(|&n| n != 1),
-                ..rules.clone()
-            });
-        }
-        crate::settings::snapshot_for(&state, id, &pinned_path, gnubg_threads, sage_threads, plies)
-            .await
-            .map_err(native_error)
-    };
-    let bot = play_snapshot(
-        &settings.play_engine,
-        settings.gnubg_play_threads,
-        settings.sage_play_threads(),
-        settings.play_plies,
-    )
-    .await?;
-    if request.play_difficulty.is_some()
-        && !bot
-            .open_sage
-            .as_ref()
-            .is_some_and(crate::engines::SageSnapshot::supports_difficulty_presets)
-    {
-        return Err(ApiError::invalid(
-            "NeonGammon difficulty presets require NeonGammon 3.1.0 or newer",
-        ));
-    }
-    let analysis = if let Some(profile) = &bot.open_sage
-        && settings.analysis_engine == settings.play_engine
-        && settings.analysis_plies == profile.plies
-        && settings.sage_analysis_threads() == profile.threads
-    {
-        bot.clone()
-    } else {
-        play_snapshot(
-            &settings.analysis_engine,
-            settings.gnubg_threads,
-            settings.sage_analysis_threads(),
-            settings.analysis_plies,
-        )
-        .await?
-    };
-    let version = bot
-        .engine_version
-        .clone()
-        .context("Playing engine has no verified version")
-        .map_err(native_error)?;
-    let id = Uuid::new_v4();
-    let mut session = PlaySession {
-        paused: false,
-        engine_snapshots: Some(PlayEngineSnapshots {
-            rules,
-            bot,
-            analysis,
-        }),
-        money_session_ended: false,
-        match_forfeited: false,
-        game_results: None,
-        study_report_id: None,
-        study_report_version: None,
-        review_game_no: None,
-        game_learning_used: request.play_mode.unwrap_or(settings.default_play_mode)
-            != PlayMode::Competition,
-        library_match_id: None,
-        learning_used: request.play_mode.unwrap_or(settings.default_play_mode)
-            != PlayMode::Competition,
-        play_mode: request.play_mode.unwrap_or(settings.default_play_mode),
-        tutor_threshold: request.tutor_threshold.unwrap_or(error_thresholds.error),
-        error_thresholds,
-        training_auto_analysis: request
-            .training_auto_analysis
-            .unwrap_or(settings.training_auto_analysis),
-        analysis_plies: settings.analysis_plies,
-        pending_decision: None,
-        review: None,
-        decisions: vec![],
-        id,
-        version: 0,
-        human_player: request.human_player,
-        human_name: if settings.player_name.is_empty() {
-            "Human".into()
-        } else {
-            settings.player_name
-        },
-        match_length: request.match_length,
-        bearoff_direction: settings.bearoff_direction,
-        engine: PlayEngine {
-            id: settings.play_engine,
-            version,
-            plies: settings.play_plies,
-            top_two: settings.play_top_two,
-            difficulty: request.play_difficulty,
-        },
-        position: Position {
-            cube_enabled: None,
-            id,
-            match_uuid: id,
-            ordinal: 0,
-            game_no: 1,
-            ply: 0,
-            player: request.human_player,
-            dice: vec![],
-            board: vec![],
-            position_id: String::new(),
-            gnubg_match_id: String::new(),
-            notation: String::new(),
-        },
-        phase: PlayPhase::OpeningRoll,
-        can_double: false,
-        legal_moves: vec![],
-        legal_turns: None,
-        history: vec![],
-        scores: [0, 0],
-        game_no: 1,
-        winner: None,
-        opening: None,
-    };
-    probe_native(&session.rules_engine(&pinned_path)?)
-        .await
-        .map_err(native_error)?;
-    stage_opening(&mut session, false)?;
-    insert_saved_session(&state.pool, &mut session, &pinned_path).await?;
-    open_sage::schedule_warmup(&session, &state);
+        .ok_or_else(benchmark_conflict)??;
     Ok((StatusCode::CREATED, Json(session)))
-}
-
-pub(super) fn native_error(error: anyhow::Error) -> ApiError {
-    tracing::warn!(error=?error,"Play action failed; no session changes saved");
-    ApiError(
-        StatusCode::SERVICE_UNAVAILABLE,
-        format!(
-            "The engines could not complete this action; the saved session is unchanged. {error}"
-        )
-        .into(),
-    )
 }
 
 #[utoipa::path(post,path="/api/play/sessions/{id}/mode",params(("id"=Uuid,Path)),request_body=PlayModeRequest,responses((status=200,body=PlaySession),(status=409,body=ErrorBody),(status=422,body=ErrorBody)),tag="Playing")]
@@ -289,27 +103,18 @@ pub(super) async fn change_mode(
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     let mut session = previous.state.0;
-    if request.version != session.version {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "Session changed; reload before changing playing mode".into(),
-        ));
-    }
-    if request.version < 0 || request.version == i64::MAX {
-        return Err(ApiError::invalid("Invalid session version"));
-    }
+    check_session_version(
+        request.version,
+        session.version,
+        "Session changed; reload before changing playing mode",
+    )?;
     pause::require_active(&session)?;
     if matches!(session.phase, PlayPhase::MatchOver) || reports::money_finished(&session) {
         return Err(ApiError::invalid(
             "Completed matches keep their playing mode",
         ));
     }
-    if let Some(threshold) = request.tutor_threshold {
-        if !threshold.is_finite() || threshold <= 0.0 || threshold > 1.0 {
-            return Err(ApiError::invalid(
-                "tutor_threshold must be greater than 0 and at most 1",
-            ));
-        }
+    if let Some(threshold) = validate_tutor_threshold(request.tutor_threshold)? {
         session.tutor_threshold = threshold;
     }
     session.learning_used |=
@@ -347,170 +152,7 @@ pub(super) async fn act(
     Path(id): Path<Uuid>,
     Json(request): Json<PlayActionRequest>,
 ) -> ApiResult<Json<PlaySession>> {
-    let previous = saved(&state, id).await?;
-    if request.version != previous.state.version {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "Session changed; reload before playing".into(),
-        ));
-    }
-    if request.version < 0 || request.version == i64::MAX {
-        return Err(ApiError::invalid("Invalid session version"));
-    }
-    if matches!(request.action, PlayAction::Pause | PlayAction::Resume) {
-        if request.move_index.is_some()
-            || request.resign_level.is_some()
-            || request.decision_id.is_some()
-        {
-            return Err(ApiError::invalid(
-                "Pausing and resuming only require a session version",
-            ));
-        }
-        return pause::transition(
-            &state,
-            previous,
-            matches!(request.action, PlayAction::Pause),
-        )
-        .await;
-    }
-    if matches!(request.action, PlayAction::ForfeitMatch) {
-        return forfeit::finish(&state, previous, &request).await;
-    }
-    let (action, notation) = validate_action(&previous.state, &request)?;
-    let mut working = previous.state.0.clone();
-    working.learning_used |= working.play_mode != PlayMode::Competition;
-    working.game_learning_used |= working.play_mode != PlayMode::Competition;
-    if matches!(request.action, PlayAction::EndSession) {
-        if working.review.is_none() {
-            reports::build(&mut working, &previous.sgf, &previous.gnubg_path)
-                .await
-                .map_err(native_error)?;
-        }
-        working.phase = PlayPhase::MatchOver;
-        working.money_session_ended = true;
-        working.version += 1;
-        return persist_session(
-            &state,
-            &working,
-            &previous.sgf,
-            &previous.native_id,
-            request.version,
-            false,
-        )
-        .await;
-    }
-    if let Some(pending) = &working.pending_decision {
-        if let Some(choice) = &pending.action {
-            if request.decision_id != Some(pending.id)
-                || choice != action
-                || pending.move_index != request.move_index
-            {
-                return Err(ApiError::invalid(
-                    "Continue or retry the pending decision before playing",
-                ));
-            }
-        } else if request.decision_id.is_some() {
-            return Err(ApiError::invalid("Choose a decision before continuing"));
-        }
-    } else if request.decision_id.is_some() {
-        return Err(ApiError::invalid("No pending decision to continue"));
-    }
-    let is_decision = matches!(
-        request.action,
-        PlayAction::Move
-            | PlayAction::Pass
-            | PlayAction::Double
-            | PlayAction::Take
-            | PlayAction::Drop
-    ) || (matches!(request.action, PlayAction::Roll) && working.can_double);
-    if is_decision
-        && request.decision_id.is_none()
-        && (working.play_mode != PlayMode::Competition || working.pending_decision.is_some())
-    {
-        let alternatives = if let Some(pending) = &working.pending_decision {
-            pending.alternatives.clone()
-        } else {
-            analyze_decision(&working, &previous.gnubg_path)
-                .await
-                .map_err(native_error)?
-        };
-        stage_choice(&mut working, action, request.move_index, alternatives)?;
-        if should_pause_for_feedback(&working, &request.action) {
-            working.version += 1;
-            return persist_session(
-                &state,
-                &working,
-                &previous.sgf,
-                &previous.native_id,
-                request.version,
-                false,
-            )
-            .await;
-        }
-    }
-    // Native action is the sole commit point. A failed process leaves the
-    // original pending checkpoint and its version untouched.
-    let mut completed_report = None;
-    let (mut session, sgf, native_id) = if matches!(request.action, PlayAction::NextGame) {
-        if reports::money_finished(&working) {
-            if working.review.is_none() {
-                reports::build(&mut working, &previous.sgf, &previous.gnubg_path)
-                    .await
-                    .map_err(native_error)?;
-            }
-            completed_report = Some(working.clone());
-            working.review = None;
-            working.study_report_id = None;
-            working.study_report_version = None;
-            working.review_game_no = None;
-            working.game_learning_used = working.play_mode != PlayMode::Competition;
-        }
-        working.version += 1;
-        stage_opening(&mut working, true)?;
-        (working, previous.sgf, previous.native_id)
-    } else {
-        let checkpoint = if previous.sgf.is_empty() {
-            None
-        } else {
-            Some((previous.sgf.as_str(), previous.native_id.as_str()))
-        };
-        let (snapshot, sgf) = native(
-            &working,
-            &previous.gnubg_path,
-            checkpoint,
-            action,
-            notation,
-            request.resign_level,
-        )
-        .await
-        .map_err(native_error)?;
-        if snapshot.resignation_declined {
-            return Err(ApiError::invalid(
-                "The bot declined this resignation. Choose a higher level or continue playing; the saved game is unchanged",
-            ));
-        }
-        working.version += 1;
-        let native_id = apply_snapshot(&mut working, snapshot)?;
-        (working, sgf, native_id)
-    };
-    // Resignation abandons a hint/retry checkpoint; its checker/cube choice
-    // was never played and must not become a committed learning decision.
-    if let Some(mut decision) = session.pending_decision.take()
-        && !matches!(request.action, PlayAction::Resign)
-    {
-        decision.committed = true;
-        session.decisions.push(decision);
-    }
-    persist_session_with_report(
-        &state,
-        &session,
-        &sgf,
-        &native_id,
-        request.version,
-        true,
-        completed_report.as_ref(),
-    )
-    .await
+    perform_action(&state, id, request).await
 }
 
 #[utoipa::path(post,path="/api/play/sessions/{id}/feedback",params(("id"=Uuid,Path)),request_body=PlayFeedbackRequest,responses((status=200,body=PlaySession),(status=409,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Playing")]
@@ -521,15 +163,11 @@ pub(super) async fn feedback(
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     let mut session = previous.state.0;
-    if request.version != session.version {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "Session changed; reload before requesting feedback".into(),
-        ));
-    }
-    if request.version < 0 || request.version == i64::MAX {
-        return Err(ApiError::invalid("Invalid session version"));
-    }
+    check_session_version(
+        request.version,
+        session.version,
+        "Session changed; reload before requesting feedback",
+    )?;
     pause::require_active(&session)?;
     if session.play_mode == PlayMode::Competition {
         return Err(ApiError::invalid(
@@ -612,15 +250,11 @@ pub(super) async fn review(
 ) -> ApiResult<Json<PlaySession>> {
     let previous = saved(&state, id).await?;
     let mut session = previous.state.0;
-    if request.version != session.version {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "Session changed; reload before reviewing".into(),
-        ));
-    }
-    if request.version < 0 || request.version == i64::MAX {
-        return Err(ApiError::invalid("Invalid session version"));
-    }
+    check_session_version(
+        request.version,
+        session.version,
+        "Session changed; reload before reviewing",
+    )?;
     pause::require_active(&session)?;
     if !matches!(session.phase, PlayPhase::MatchOver) && !reports::money_finished(&session) {
         return Err(ApiError::invalid(

@@ -47,11 +47,7 @@ pub(super) async fn position_result(
         .ok_or_else(ApiError::missing)?;
     crate::play::require_review_available(&state.pool, position.match_uuid).await?;
     crate::imported_analysis::ensure_catalog(&state.pool, position.match_uuid).await?;
-    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
-    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
-        .execute(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?;
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     let position: Position = sqlx::query_as("SELECT * FROM positions WHERE id=$1")
         .bind(id)
         .fetch_optional(&mut *tx)

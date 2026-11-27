@@ -192,13 +192,6 @@
   align-items: center;
   gap: 6px 8px;
 }
-.benchmark-delete-confirm .danger,
-.benchmark-delete-confirm .action-button.danger:not(:disabled),
-.benchmark-delete-confirm .action-button.danger:hover:not(:disabled) {
-  background: var(--ui-danger-button);
-  color: var(--ui-danger-button-text);
-  border-color: var(--ui-danger-button);
-}
 .benchmark-history th.benchmark-number .library-sort-heading {
   justify-content: flex-end;
 }

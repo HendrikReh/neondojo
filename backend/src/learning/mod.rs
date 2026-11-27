@@ -50,6 +50,7 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
 use attempts::*;
+pub(crate) use card_writes::card_signature_sql;
 use card_writes::*;
 use decks::*;
 pub use routes::{LearningDoc, daily_doc, routes};
@@ -248,6 +249,25 @@ pub struct CardSource {
     pub position_id: Option<Uuid>,
     pub game_no: i32,
     pub decision_no: Option<i32>,
+}
+
+impl CardSource {
+    /// Remove local database UUIDs and analysis references so a card is portable
+    /// across Anki packages.
+    pub(super) fn strip_local_refs(content: &mut CardContent) {
+        content.position.id = Uuid::nil();
+        content.position.match_uuid = Uuid::nil();
+        content.source = Self {
+            kind: "anki".into(),
+            job_id: None,
+            analysis_id: None,
+            imported_analysis_id: None,
+            match_id: Uuid::nil(),
+            position_id: None,
+            game_no: 1,
+            decision_no: None,
+        };
+    }
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct CardSolution {

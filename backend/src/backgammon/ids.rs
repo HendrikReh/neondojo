@@ -61,6 +61,31 @@ impl MatchId {
             }
         }
     }
+
+    /// Whether `doubler` (0 White, 1 Black) may legally offer a double in this
+    /// match context: not Crawford, cube below the 4-bit Match ID ceiling
+    /// (32768), centered or owned by `doubler`, and not dead for `doubler`'s
+    /// score in match play.
+    pub(crate) fn can_double(&self, doubler: i32) -> bool {
+        if !matches!(doubler, 0 | 1) {
+            return false;
+        }
+        let owner = self.get(Field::CUBE_OWNER);
+        if self.get(Field::CRAWFORD) != 0 || (owner != 3 && owner != doubler) {
+            return false;
+        }
+        let cube = 1 << self.get(Field::CUBE_LOG2);
+        if cube >= 32768 {
+            return false;
+        }
+        let length = self.get(Field::LENGTH);
+        let score = self.get(if doubler == 0 {
+            Field::SCORE_0
+        } else {
+            Field::SCORE_1
+        });
+        length == 0 || score + cube < length
+    }
 }
 
 /// The player on roll in a Match ID.
@@ -277,5 +302,36 @@ mod tests {
         assert!(decode_board("AAAAAAAAAAAAAA", "AAAAAAAAAAAA").is_ok());
         assert!(decode_board("/////////////w", "AAAAAAAAAAAA").is_err());
         assert!(decode_board(OPENING, "AAAA").is_err());
+    }
+
+    #[test]
+    fn can_double_enforces_ownership_crawford_ceiling_and_dead_cube() {
+        let decode = |id: String| MatchId::decode(&id).unwrap();
+        // Money play: centered or owned cube below 32768 may double; 32768 ceiling cannot.
+        let money_center = decode(match_id(0, [0, 0], 1, -1, false, true, 0, [0, 0]));
+        assert!(money_center.can_double(0));
+        assert!(money_center.can_double(1));
+        assert!(!money_center.can_double(2));
+        let money_owned = decode(match_id(0, [0, 0], 2, 0, false, true, 0, [0, 0]));
+        assert!(money_owned.can_double(0));
+        assert!(!money_owned.can_double(1));
+        let money_ceiling = decode(match_id(0, [0, 0], 32768, 0, false, true, 0, [0, 0]));
+        assert!(!money_ceiling.can_double(0));
+
+        // Crawford forbids both sides from doubling.
+        let crawford = decode(match_id(7, [6, 3], 1, -1, true, false, 1, [0, 0]));
+        assert!(!crawford.can_double(0));
+        assert!(!crawford.can_double(1));
+
+        // Post-Crawford 1-away: leader (score + cube == length) has a dead cube; trailer may double.
+        let post_crawford = decode(match_id(7, [6, 3], 1, -1, false, false, 0, [0, 0]));
+        assert!(!post_crawford.can_double(0));
+        assert!(post_crawford.can_double(1));
+
+        // 2-away with a 2-cube is dead (5 + 2 == 7); 3-away with a 2-cube is live (4 + 2 < 7).
+        let dead_two = decode(match_id(7, [5, 2], 2, 0, false, false, 0, [0, 0]));
+        assert!(!dead_two.can_double(0));
+        let live_two = decode(match_id(7, [4, 2], 2, 0, false, false, 0, [0, 0]));
+        assert!(live_two.can_double(0));
     }
 }

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import ActionButton from '../../shared/ui/ActionButton';
+import { useIsMounted } from '../../shared/hooks/useIsMounted';
 import { request, type Match } from '../../shared/http/api';
 import { NumberedSearchPagination } from '../../shared/ui/SearchPagination';
 import { SearchResultTable } from '../../shared/ui/SearchResultList';
@@ -283,13 +284,7 @@ export function PlayerRatings({
   const { formatError, formatNumber } = useI18n();
   const [collecting, setCollecting] = useState(false);
   const [collected, setCollected] = useState<{ error?: unknown }>();
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  const mounted = useIsMounted();
 
   async function analyzeRest() {
     setCollecting(true);

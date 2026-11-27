@@ -89,7 +89,7 @@ export function createPositionSummaryFormatter(
         .slice(0, 4)
         .map(
           (note) =>
-            `${p(({ match: 'scopeMatch', game: 'scopeGame', position: 'scopePosition', move: 'scopeMove' } as const)[note.scope])}: ${compact(note.comment_excerpt)}`,
+            `${p(({ match: 'groupMatch', game: 'gameNumber', position: 'scopePosition', move: 'playedMove' } as const)[note.scope])}: ${compact(note.comment_excerpt)}`,
         ),
     ]
       .filter(Boolean)

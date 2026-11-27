@@ -456,18 +456,12 @@
   z-index: 20;
   display: grid;
   gap: 4px;
-  min-width: 260px;
+  min-width: max-content;
   margin-top: 4px;
-  padding: 6px;
-  border: 1px solid var(--ui-border);
-  border-radius: 8px;
-  background: var(--ui-surface);
-  box-shadow: 0 8px 24px #0004;
 }
 .learning-anki-menu-items .action-button {
-  justify-content: flex-start;
-  border-color: transparent;
-  background: transparent;
+  text-align: start;
+  white-space: nowrap;
 }
 /* Optional tools between the deck and the results. */
 .learning-workspace > details {
@@ -519,11 +513,4 @@
   padding: 3px 6px;
   border-color: transparent;
   background: transparent;
-}
-.learning-anki-menu-items {
-  min-width: max-content;
-}
-.learning-anki-menu-items .action-button {
-  text-align: start;
-  white-space: nowrap;
 }

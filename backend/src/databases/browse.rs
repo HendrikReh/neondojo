@@ -17,20 +17,9 @@ LEFT JOIN LATERAL (
     WHERE selected_job.match_uuid=m.id AND selected_job.source_revision=m.source_revision AND selected_job.kind='match' AND selected_job.game_no IS NULL AND selected_job.status='completed' AND NOT m.collection_only
 ) rawpr ON true
 LEFT JOIN LATERAL (
-    SELECT rawpr.result WHERE rawpr.total_games>0 AND rawpr.completed_games=rawpr.total_games
-    AND NOT m.play_assisted AND (m.play_mode IS NULL OR (m.play_mode='competition' AND (ps.id IS NULL OR ",
-    crate::play::finished_session_sql!("ps"),
-    ")))
-    AND rawpr.result->>'total_games'=rawpr.total_games::text
-    AND rawpr.result->>'completed_games'=rawpr.total_games::text
-    AND rawpr.result->>'analyzed_moves'=rawpr.result->>'total_moves'
-    AND rawpr.result #>> '{players,0,unavailable}'='0'
-    AND rawpr.result #>> '{players,1,unavailable}'='0'
-    AND rawpr.result #>> '{performance_rating,method}'='gnubg_emg_500_v1'
-    AND rawpr.result #>> '{performance_rating,games}'=rawpr.total_games::text
-    AND rawpr.result #>> '{performance_rating,profile}' IN ((rawpr.result->>'engine')||'; '||(rawpr.result->>'plies')||'-ply cubeful deterministic', (rawpr.result->>'engine')||'; '||(rawpr.result->>'plies')||'-ply source cube rules deterministic')
-    AND rawpr.result #>> '{performance_rating,players,0,player}'='0'
-    AND rawpr.result #>> '{performance_rating,players,1,player}'='1'
+    SELECT rawpr.result WHERE ",
+    crate::match_analysis::rated_match_pr_where_sql!(),
+    "
 ) prj ON true
 LEFT JOIN (
     SELECT j.match_uuid,j.source_revision,
@@ -60,7 +49,24 @@ LEFT JOIN LATERAL (
 
 pub(super) const MATCH_COLUMNS: &str = "coalesce((SELECT r.id FROM study_report_snapshots r WHERE r.session_id=ps.id ORDER BY r.game_no DESC,r.created_at DESC LIMIT 1),CASE WHEN ps.state->>'phase'='match_over' AND jsonb_typeof(ps.state->'review')='object' THEN ps.id END) AS study_report_id,ps.id AS play_session_id,ps.paused_from_database_id IS NOT NULL AS play_paused,ps.state->>'phase' AS play_phase,m.play_mode,m.play_assisted,m.id,NOT m.collection_only AS source_available,coalesce(m.source_match_no,m.match_no) AS match_no,m.filename,m.format,m.white,m.black,m.match_length,m.position_count,m.created_at,coalesce(m.source_database_id,m.database_id) AS database_id,coalesce(nullif(m.display_name,''),m.filename) AS display_name,m.played_on,m.tournament,m.round,m.place,m.result_state,m.white_score,m.black_score,(prj.result #>> '{performance_rating,players,0,value}')::float8 AS white_pr,(prj.result #>> '{performance_rating,players,1,value}')::float8 AS black_pr,prj.result #>> '{performance_rating,method}' AS pr_method,prj.result #>> '{performance_rating,profile}' AS pr_profile,analysis.status AS analysis_status,(SELECT count(*) FROM match_games g WHERE g.match_uuid=m.id) AS game_count,jsonb_array_length(m.import_warnings) AS import_warning_count,coalesce(a.tags,'{}'::text[]) AS tags,coalesce(a.comment,'') AS comment,m.metadata_version AS version";
 
-pub(super) fn sort_spec(sort: &str) -> Option<(&'static str, &'static str)> {
+pub(crate) const DATE_FIELDS: &[&str] = &["played", "imported"];
+pub(crate) const MATCH_TYPES: &[&str] = &["match", "money"];
+pub(crate) const RESULT_STATES: &[&str] = &[
+    "completed",
+    "ongoing",
+    "unknown",
+    "white_won",
+    "black_won",
+    "draw",
+];
+
+pub(crate) fn valid_match_points_range(min: Option<i32>, max: Option<i32>) -> bool {
+    min.is_none_or(|v| v >= 0)
+        && max.is_none_or(|v| v >= 0)
+        && min.zip(max).is_none_or(|(a, b)| a <= b)
+}
+
+pub(crate) fn sort_spec(sort: &str) -> Option<(&'static str, &'static str)> {
     Some(match sort {
         "occurrence_database" => ("lower(occurrence_db.name)", "text"),
         "occurrence_game" => ("hit.game_no", "integer"),
@@ -137,7 +143,21 @@ pub(super) fn library_filters(
     }
     if let Some(v) = p.q.as_deref().filter(|v| !v.trim().is_empty()) {
         let pattern = literal_pattern(v.trim());
-        q.push(" AND m.id IN (SELECT id FROM matches WHERE search_text LIKE ").push_bind(pattern.clone()).push(" OR lower(display_name) LIKE ").push_bind(pattern.clone()).push(" OR lower(tournament) LIKE ").push_bind(pattern.clone()).push(" OR lower(round) LIKE ").push_bind(pattern.clone()).push(" UNION SELECT coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid) FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE n.search_text LIKE ").push_bind(pattern).push(")");
+        q.push(" AND m.id IN (SELECT id FROM matches WHERE search_text LIKE ")
+            .push_bind(pattern.clone())
+            .push(" OR lower(display_name) LIKE ")
+            .push_bind(pattern.clone())
+            .push(" OR lower(tournament) LIKE ")
+            .push_bind(pattern.clone())
+            .push(" OR lower(round) LIKE ")
+            .push_bind(pattern.clone())
+            .push(" UNION SELECT ")
+            .push(crate::annotations::ANNOTATION_MATCH_UUID_EXPR)
+            .push(" FROM ")
+            .push(crate::annotations::ANNOTATION_MATCH_JOIN_SQL)
+            .push(" WHERE a.search_text LIKE ")
+            .push_bind(pattern)
+            .push(")");
     }
     if let Some((id, virtual_profile)) = p.player_scope() {
         q.push(" AND EXISTS(SELECT 1 ")
@@ -182,10 +202,18 @@ pub(super) fn library_filters(
     );
     if let Some(v) = p.tag.as_ref() {
         let tag = normalize_tag(v)?;
-        q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND n.tags @> ").push_bind(vec![tag]).push(")");
+        q.push(" AND EXISTS(SELECT 1 ")
+            .push(crate::annotations::MATCH_ANNOTATION_EXISTS_FROM)
+            .push(" AND n.tags @> ")
+            .push_bind(vec![tag])
+            .push(")");
     }
     if let Some(v) = p.comment.as_ref() {
-        q.push(" AND EXISTS(SELECT 1 FROM annotations n LEFT JOIN positions np ON np.id=n.position_uuid LEFT JOIN match_games ng ON ng.id=n.game_uuid LEFT JOIN match_moves nm ON nm.id=n.move_uuid WHERE coalesce(n.match_uuid,np.match_uuid,ng.match_uuid,nm.match_uuid)=m.id AND lower(n.comment) LIKE ").push_bind(literal_pattern(v)).push(")");
+        q.push(" AND EXISTS(SELECT 1 ")
+            .push(crate::annotations::MATCH_ANNOTATION_EXISTS_FROM)
+            .push(" AND lower(n.comment) LIKE ")
+            .push_bind(literal_pattern(v))
+            .push(")");
     }
     if let Some(v) = &p.position_id {
         q.push(concat!(
@@ -260,7 +288,55 @@ pub(super) fn library_row_projection(
     }
 }
 
-pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage> {
+struct BrowsePlan {
+    sort: String,
+    expr: &'static str,
+    cast: &'static str,
+    direction: String,
+    date_field: String,
+    limit: i64,
+    offset: Option<i64>,
+    scope: String,
+    occurrences: bool,
+    compact: bool,
+    sort_uses_analysis: bool,
+}
+
+impl BrowsePlan {
+    fn occurrence_join(&self) -> &'static str {
+        if self.occurrences {
+            " JOIN positions hit ON hit.match_uuid=m.id JOIN databases occurrence_db ON occurrence_db.id=m.database_id"
+        } else {
+            ""
+        }
+    }
+
+    fn occurrence_columns(&self) -> &'static str {
+        if self.occurrences {
+            ",hit.id AS occurrence_id,hit.ordinal AS occurrence_ordinal,hit.game_no AS occurrence_game_no,hit.ply AS occurrence_move_no,occurrence_db.name AS occurrence_database_name"
+        } else {
+            ""
+        }
+    }
+
+    fn projected_occurrence_columns(&self) -> &'static str {
+        if self.occurrences {
+            ",ranked.occurrence_id,ranked.occurrence_ordinal,ranked.occurrence_game_no,ranked.occurrence_move_no,ranked.occurrence_database_name"
+        } else {
+            ""
+        }
+    }
+
+    fn sort_order(&self) -> &'static str {
+        if self.direction == "asc" {
+            " ASC NULLS LAST"
+        } else {
+            " DESC NULLS LAST"
+        }
+    }
+}
+
+fn prepare_browse_plan(p: &mut LibraryQuery) -> ApiResult<(BrowsePlan, Option<String>)> {
     for v in [
         &p.q,
         &p.player,
@@ -271,7 +347,7 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         &p.round,
         &p.match_name,
     ] {
-        bounded_text(v)?
+        bounded_text(v)?;
     }
     if p.player_id.is_some() && p.virtual_player_id.is_some() {
         return Err(ApiError::invalid(
@@ -292,37 +368,25 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         return Err(ApiError::invalid("direction must be asc or desc"));
     }
     let date_field = p.date_field.clone().unwrap_or("played".into());
-    if !["played", "imported"].contains(&date_field.as_str()) {
+    if !DATE_FIELDS.contains(&date_field.as_str()) {
         return Err(ApiError::invalid("date_field must be played or imported"));
     }
     if p.date_from.zip(p.date_to).is_some_and(|(a, b)| a > b) {
         return Err(ApiError::invalid("date_from must not exceed date_to"));
     }
-    if p.match_points_min.is_some_and(|v| v < 0)
-        || p.match_points_max.is_some_and(|v| v < 0)
-        || p.match_points_min
-            .zip(p.match_points_max)
-            .is_some_and(|(a, b)| a > b)
-    {
+    if !valid_match_points_range(p.match_points_min, p.match_points_max) {
         return Err(ApiError::invalid("Invalid match points range"));
     }
     if p.match_type
         .as_deref()
-        .is_some_and(|v| !["match", "money"].contains(&v))
+        .is_some_and(|v| !MATCH_TYPES.contains(&v))
     {
         return Err(ApiError::invalid("match_type must be match or money"));
     }
-    if p.result.as_deref().is_some_and(|v| {
-        ![
-            "completed",
-            "ongoing",
-            "unknown",
-            "white_won",
-            "black_won",
-            "draw",
-        ]
-        .contains(&v)
-    }) {
+    if p.result
+        .as_deref()
+        .is_some_and(|v| !RESULT_STATES.contains(&v))
+    {
         return Err(ApiError::invalid("Invalid result state"));
     }
     let limit = p.limit.unwrap_or(50);
@@ -334,186 +398,210 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
     p.limit = None;
     let scope = format!(
         "{:x}",
-        Sha256::digest(serde_json::to_vec(&p).map_err(anyhow::Error::from)?)
+        Sha256::digest(serde_json::to_vec(p).map_err(anyhow::Error::from)?)
     );
     let occurrences = p.position_id.is_some();
-    let occurrence_join = if occurrences {
-        " JOIN positions hit ON hit.match_uuid=m.id JOIN databases occurrence_db ON occurrence_db.id=m.database_id"
-    } else {
-        ""
-    };
-    let occurrence_columns = if occurrences {
-        ",hit.id AS occurrence_id,hit.ordinal AS occurrence_ordinal,hit.game_no AS occurrence_game_no,hit.ply AS occurrence_move_no,occurrence_db.name AS occurrence_database_name"
-    } else {
-        ""
-    };
-    let projected_occurrence_columns = if occurrences {
-        ",ranked.occurrence_id,ranked.occurrence_ordinal,ranked.occurrence_game_no,ranked.occurrence_move_no,ranked.occurrence_database_name"
-    } else {
-        ""
-    };
     let compact = ["tags", "comment"].contains(&sort.as_str());
     let sort_uses_analysis = ["white_pr", "black_pr", "analysis_status"].contains(&sort.as_str());
-    let mut cursor = after
-        .map(|v| {
-            if v.len() > 4096 {
-                return Err(ApiError::invalid("Cursor is too long"));
-            }
-            URL_SAFE_NO_PAD
-                .decode(v)
-                .ok()
-                .and_then(|b| serde_json::from_slice::<LibraryCursor>(&b).ok())
-                .filter(|c| c.scope == scope)
-                .ok_or_else(|| {
-                    ApiError::invalid("Cursor is invalid or belongs to different filters")
-                })
-        })
-        .transpose()?;
-    if let Some(c) = &mut cursor {
-        if c.anchor != compact
-            || (c.anchor && c.key.is_some())
-            || c.occurrence.is_some() != occurrences
-            || c.occurrence.as_ref().is_some_and(|o| o.ordinal < 0)
-        {
-            return Err(ApiError::invalid("Cursor contains an invalid anchor"));
-        }
-        if c.anchor {
-            // Use the same filters as the page, so a deleted anchor or one that
-            // has left the current scope produces a validation error.
-            let play_join = if occurrences { MATCH_PLAY_JOIN } else { "" };
-            let mut anchor = QueryBuilder::<Postgres>::new(format!(
-                "SELECT ({expr})::text AS cursor_key FROM matches m{MATCH_NOTE_JOIN}{play_join}{occurrence_join} WHERE NOT m.collection_only"
-            ));
-            library_filters(&mut anchor, &p, &date_field)?;
-            anchor.push(" AND m.id=").push_bind(c.id);
-            if let Some(o) = &c.occurrence {
-                anchor
-                    .push(" AND hit.id=")
-                    .push_bind(o.id)
-                    .push(" AND hit.ordinal=")
-                    .push_bind(o.ordinal);
-            }
-            let row = anchor
-                .build()
-                .fetch_optional(pool)
-                .await
-                .map_err(anyhow::Error::from)?
-                .ok_or_else(|| {
-                    ApiError::invalid("Cursor anchor is missing from the current filters")
-                })?;
-            c.key = row.try_get("cursor_key").map_err(anyhow::Error::from)?;
-        }
-        let valid = match c.key.as_deref() {
-            None => [
-                "played_at",
-                "white_pr",
-                "black_pr",
-                "tournament",
-                "analysis_status",
-                "tags",
-                "comment",
-                "score",
-            ]
-            .contains(&sort.as_str()),
-            Some(key) => match cast {
-                "integer" => key.parse::<i32>().is_ok(),
-                "bigint" => key.parse::<i64>().is_ok(),
-                "integer[]" => valid_score_key(key),
-                "float8" => key.parse::<f64>().is_ok_and(f64::is_finite),
-                "date" => NaiveDate::parse_from_str(key, "%Y-%m-%d").is_ok(),
-                "timestamptz" => DateTime::parse_from_str(key, "%Y-%m-%d %H:%M:%S%.f%#z").is_ok(),
-                _ => c.anchor || key.chars().count() <= 2048,
-            },
-        };
-        if !valid {
-            return Err(ApiError::invalid("Cursor contains an invalid sort value"));
-        }
+    Ok((
+        BrowsePlan {
+            sort,
+            expr,
+            cast,
+            direction,
+            date_field,
+            limit,
+            offset,
+            scope,
+            occurrences,
+            compact,
+            sort_uses_analysis,
+        },
+        after,
+    ))
+}
+
+async fn resolve_browse_cursor(
+    pool: &PgPool,
+    after: Option<String>,
+    plan: &BrowsePlan,
+    p: &LibraryQuery,
+) -> ApiResult<Option<LibraryCursor>> {
+    let Some(raw) = after else {
+        return Ok(None);
+    };
+    if raw.len() > crate::cursor::DEFAULT_MAX_LEN {
+        return Err(ApiError::invalid("Cursor is too long"));
     }
-    let mut q = QueryBuilder::<Postgres>::new("WITH ");
-    if offset.is_some() {
+    let mut c: LibraryCursor = crate::cursor::decode(
+        &raw,
+        crate::cursor::DEFAULT_MAX_LEN,
+        "Cursor is invalid or belongs to different filters",
+    )?;
+    if c.scope != plan.scope {
+        return Err(ApiError::invalid(
+            "Cursor is invalid or belongs to different filters",
+        ));
+    }
+    if c.anchor != plan.compact
+        || (c.anchor && c.key.is_some())
+        || c.occurrence.is_some() != plan.occurrences
+        || c.occurrence.as_ref().is_some_and(|o| o.ordinal < 0)
+    {
+        return Err(ApiError::invalid("Cursor contains an invalid anchor"));
+    }
+    if c.anchor {
+        // Use the same filters as the page, so a deleted anchor or one that
+        // has left the current scope produces a validation error.
+        let play_join = if plan.occurrences {
+            MATCH_PLAY_JOIN
+        } else {
+            ""
+        };
+        let mut anchor = QueryBuilder::<Postgres>::new(format!(
+            "SELECT ({})::text AS cursor_key FROM matches m{MATCH_NOTE_JOIN}{play_join}{} WHERE NOT m.collection_only",
+            plan.expr,
+            plan.occurrence_join()
+        ));
+        library_filters(&mut anchor, p, &plan.date_field)?;
+        anchor.push(" AND m.id=").push_bind(c.id);
+        if let Some(o) = &c.occurrence {
+            anchor
+                .push(" AND hit.id=")
+                .push_bind(o.id)
+                .push(" AND hit.ordinal=")
+                .push_bind(o.ordinal);
+        }
+        let row = anchor
+            .build()
+            .fetch_optional(pool)
+            .await
+            .map_err(anyhow::Error::from)?
+            .ok_or_else(|| {
+                ApiError::invalid("Cursor anchor is missing from the current filters")
+            })?;
+        c.key = row.try_get("cursor_key").map_err(anyhow::Error::from)?;
+    }
+    let valid = match c.key.as_deref() {
+        None => [
+            "played_at",
+            "white_pr",
+            "black_pr",
+            "tournament",
+            "analysis_status",
+            "tags",
+            "comment",
+            "score",
+        ]
+        .contains(&plan.sort.as_str()),
+        Some(key) => match plan.cast {
+            "integer" => key.parse::<i32>().is_ok(),
+            "bigint" => key.parse::<i64>().is_ok(),
+            "integer[]" => valid_score_key(key),
+            "float8" => key.parse::<f64>().is_ok_and(f64::is_finite),
+            "date" => NaiveDate::parse_from_str(key, "%Y-%m-%d").is_ok(),
+            "timestamptz" => DateTime::parse_from_str(key, "%Y-%m-%d %H:%M:%S%.f%#z").is_ok(),
+            _ => c.anchor || key.chars().count() <= 2048,
+        },
+    };
+    if !valid {
+        return Err(ApiError::invalid("Cursor contains an invalid sort value"));
+    }
+    Ok(Some(c))
+}
+
+fn push_browse_query<'a>(
+    q: &mut QueryBuilder<'a, Postgres>,
+    plan: &'a BrowsePlan,
+    p: &'a LibraryQuery,
+    cursor: Option<LibraryCursor>,
+) -> ApiResult<()> {
+    let occurrence_join = plan.occurrence_join();
+    if plan.offset.is_some() {
         q.push("totals AS (SELECT count(*) AS total FROM matches m");
-        if occurrences {
+        if plan.occurrences {
             q.push(MATCH_PLAY_JOIN).push(occurrence_join);
         }
         q.push(" WHERE NOT m.collection_only");
-        library_filters(&mut q, &p, &date_field)?;
+        library_filters(q, p, &plan.date_field)?;
         q.push("), ");
     }
-    if sort_uses_analysis {
+    if plan.sort_uses_analysis {
         q.push("page AS (");
-        library_row_projection(&mut q, p.player_scope());
+        library_row_projection(q, p.player_scope());
     } else {
         // Sort and limit narrow rows before fetching notes, games and analysis.
         q.push("ranked AS MATERIALIZED (SELECT m.id");
     }
-    q.push(occurrence_columns).push(format!(
-        ",({expr})::text AS cursor_key,({expr}) AS page_sort FROM matches m"
+    q.push(plan.occurrence_columns()).push(format!(
+        ",({})::text AS cursor_key,({}) AS page_sort FROM matches m",
+        plan.expr, plan.expr
     ));
-    if occurrences || sort_uses_analysis {
+    if plan.occurrences || plan.sort_uses_analysis {
         q.push(MATCH_PLAY_JOIN);
     }
-    if compact || sort_uses_analysis {
+    if plan.compact || plan.sort_uses_analysis {
         q.push(MATCH_NOTE_JOIN);
     }
-    if sort_uses_analysis {
+    if plan.sort_uses_analysis {
         q.push(MATCH_ANALYSIS_JOINS);
     }
     q.push(occurrence_join).push(" WHERE NOT m.collection_only");
-    library_filters(&mut q, &p, &date_field)?;
+    library_filters(q, p, &plan.date_field)?;
     if let Some(c) = cursor {
         q.push(" AND (");
         if let Some(key) = c.key {
-            q.push(expr)
-                .push(if direction == "asc" { " > " } else { " < " })
+            q.push(plan.expr)
+                .push(if plan.direction == "asc" {
+                    " > "
+                } else {
+                    " < "
+                })
                 .push_bind(key.clone())
                 .push("::")
-                .push(cast)
+                .push(plan.cast)
                 .push(" OR ")
-                .push(expr)
+                .push(plan.expr)
                 .push(" IS NULL OR (")
-                .push(expr)
+                .push(plan.expr)
                 .push(" = ")
                 .push_bind(key)
                 .push("::")
-                .push(cast)
+                .push(plan.cast)
                 .push(" AND ");
-            occurrence_after(&mut q, c.id, c.occurrence.as_ref());
+            occurrence_after(q, c.id, c.occurrence.as_ref());
             q.push("))");
         } else {
-            q.push(expr).push(" IS NULL AND ");
-            occurrence_after(&mut q, c.id, c.occurrence.as_ref());
+            q.push(plan.expr).push(" IS NULL AND ");
+            occurrence_after(q, c.id, c.occurrence.as_ref());
             q.push(")");
         }
     }
-    let sort_order = if direction == "asc" {
-        " ASC NULLS LAST"
-    } else {
-        " DESC NULLS LAST"
-    };
+    let sort_order = plan.sort_order();
     q.push(" ORDER BY ")
-        .push(expr)
+        .push(plan.expr)
         .push(sort_order)
         .push(",m.id ASC");
-    if occurrences {
+    if plan.occurrences {
         q.push(",hit.ordinal ASC,hit.id ASC");
     }
-    q.push(" LIMIT ").push_bind(limit + 1);
-    if let Some(offset) = offset {
+    q.push(" LIMIT ").push_bind(plan.limit + 1);
+    if let Some(offset) = plan.offset {
         q.push(" OFFSET ").push_bind(offset);
     }
     q.push(")");
-    if !sort_uses_analysis {
+    if !plan.sort_uses_analysis {
         q.push(", page AS (");
-        library_row_projection(&mut q, p.player_scope());
+        library_row_projection(q, p.player_scope());
         q.push(",ranked.cursor_key,ranked.page_sort")
-            .push(projected_occurrence_columns)
+            .push(plan.projected_occurrence_columns())
             .push(" FROM ranked JOIN matches m ON m.id=ranked.id")
             .push(MATCH_PLAY_JOIN)
             .push(MATCH_NOTE_JOIN)
             .push(MATCH_ANALYSIS_JOINS)
             .push(")");
     }
-    if offset.is_some() {
+    if plan.offset.is_some() {
         q.push(" SELECT page.*,totals.total FROM totals LEFT JOIN page ON true");
     } else {
         q.push(" SELECT page.* FROM page");
@@ -521,25 +609,28 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
     q.push(" ORDER BY page_sort")
         .push(sort_order)
         .push(",id ASC");
-    if occurrences {
+    if plan.occurrences {
         q.push(",occurrence_ordinal ASC,occurrence_id ASC");
     }
-    let mut rows = q
-        .build()
-        .fetch_all(pool)
-        .await
-        .map_err(anyhow::Error::from)?;
-    let total = if offset.is_some() {
+    Ok(())
+}
+
+fn map_browse_rows(
+    mut rows: Vec<sqlx::postgres::PgRow>,
+    plan: &BrowsePlan,
+    p: &LibraryQuery,
+) -> ApiResult<LibraryPage> {
+    let total = if plan.offset.is_some() {
         let total = rows[0].get::<i64, _>("total");
         rows.retain(|row| row.get::<Option<Uuid>, _>("id").is_some());
         Some(total)
     } else {
         None
     };
-    let more = rows.len() > limit as usize;
+    let more = rows.len() > plan.limit as usize;
     let mut items = Vec::new();
     let mut last = None;
-    for row in rows.iter().take(limit as usize) {
+    for row in rows.iter().take(plan.limit as usize) {
         let mut m = <DatabaseMatch as sqlx::FromRow<sqlx::postgres::PgRow>>::from_row(row)
             .map_err(anyhow::Error::from)?;
         if p.player_scope().is_some() {
@@ -548,7 +639,7 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
                 .try_get("opponent_player_id")
                 .map_err(anyhow::Error::from)?;
         }
-        let occurrence = if occurrences {
+        let occurrence = if plan.occurrences {
             let id = row.try_get("occurrence_id").map_err(anyhow::Error::from)?;
             m.occurrence = Some(LibraryOccurrence {
                 id,
@@ -573,21 +664,19 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         };
         last = Some(LibraryCursor {
             occurrence,
-            scope: scope.clone(),
-            key: if compact {
+            scope: plan.scope.clone(),
+            key: if plan.compact {
                 None
             } else {
                 row.try_get("cursor_key").map_err(anyhow::Error::from)?
             },
             id: m.id,
-            anchor: compact,
+            anchor: plan.compact,
         });
         items.push(m);
     }
     let next_cursor = if more {
-        last.map(|c| serde_json::to_vec(&c).map(|v| URL_SAFE_NO_PAD.encode(v)))
-            .transpose()
-            .map_err(anyhow::Error::from)?
+        last.map(|c| crate::cursor::encode(&c)).transpose()?
     } else {
         None
     };
@@ -596,4 +685,17 @@ pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage
         next_cursor,
         total,
     })
+}
+
+pub async fn browse(pool: &PgPool, mut p: LibraryQuery) -> ApiResult<LibraryPage> {
+    let (plan, after) = prepare_browse_plan(&mut p)?;
+    let cursor = resolve_browse_cursor(pool, after, &plan, &p).await?;
+    let mut q = QueryBuilder::<Postgres>::new("WITH ");
+    push_browse_query(&mut q, &plan, &p, cursor)?;
+    let rows = q
+        .build()
+        .fetch_all(pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+    map_browse_rows(rows, &plan, &p)
 }

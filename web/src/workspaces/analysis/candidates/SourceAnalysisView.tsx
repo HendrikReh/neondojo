@@ -8,6 +8,7 @@ import { candidateEquityRanks } from './candidate-comparison';
 import type { Match, Position } from '../../../shared/http/api';
 import { useSourceText } from './analysis-source-messages';
 import { useCandidateText } from './candidate-messages';
+import { formatPly } from '../../../shared/format/ply';
 import type { SourceAnalysis, BookLookup } from './source-analysis-api';
 
 function OgxmCheckerSummary({ raw }: { raw: unknown }) {
@@ -120,7 +121,7 @@ export default function SourceAnalysisView({
           ...c,
           equity_kind: book?.provenance?.equity_kind ?? 'unknown',
           depth:
-            book.checker?.plies == null ? null : `${book.checker.plies}-ply`,
+            book.checker?.plies == null ? null : formatPly(book.checker.plies),
           method: 'evaluation',
         })) ?? []);
   const equityRanks = xgChecker ? candidateEquityRanks(sourceCandidates) : null;
@@ -239,7 +240,7 @@ export default function SourceAnalysisView({
     [
       book?.provenance?.engine ?? 'BackgammonDB',
       book?.provenance && 'BackgammonDB',
-      plies == null ? l('unknownDepth') : `${plies}-ply`,
+      plies == null ? l('unknownDepth') : formatPly(plies),
       book?.provenance?.evaluation_kind,
       book?.provenance?.context,
     ]
@@ -349,7 +350,7 @@ export default function SourceAnalysisView({
               ? record?.depth
               : book?.checker?.plies == null
                 ? null
-                : `${book.checker.plies}-ply`
+                : formatPly(book.checker.plies)
           }
           played={
             position?.notation ??

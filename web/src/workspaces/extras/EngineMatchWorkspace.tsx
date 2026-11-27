@@ -1,6 +1,8 @@
 import ActionButton from '../../shared/ui/ActionButton';
 import { useEffect, useId, useRef, useState } from 'react';
 import { engineDisplayName } from '../../shared/engine/engine-version';
+import { formatPly } from '../../shared/format/ply';
+import { usePolling } from '../../shared/hooks/usePolling';
 import type { Match } from '../../shared/http/api';
 import {
   cancelSeries,
@@ -101,38 +103,32 @@ export default function EngineMatchWorkspace({
     return () => abort.abort();
   }, [visible, retry]);
 
-  useEffect(() => {
-    if (!visible) return;
-    const abort = new AbortController();
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      let pollAgain = true;
+  usePolling(
+    async (signal) => {
       try {
         const [list, selected] = await Promise.all([
-          listSeries(abort.signal),
-          id ? loadSeries(id, offset, abort.signal) : undefined,
+          listSeries(signal),
+          id ? loadSeries(id, offset, signal) : undefined,
         ]);
-        if (!abort.signal.aborted) {
-          setRecent(list);
-          if (selected) setResultPage({ offset, details: selected });
-          setLoadError(undefined);
-          pollAgain =
-            list.runs.some((run) => isActive(run.status)) ||
-            (selected !== undefined && isActive(selected.series.status));
-        }
+        if (signal.aborted) return false;
+        setRecent(list);
+        if (selected) setResultPage({ offset, details: selected });
+        setLoadError(undefined);
+        return (
+          list.runs.some((run) => isActive(run.status)) ||
+          (selected !== undefined && isActive(selected.series.status))
+        );
       } catch (reason) {
-        if (!abort.signal.aborted) setLoadError(reason);
-      } finally {
-        if (!abort.signal.aborted && pollAgain)
-          timer = setTimeout(() => void poll(), 1500);
+        if (!signal.aborted) setLoadError(reason);
+        return !signal.aborted;
       }
-    }
-    void poll();
-    return () => {
-      abort.abort();
-      clearTimeout(timer);
-    };
-  }, [visible, id, offset, refresh, retry]);
+    },
+    {
+      active: visible,
+      intervalMs: 1500,
+      deps: [id, offset, refresh, retry],
+    },
+  );
 
   const available = (engineId: string) =>
     engines?.some((engine) => engine.id === engineId && engine.available);
@@ -211,7 +207,7 @@ export default function EngineMatchWorkspace({
   }
 
   const profile = (side: Competitor) =>
-    `${engineDisplayName(side.engine_id)} ${formatNumber(side.plies)}-ply`;
+    `${engineDisplayName(side.engine_id)} ${formatPly(side.plies, formatNumber)}`;
   const date = dateTimeFormat(locale, {
     dateStyle: 'short',
     timeStyle: 'short',
