@@ -7,6 +7,11 @@ use utoipa::ToSchema;
 
 pub(crate) mod cpu;
 mod gate;
+
+/// Upper bound on simultaneous engine threads for this host (P-core budget on Apple Silicon).
+pub async fn host_parallel_threads() -> Option<i32> {
+    cpu::HostCpuBudget::host_parallel_threads().await
+}
 mod installation;
 mod parse;
 #[cfg(test)]

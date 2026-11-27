@@ -270,6 +270,13 @@ fn bgf_analysis(m: &SourceMove, value: Value) -> Vec<ImportedAnalysisData> {
 }
 /// Extract only analysis actually present in the validated source, with its own units.
 pub(crate) fn extract(sgf: &str) -> Result<Vec<ImportedAnalysisData>> {
+    extract_with_moves(sgf).map(|(_, records)| records)
+}
+
+/// Extract validated source moves and imported analysis records in one parse.
+pub(crate) fn extract_with_moves(
+    sgf: &str,
+) -> Result<(Vec<SourceMove>, Vec<ImportedAnalysisData>)> {
     let (imported, games, moves) = parse_sgf_events(sgf)?;
     let trees = parse_trees(sgf)?;
     let mut result = Vec::new();
@@ -448,7 +455,7 @@ pub(crate) fn extract(sgf: &str) -> Result<Vec<ImportedAnalysisData>> {
             });
         }
     }
-    Ok(result)
+    Ok((moves, result))
 }
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ImportedAnalysisRecord {
@@ -570,15 +577,26 @@ pub(crate) async fn ensure_catalog(pool: &PgPool, id: Uuid) -> Result<bool> {
     Ok(true)
 }
 pub async fn match_summary(pool: &PgPool, id: Uuid) -> Result<Option<ImportedAnalysisSummary>> {
-    if !ensure_catalog(pool, id).await? {
-        return Ok(None);
-    }
-    let format: String = sqlx::query_scalar("SELECT format FROM matches WHERE id=$1")
+    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
+    let format: Option<String> = sqlx::query_scalar("SELECT format FROM matches WHERE id=$1")
         .bind(id)
-        .fetch_one(pool)
+        .fetch_optional(&mut *tx)
         .await?;
-    let (count,checker,cube,engines,depths):(i64,i64,i64,Vec<String>,Vec<String>)=sqlx::query_as("SELECT count(*),count(*) FILTER(WHERE kind='checker'),count(*) FILTER(WHERE kind='cube'),coalesce(array_agg(DISTINCT data->>'engine') FILTER(WHERE data->>'engine' IS NOT NULL),'{}'::text[]),coalesce(array_agg(DISTINCT data->>'depth') FILTER(WHERE data->>'depth' IS NOT NULL),'{}'::text[]) FROM imported_analyses WHERE match_uuid=$1").bind(id).fetch_one(pool).await?;
-    Ok(Some(ImportedAnalysisSummary {
+    let Some(format) = format else {
+        return Ok(None);
+    };
+    let summary = match_summary_on(&mut tx, id, format).await?;
+    tx.commit().await?;
+    Ok(Some(summary))
+}
+
+async fn match_summary_on(
+    connection: &mut sqlx::PgConnection,
+    id: Uuid,
+    format: String,
+) -> Result<ImportedAnalysisSummary> {
+    let (count,checker,cube,engines,depths):(i64,i64,i64,Vec<String>,Vec<String>)=sqlx::query_as("SELECT count(*),count(*) FILTER(WHERE kind='checker'),count(*) FILTER(WHERE kind='cube'),coalesce(array_agg(DISTINCT data->>'engine') FILTER(WHERE data->>'engine' IS NOT NULL),'{}'::text[]),coalesce(array_agg(DISTINCT data->>'depth') FILTER(WHERE data->>'depth' IS NOT NULL),'{}'::text[]) FROM imported_analyses WHERE match_uuid=$1").bind(id).fetch_one(connection).await?;
+    Ok(ImportedAnalysisSummary {
         status: if checker + cube > 0 {
             "available"
         } else {
@@ -591,7 +609,7 @@ pub async fn match_summary(pool: &PgPool, id: Uuid) -> Result<Option<ImportedAna
         cube_records: cube,
         engines,
         depths,
-    }))
+    })
 }
 pub(crate) async fn selected_position_records(
     executor: impl sqlx::PgExecutor<'_>,
@@ -651,17 +669,17 @@ pub async fn position_records(
     pool: &PgPool,
     id: Uuid,
 ) -> Result<Option<Vec<ImportedAnalysisRecord>>> {
+    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
     let match_id: Option<Uuid> = sqlx::query_scalar("SELECT match_uuid FROM positions WHERE id=$1")
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *tx)
         .await?;
     let Some(match_id) = match_id else {
         return Ok(None);
     };
-    if !ensure_catalog(pool, match_id).await? {
-        return Ok(None);
-    }
-    Ok(Some(records_where(pool, match_id, Some(id), None).await?))
+    let records = records_where(&mut *tx, match_id, Some(id), None).await?;
+    tx.commit().await?;
+    Ok(Some(records))
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -670,49 +688,70 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/positions/{id}/imported-analysis", get(get_position))
         .route("/api/moves/{id}/imported-analysis", get(get_move))
 }
-#[utoipa::path(get,path="/api/matches/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=ImportedAnalysisSummary),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Imported analysis")]
+#[utoipa::path(get,path="/api/matches/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=ImportedAnalysisSummary),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Imported analysis")]
 async fn get_match(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<ImportedAnalysisSummary>> {
-    crate::play::require_review_available(&s.pool, id).await?;
-    Ok(Json(
-        match_summary(&s.pool, id)
-            .await?
-            .ok_or_else(ApiError::missing)?,
-    ))
+    let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
+    crate::play::require_review_available_on(&mut *tx, id).await?;
+    let row: Option<(String, bool)> =
+        sqlx::query_as("SELECT format,imported_analysis_loaded FROM matches WHERE id=$1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    let (format, loaded) = row.ok_or_else(ApiError::missing)?;
+    if !loaded {
+        return Err(crate::browse_indexes::preparing(&s, "Imported analysis"));
+    }
+    let summary = match_summary_on(&mut tx, id, format).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Json(summary))
 }
-#[utoipa::path(get,path="/api/positions/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Imported analysis")]
+#[utoipa::path(get,path="/api/positions/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Imported analysis")]
 async fn get_position(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<ImportedAnalysisRecord>>> {
-    crate::play::require_position_review_available(&s.pool, id).await?;
-    Ok(Json(
-        position_records(&s.pool, id)
-            .await?
-            .ok_or_else(ApiError::missing)?,
-    ))
+    let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
+    let row: Option<(Uuid, bool)> = sqlx::query_as(
+        "SELECT m.id,m.imported_analysis_loaded FROM positions p JOIN matches m ON m.id=p.match_uuid WHERE p.id=$1",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let (match_id, loaded) = row.ok_or_else(ApiError::missing)?;
+    crate::play::require_review_available_on(&mut *tx, match_id).await?;
+    if !loaded {
+        return Err(crate::browse_indexes::preparing(&s, "Imported analysis"));
+    }
+    let records = records_where(&mut *tx, match_id, Some(id), None).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Json(records))
 }
-#[utoipa::path(get,path="/api/moves/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Imported analysis")]
+#[utoipa::path(get,path="/api/moves/{id}/imported-analysis",params(("id"=Uuid,Path)),responses((status=200,body=Vec<ImportedAnalysisRecord>),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Imported analysis")]
 async fn get_move(
     State(s): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<ImportedAnalysisRecord>>> {
-    let row: Option<(Uuid, i32, i32)> =
-        sqlx::query_as("SELECT match_uuid,game_no,move_no FROM match_moves WHERE id=$1")
-            .bind(id)
-            .fetch_optional(&s.pool)
-            .await
-            .map_err(anyhow::Error::from)?;
-    let (match_id, game, mov) = row.ok_or_else(ApiError::missing)?;
-    crate::play::require_review_available(&s.pool, match_id).await?;
-    if !ensure_catalog(&s.pool, match_id).await? {
-        return Err(ApiError::missing());
+    let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
+    let row: Option<(Uuid, i32, i32, bool)> = sqlx::query_as(
+        "SELECT mm.match_uuid,mm.game_no,mm.move_no,m.imported_analysis_loaded FROM match_moves mm JOIN matches m ON m.id=mm.match_uuid WHERE mm.id=$1",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let (match_id, game, mov, loaded) = row.ok_or_else(ApiError::missing)?;
+    crate::play::require_review_available_on(&mut *tx, match_id).await?;
+    if !loaded {
+        return Err(crate::browse_indexes::preparing(&s, "Imported analysis"));
     }
-    Ok(Json(
-        records_where(&s.pool, match_id, None, Some((game, mov))).await?,
-    ))
+    let records = records_where(&mut *tx, match_id, None, Some((game, mov))).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(Json(records))
 }
 #[derive(OpenApi)]
 #[openapi(

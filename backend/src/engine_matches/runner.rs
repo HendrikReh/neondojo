@@ -100,6 +100,10 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
         .with_expected_version(Some(series.engines.rules_version.clone()));
     let a = series.engines.a.engine()?;
     let b = series.engines.b.engine()?;
+    let workers = crate::engines::DuelWorkers::new([&a, &b].map(|bot| match bot {
+        crate::engines::AnalysisEngine::OpenSage(sage) => Some(sage.snapshot()),
+        crate::engines::AnalysisEngine::Gnubg(_) => None,
+    }));
     let configuration = &series.configuration;
     let unit = configuration.unit()?;
     let event = escape_value(&format!(
@@ -119,12 +123,20 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
             bots.swap(0, 1);
             depths.swap(0, 1);
         }
-        let finished = engine_match::play(&rules, bots, depths, unit, |game| {
-            Ok(GameDice {
-                opening: dice::opening(plan.seed, game)?,
-                turns: dice::turns(plan.seed, game),
-            })
-        })
+        let finished = engine_match::play_with_workers(
+            &rules,
+            bots,
+            depths,
+            unit,
+            &workers,
+            plan.swapped,
+            |game| {
+                Ok(GameDice {
+                    opening: dice::opening(plan.seed, game)?,
+                    turns: dice::turns(plan.seed, game),
+                })
+            },
+        )
         .await?;
         let mut scores = finished.scores;
         let mut costs = finished.costs;
@@ -197,6 +209,7 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
             .execute(&mut *tx).await?;
         tx.commit().await?;
     }
+    workers.shutdown().await?;
     Ok(())
 }
 

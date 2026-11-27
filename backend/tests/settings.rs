@@ -125,9 +125,7 @@ async fn defaults_use_injected_engine_and_survive_new_app_states(pool: PgPool) {
     // 1-ply needs an installation verified for it; the others are offered.
     assert_eq!(engines[1]["plies"], json!([2, 3, 4]));
     assert!(engines[0]["max_parallel_threads"].is_null());
-    let cpu_threads = std::thread::available_parallelism()
-        .ok()
-        .map(|count| count.get());
+    let cpu_threads = neondojo::engine::host_parallel_threads().await;
     assert_eq!(engines[1]["max_parallel_threads"], json!(cpu_threads));
     let (_, schema) = call(app, "GET", "/api/openapi.json", Value::Null).await;
     for route in ["/api/settings", "/api/engines", "/api/engines/gnubg/check"] {
@@ -191,7 +189,7 @@ async fn thread_settings_are_validated_and_pinned_in_new_jobs(pool: PgPool) {
     let (status, before) = call(app.clone(), "POST", &endpoint, json!({})).await;
     assert_eq!(status, 202, "{before}");
 
-    let cpu_threads = std::thread::available_parallelism().unwrap().get();
+    let cpu_threads = neondojo::engine::host_parallel_threads().await.unwrap() as usize;
     let (_, engines) = call(app.clone(), "GET", "/api/engines", Value::Null).await;
     let gnu_max = engines[0]["max_parallel_threads"].as_u64().unwrap() as usize;
     assert!((2..=cpu_threads).contains(&gnu_max));

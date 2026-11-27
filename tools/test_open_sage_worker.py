@@ -139,6 +139,79 @@ class WorkerTests(unittest.TestCase):
             worker.Runtime({'plies': 2, 'threads': 2}, integrity)
         self.assertEqual(validate_calls, [worker.probabilities])
 
+    def test_cubeless_nply_observes_thread_budget_while_cubeless_1ply_stays_serial(self):
+        spec = importlib.util.spec_from_file_location('sage_worker', PATH)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        move = SimpleNamespace(
+            board=[0] * 26, eval_level='2-ply', equity=0.1,
+            probs=SimpleNamespace(to_list=lambda: [.6, .1, .02, .1, .01]),
+        )
+
+        def run_case(plies, configured_threads, multipy_threads):
+            native = SimpleNamespace(
+                checker_play_nply=lambda *args, **kwargs: None,
+                create_multipy_from_base=lambda *args, **kwargs: object(),
+            )
+            analyzer_module = SimpleNamespace(
+                SERIAL_CUBEFUL_1PLY=True,
+                bgbot_cpp=native,
+                ThreadPoolExecutor=object,
+            )
+
+            class FakeAnalyzer:
+                def __init__(self, *, eval_level, cubeful, parallel_threads):
+                    if not cubeful and eval_level != '1ply' and multipy_threads is not None:
+                        native.create_multipy_from_base(
+                            'base', n_plies=int(eval_level[0]),
+                            parallel_evaluate=True, parallel_threads=multipy_threads,
+                        )
+
+                def checker_play(self, *args, **kwargs):
+                    return SimpleNamespace(moves=[move])
+
+                def cube_decision(self, *args, **kwargs):
+                    pass
+
+            fake_sage = SimpleNamespace(
+                STARTING_BOARD=[0] * 26,
+                BgBotAnalyzer=FakeAnalyzer,
+                DifficultyPolicy=lambda *args, **kwargs: None,
+                BatchModels=SimpleNamespace(from_analyzer=lambda analyzer: object()),
+                analyzer=analyzer_module,
+            )
+            version = PROBE.SUPPORTED_VERSIONS[-1]
+            manifest = dict(identity_sha256='orig', neongammon=version, numpy=PROBE.NUMPY_VERSION,
+                            production_model='stage11', strategy='backgame_pair_phased')
+            integrity = {
+                'RELEASES': PROBE.RELEASES,
+                'ProbeError': PROBE.ProbeError,
+                'deny_network': lambda: None,
+                'validate_platform': lambda *args: None,
+                'identity': lambda *args: dict(manifest),
+                'validate_versions': PROBE.validate_versions,
+                'observe_thread_budgets': PROBE.observe_thread_budgets,
+                'validate_thread_budget': PROBE.validate_thread_budget,
+                'validate_result': PROBE.validate_result,
+                'locked_paths': lambda *args: ['locked'],
+                'stat_snapshot': lambda paths: ('snap',),
+            }
+            distribution = Mock()
+            distribution.read_text.return_value = 'RECORD'
+            with patch.dict(sys.modules, {'neongammon': fake_sage, 'bgbot_cpp': native}), \
+                 patch('importlib.metadata.distribution', return_value=distribution):
+                worker.Runtime({'plies': plies, 'threads': configured_threads, 'cubeless': True}, integrity)
+
+        # Cubeless 1-ply is genuinely serial (zero observed pools).
+        run_case(1, 4, None)
+        # Cubeless 2..4-ply must observe a bounded native thread budget.
+        for plies in (2, 3, 4):
+            run_case(plies, 4, 4)
+        # Missing or oversubscribed thread budget on cubeless N-ply fails closed.
+        for bad_threads in (None, 0, 8):
+            with self.subTest(bad_threads=bad_threads), self.assertRaises(PROBE.ProbeError):
+                run_case(2, 4, bad_threads)
+
 class ProtocolTests(unittest.TestCase):
     def run_protocol(self, data):
         source = PATH.read_text() + """
@@ -900,6 +973,52 @@ class OpponentPolicyTests(unittest.TestCase):
         runtime.analyzer.checker_play.assert_called_once_with(before, 3, 1, beaver=False, **context)
         policy.select_checker_move.assert_not_called()
         policy.cube_decision.assert_called_once_with(before, beaver=False, **context)
+
+    def test_legacy_31x_full_strength_checker_short_circuits_before_constructing_policy(self):
+        spec = importlib.util.spec_from_file_location('sage_worker', PATH)
+        worker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(worker)
+        runtime = worker.Runtime.__new__(worker.Runtime)
+        runtime.verify = lambda: None
+        runtime.batch_active = False
+        runtime.cubeless = False
+        runtime.profile = {'plies': 3, 'threads': 2}
+        runtime.opponent_policies = {}
+        runtime.policy_analyzers = {}
+        before = [0] * 26
+        before[6], before[19] = 2, -2
+        selected = [0] * 26
+        selected[2], selected[19] = 2, -2
+        context = dict(cube_value=1, cube_owner='centered', away1=5, away2=3,
+                       is_crawford=False, jacoby=False)
+        request = dict(board=before, context=context, difficulty='full_strength', seed=61)
+        runtime.analyzer = SimpleNamespace(checker_play=Mock(return_value=SimpleNamespace(
+            moves=[SimpleNamespace(board=selected)]
+        )))
+        cube_policy = SimpleNamespace(
+            cube_decision=Mock(return_value=SimpleNamespace(should_double=False, should_take=True))
+        )
+        policy_ctor = Mock(return_value=cube_policy)
+        runtime.sage = SimpleNamespace(DifficultyPolicy=policy_ctor)
+
+        # 3.1.2 Full Strength 3-ply checker turn must never construct DifficultyPolicy.
+        runtime.release = PROBE.RELEASES['3.1.2']
+        checker, _ = runtime.dispatch(dict(request, operation='opponent_checker', dice=[3, 1]))
+        self.assertEqual(checker, selected)
+        policy_ctor.assert_not_called()
+        runtime.analyzer.checker_play.assert_called_once_with(before, 3, 1, beaver=False, **context)
+
+        # Cube decisions on 3.1.2 still construct DifficultyPolicy.
+        cube, _ = runtime.dispatch(dict(request, operation='opponent_cube'))
+        self.assertEqual(cube, {'should_double': False, 'should_take': True})
+        policy_ctor.assert_called_once_with('full_strength', seed=61, parallel_threads=2)
+
+        # 3.0.0 without presets still fails closed on opponent_checker.
+        runtime.release = PROBE.RELEASES['3.0.0']
+        policy_ctor.reset_mock()
+        with self.assertRaisesRegex(ValueError, '3.1.0 or newer'):
+            runtime.dispatch(dict(request, operation='opponent_checker', dice=[3, 1]))
+        policy_ctor.assert_not_called()
 
 
 if __name__ == '__main__':

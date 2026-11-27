@@ -3,7 +3,7 @@
 use super::{GameAnalysisStatistics, PlayerErrorBreakdown};
 use crate::json_errors::{Json, Path, Query};
 use crate::{
-    analysis_catalog::{SelectedAnalysis, resolve_selection},
+    analysis_catalog::{SelectedAnalysis, resolve_selection_on},
     api::{ApiError, ApiResult, AppState, ErrorBody},
     model::{
         MatchAnalysisSummary, MatchGame, PerformanceRatingSummary, PlayerAnalysisSummary, Position,
@@ -129,25 +129,25 @@ struct ImportedStatsInputs {
     explicit_cubes: Vec<(i32, i64)>,
 }
 
-async fn load_imported_inputs(
-    pool: &sqlx::PgPool,
+async fn load_imported_inputs_on(
+    state: &AppState,
+    tx: &mut sqlx::PgConnection,
     id: Uuid,
     key: &str,
     game_no: Option<i32>,
 ) -> ApiResult<ImportedStatsInputs> {
-    // Build the lazy catalogs first, then read every statistics input from one
-    // repeatable-read snapshot so a source replacement cannot combine old
-    // decisions with new coverage.
-    crate::review_decisions::prepare_review(pool, id).await?;
-    crate::store::game_catalog(pool, id)
-        .await?
-        .ok_or_else(ApiError::missing)?;
-    let mut tx = crate::database_pool::begin_read_snapshot(pool).await?;
-    let rows = crate::review_decisions::load_all_review_on(&mut tx, id, key, game_no, None).await?;
-    let source_games = crate::store::match_games_on(&mut tx, id).await?;
+    let source_games = crate::store::match_games_on(&mut *tx, id).await?;
+    if source_games.is_empty() {
+        return Err(crate::browse_indexes::preparing(
+            state,
+            "The match game catalog",
+        ));
+    }
     if game_no.is_some_and(|n| !source_games.iter().any(|g| g.game_no == n)) {
         return Err(ApiError::missing());
     }
+    let rows =
+        crate::review_decisions::load_all_review_on(&mut *tx, id, key, game_no, None).await?;
     let source_games: Vec<_> = source_games
         .into_iter()
         .filter(|g| game_no.is_none_or(|n| n == g.game_no))
@@ -173,7 +173,6 @@ async fn load_imported_inputs(
     .fetch_all(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?;
-    tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(ImportedStatsInputs {
         rows,
         source_games,
@@ -315,7 +314,7 @@ fn summarize_imported_entry(
     })
 }
 
-#[utoipa::path(get,path="/api/matches/{id}/analysis-statistics",params(("id"=Uuid,Path),CatalogStatisticsQuery),responses((status=200,body=MatchAnalysisStatistics),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
+#[utoipa::path(get,path="/api/matches/{id}/analysis-statistics",params(("id"=Uuid,Path),CatalogStatisticsQuery),responses((status=200,body=MatchAnalysisStatistics),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Match analysis")]
 async fn statistics(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -324,25 +323,36 @@ async fn statistics(
     if query.game_no.is_some_and(|g| g <= 0) {
         return Err(ApiError::invalid("game_no must be positive"));
     }
-    let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM matches WHERE id=$1)")
-        .bind(id)
-        .fetch_one(&state.pool)
-        .await
-        .map_err(anyhow::Error::from)?;
-    if !exists {
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
+    let flags: Option<(bool, bool)> =
+        sqlx::query_as("SELECT moves_cataloged,imported_analysis_loaded FROM matches WHERE id=$1")
+            .bind(id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+    let Some((moves_cataloged, imported_loaded)) = flags else {
         return Err(ApiError::missing());
+    };
+    crate::play::require_review_available_on(&mut *tx, id).await?;
+    if !imported_loaded {
+        return Err(crate::browse_indexes::preparing(
+            &state,
+            "Imported analysis",
+        ));
     }
-    let selected = resolve_selection(&state.pool, id, query.analysis_id.as_deref()).await?;
+    let selected = resolve_selection_on(&mut tx, id, query.analysis_id.as_deref()).await?;
     let analysis_id = selected.as_ref().map(|s| s.id());
     if let Some(SelectedAnalysis::Job(job)) = &selected
         && job.kind == "match"
     {
+        tx.commit().await.map_err(anyhow::Error::from)?;
         return Ok(Json(
             summarize_native_entry(&state, job.id, analysis_id, query.game_no).await?,
         ));
     }
     // A single-position result has no match statistics, even if it contains a loss.
     if !matches!(selected, Some(SelectedAnalysis::Imported { .. })) {
+        tx.commit().await.map_err(anyhow::Error::from)?;
         return Ok(Json(MatchAnalysisStatistics {
             needs_cube_rule_reanalysis: false,
             analysis_id,
@@ -351,8 +361,15 @@ async fn statistics(
             error_breakdown: None,
         }));
     }
+    if !moves_cataloged {
+        return Err(crate::browse_indexes::preparing(
+            &state,
+            "The match analysis catalog",
+        ));
+    }
     let key = analysis_id.as_deref().ok_or_else(ApiError::missing)?;
-    let inputs = load_imported_inputs(&state.pool, id, key, query.game_no).await?;
+    let inputs = load_imported_inputs_on(&state, &mut tx, id, key, query.game_no).await?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
     let data = tokio::task::spawn_blocking(move || summarize_imported_entry(analysis_id, inputs))
         .await
         .map_err(anyhow::Error::from)??;

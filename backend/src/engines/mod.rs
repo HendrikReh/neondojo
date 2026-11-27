@@ -7,12 +7,13 @@ mod provider;
 pub(crate) mod replay;
 mod sage;
 
+pub(crate) use context::{ensure_supported_away, validate_match_id_away};
 pub use dispatch::{AnalysisEngine, EngineCost};
 pub(crate) use dispatch::{forced_pass, validate_evaluation};
 pub(crate) use game::GAME_TIMEOUT;
 #[cfg(all(test, unix))]
 pub(crate) use process::tests::{hold_general_worker, unstartable_engine};
-pub(crate) use process::{DuelWorkers, VerifiedBatch};
+pub(crate) use process::{DuelWorkers, VerifiedBatch, shutdown_workers};
 pub(crate) use provider::{EngineId, display_name};
 use sage::{CheckerScope, CubeScope, RELEASES_JSON, cube_request};
 pub use sage::{

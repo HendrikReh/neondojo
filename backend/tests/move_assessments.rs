@@ -326,6 +326,14 @@ async fn legacy_source_catalog_is_loaded_without_changing_original_or_manual_met
         pool.clone(),
         Engine::new("gnubg".into()),
     ));
+    let (status, preparing) = get(&app, &uri(id, 1, None)).await;
+    assert_eq!(status, 503, "{preparing}");
+    assert_eq!(preparing["code"], "index_preparing");
+    let mut cursor = neondojo::browse_indexes::BackfillCursor::default();
+    while neondojo::browse_indexes::backfill_batch(&pool, &mut cursor)
+        .await
+        .unwrap_or_else(|e| panic!("backfill failed: {e:?}"))
+    {}
     let (status, data) = get(&app, &uri(id, 1, None)).await;
     assert_eq!(status, 200, "{data}");
     assert!(

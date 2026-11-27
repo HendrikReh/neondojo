@@ -176,6 +176,28 @@ async fn legacy_xg_recovers_analysis_from_exact_original_and_keeps_source_move_m
         .await
         .unwrap();
     sqlx::query("UPDATE matches SET imported_analysis_loaded=false,sgf=replace(replace(sgf,'XGA[','IGNOREDM['),'XGC[','IGNOREDC[') WHERE id=$1").bind(id).execute(&pool).await.unwrap();
+    // Match-inspection GETs are strictly read-only and signal background backfill on legacy rows.
+    let (status, preparing) = call(
+        &pool,
+        "GET",
+        &format!("/api/matches/{id}/imported-analysis"),
+        None,
+    )
+    .await;
+    assert_eq!(status, 503, "{preparing}");
+    assert_eq!(preparing["code"], "index_preparing");
+    let loaded: bool =
+        sqlx::query_scalar("SELECT imported_analysis_loaded FROM matches WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert!(!loaded, "GET must not mutate imported_analysis_loaded");
+    let mut cursor = neondojo::browse_indexes::BackfillCursor::default();
+    while neondojo::browse_indexes::backfill_batch(&pool, &mut cursor)
+        .await
+        .unwrap_or_else(|e| panic!("backfill failed: {e:?}"))
+    {}
     let (status, summary) = call(
         &pool,
         "GET",

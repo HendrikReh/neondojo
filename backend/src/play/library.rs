@@ -169,10 +169,11 @@ pub(super) async fn sync(
     // The archived source needs no database state. Parse it off the async
     // worker while the caller's transaction is open.
     let source = source(session, sgf);
-    let (sgf, imported, hash) = tokio::task::spawn_blocking(move || {
-        let (sgf, imported) = normalize_and_replay_native(source, false, None)?;
+    let (sgf, imported, source_moves, hash) = tokio::task::spawn_blocking(move || {
+        let mut source_moves = Vec::new();
+        let (sgf, imported) = normalize_and_replay_native(source, false, Some(&mut source_moves))?;
         let hash = format!("{:x}", Sha256::digest(sgf.as_bytes()));
-        anyhow::Ok((sgf, imported, hash))
+        anyhow::Ok((sgf, imported, source_moves, hash))
     })
     .await??;
     let id = match target {
@@ -258,8 +259,9 @@ pub(super) async fn sync(
         sqlx::query("INSERT INTO match_games(match_uuid,game_no,position_count,white_score,black_score,crawford,cube_enabled) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(match_uuid,game_no) DO UPDATE SET position_count=EXCLUDED.position_count,white_score=EXCLUDED.white_score,black_score=EXCLUDED.black_score,crawford=EXCLUDED.crawford,cube_enabled=EXCLUDED.cube_enabled")
             .bind(id).bind(game.game_no).bind(game.position_count).bind(game.white_score).bind(game.black_score).bind(game.crawford).bind(game.cube_enabled).execute(&mut **tx).await?;
     }
-    sqlx::query("UPDATE matches SET sha256=$2,original=$3,sgf=$4,white=$5,black=$6,position_count=$7,metadata_version=metadata_version+CASE WHEN result_state IS DISTINCT FROM $8 OR white_score IS DISTINCT FROM $9 OR black_score IS DISTINCT FROM $10 THEN 1 ELSE 0 END,result_state=$8,white_score=$9,black_score=$10,moves_cataloged=CASE WHEN sgf<>$4 THEN false ELSE moves_cataloged END,source_revision=source_revision+CASE WHEN sgf<>$4 THEN 1 ELSE 0 END WHERE id=$1")
+    sqlx::query("UPDATE matches SET sha256=$2,original=$3,sgf=$4,white=$5,black=$6,position_count=$7,metadata_version=metadata_version+CASE WHEN result_state IS DISTINCT FROM $8 OR white_score IS DISTINCT FROM $9 OR black_score IS DISTINCT FROM $10 THEN 1 ELSE 0 END,result_state=$8,white_score=$9,black_score=$10,source_revision=source_revision+CASE WHEN sgf<>$4 THEN 1 ELSE 0 END WHERE id=$1")
         .bind(id).bind(hash).bind(sgf.as_bytes()).bind(&sgf).bind(&imported.players[0]).bind(&imported.players[1]).bind(imported.positions.len() as i32).bind(result).bind(session.scores[0]).bind(session.scores[1]).execute(&mut **tx).await?;
+    crate::move_catalog::insert_moves(tx, id, &source_moves).await?;
     if matches!(target, ArchiveTarget::NewIn(_)) {
         sqlx::query(
             "UPDATE play_sessions SET library_match_id=$2,library_archived=true WHERE id=$1",

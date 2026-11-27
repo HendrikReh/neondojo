@@ -69,6 +69,19 @@ pub(super) async fn create_match_analysis(
         ));
     }
     let games = validate_game(&state, id, request.game_no).await?;
+    if snapshot.provider() == Some(crate::engines::EngineId::NeonGammon) && source.match_length > 0
+    {
+        for game in games
+            .iter()
+            .filter(|game| request.game_no.is_none_or(|n| game.game_no == n))
+        {
+            crate::engines::ensure_supported_away(
+                source.match_length - game.white_score,
+                source.match_length - game.black_score,
+            )
+            .map_err(|e| ApiError::invalid(format!("{e:#}")))?;
+        }
+    }
     let total = if request.game_no.is_some() {
         1
     } else {

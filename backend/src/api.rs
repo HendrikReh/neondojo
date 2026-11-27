@@ -47,6 +47,7 @@ pub struct AppState {
     pub(crate) job_heartbeat: Duration,
     pub(crate) running_jobs: Arc<crate::jobs::RunningJobs>,
     pub(crate) openai: Arc<crate::match_assessment::OpenAi>,
+    pub(crate) review_hit_queue: Arc<crate::review_decisions::HitRefreshQueue>,
 }
 
 impl AppState {
@@ -70,6 +71,7 @@ impl AppState {
             job_heartbeat: crate::jobs::DEFAULT_HEARTBEAT,
             running_jobs: Arc::default(),
             openai: Arc::new(crate::match_assessment::OpenAi::from_env()),
+            review_hit_queue: Arc::default(),
         }
     }
 

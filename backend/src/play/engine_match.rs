@@ -131,11 +131,30 @@ fn checker_turns(history: &[super::PlayHistory], side: usize) -> i32 {
     i32::try_from(count).unwrap_or(i32::MAX)
 }
 
+#[cfg(test)]
 pub(crate) async fn play(
     rules: &Engine,
     bots: [&AnalysisEngine; 2],
     depths: [i32; 2],
     unit: DuelUnit,
+    dice: impl Fn(i32) -> Result<GameDice>,
+) -> Result<FinishedMatch> {
+    let workers = DuelWorkers::new(bots.map(|bot| match bot {
+        AnalysisEngine::OpenSage(sage) => Some(sage.snapshot()),
+        AnalysisEngine::Gnubg(_) => None,
+    }));
+    let finished = play_with_workers(rules, bots, depths, unit, &workers, false, dice).await;
+    let shutdown = workers.shutdown().await;
+    finished.and_then(|match_result| shutdown.map(|()| match_result))
+}
+
+pub(crate) async fn play_with_workers(
+    rules: &Engine,
+    bots: [&AnalysisEngine; 2],
+    depths: [i32; 2],
+    unit: DuelUnit,
+    workers: &DuelWorkers<'_>,
+    swapped: bool,
     dice: impl Fn(i32) -> Result<GameDice>,
 ) -> Result<FinishedMatch> {
     let (length, last_game, cubeless) = match unit {
@@ -153,10 +172,6 @@ pub(crate) async fn play(
     let mut saved: Option<(super::NativeSnapshot, String)> = None;
     let mut checker_evaluations = Vec::new();
     let mut meter = CostMeter::new();
-    let workers = DuelWorkers::new(bots.map(|bot| match bot {
-        AnalysisEngine::OpenSage(sage) => Some(sage.snapshot()),
-        AnalysisEngine::Gnubg(_) => None,
-    }));
     for game in 1..=last_game {
         let schedule = dice(game)?;
         let (snapshot, sgf) = crate::engine::with_shared_access(async {
@@ -174,7 +189,7 @@ pub(crate) async fn play(
                 match_bots,
                 cubeless,
             };
-            let mut batches = workers.begin_game().await?;
+            let mut batches = workers.begin_game_sides(swapped).await?;
             let process = RulesProcess::start_with_dice(
                 rules,
                 saved.as_ref().map(|(_, sgf)| sgf.as_str()),

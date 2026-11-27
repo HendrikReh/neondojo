@@ -48,7 +48,8 @@ pub(crate) fn validate_evaluation(equity: f64, probabilities: &[f64]) -> Result<
 /// Whether the player on roll cannot play a checker with `dice`, decided by
 /// the rule validation that also checks recorded moves.
 pub(crate) fn forced_pass(position_id: &str, match_id: &str, dice: [i32; 2]) -> Result<bool> {
-    let player = context::Context::decode(match_id)?.player;
+    let id = crate::backgammon::ids::MatchId::decode(match_id).context("Invalid GNUbg Match ID")?;
+    let player = id.get(crate::backgammon::ids::Field::ON_ROLL);
     let board: [i32; 26] = crate::backgammon::ids::decode_board(position_id, match_id)?
         .try_into()
         .ok()
@@ -167,6 +168,7 @@ impl AnalysisEngine {
                     .await
             }
             Self::OpenSage(engine) => {
+                engine.check_depth(plies)?;
                 let cube = engine.cube(position_id, match_id).await?;
                 let name = engine
                     .saved_version()
@@ -304,12 +306,45 @@ impl From<Engine> for AnalysisEngine {
 
 #[cfg(test)]
 mod tests {
-    use super::forced_pass;
+    use super::{AnalysisEngine, SageEngine, forced_pass};
+    use crate::engines::SageSnapshot;
 
     #[test]
     fn forced_passes_follow_the_rules() {
         assert!(!forced_pass("4HPwATDgc/ABMA", "cInlAAAAAAAE", [3, 1]).unwrap());
         assert!(forced_pass("Y54pATDg28EBYA", "cAlnAQAAAAAE", [6, 6]).unwrap());
         assert!(!forced_pass("Y54pATDg28EBYA", "cAlnAQAAAAAE", [2, 3]).unwrap());
+        // GNUbg supports matches above 25-away, so forced-pass detection must not enforce NeonGammon's 25-away cap.
+        let long_mid = crate::backgammon::ids::match_id(31, [0, 0], 1, 3, false, false, 0, [6, 6]);
+        assert!(forced_pass("Y54pATDg28EBYA", &long_mid, [6, 6]).unwrap());
+    }
+
+    #[tokio::test]
+    async fn cube_equities_rejects_mismatched_neongammon_depth_before_invoking_worker() {
+        let engine = AnalysisEngine::OpenSage(
+            SageEngine::new(SageSnapshot {
+                python: "/missing/python".into(),
+                package_version: "3.2.2".into(),
+                artifact_fingerprint: "a".repeat(64),
+                threads: 2,
+                plies: 2,
+                adapter_version: 1,
+                one_ply_verified: true,
+                cubeless: false,
+            })
+            .unwrap(),
+        );
+        let Err(error) = engine
+            .cube_equities("4HPwATDgc/ABMA", "cAkHAAAAAAAE", 3)
+            .await
+        else {
+            panic!("mismatched NeonGammon depth must fail before invoking worker");
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("Requested depth differs from immutable NeonGammon profile"),
+            "{error:#}"
+        );
     }
 }

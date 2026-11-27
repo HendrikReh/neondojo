@@ -102,6 +102,7 @@ pub(crate) struct MatchImport<'a> {
     imported: &'a ImportedMatch,
     hash: String,
     metadata: crate::databases::SourceMetadata,
+    source_moves: Vec<crate::import::sgf::SourceMove>,
     source_analysis: Vec<crate::imported_analysis::ImportedAnalysisData>,
     warnings: Vec<ImportWarning>,
 }
@@ -125,8 +126,8 @@ impl<'a> MatchImport<'a> {
         let hash = format!("{:x}", Sha256::digest(bytes));
         let metadata = crate::databases::source_metadata(sgf);
         let analysis_source = sgf.to_owned();
-        let source_analysis = tokio::task::spawn_blocking(move || {
-            crate::imported_analysis::extract(&analysis_source)
+        let (source_moves, source_analysis) = tokio::task::spawn_blocking(move || {
+            crate::imported_analysis::extract_with_moves(&analysis_source)
         })
         .await??;
         Ok(Self {
@@ -137,6 +138,7 @@ impl<'a> MatchImport<'a> {
             imported,
             hash,
             metadata,
+            source_moves,
             source_analysis,
             warnings: Vec::new(),
         })
@@ -161,6 +163,7 @@ pub(crate) async fn insert_match_import(
         imported,
         hash,
         metadata,
+        source_moves,
         source_analysis,
         warnings,
     } = prepared;
@@ -212,6 +215,7 @@ pub(crate) async fn insert_match_import(
         query.build().execute(&mut **tx).await?;
     }
     insert_games(tx, id, &imported.games).await?;
+    crate::move_catalog::insert_moves(tx, id, &source_moves).await?;
     crate::imported_analysis::insert_records(tx, id, &source_analysis).await?;
     let summary = sqlx::query_as::<_, MatchSummary>(&format!("{MATCH_SUMMARY} WHERE id=$1"))
         .bind(id)

@@ -5,7 +5,7 @@ use crate::{
     engine::Analysis,
     match_analysis::Decision,
     model::{MoveSeverity, Position},
-    review_decisions::load_all_review,
+    review_decisions::{load_all_review_on, require_cataloged_on},
 };
 use axum::{Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
@@ -49,7 +49,7 @@ pub struct GameMoveAssessments {
 pub fn routes() -> Router<AppState> {
     Router::new().route("/api/matches/{id}/move-assessments", get(assessments))
 }
-#[utoipa::path(get,path="/api/matches/{id}/move-assessments",params(("id"=Uuid,Path),MoveAssessmentQuery),responses((status=200,body=GameMoveAssessments),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
+#[utoipa::path(get,path="/api/matches/{id}/move-assessments",params(("id"=Uuid,Path),MoveAssessmentQuery),responses((status=200,body=GameMoveAssessments),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Match analysis")]
 async fn assessments(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
@@ -68,8 +68,10 @@ async fn assessments(
             "analysis_id and job_id must identify the same result",
         ));
     }
-    let selected = crate::analysis_catalog::resolve_selection(
-        &state.pool,
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
+    require_cataloged_on(&state, &mut tx, id).await?;
+    let selected = crate::analysis_catalog::resolve_selection_on(
+        &mut tx,
         id,
         query.analysis_id.as_deref().or(legacy.as_deref()),
     )
@@ -83,8 +85,14 @@ async fn assessments(
     let analysis_id = selected.as_ref().map(|s| s.id());
     let mut items = Vec::new();
     if let Some(ref key) = analysis_id {
-        let rows =
-            load_all_review(&state, id, key, Some(query.game_no), Some("checker".into())).await?;
+        let rows = load_all_review_on(
+            &mut tx,
+            id,
+            key,
+            Some(query.game_no),
+            Some("checker".into()),
+        )
+        .await?;
         items.extend(rows.into_iter().filter_map(|r| {
             if !matches!(
                 r.decision.evaluation_status.as_str(),
@@ -111,13 +119,14 @@ async fn assessments(
         )
         .bind(id)
         .bind(query.game_no)
-        .fetch_one(&state.pool)
+        .fetch_one(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?;
         if !exists {
             return Err(ApiError::missing());
         }
     }
+    tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Json(GameMoveAssessments {
         match_id: id,
         game_no: query.game_no,
