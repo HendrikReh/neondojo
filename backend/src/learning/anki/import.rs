@@ -1,5 +1,5 @@
 //! Import the structured decision model emitted by NeonDojo APKG exports.
-use super::*;
+use super::super::*;
 use crate::json_errors::Multipart;
 use std::io::{Cursor, Read, Write};
 
@@ -8,13 +8,13 @@ static IMPORTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
 
 #[derive(ToSchema)]
 #[allow(dead_code)]
-pub(super) struct AnkiUpload {
+pub(in crate::learning) struct AnkiUpload {
     #[schema(value_type=String, format=Binary)]
     file: String,
 }
 
 #[utoipa::path(post,path="/api/decks/{id}/import.apkg",params(("id"=Uuid,Path)),request_body(content=AnkiUpload,content_type="multipart/form-data"),responses((status=200,body=AddCardsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
-pub(super) async fn import(
+pub(in crate::learning) async fn import(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Multipart(mut multipart): Multipart,

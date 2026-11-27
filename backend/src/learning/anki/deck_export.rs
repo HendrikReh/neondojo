@@ -1,6 +1,6 @@
-use super::*;
+use super::{super::*, apkg};
 
-pub(super) async fn build_deck_package(
+pub(in crate::learning) async fn build_deck_package(
     state: &AppState,
     id: Uuid,
     query: ExportQuery,

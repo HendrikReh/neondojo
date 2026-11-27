@@ -1,5 +1,5 @@
 //! User-initiated transfer to the local AnkiConnect instance.
-use super::*;
+use super::{super::*, deck_export::build_deck_package};
 use anyhow::{Context, ensure};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -116,7 +116,7 @@ fn sanitize(error: &str, key: Option<&str>) -> String {
 }
 
 #[utoipa::path(post,path="/api/decks/{id}/send-to-anki",params(("id"=Uuid,Path)),request_body=ExportQuery,responses((status=204),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=502,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Learning")]
-pub(super) async fn send(
+pub(in crate::learning) async fn send(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
     Json(query): Json<ExportQuery>,

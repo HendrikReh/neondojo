@@ -1,17 +1,11 @@
 //! Shared cards power native Anki exports and the integrated FSRS trainer.
-mod anki_auto_sync;
-mod anki_connect;
-pub(crate) use anki_auto_sync::AnkiConnection;
-pub use anki_auto_sync::worker as anki_sync_worker;
-pub mod anki_flashcards;
-mod anki_import;
-mod anki_review_sync;
-mod apkg;
+mod anki;
+pub(crate) use anki::auto_sync::AnkiConnection;
+pub use anki::{auto_sync::worker as anki_sync_worker, flashcards as anki_flashcards};
 mod attempts;
 mod card_writes;
 mod content;
 mod daily;
-mod deck_export;
 mod decks;
 mod exercises;
 mod management;
@@ -54,7 +48,6 @@ use uuid::Uuid;
 
 use attempts::*;
 use card_writes::*;
-use deck_export::*;
 use decks::*;
 pub use routes::{LearningDoc, daily_doc, routes};
 
