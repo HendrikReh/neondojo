@@ -1,5 +1,6 @@
 import { openMatchAnalysisOptions } from './analysis-controls';
 import { expect, test, type Locator, type Page } from './test';
+import { uiThemes } from '../src/settings/appearance/ui-appearance';
 
 test.use({ viewport: { width: 1800, height: 1169 }, actionTimeout: 10000 });
 async function fixture(page: Page, theme = 'graphite', mode = 'light') {
@@ -93,7 +94,12 @@ async function activeText(item: Locator, color: string) {
   await expect(item).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(item).toHaveCSS('border-bottom-color', color);
 }
-for (const theme of ['graphite', 'club', 'paper']) {
+
+async function expectHiddenContentOutOfLayout(page: Page) {
+  await expect(page.locator('.app-shell [hidden]:visible')).toHaveCount(0);
+}
+
+for (const theme of uiThemes) {
   for (const mode of ['light', 'dark']) {
     test(`Benchmark mode buttons use the shared navigation in ${theme} ${mode}`, async ({
       page,
@@ -126,16 +132,14 @@ for (const theme of ['graphite', 'club', 'paper']) {
   }
 }
 
-// Themes only change colour tokens; ui-themes.spec.ts checks the literal
-// palettes. One light and one dark palette cover the underline rules.
-for (const [theme, mode] of [
-  ['graphite', 'light'],
-  ['club', 'dark'],
-] as const)
+for (const [theme, mode] of uiThemes.flatMap((theme) =>
+  (['light', 'dark'] as const).map((mode) => [theme, mode] as const),
+))
   test(`${theme} ${mode}: navigation uses text and active underlines throughout the workspaces`, async ({
     page,
   }) => {
     await fixture(page, theme, mode);
+    await expectHiddenContentOutOfLayout(page);
     const color = await accent(page);
     await activeText(page.locator('.app-tabs [aria-selected="true"]'), color);
     await activeText(
@@ -186,6 +190,7 @@ for (const [theme, mode] of [
     });
     await expect(action).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
     await page.getByRole('tab', { name: 'Notes', exact: true }).click();
+    await expectHiddenContentOutOfLayout(page);
     await activeText(
       page.locator('.notes-scope-tabs [aria-selected="true"]'),
       color,
@@ -210,6 +215,7 @@ for (const [theme, mode] of [
     await page
       .getByRole('tab', { name: 'Match database', exact: true })
       .click();
+    await expectHiddenContentOutOfLayout(page);
     await activeText(
       page.locator('.database-collections [aria-pressed="true"]'),
       color,
@@ -232,6 +238,7 @@ for (const [theme, mode] of [
     );
     for (const name of ['Positions', 'Study']) {
       await page.getByRole('tab', { name, exact: true }).click();
+      await expectHiddenContentOutOfLayout(page);
       await activeText(page.locator('.app-tabs [aria-selected="true"]'), color);
     }
   });

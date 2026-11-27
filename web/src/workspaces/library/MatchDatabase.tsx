@@ -682,7 +682,7 @@ export default function MatchDatabase({
                 busy={loading}
                 onPageChange={setPage}
               />
-              <p className="fineprint library-pr-help">{l('prHelp')}</p>
+              <p className="fineprint">{l('prHelp')}</p>
             </div>
           </div>
         </div>

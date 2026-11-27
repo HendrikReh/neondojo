@@ -409,6 +409,8 @@ test('keeps selection actions visible with wide saved columns', async ({
   const white = table.locator('th[data-column="white"]');
   await white.getByRole('separator').press('End');
   const wrapper = page.locator('.database-table-wrap');
+  await expect(wrapper).toHaveCSS('overflow-x', 'auto');
+  await expect(wrapper).toHaveCSS('overflow-y', 'auto');
   await wrapper.evaluate((element) => (element.scrollLeft = 0));
   const row = table.locator('tbody tr').first();
   const firstRowTop = (await row.boundingBox())?.y;
