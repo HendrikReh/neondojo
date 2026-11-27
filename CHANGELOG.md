@@ -6,7 +6,9 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
-- Pin the verified NeonGammon 4.0.0 Apple Silicon wheel. Existing jobs and sessions pinned to 3.2.2 keep their saved interpreter and fingerprint. [Installation and verification](docs/open-sage-local.md#neongammon-400--november-27-2026)
+## [1.5.1] - 2026-11-27
+
+- Pin the official NeonGammon 4.0.0 wheel for Apple Silicon. The engine fingerprint stays consistent across virtualenv paths. Existing 3.2.2 jobs and sessions keep their saved interpreter and fingerprint. [Installation and verification](docs/open-sage-local.md#neongammon-400--november-27-2026)
 
 ## [1.5.0] - 2026-11-27
 
@@ -343,7 +345,8 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/neondojo/pull/4) · [#5](https://github.com/HendrikReh/neondojo/pull/5) · [#6](https://github.com/HendrikReh/neondojo/pull/6) · [#7](https://github.com/HendrikReh/neondojo/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/HendrikReh/neondojo/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/HendrikReh/neondojo/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/HendrikReh/neondojo/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/HendrikReh/neondojo/compare/v1.4.0...v1.4.1
