@@ -54,5 +54,14 @@
     "fingerprint": "d531c887a518ff89fefb05be621e3eb268f4510cb013852f5950b950aebc4682",
     "revision": "81aec61a20131185269cdb2d2deedd243596b007",
     "deep_checker_batch": true
+  },
+  "4.0.0": {
+    "presets": true,
+    "checker_batch": true,
+    "shared_models": true,
+    "fingerprint": "ed317baac01ab5920e45fdb7b46e7d504a3219d05a2a7f0214500ff06ab7196a",
+    "revision": "b59fd863675613881183b9923635392060ddd880",
+    "deep_checker_batch": true,
+    "console_script": "neongammon"
   }
 }

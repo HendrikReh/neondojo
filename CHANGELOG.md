@@ -6,6 +6,8 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
+- Pin the verified NeonGammon 4.0.0 Apple Silicon wheel. Existing jobs and sessions pinned to 3.2.2 keep their saved interpreter and fingerprint. [Installation and verification](docs/open-sage-local.md#neongammon-400--november-27-2026)
+
 ## [1.5.0] - 2026-11-27
 
 NeonDojo 1.5.0 adds independent board artwork controls and ships with verified support for NeonGammon 3.2.2. Migration `0097_retained_checker_equity_kind` runs at startup and repairs labels on saved cubeless checker analyses. Backups from 1.4.2 remain restorable.
