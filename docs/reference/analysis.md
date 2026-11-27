@@ -186,9 +186,9 @@ statistics. Switching tabs keeps the selected game and move.
 
 Drag the divider beside the board to resize it in **Checker**, **Statistics**,
 **Cube**, **Notes**, or **Study cards**. The divider also accepts Left/Right
-arrows, with Shift for larger steps. Double-click the divider or press End
-to set the board to its maximum width for the current window. Home sets the
-minimum width and Enter restores the default width. The browser stores separate widths
+arrows, with Shift for larger steps. End maximizes the board for the current
+window, and Home sets its minimum width. Double-click the divider or press Enter
+to restore the default width. The browser stores separate widths
 for **Checker**, **Cube**, **Statistics**, **Notes**, and **Study cards**.
 On wide screens, the move history has room for more rows. **Statistics** uses
 larger table text and side-by-side player summaries when there is room.

@@ -243,7 +243,7 @@ export function useAnalysisBoardResize(
       onLostPointerCapture={cancel}
       onDoubleClick={() => {
         cancel();
-        setPreferred(geometry.max);
+        setPreferred(null);
       }}
       onKeyDown={(event) => {
         if (
