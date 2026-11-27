@@ -18,7 +18,13 @@
 | [`web/src/`](../../web/src/)                                                                                             | React client, SVG board, and generated API types                    |
 | [`web/e2e/`](../../web/e2e/), [`web/playwright.setup.ts`](../../web/playwright.setup.ts) | Browser workflows; one isolated PostgreSQL database, backend and Vite server per Playwright worker ([`web/e2e/stack.ts`](../../web/e2e/stack.ts)) |
 
-The Rust backend runs independently of the browser. A future Tauri shell could start it as a sidecar and reuse the HTTP API.
+The Rust backend runs independently of the browser. The CLI starts it through
+[`neondojo::runtime::start`](../../backend/src/runtime.rs). A host embedding the
+runtime supplies database connection options and can bind to port zero, then
+use `RunningServer::local_addr()` to find the HTTP endpoint. Calling
+`RunningServer::shutdown().await` drains HTTP requests and background workers.
+Each running server owns its opening-book caches and its Study, Play, and Anki
+operation limits.
 
 ### Engine providers
 
