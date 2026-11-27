@@ -38,9 +38,9 @@ Action buttons, field controls, bookmarks, sortable table headers, selected rows
 error badges, candidate previews and artwork/theme tiles retain their existing
 visual roles. This keeps navigation, actions and content selection recognizable.
 
-`web/e2e/text-navigation.spec.ts` verifies the active and hover states and the
+`web/e2e/layout/text-navigation.spec.ts` verifies the active and hover states and the
 spacing between labels in one light (`graphite` light) and one dark (`club`
-dark) palette, while `web/e2e/ui-themes.spec.ts` verifies all six light/dark
+dark) palette, while `web/e2e/settings/ui-themes.spec.ts` verifies all six light/dark
 theme palettes. It also checks the header order with mouse and keyboard,
 keyboard focus in the analysis and notes tabs, and the absence of horizontal
 overflow at the desktop viewports 1800×1169, 2560×1440 and 3840×2160. Related

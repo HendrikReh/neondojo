@@ -1,0 +1,366 @@
+import { gotoWorkspace, openWorkspace, seedLocale } from '../helpers/navigation';
+import { fulfillJson, mockEngineCatalog } from '../helpers/api-fixtures';
+import { test, expect } from '../helpers/test';
+import { historyFixture } from '../helpers/play-history-review-helpers';
+import { botDice, playMenuItem, resignGame } from '../helpers/play-board-actions';
+import { eitherOrder } from '../helpers/play-turn-fixtures';
+import { nativeSteps } from '../../src/shared/board/play-sound-events';
+
+test('the action panel confirms a turn by button and by Enter', async ({
+  page,
+}) => {
+  const { writes, point } = await historyFixture(page);
+  const toolbar = page.getByTestId('play-board-toolbar');
+  const confirm = toolbar.getByRole('button', {
+    name: 'Confirm turn',
+    exact: true,
+  });
+  const undo = toolbar.getByRole('button', { name: 'Undo step', exact: true });
+  await expect(
+    toolbar.getByRole('heading', { name: 'Move your checkers' }),
+  ).toBeVisible();
+  await expect(confirm).toBeDisabled();
+  await expect(confirm).toHaveAttribute('aria-keyshortcuts', 'Enter');
+  // The fixture's roll leaves exactly one legal move.
+  await expect(toolbar.locator('.play-turn-help')).toHaveText(
+    'Only one legal move with this roll: 13/10 6/5. Every other play is blocked or would leave a playable die unused. The rules require playing as many dice as possible, and the higher die if only one can be played.',
+  );
+  await page.keyboard.press('Enter');
+  expect(writes).toEqual([]);
+  await point(13).click();
+  await expect(undo).toBeEnabled();
+  await page.keyboard.press('z');
+  await expect(undo).toBeDisabled();
+  await expect(page.locator('.play-selected-steps')).toHaveCount(0);
+  await point(13).click();
+  await point(6).click();
+  await expect(confirm).toBeEnabled();
+  await expect(toolbar.locator('.play-turn-help')).toHaveText(
+    'Click the dice pair to confirm your turn.',
+  );
+  await page.locator('.play-match-format').click();
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(() => writes)
+    .toEqual([{ version: 7, action: 'move', move: 0 }]);
+});
+
+test('the action panel explains only a forced move, not a free choice', async ({
+  page,
+}) => {
+  const { saved } = await historyFixture(page);
+  saved.legal_moves.push({
+    notation: '13/10 13/12',
+    steps: nativeSteps('13/10 13/12', 0),
+  });
+  saved.legal_turns = [
+    ...(saved.legal_turns ?? []),
+    ...eitherOrder([3, 1], '13/10 13/12').map((turn) => ({
+      ...turn,
+      move_index: 1,
+    })),
+  ];
+  await page.reload();
+  await openWorkspace(page, 'play');
+  const help = page
+    .getByTestId('play-board-toolbar')
+    .locator('.play-turn-help');
+  await expect(help).toContainText('Hover over a checker');
+  await expect(help).not.toContainText('Only one legal move');
+});
+
+test('Roll, Double and Hint stay visible after the bot has rolled', async ({
+  page,
+}) => {
+  const { saved, writes } = await historyFixture(page);
+  Object.assign(saved, {
+    phase: 'roll',
+    play_mode: 'coach',
+    can_double: true,
+    legal_moves: [],
+    position: { ...saved.position, dice: [] },
+  });
+  await page.reload();
+  await openWorkspace(page, 'play');
+  const toolbar = page.getByTestId('play-board-toolbar');
+  const roll = toolbar.getByRole('button', { name: 'Roll dice', exact: true });
+  await expect(botDice(page).first()).toBeVisible();
+  await expect(
+    toolbar.getByRole('heading', { name: 'Your turn' }),
+  ).toBeVisible();
+  await expect(roll).toBeEnabled();
+  await expect(roll).toHaveAttribute('aria-keyshortcuts', 'Enter');
+  await expect(
+    toolbar.getByRole('button', { name: 'Double', exact: true }),
+  ).toHaveAttribute('aria-keyshortcuts', 'D');
+  await expect(
+    toolbar.getByRole('button', { name: 'Hint', exact: true }),
+  ).toHaveAttribute('aria-keyshortcuts', 'H');
+  await page.keyboard.press('d');
+  await expect.poll(() => writes).toEqual([{ version: 7, action: 'double' }]);
+  await expect(roll).toBeEnabled();
+  // Enter on the focused workspace tab belongs to the tab itself.
+  await page.locator('.play-match-format').click();
+  await page.keyboard.press('Enter');
+  await expect
+    .poll(() => writes)
+    .toEqual([
+      { version: 7, action: 'double' },
+      { version: 7, action: 'roll' },
+    ]);
+});
+
+test('a forced pass offers a Pass button', async ({ page }) => {
+  const { saved, writes } = await historyFixture(page);
+  Object.assign(saved, { legal_moves: [] });
+  await page.reload();
+  await openWorkspace(page, 'play');
+  const toolbar = page.getByTestId('play-board-toolbar');
+  await expect(
+    toolbar.getByRole('heading', { name: 'No legal move — pass' }),
+  ).toBeVisible();
+  await expect(
+    toolbar.getByRole('button', { name: 'Undo step', exact: true }),
+  ).toHaveCount(0);
+  await toolbar.getByRole('button', { name: 'Pass', exact: true }).click();
+  await expect.poll(() => writes).toEqual([{ version: 7, action: 'pass' }]);
+});
+
+test('Escape returns from the move review to the game', async ({ page }) => {
+  const { rows, writes } = await historyFixture(page);
+  await rows.first().click();
+  const back = page.getByRole('button', {
+    name: 'Return to game',
+    exact: true,
+  });
+  await expect(back).toHaveAttribute('aria-keyshortcuts', 'Escape');
+  await page.locator('.play-match-format').click();
+  await page.keyboard.press('Escape');
+  await expect(back).toHaveCount(0);
+  await expect(page.getByTestId('play-board-toolbar')).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test('the setup form marks the start action and opens the play settings', async ({
+  page,
+}) => {
+  await historyFixture(page);
+  await (await playMenuItem(page, 'New match')).click();
+  const setup = page.locator('.play-setup');
+  await expect(
+    setup.getByRole('button', { name: 'Start match', exact: true }),
+  ).toHaveClass(/\bprimary\b/);
+  await setup.getByRole('radio', { name: 'Black', exact: true }).check();
+  await expect(
+    setup.getByRole('radio', { name: 'White', exact: true }),
+  ).not.toBeChecked();
+  await setup
+    .getByRole('button', { name: 'Engine settings', exact: true })
+    .click();
+  const settings = page.getByRole('dialog', { name: 'Settings', exact: true });
+  await expect(
+    settings.getByRole('group', { name: 'Playing', exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+  await setup
+    .getByRole('button', { name: 'Back to match', exact: true })
+    .click();
+  await expect(page.getByTestId('play-board-toolbar')).toBeVisible();
+});
+
+test('the setup dialog overlays the match and sends this match’s name, engine and strength', async ({
+  page,
+}) => {
+  const { saved } = await historyFixture(page);
+  await mockEngineCatalog(page, () => [
+    { id: 'gnubg', name: 'GNUbg', available: true, plies: [1, 2, 3] },
+    { id: 'bgsage', name: 'NeonGammon', available: true, plies: [1, 2] },
+  ]);
+  const created: unknown[] = [];
+  await page.route('**/api/play/sessions', (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    created.push(route.request().postDataJSON());
+    return fulfillJson<'PlaySession'>(
+      route,
+      { ...saved, human_name: 'Guest' },
+      201,
+    );
+  });
+  await (await playMenuItem(page, 'New match')).click();
+  const dialog = page.getByRole('dialog', { name: 'New match', exact: true });
+  await expect(dialog).toHaveClass(/\bplay-setup-dialog\b/);
+  // The opened dialog takes the focus; the match behind it stays visible but
+  // inert, while the app header remains usable.
+  await expect(dialog.locator('h2')).toBeFocused();
+  await expect(page.locator('.play-live-board .board')).toBeVisible();
+  await expect(page.locator('.play-layout')).toHaveAttribute('inert', '');
+  await expect(
+    page.getByRole('tab', { name: 'Analysis', exact: true }),
+  ).toBeEnabled();
+  const name = dialog.getByRole('textbox', { name: 'Your name', exact: true });
+  await name.fill('Guest');
+  const engine = dialog.getByRole('combobox', {
+    name: 'Bot engine',
+    exact: true,
+  });
+  const strength = dialog.getByRole('combobox', {
+    name: 'Playing strength',
+    exact: true,
+  });
+  await expect(strength.locator('option')).toHaveCount(3);
+  await engine.selectOption('bgsage');
+  // NeonGammon adds its difficulty presets and 2-ply + Top-2 to the depths.
+  await expect(strength.locator('option')).toHaveText([
+    'Beginner',
+    'Casual',
+    'Intermediate',
+    'Full Strength · 3-ply checkers / 2-ply cube',
+    '1-ply',
+    '2-ply',
+    '2-ply + Top-2 (10 mEq)',
+  ]);
+  await strength.selectOption('2');
+  await dialog
+    .getByRole('button', { name: 'Start match', exact: true })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  expect(created).toEqual([
+    expect.objectContaining({
+      human_name: 'Guest',
+      play_engine: 'bgsage',
+      play_plies: 2,
+      play_top_two: false,
+    }),
+  ]);
+});
+
+test('without a match the setup dialog can be closed and reopened', async ({
+  page,
+}) => {
+  await seedLocale(page);
+  await page.goto('/');
+  const playing = page.getByRole('tab', { name: 'Playing', exact: true });
+  await playing.click();
+  const dialog = page.getByRole('dialog', { name: 'New match', exact: true });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator('.play-idle-board .board')).toBeVisible();
+  // Opening automatically leaves the focus on the header tab.
+  await expect(playing).toBeFocused();
+  await dialog.getByRole('textbox', { name: 'Your name', exact: true }).focus();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  const reopen = page
+    .locator('.play-header')
+    .getByRole('button', { name: 'New match', exact: true });
+  await expect(reopen).toBeFocused();
+  await reopen.click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
+test('a deleted stored session is forgotten and opens the setup dialog', async ({
+  page,
+}) => {
+  const missing = '00000000-0000-4000-8000-000000000404';
+  await page.addInitScript((id) => {
+    localStorage.setItem('neondojo.locale', 'en');
+    localStorage.setItem('neondojo.play-session', id);
+  }, missing);
+  let reads = 0;
+  await page.route(`**/api/play/sessions/${missing}`, (route) => {
+    reads++;
+    return route.fulfill({ status: 404, json: { error: 'Not found' } });
+  });
+  await gotoWorkspace(page, 'play');
+  await expect(
+    page.getByRole('dialog', { name: 'New match', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.play-error')).toHaveCount(0);
+  expect(reads).toBe(1);
+  expect(
+    await page.evaluate(() => localStorage.getItem('neondojo.play-session')),
+  ).toBeNull();
+});
+
+test('a blocked Double stays visible and names the reason', async ({
+  page,
+}) => {
+  const { saved, writes } = await historyFixture(page);
+  Object.assign(saved, {
+    phase: 'roll',
+    can_double: false,
+    legal_moves: [],
+    position: { ...saved.position, dice: [] },
+  });
+  await page.reload();
+  await openWorkspace(page, 'play');
+  const double = page
+    .getByTestId('play-board-toolbar')
+    .getByRole('button', { name: 'Double', exact: true });
+  await expect(double).toBeDisabled();
+  await expect(double).toHaveAccessibleDescription(/\S/);
+  expect(writes).toEqual([]);
+});
+
+test('a money session names resignations and its score without match wording', async ({
+  page,
+}) => {
+  const { saved, rows } = await historyFixture(page);
+  saved.match_length = 0;
+  saved.history.push({ player: 1, dice: [], notation: 'resign' });
+  await page.reload();
+  await openWorkspace(page, 'play');
+  await expect(rows.last().locator('strong')).toHaveText('Resign');
+  const mode = page.getByLabel('Change play mode', { exact: true });
+  await mode.hover();
+  await expect(page.getByRole('tooltip')).toContainText(
+    'Analysis and pip counts stay hidden',
+  );
+  await resignGame(page).click();
+  const dialog = page.getByRole('dialog', {
+    name: 'Resign this game',
+    exact: true,
+  });
+  await expect(dialog).toContainText('Score if accepted');
+  await expect(dialog).toContainText('If accepted, the session continues.');
+  await expect(dialog).not.toContainText('match continues');
+});
+
+test('shortcut buttons show their key as a keycap without wrapping labels', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1800, height: 1169 });
+  const { saved } = await historyFixture(page);
+  Object.assign(saved, {
+    phase: 'roll',
+    play_mode: 'coach',
+    can_double: true,
+    legal_moves: [],
+    position: { ...saved.position, dice: [] },
+  });
+  await page.reload();
+  await openWorkspace(page, 'play');
+  const toolbar = page.getByTestId('play-board-toolbar');
+  const badges = async () =>
+    toolbar.locator('.action-button[data-shortcut]').evaluateAll((buttons) =>
+      buttons.map((button) => {
+        const label = button.querySelector('.action-label')!;
+        const lines = Math.round(
+          label.getBoundingClientRect().height /
+            parseFloat(getComputedStyle(label).lineHeight),
+        );
+        return [
+          button.getAttribute('aria-label'),
+          getComputedStyle(button, '::after').content,
+          lines,
+        ];
+      }),
+    );
+  // The accessible name stays the label; the keycap is decoration.
+  await expect.poll(badges).toEqual([
+    ['Roll dice', '"↵"', 1],
+    ['Double', '"D"', 1],
+    ['Hint', '"H"', 1],
+  ]);
+});

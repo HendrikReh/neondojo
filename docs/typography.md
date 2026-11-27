@@ -48,9 +48,9 @@ a 21 px sans-serif Study title, differing table weights/sizes and form controls
 between 11–14 px. These were normalized to the shared roles. Note editors already
 inherited the UI family; their size is now the shared 13 px field size.
 
-`web/e2e/typography.spec.ts` checks computed styles in populated Analysis,
+`web/e2e/layout/typography.spec.ts` checks computed styles in populated Analysis,
 Match database, Positions and Study views (using the `graphite` light theme,
-since interface themes only redefine color tokens; `web/e2e/ui-themes.spec.ts`
+since interface themes only redefine color tokens; `web/e2e/settings/ui-themes.spec.ts`
 verifies all six light/dark theme palettes). It covers every UI language (`en`,
 `de`, `es`, `fr`, `pl`, `it`), dialogs, previews, notes, statistics, cube
 review, monospace position IDs and the board’s graphical dice pips.
