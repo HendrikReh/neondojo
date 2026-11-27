@@ -6,10 +6,28 @@ NeonDojo 1.0.0 is the first release under this name; BG Tutor 0.1.0 to 0.3.0 are
 
 ## [Unreleased]
 
-- The verified NeonGammon installation now uses 3.2.2. Existing jobs and sessions retain their pinned engine identity.
+## [1.5.0] - 2026-11-27
 
-- NeonDojo now supports German and English. Profiles and browser settings saved with a retired language open in English.
-- When a roll allows only one legal move, the Playing action panel names it and explains why the other checkers cannot move.
+NeonDojo 1.5.0 adds independent board artwork controls and ships with verified support for NeonGammon 3.2.2. Migration `0097_retained_checker_equity_kind` runs at startup and repairs labels on saved cubeless checker analyses. Backups from 1.4.2 remain restorable.
+
+### Added
+
+- Choose the board, checkers, doubling cube and dice independently. Preview the combination in **Settings → Board**. [Board artwork](docs/reference/settings.md#board-artwork)
+- Open the NeonDojo and NeonGammon manuals from the **Help** menu. The **Playing** action panel identifies the move when only one legal checker turn remains and explains why the other checkers cannot move.
+- Reset the Analysis board width from its splitter and undo the previous flashcard rating from the keyboard.
+
+### Changed
+
+- The interface supports German and English. Profiles and browser settings saved in Spanish, French, Italian or Polish open in English. [Themes and language](docs/reference/settings.md#themes-and-language)
+- The verified installation pins the official [NeonGammon 3.2.2 wheel](https://github.com/HendrikReh/neongammon/releases/tag/v3.2.2). It fixes post-Crawford cube decisions, capped money-cube evaluation and one-turn bearoff gammon probabilities. Existing jobs and sessions retain their pinned engine identity. [Installation and verification](docs/open-sage-local.md#neongammon-322--november-27-2026)
+- Play commits and canceled jobs wake the browsing index worker. Match inspection reads the catalog without changing it and can briefly return HTTP 503 with `index_preparing` while older matches are indexed.
+- Engine Duels reuse the NeonGammon workers for a series, and NeonDojo validates the engine's 25-away limit before submitting a decision.
+
+### Fixed
+
+- Keep the checker equity type and depth label for cubeless NeonGammon duel decisions when their analysis is retained in SGF.
+- Stop repeated opening-book requests, restore saved Study thresholds when discarding Settings edits, and keep the app usable if a BGBlitz artwork preload fails.
+- Improve focus handling in dialogs and readability in dense desktop layouts.
 
 ## [1.4.2] - 2026-11-26
 
@@ -323,7 +341,8 @@ First tagged release. It covers everything since the first commit on 2026-11-08.
 - An illustrated English user guide, reference pages for each workspace, and development guides for the API, architecture and verification. [#4](https://github.com/HendrikReh/neondojo/pull/4) · [#5](https://github.com/HendrikReh/neondojo/pull/5) · [#6](https://github.com/HendrikReh/neondojo/pull/6) · [#7](https://github.com/HendrikReh/neondojo/pull/7)
 - The local restart procedure on port 8787 and the local Open Sage setup.
 
-[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/HendrikReh/neondojo/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/HendrikReh/neondojo/compare/v1.4.2...v1.5.0
 [1.4.2]: https://github.com/HendrikReh/neondojo/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/HendrikReh/neondojo/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/HendrikReh/neondojo/compare/v1.3.0...v1.4.0
