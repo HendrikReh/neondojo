@@ -83,6 +83,8 @@ The selected decision shows the played and best actions, the loss, and the analy
 
 Games imported with the SGF rule `RU[NoCube]` use cubeless checker analysis and have zero cube decisions. GNUbg uses the source game rules for checker evaluation and PR. NeonGammon supports cubeless checker evaluation for money games without Jacoby and reports other cube-disabled configurations as unsupported. Statistics marks older native checkpoints for these games so you can choose to analyze them again. Historical decisions and study schedules stay available. A cube-disabled checker card has its own schedule even when its board and Match ID also occur in a cube-enabled game. New cube practice questions require a game that permits doubling. For saved occurrences from older libraries whose source has already been deleted, the cube rule can be unknown. Evaluations that need it report it as unavailable.
 
+Checker evaluations retained from NeonGammon engine duels record whether they used cubeful or cubeless evaluation. Older duel exports use the saved game rules to recover the evaluation mode.
+
 NeonGammon evaluates point-match decisions when both players are at most 25-away. You can import longer matches and analyze supported games individually. A NeonGammon analysis that encounters an unsupported decision fails with the away scores in the error. Saved NeonGammon results from unsupported scores can contain incorrect equities. Reanalyze those games with GNUbg.
 
 NeonGammon replays the stored match once when a job starts or resumes. It indexes checker occurrences by game and ply, then verifies and checkpoints each remaining game independently.

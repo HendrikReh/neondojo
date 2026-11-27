@@ -292,6 +292,22 @@ async fn cubeless_open_sage_plays_a_money_block_against_gnubg() {
             .unwrap()
             .1;
         assert!(turns.iter().all(|turn| turn.kind == "checker"));
+        let retained = crate::imported_analysis::extract(&finished.sgf).unwrap();
+        let retained: Vec<_> = retained
+            .iter()
+            .filter(|record| record.engine == "NeonGammon")
+            .collect();
+        assert!(!retained.is_empty());
+        for record in retained {
+            assert_eq!(record.raw["cubeless"], true);
+            assert_eq!(record.depth.as_deref(), Some("2-ply cubeless"));
+            assert!(
+                record
+                    .candidates
+                    .iter()
+                    .all(|c| c.equity_kind == "cubeless")
+            );
+        }
         assert!(finished.costs.iter().all(Option::is_some));
     }
 }
