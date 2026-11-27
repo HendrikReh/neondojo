@@ -1,12 +1,14 @@
 mod advisory_locks;
 pub mod api;
 mod async_temp_dir;
-mod backgammon;
+pub use neondojo_rules::backgammon;
 pub mod cube_context;
 mod cursor;
 mod database_pool;
+pub mod domain_error;
 pub mod engine;
 pub mod engines;
+pub mod facade;
 pub mod game_plan;
 pub mod import;
 pub mod jobs;

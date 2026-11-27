@@ -1,0 +1,16 @@
+[package]
+name = "neondojo-desktop"
+version = "1.4.2"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+gpui-kit = "0.11"
+neondojo = { path = "../../backend" }
+neondojo-rules = { path = "../neondojo-rules" }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+gpui-kit = { version = "0.11", features = ["test-support"] }

@@ -7,52 +7,52 @@ use base64::{Engine as _, engine::general_purpose::STANDARD_NO_PAD};
 /// A field of GNUbg's 72-bit Match ID: `(offset, width)` in bits, least
 /// significant bit first.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Field(usize, usize);
+pub struct Field(usize, usize);
 
 impl Field {
     /// log2 of the cube value.
-    pub(crate) const CUBE_LOG2: Self = Self(0, 4);
+    pub const CUBE_LOG2: Self = Self(0, 4);
     /// 0 or 1 for the owner, 3 for a centered cube.
-    pub(crate) const CUBE_OWNER: Self = Self(4, 2);
+    pub const CUBE_OWNER: Self = Self(4, 2);
     /// The player on roll.
-    pub(crate) const ON_ROLL: Self = Self(6, 1);
-    pub(crate) const CRAWFORD: Self = Self(7, 1);
+    pub const ON_ROLL: Self = Self(6, 1);
+    pub const CRAWFORD: Self = Self(7, 1);
     /// 1 while a game is being played.
-    pub(crate) const GAME_STATE: Self = Self(8, 3);
+    pub const GAME_STATE: Self = Self(8, 3);
     /// The player who must make a decision.
-    pub(crate) const TURN: Self = Self(11, 1);
-    pub(crate) const DOUBLED: Self = Self(12, 1);
-    pub(crate) const RESIGNED: Self = Self(13, 2);
-    pub(crate) const DIE_0: Self = Self(15, 3);
-    pub(crate) const DIE_1: Self = Self(18, 3);
+    pub const TURN: Self = Self(11, 1);
+    pub const DOUBLED: Self = Self(12, 1);
+    pub const RESIGNED: Self = Self(13, 2);
+    pub const DIE_0: Self = Self(15, 3);
+    pub const DIE_1: Self = Self(18, 3);
     /// 0 for money play.
-    pub(crate) const LENGTH: Self = Self(21, 15);
-    pub(crate) const SCORE_0: Self = Self(36, 15);
-    pub(crate) const SCORE_1: Self = Self(51, 15);
+    pub const LENGTH: Self = Self(21, 15);
+    pub const SCORE_0: Self = Self(36, 15);
+    pub const SCORE_1: Self = Self(51, 15);
     /// Set when the Jacoby rule is off; GNUbg also sets it in match play.
-    pub(crate) const NO_JACOBY: Self = Self(66, 1);
+    pub const NO_JACOBY: Self = Self(66, 1);
     /// Reserved bits after the GNUbg fields.
-    pub(crate) const EXTENSION: Self = Self(67, 5);
+    pub const EXTENSION: Self = Self(67, 5);
 }
 
-pub(crate) struct MatchId([u8; 9]);
+pub struct MatchId([u8; 9]);
 
 impl MatchId {
-    pub(crate) fn decode(id: &str) -> Option<Self> {
+    pub fn decode(id: &str) -> Option<Self> {
         Some(Self(STANDARD_NO_PAD.decode(id).ok()?.try_into().ok()?))
     }
 
-    pub(crate) fn encode(&self) -> String {
+    pub fn encode(&self) -> String {
         STANDARD_NO_PAD.encode(self.0)
     }
 
-    pub(crate) fn get(&self, Field(offset, width): Field) -> i32 {
+    pub fn get(&self, Field(offset, width): Field) -> i32 {
         (0..width).fold(0, |value, i| {
             value | (i32::from((self.0[(offset + i) / 8] >> ((offset + i) % 8)) & 1) << i)
         })
     }
 
-    pub(crate) fn set(&mut self, Field(offset, width): Field, value: i32) {
+    pub fn set(&mut self, Field(offset, width): Field, value: i32) {
         for i in 0..width {
             let (byte, bit) = ((offset + i) / 8, (offset + i) % 8);
             self.0[byte] &= !(1 << bit);
@@ -66,7 +66,7 @@ impl MatchId {
     /// match context: not Crawford, cube below the 4-bit Match ID ceiling
     /// (32768), centered or owned by `doubler`, and not dead for `doubler`'s
     /// score in match play.
-    pub(crate) fn can_double(&self, doubler: i32) -> bool {
+    pub fn can_double(&self, doubler: i32) -> bool {
         if !matches!(doubler, 0 | 1) {
             return false;
         }
@@ -89,12 +89,12 @@ impl MatchId {
 }
 
 /// The player on roll in a Match ID.
-pub(crate) fn on_roll(id: &str) -> Option<i32> {
+pub fn on_roll(id: &str) -> Option<i32> {
     Some(MatchId::decode(id)?.get(Field::ON_ROLL))
 }
 
 /// The same Match ID before the dice are rolled.
-pub(crate) fn hide_dice(id: &str) -> Option<String> {
+pub fn hide_dice(id: &str) -> Option<String> {
     let mut id = MatchId::decode(id)?;
     id.set(Field::DIE_0, 0);
     id.set(Field::DIE_1, 0);
@@ -103,14 +103,14 @@ pub(crate) fn hide_dice(id: &str) -> Option<String> {
 
 /// The native mistake browser displays a responder-oriented ID with a visual
 /// offer bit. For evaluation, restore the responder-oriented decision ID.
-pub(crate) fn without_offer_marker(id: &str) -> Option<String> {
+pub fn without_offer_marker(id: &str) -> Option<String> {
     let mut id = MatchId::decode(id)?;
     id.set(Field::DOUBLED, 0);
     Some(id.encode())
 }
 
 /// Marks a responder-oriented decision ID as facing an offered double.
-pub(crate) fn with_offer_marker(id: &str) -> Option<String> {
+pub fn with_offer_marker(id: &str) -> Option<String> {
     let mut id = MatchId::decode(id)?;
     id.set(Field::DOUBLED, 1);
     Some(id.encode())
@@ -118,7 +118,7 @@ pub(crate) fn with_offer_marker(id: &str) -> Option<String> {
 
 /// The same Match ID while `doubler` waits for the answer to a double. GNUbg's
 /// player on roll stays the doubler; the opponent must decide.
-pub(crate) fn with_offer_from(id: &str, doubler: i32) -> Option<String> {
+pub fn with_offer_from(id: &str, doubler: i32) -> Option<String> {
     let mut id = MatchId::decode(id)?;
     id.set(Field::ON_ROLL, doubler);
     id.set(Field::TURN, 1 - doubler);
@@ -127,7 +127,7 @@ pub(crate) fn with_offer_from(id: &str, doubler: i32) -> Option<String> {
 }
 
 /// GNUbg encodes the opponent's checkers first, then the player on roll.
-pub(crate) fn position_id(board: &[i32; 26], player: i32) -> String {
+pub fn position_id(board: &[i32; 26], player: i32) -> String {
     let mut bytes = [0u8; 10];
     let mut bit = 0usize;
     for side in [1 - player, player] {
@@ -150,7 +150,7 @@ pub(crate) fn position_id(board: &[i32; 26], player: i32) -> String {
 
 /// Inverse of [`position_id`] for the player on roll in `match_id`, returned
 /// in absolute colors.
-pub(crate) fn decode_board(position_id: &str, match_id: &str) -> anyhow::Result<Vec<i32>> {
+pub fn decode_board(position_id: &str, match_id: &str) -> anyhow::Result<Vec<i32>> {
     let key = STANDARD_NO_PAD.decode(position_id)?;
     ensure!(key.len() == 10, "Invalid GNU ID length");
     let player = on_roll(match_id).context("Invalid GNU ID length")?;
@@ -184,7 +184,7 @@ pub(crate) fn decode_board(position_id: &str, match_id: &str) -> anyhow::Result<
 
 // These are the eight independently encoded fields in GNUbg's binary Match ID.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn match_id(
+pub fn match_id(
     length: i32,
     scores: [i32; 2],
     cube: i32,

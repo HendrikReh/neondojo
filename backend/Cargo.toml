@@ -15,6 +15,7 @@ dotenvy = "0.15"
 flate2 = { version = "1", default-features = false, features = ["zlib-rs"] }
 futures-util = "0.3"
 fsrs = { version = "=6.6.2", default-features = false }
+neondojo-rules = { path = "../crates/neondojo-rules" }
 rusqlite = { version = "0.32", features = ["bundled"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 regex = "1"

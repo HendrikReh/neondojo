@@ -220,7 +220,9 @@ impl XgConverter {
         // The first checker and cube records hold the game's actual
         // starting board and cube; transcripts can begin mid-game.
         let game_records = bytes[(index + 1) * RECORD_BYTES..]
-            .chunks_exact(RECORD_BYTES)
+            .as_chunks::<RECORD_BYTES>()
+            .0
+            .iter()
             .enumerate()
             .take_while(|(_, r)| !matches!(r[8], 1 | 4 | 5));
         let first_checker = game_records.clone().find(|(_, r)| r[8] == 3);
@@ -540,7 +542,13 @@ pub fn convert_xg(input: &[u8]) -> Result<ConvertedMatch> {
         "XG: invalid 2560-byte record layout"
     );
     let mut converter = XgConverter::from_header(&bytes[..RECORD_BYTES])?;
-    for (index, record) in bytes.chunks_exact(RECORD_BYTES).enumerate().skip(1) {
+    for (index, record) in bytes
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
+        .enumerate()
+        .skip(1)
+    {
         converter.handle_record(&bytes, index, record)?;
     }
     converter.finish()

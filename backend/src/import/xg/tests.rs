@@ -64,7 +64,9 @@ fn completed_match_preserves_final_footer_score_in_sgf() {
 fn unknown_footer_cannot_supply_a_match_outcome() {
     let mut records = main_records(include_bytes!("../../../tests/fixtures/WC2014.xg")).unwrap();
     let last = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .rposition(|r| r[8] == 4)
         .unwrap()
         * RECORD_BYTES;
@@ -82,7 +84,9 @@ fn unknown_footer_cannot_supply_a_match_outcome() {
 fn resignation_uses_recorded_score_delta_when_points_field_is_a_sentinel() {
     let mut records = main_records(include_bytes!("../../../tests/fixtures/WC2014.xg")).unwrap();
     let last = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .rposition(|r| r[8] == 4)
         .unwrap()
         * RECORD_BYTES;
@@ -112,8 +116,10 @@ fn native_payload_does_not_inflate_long_matches_past_sgf_limits() {
 fn unknown_native_cube_actions_keep_their_source_label() {
     let bytes = main_records(include_bytes!("../../../tests/fixtures/WC2014.xg")).unwrap();
     let mut record = bytes
-        .chunks_exact(RECORD_BYTES)
-        .find(|r| r[8] == 2 && i32_at(r, 232).unwrap() >= 0 && i32_at(r, 16).unwrap() == 0)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
+        .find(|r| r[8] == 2 && i32_at(*r, 232).unwrap() >= 0 && i32_at(*r, 16).unwrap() == 0)
         .unwrap()
         .to_vec();
     set_u32(&mut record, 16, u32::MAX);
@@ -156,14 +162,18 @@ fn unanalysed_native_records_do_not_project_zero_equities() {
     let sample = include_bytes!("../../../tests/fixtures/WC2014.xg");
     let records = main_records(sample).unwrap();
     let mut checker = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .find(|r| r[8] == 3)
         .unwrap()
         .to_vec();
     set_u32(&mut checker, 120, 0);
     assert!(checker_analysis(&checker, 1).unwrap().is_none());
     let mut cube = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .find(|r| r[8] == 2)
         .unwrap()
         .to_vec();
@@ -223,7 +233,9 @@ fn unavailable_cube_placeholder_can_have_no_active_player() {
 fn completed_money_games_can_end_without_a_match_footer() {
     let mut records = main_records(include_bytes!("../../../tests/fixtures/WC2014.xg")).unwrap();
     let end = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .position(|r| r[8] == 4)
         .unwrap();
     records.truncate((end + 1) * RECORD_BYTES);
@@ -233,7 +245,9 @@ fn completed_money_games_can_end_without_a_match_footer() {
     let sgf = xg_to_sgf(&wrap(&records, None)).unwrap();
     let parsed = parse_sgf(&sgf).unwrap();
     let expected = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .filter(|r| r[8] == 3 && r[2308] == 1)
         .count();
     assert_eq!(parsed.match_length, 0);
@@ -260,7 +274,9 @@ fn point_match_saved_between_games_preserves_all_played_positions() {
     let expected = parse_sgf(&xg_to_sgf(sample).unwrap()).unwrap();
     let mut records = main_records(sample).unwrap();
     let end = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .enumerate()
         .filter(|(_, r)| r[8] == 4)
         .nth(1)
@@ -293,11 +309,15 @@ fn in_progress_game_preserves_played_positions_and_nonzero_score_cube_context() 
     // accepted double, the following no-double cube record, and a rolled
     // checker record that has not been played yet.
     let last_played = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .position(|r| r[8] == 3 && i32_at(r, 108).unwrap() != 0)
         .unwrap();
     let game_header = records[..last_played * RECORD_BYTES]
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .rposition(|r| r[8] == 1)
         .unwrap();
     assert_eq!(
@@ -314,7 +334,9 @@ fn in_progress_game_preserves_played_positions_and_nonzero_score_cube_context() 
     records[game_header * RECORD_BYTES + 52] = 1; // InProgress
     records[(last_played + 2) * RECORD_BYTES + 2308] = 0; // Played
     let played_count = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .filter(|r| r[8] == 3 && r[2308] == 1)
         .count();
     let sgf = xg_to_sgf(&wrap(&records, None)).unwrap();
@@ -355,7 +377,9 @@ fn completed_point_match_without_its_footer_is_rejected() {
 fn a_game_marked_complete_cannot_be_missing_its_game_footer() {
     let mut records = main_records(include_bytes!("../../../tests/fixtures/WC2014.xg")).unwrap();
     let end = records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .position(|r| r[8] == 4)
         .unwrap();
     records.truncate(end * RECORD_BYTES);
@@ -372,7 +396,9 @@ fn a_game_marked_complete_cannot_be_missing_its_game_footer() {
 fn a_match_footer_cannot_replace_a_missing_game_footer() {
     let original = main_records(include_bytes!("../../../tests/fixtures/WC2014.xg")).unwrap();
     let end = original
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .position(|r| r[8] == 4)
         .unwrap();
     let mut records = original[..end * RECORD_BYTES].to_vec();
@@ -410,7 +436,9 @@ fn compact_checker_runs_expand_to_the_original_positions() {
     for doubles in [false, true] {
         let mut move_no = 0;
         let (index, _) = original
-            .chunks_exact(RECORD_BYTES)
+            .as_chunks::<RECORD_BYTES>()
+            .0
+            .iter()
             .enumerate()
             .find(|(_, record)| {
                 if record[8] != 3 || record[2308] != 1 {
@@ -418,6 +446,7 @@ fn compact_checker_runs_expand_to_the_original_positions() {
                 }
                 let p = &expected.positions[move_no];
                 move_no += 1;
+                let record = *record;
                 let middle = i32_at(record, 72).unwrap();
                 let absolute = if p.player == 0 {
                     middle + 1
@@ -540,7 +569,9 @@ fn assert_same_positions(actual: &[ImportedPosition], expected: &[&ImportedPosit
 /// Index of every played checker record, in the order of parsed positions.
 fn played_records(records: &[u8]) -> Vec<usize> {
     records
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .enumerate()
         .filter(|(_, r)| r[8] == 3 && r[2308] == 1)
         .map(|(i, _)| i)
@@ -613,7 +644,9 @@ fn transcripts_can_start_a_game_from_a_recorded_position_and_cube() {
             .unwrap();
         let first = played[ordinal];
         let header = original[..first * RECORD_BYTES]
-            .chunks_exact(RECORD_BYTES)
+            .as_chunks::<RECORD_BYTES>()
+            .0
+            .iter()
             .rposition(|r| r[8] == 1)
             .unwrap();
         let game_no = expected[ordinal].game_no;
@@ -669,7 +702,9 @@ fn an_unfinished_game_followed_by_the_next_game_keeps_its_moves_without_a_result
     let expected = played_positions(&expected_sgf);
     let original = main_records(sample).unwrap();
     let footer = original
-        .chunks_exact(RECORD_BYTES)
+        .as_chunks::<RECORD_BYTES>()
+        .0
+        .iter()
         .position(|r| r[8] == 4)
         .unwrap();
     let mut records = original[..footer * RECORD_BYTES].to_vec();

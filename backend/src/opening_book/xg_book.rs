@@ -264,7 +264,7 @@ impl Book {
         let mut index: HashMap<Key, Vec<XgEvaluation>> = HashMap::new();
         let mut notes = String::new();
         let mut entries = 0;
-        for (record_index, record) in bytes.chunks_exact(256).enumerate().skip(1) {
+        for (record_index, record) in bytes.as_chunks::<256>().0.iter().enumerate().skip(1) {
             match integer(record, 0)? {
                 1 => {
                     notes.push_str(&unicode(record, 4, 96)?);
@@ -447,8 +447,10 @@ fn unicode(bytes: &[u8], offset: usize, width: usize) -> Result<String> {
     let words: Vec<u16> = bytes
         .get(offset..offset + 2 * width)
         .context("Truncated XG author string")?
-        .chunks_exact(2)
-        .map(|word| u16::from_le_bytes([word[0], word[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&word| u16::from_le_bytes(word))
         .take_while(|word| *word != 0)
         .collect();
     Ok(String::from_utf16(&words)?)

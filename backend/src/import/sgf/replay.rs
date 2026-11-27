@@ -56,7 +56,7 @@ pub(crate) fn play(board: &mut [i32; 26], player: i32, value: &str) -> Result<([
     let mut pairs = Vec::new();
     let mut notation = Vec::new();
     let mut local = local_board(board, player);
-    for pair in bytes[2..].chunks_exact(2) {
+    for pair in bytes[2..].as_chunks::<2>().0 {
         let from = decode_point(pair[0], player)?;
         let to = decode_point(pair[1], player)?;
         let hit = to > 0 && to < 25 && local[to] == -1;

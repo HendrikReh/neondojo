@@ -68,7 +68,9 @@ pub(crate) fn sgf_notation(value: &str, player: i32) -> String {
     };
     let moves: Vec<_> = value
         .as_bytes()
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| format!("{}/{}", point(p[0]), point(p[1])))
         .collect();
     if moves.is_empty() {

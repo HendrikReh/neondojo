@@ -4,6 +4,10 @@ mod matches;
 mod openapi;
 
 pub(crate) use analysis::MatchAnalysisEngine;
+pub use jobs::JobStatusBatch;
+pub(crate) use jobs::{
+    cancel_job_by_id, get_job_by_id, get_job_status_batch, watch_job_events_checked,
+};
 pub use matches::ImportQuery;
 pub use openapi::{ApiDoc, BaseApiDoc};
 
@@ -294,38 +298,41 @@ async fn database_access(
     Ok(next.run(request).await)
 }
 
-#[derive(Serialize, ToSchema)]
-struct VersionInfo {
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct VersionInfo {
     /// NeonDojo release version, for example `1.1.0`.
-    release: &'static str,
+    pub release: &'static str,
     /// Full build commit ID, or an empty string when it is unavailable.
-    commit: &'static str,
+    pub commit: &'static str,
     /// The build commit, as in `commit`; kept for earlier clients.
     #[schema(deprecated)]
-    version: &'static str,
+    pub version: &'static str,
+}
+
+pub fn version_info() -> VersionInfo {
+    let commit = env!("NEONDOJO_GIT_COMMIT");
+    VersionInfo {
+        release: env!("CARGO_PKG_VERSION"),
+        commit,
+        version: commit,
+    }
 }
 
 #[utoipa::path(get, path="/api/version", responses((status=200, body=VersionInfo)), tag="System")]
 async fn version() -> Json<VersionInfo> {
-    let commit = env!("NEONDOJO_GIT_COMMIT");
-    Json(VersionInfo {
-        release: env!("CARGO_PKG_VERSION"),
-        commit,
-        version: commit,
-    })
+    Json(version_info())
 }
 
-#[derive(Serialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct Health {
     pub status: String,
     pub database: bool,
     pub gnubg: Option<String>,
 }
 
-#[utoipa::path(get, path="/api/health", responses((status=200, body=Health), (status=503, body=Health)), tag="System")]
-async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
+pub async fn check_health(state: &AppState) -> (bool, Health) {
     let database = sqlx::query("SELECT 1").execute(&state.pool).await.is_ok();
-    let gnubg = match crate::settings::load(&state).await {
+    let gnubg = match crate::settings::load(state).await {
         Ok(settings) => {
             match crate::benchmarks::running_engine_version(&state.pool, &settings.gnubg_path).await
             {
@@ -338,15 +345,24 @@ async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
     };
     let ready = database && gnubg.is_some();
     (
+        ready,
+        Health {
+            status: if ready { "ok" } else { "degraded" }.into(),
+            database,
+            gnubg,
+        },
+    )
+}
+
+#[utoipa::path(get, path="/api/health", responses((status=200, body=Health), (status=503, body=Health)), tag="System")]
+async fn health(State(state): State<AppState>) -> (StatusCode, Json<Health>) {
+    let (ready, body) = check_health(&state).await;
+    (
         if ready {
             StatusCode::OK
         } else {
             StatusCode::SERVICE_UNAVAILABLE
         },
-        Json(Health {
-            status: if ready { "ok" } else { "degraded" }.into(),
-            database,
-            gnubg,
-        }),
+        Json(body),
     )
 }

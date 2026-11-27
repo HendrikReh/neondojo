@@ -3,16 +3,16 @@
 //! White moves 24 -> 1, positive checkers; Black moves 1 -> 24, negative
 //! checkers. Index 0 is Black's bar, and index 25 is White's bar.
 
-pub(crate) mod board;
-pub(crate) mod ids;
-pub(crate) mod notation;
+pub mod board;
+pub mod ids;
+pub mod notation;
 mod rules;
-pub(crate) use board::{initial_board, local_board, valid_board};
-pub(crate) use rules::{CheckerPath, apply_checker_turn, checker_paths, expand_joined_play};
+pub use board::{initial_board, local_board, valid_board};
+pub use rules::{CheckerPath, apply_checker_turn, checker_paths, expand_joined_play};
 
 #[cfg(test)]
 mod tests {
-    /// Import, engine and play code depend on the rules, never the reverse.
+    /// Import, engine, UI and play code depend on the rules, never the reverse.
     #[test]
     fn the_rules_depend_on_no_other_module() {
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/backgammon");

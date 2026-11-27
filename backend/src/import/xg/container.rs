@@ -139,7 +139,7 @@ pub(in crate::import) fn main_records(input: &[u8]) -> Result<Vec<u8>> {
     };
     let mut main = None;
     let mut ranges = Vec::new();
-    for entry in registry.chunks_exact(REGISTRY_ENTRY_BYTES) {
+    for entry in registry.as_chunks::<REGISTRY_ENTRY_BYTES>().0 {
         let name = std::str::from_utf8(&entry[1..=usize::from(entry[0])])
             .context("XG: invalid archive entry name")?
             .to_ascii_lowercase();
@@ -200,8 +200,10 @@ pub(super) fn header_text(
     ansi_limit: usize,
 ) -> Result<String> {
     let words: Vec<u16> = record[unicode_at..unicode_at + 258]
-        .chunks_exact(2)
-        .map(|b| u16::from_le_bytes([b[0], b[1]]))
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&b| u16::from_le_bytes(b))
         .take_while(|n| *n != 0)
         .collect();
     if !words.is_empty() {

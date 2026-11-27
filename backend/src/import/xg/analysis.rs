@@ -20,7 +20,9 @@ fn level(value: i32) -> (String, Option<i32>, &'static str) {
 fn native_notation(endpoints: &[i32]) -> String {
     let point = |n: i32| format_point(if n < 0 { 0 } else { (n + 1) as usize });
     let moves: Vec<_> = endpoints
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .take_while(|p| p[0] != -1)
         .map(|p| format!("{}/{}", point(p[0]), point(p[1])))
         .collect();

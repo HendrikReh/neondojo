@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 use utoipa::ToSchema;
 
-pub(super) const RELEASES_JSON: &str = include_str!("../../../shared/neongammon-releases.json");
+pub(super) const RELEASES_JSON: &str = neondojo_rules::options::NEONGAMMON_RELEASES_JSON;
 
 #[derive(Deserialize)]
 struct Release {

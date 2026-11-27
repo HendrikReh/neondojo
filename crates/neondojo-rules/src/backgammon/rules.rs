@@ -41,18 +41,14 @@ fn turn_dice(dice: [i32; 2]) -> Vec<i32> {
     }
 }
 
-pub(crate) struct CheckerPath {
+pub struct CheckerPath {
     pub board: [i32; 26],
     pub steps: Vec<(usize, usize, i32)>,
 }
 
 /// Complete checker paths in mover-relative coordinates, with absolute end
 /// boards. An active position with no legal path is a forced pass.
-pub(crate) fn checker_paths(
-    board: &[i32; 26],
-    player: i32,
-    dice: [i32; 2],
-) -> Result<Vec<CheckerPath>> {
+pub fn checker_paths(board: &[i32; 26], player: i32, dice: [i32; 2]) -> Result<Vec<CheckerPath>> {
     ensure!(matches!(player, 0 | 1), "Invalid checker turn player");
     ensure!(
         dice.iter().all(|die| (1..=6).contains(die)),
@@ -217,7 +213,7 @@ fn expand_runs(
 /// files imported from text do. Expand at most four dice using the replayed
 /// board, including bar priority and legal overshoots. SGF imports themselves
 /// continue to require explicit steps.
-pub(crate) fn expand_joined_play(
+pub fn expand_joined_play(
     board: &mut [i32; 26],
     player: i32,
     dice: [i32; 2],
@@ -250,7 +246,7 @@ pub(crate) fn expand_joined_play(
 
 /// Apply a complete turn in the given order. Pairs are mover-relative, with
 /// bar at 25 and off at 0. The input and output boards use absolute colors.
-pub(crate) fn apply_checker_turn(
+pub fn apply_checker_turn(
     board: &[i32; 26],
     player: i32,
     dice: [i32; 2],

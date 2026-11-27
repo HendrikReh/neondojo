@@ -2,7 +2,7 @@
 //! coordinates (`25` = bar, `1..=24` = points, `0` = off).
 use std::borrow::Cow;
 
-pub(crate) fn format_point(point: usize) -> Cow<'static, str> {
+pub fn format_point(point: usize) -> Cow<'static, str> {
     match point {
         25 => Cow::Borrowed("bar"),
         0 => Cow::Borrowed("off"),
@@ -10,7 +10,7 @@ pub(crate) fn format_point(point: usize) -> Cow<'static, str> {
     }
 }
 
-pub(crate) fn format_step(from: usize, to: usize, hit: bool) -> String {
+pub fn format_step(from: usize, to: usize, hit: bool) -> String {
     format!(
         "{}/{}{}",
         format_point(from),
@@ -23,7 +23,7 @@ pub(crate) fn format_step(from: usize, to: usize, hit: bool) -> String {
 /// `"bar/22* 6/4(2)"`, `"13/7/5"`, or `"Cannot move"` into `(from, to)` runs
 /// (`25` = bar, `0` = off). Rejects empty, overlong (>160 bytes), or >4-run
 /// inputs.
-pub(crate) fn parse_steps(notation: &str) -> Option<Vec<(usize, usize)>> {
+pub fn parse_steps(notation: &str) -> Option<Vec<(usize, usize)>> {
     let trimmed = notation.trim();
     if trimmed.is_empty() || notation.len() > 160 {
         return None;

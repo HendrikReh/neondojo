@@ -1,12 +1,12 @@
 use anyhow::{Result, ensure};
 
-pub(crate) const MAX_CUBE_VALUE: i32 = 32768;
+pub const MAX_CUBE_VALUE: i32 = 32768;
 
-pub(crate) fn is_valid_cube_value(value: i32) -> bool {
+pub fn is_valid_cube_value(value: i32) -> bool {
     (1..=MAX_CUBE_VALUE).contains(&value) && (value as u32).is_power_of_two()
 }
 
-pub(crate) fn initial_board() -> [i32; 26] {
+pub fn initial_board() -> [i32; 26] {
     let mut b = [0; 26];
     for (p, n) in [
         (6, 5),
@@ -23,7 +23,7 @@ pub(crate) fn initial_board() -> [i32; 26] {
     b
 }
 
-pub(crate) fn validate(board: &[i32; 26]) -> Result<()> {
+pub fn validate(board: &[i32; 26]) -> Result<()> {
     ensure!(
         board.iter().all(|count| (-15..=15).contains(count)),
         "Each board count must be between -15 and 15"
@@ -40,7 +40,7 @@ pub(crate) fn validate(board: &[i32; 26]) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn validate_slice(board: &[i32]) -> Result<&[i32; 26]> {
+pub fn validate_slice(board: &[i32]) -> Result<&[i32; 26]> {
     let array: &[i32; 26] = board
         .try_into()
         .map_err(|_| anyhow::anyhow!("Board must contain 26 points"))?;
@@ -48,7 +48,7 @@ pub(crate) fn validate_slice(board: &[i32]) -> Result<&[i32; 26]> {
     Ok(array)
 }
 
-pub(crate) fn validate_active(board: &[i32; 26]) -> Result<()> {
+pub fn validate_active(board: &[i32; 26]) -> Result<()> {
     validate(board)?;
     ensure!(
         board.iter().any(|&count| count > 0) && board.iter().any(|&count| count < 0),
@@ -57,11 +57,11 @@ pub(crate) fn validate_active(board: &[i32; 26]) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn valid_board(b: &[i32; 26]) -> Result<()> {
+pub fn valid_board(b: &[i32; 26]) -> Result<()> {
     validate(b)
 }
 
-pub(crate) fn local_board(board: &[i32; 26], player: i32) -> [i32; 26] {
+pub fn local_board(board: &[i32; 26], player: i32) -> [i32; 26] {
     if player == 0 {
         *board
     } else {
@@ -72,7 +72,7 @@ pub(crate) fn local_board(board: &[i32; 26], player: i32) -> [i32; 26] {
 /// Pip counts `[white_pips, black_pips]` for an absolute board, or
 /// `[mover_pips, opponent_pips]` for a `local_board` (both use `board[25] >= 0`
 /// and `board[0] <= 0`).
-pub(crate) fn pip_counts(board: &[i32; 26]) -> [i32; 2] {
+pub fn pip_counts(board: &[i32; 26]) -> [i32; 2] {
     let mut white = 25 * board[25].max(0);
     let mut black = 25 * (-board[0]).max(0);
     for (point, &count) in board.iter().enumerate().take(25).skip(1) {
@@ -88,7 +88,7 @@ pub(crate) fn pip_counts(board: &[i32; 26]) -> [i32; 2] {
 /// True while at least one negative checker still sits behind (at a lower point
 /// than, or on the bar behind) the rearmost positive checker. Works identically
 /// on absolute boards and mover-relative `local_board`s.
-pub(crate) fn has_contact(board: &[i32; 26]) -> bool {
+pub fn has_contact(board: &[i32; 26]) -> bool {
     let rearmost_positive = if board[25] > 0 {
         25
     } else {
