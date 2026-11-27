@@ -46,5 +46,13 @@
     "fingerprint": "32376db9d2ea5c39264ed153e835080ccbcb3c7201b46b764c3c5511c79f4a74",
     "revision": "4553ed8727feb5f45a992a6c416da03d26e9ffe9",
     "deep_checker_batch": true
+  },
+  "3.2.2": {
+    "presets": true,
+    "checker_batch": true,
+    "shared_models": true,
+    "fingerprint": "d531c887a518ff89fefb05be621e3eb268f4510cb013852f5950b950aebc4682",
+    "revision": "81aec61a20131185269cdb2d2deedd243596b007",
+    "deep_checker_batch": true
   }
 }
