@@ -909,14 +909,23 @@ impl NoteDraft {
     }
 
     pub fn set_comment(&mut self, comment: String) -> Result<(), String> {
-        if comment.chars().count() > MAX_COMMENT_CHARS {
-            return Err(format!("Comment exceeds {MAX_COMMENT_CHARS} characters"));
-        }
         if self.comment != comment {
             self.comment = comment;
             self.dirty = true;
         }
+        if self.comment.chars().count() > MAX_COMMENT_CHARS {
+            return Err(format!("Comment exceeds {MAX_COMMENT_CHARS} characters"));
+        }
         Ok(())
+    }
+
+    pub fn prepare_update(&mut self, comment: String) -> Result<AnnotationUpdate, String> {
+        self.set_comment(comment)?;
+        Ok(AnnotationUpdate {
+            tags: self.tags.clone(),
+            comment: self.comment.clone(),
+            expected_version: self.base_version,
+        })
     }
 }
 
@@ -1047,8 +1056,8 @@ impl NotesDraftCache {
         self.drafts.get(&key).is_some_and(|d| d.dirty)
     }
 
-    pub fn clear_for_match(&mut self) {
-        self.drafts.clear();
+    pub fn retain_unsaved(&mut self) {
+        self.drafts.retain(|_, draft| draft.dirty);
     }
 }
 

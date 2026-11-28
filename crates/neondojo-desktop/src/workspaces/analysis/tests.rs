@@ -1177,10 +1177,12 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
                 target_id: pos1_id,
             };
             ws.notes_drafts
+                .as_mut(cx)
                 .ensure_entry(key)
                 .set_comment("Preserved draft text".into())
                 .unwrap();
             ws.notes_drafts
+                .as_mut(cx)
                 .mark_conflict(key, &DomainError::conflict("Stale version 1 vs 2"));
             ws.select_detail_tab(AnalysisDetailTab::Notes, window, cx);
         });
@@ -1441,7 +1443,7 @@ async fn move_notes_editor_restores_multiline_drafts_when_changing_decisions(
 ) {
     use gpui_kit::component::WindowExt;
     init_headless_test_env(cx);
-    let (window, _) = cx
+    let (window, workspace) = cx
         .update(|cx| {
             gpui_kit::open_window(WindowOptions::default(), cx, |w, cx| {
                 cx.new(|cx| AnalysisWorkspace::new(w, cx))
@@ -1450,7 +1452,7 @@ async fn move_notes_editor_restores_multiline_drafts_when_changing_decisions(
         .unwrap();
     let match_id = Uuid::new_v4();
     let pos = sample_position(match_id, 1, 1);
-    let moves = ["double", "take"]
+    let moves = ["8/5 6/5", "take"]
         .into_iter()
         .enumerate()
         .map(|(ix, action)| StoredMove {
@@ -1458,10 +1460,10 @@ async fn move_notes_editor_restores_multiline_drafts_when_changing_decisions(
             match_uuid: match_id,
             game_no: 1,
             move_no: (ix + 1) as i32,
-            kind: "cube".into(),
+            kind: if ix == 0 { "checker" } else { "cube" }.into(),
             player: ix as i32,
             notation: action.into(),
-            position_uuid: None,
+            position_uuid: (ix == 0).then_some(pos.id),
             board: pos.board.clone(),
             dice: vec![],
             position_id: pos.position_id.clone(),
@@ -1470,15 +1472,12 @@ async fn move_notes_editor_restores_multiline_drafts_when_changing_decisions(
         .collect();
     let field = cx
         .update_window(window, |_, window, cx| {
-            super::notes_cards::open_move_notes_dialog(
-                match_id,
-                1,
-                moves,
-                None,
-                ["White".into(), "Black".into()],
-                window,
-                cx,
-            );
+            workspace.update(cx, |ws, cx| {
+                ws.open_match(match_id, Some(1), Some(pos.id), None, window, cx);
+                ws.active_tab = AnalysisDetailTab::Notes;
+                ws.source_moves = moves;
+                ws.open_move_notes_for(None, window, cx);
+            });
             window.render_frame(cx);
             window.click("move-notes-comment", cx);
             let field = window
@@ -1492,7 +1491,7 @@ async fn move_notes_editor_restores_multiline_drafts_when_changing_decisions(
                     >= field.read(cx).line_height().unwrap() * 4.
             );
             cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
-                "Double?\nReview the take.".into(),
+                "Checker play\nReview the hit.".into(),
             ));
             window.press("cmd-v", cx);
             field
@@ -1502,7 +1501,87 @@ async fn move_notes_editor_restores_multiline_drafts_when_changing_decisions(
         window.click("move-notes-item-1", cx);
         assert_eq!(field.read(cx).value(), "");
         window.click("move-notes-item-0", cx);
-        assert_eq!(field.read(cx).value(), "Double?\nReview the take.");
+        assert_eq!(field.read(cx).value(), "Checker play\nReview the hit.");
+        window.close_dialog(cx);
+        let inspector = workspace.read(cx).comment_input.clone();
+        assert_eq!(inspector.read(cx).value(), "Checker play\nReview the hit.");
+        workspace.update(cx, |ws, cx| ws.open_move_notes_for(None, window, cx));
+        window.render_frame(cx);
+        window.click("move-notes-comment", cx);
+        let reopened = window
+            .focused_input(cx)
+            .unwrap()
+            .as_textarea()
+            .unwrap()
+            .clone();
+        assert_ne!(reopened, field);
+        assert_eq!(reopened.read(cx).value(), "Checker play\nReview the hit.");
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+async fn over_limit_note_survives_match_switch_and_delayed_conflict_resolution(
+    cx: &mut TestAppContext,
+) {
+    init_headless_test_env(cx);
+    let (window, workspace) = cx
+        .update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+                cx.new(|cx| AnalysisWorkspace::new(window, cx))
+            })
+        })
+        .unwrap();
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+    let text = "x".repeat(super::state::MAX_COMMENT_CHARS + 1);
+    let key = NoteTargetKey {
+        kind: AnnotationKind::Match,
+        target_id: first,
+    };
+    let latest = Annotation {
+        id: None,
+        target_kind: key.kind,
+        target_id: first,
+        tags: Vec::new(),
+        comment: "Server version".into(),
+        version: 2,
+        updated_at: None,
+    };
+    cx.update_window(window, |_, window, cx| {
+        workspace.update(cx, |ws, cx| {
+            ws.active_tab = AnalysisDetailTab::Notes;
+            ws.notes_scope = AnnotationKind::Match;
+            ws.open_match(first, Some(1), None, None, window, cx);
+            let drafts = ws.notes_drafts.clone();
+            assert!(
+                drafts
+                    .as_mut(cx)
+                    .ensure_entry(key)
+                    .prepare_update(text.clone())
+                    .is_err()
+            );
+            drafts
+                .as_mut(cx)
+                .mark_conflict(key, &DomainError::conflict("Conflict"));
+            let original = drafts.read(cx).get(key).unwrap().clone();
+            ws.open_match(second, Some(1), None, None, window, cx);
+            ws.load_current_note(window, cx);
+            ws.apply_note_conflict_resolution(key, &original, &latest, false, window, cx);
+            assert_eq!(ws.comment_input.read(cx).value(), "");
+            assert_eq!(drafts.read(cx).get(key), Some(&original));
+            ws.open_match(first, Some(1), None, None, window, cx);
+            ws.load_current_note(window, cx);
+            assert_eq!(ws.comment_input.read(cx).value().as_ref(), text);
+            let update = drafts
+                .as_mut(cx)
+                .ensure_entry(key)
+                .prepare_update("Corrected".into())
+                .unwrap();
+            assert_eq!(update.comment, "Corrected");
+            ws.apply_note_conflict_resolution(key, &original, &latest, false, window, cx);
+            assert_eq!(drafts.read(cx).get(key).unwrap().comment, "Corrected");
+        });
     })
     .unwrap();
 }

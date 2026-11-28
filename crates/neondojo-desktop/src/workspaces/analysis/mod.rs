@@ -35,12 +35,12 @@ use self::jobs::{AnalysisJobEvent, MatchAnalysisJobEntity};
 use self::move_history::{MoveHistoryCallbacks, render_move_history_pane};
 use self::notes_cards::{
     CardsCallbacks, CardsViewProps, NotesCallbacks, NotesViewProps, open_move_notes_dialog,
-    render_cards_inspector, render_notes_inspector,
+    render_cards_inspector, render_notes_inspector, sync_note_comment,
 };
 use self::state::{
     ActiveBoardTarget, AnalysisDetailTab, BoardWidthController, CheckerSubTab, CompareEngineSlot,
     CubeAutoSelectState, CubeFilterState, DiceTabState, DiceTransitionAction, InterleavedMoveRow,
-    MOVE_LIST_PANE_WIDTH, MoveAssessmentSnapshot, MoveHistoryFilter, NoteTargetKey,
+    MOVE_LIST_PANE_WIDTH, MoveAssessmentSnapshot, MoveHistoryFilter, NoteDraft, NoteTargetKey,
     NotesDraftCache, build_interleaved_move_rows, catalog_entry_engine, run_facade,
 };
 use crate::app_context::DesktopAppContext;
@@ -73,7 +73,7 @@ use neondojo::{
         AnalysisCatalogEntry, AnalysisCatalogPage, AnalysisCatalogQuery, SelectedPositionAnalysis,
     },
     analysis_statistics::catalog::{CatalogStatisticsQuery, MatchAnalysisStatistics},
-    annotations::{AnnotationKind, AnnotationUpdate},
+    annotations::{Annotation, AnnotationKind},
     api::{MatchAnalysisEngine, PositionJobKind, PositionQuery},
     databases::DatabaseMatch,
     domain_error::ErrorKind,
@@ -189,7 +189,7 @@ pub struct AnalysisWorkspace {
 
     // Notes tab (persistent drafts across navigation + 409 conflict preservation)
     pub(crate) notes_scope: AnnotationKind,
-    pub(crate) notes_drafts: NotesDraftCache,
+    pub(crate) notes_drafts: Entity<NotesDraftCache>,
     pub(crate) notes_saving: bool,
     pub(crate) notes_saved_feedback: bool,
     pub(crate) notes_validation_error: Option<String>,
@@ -267,12 +267,33 @@ impl AnalysisWorkspace {
         let job_controller = cx.new(MatchAnalysisJobEntity::new);
         let job_subscription = cx.subscribe_in(&job_controller, window, Self::on_job_event);
 
+        let notes_drafts = cx.new(|_| NotesDraftCache::default());
+        cx.observe_in(&notes_drafts, window, |ws, drafts, window, cx| {
+            if ws.active_tab == AnalysisDetailTab::Notes {
+                if sync_note_comment(
+                    &drafts,
+                    ws.current_note_target_key(),
+                    &ws.comment_input,
+                    window,
+                    cx,
+                ) {
+                    ws.notes_validation_error = None;
+                    ws.notes_saved_feedback = false;
+                }
+                cx.notify();
+            }
+        })
+        .detach();
         let comment_input_sub = cx.subscribe(&comment_input, |this, inp, event, cx| {
             if matches!(event, InputEvent::Change)
                 && let Some(key) = this.current_note_target_key()
             {
                 let value = inp.read(cx).value().to_string();
-                let res = this.notes_drafts.ensure_entry(key).set_comment(value);
+                let res = this
+                    .notes_drafts
+                    .as_mut(cx)
+                    .ensure_entry(key)
+                    .set_comment(value);
                 this.notes_validation_error = res.err();
                 this.notes_saved_feedback = false;
                 cx.notify();
@@ -354,7 +375,7 @@ impl AnalysisWorkspace {
             compare_stats_a: None,
             compare_stats_b: None,
             notes_scope: AnnotationKind::Position,
-            notes_drafts: NotesDraftCache::default(),
+            notes_drafts,
             notes_saving: false,
             notes_saved_feedback: false,
             notes_validation_error: None,
@@ -472,7 +493,9 @@ impl AnalysisWorkspace {
             self.stats_drilldown = None;
             self.compare_stats_a = None;
             self.compare_stats_b = None;
-            self.notes_drafts.clear_for_match();
+            self.notes_drafts.as_mut(cx).retain_unsaved();
+            self.notes_validation_error = None;
+            self.notes_saved_feedback = false;
             self.card_suggestions = None;
             self.selected_suggestions.clear();
             self.suggestion_boards.clear();
@@ -536,7 +559,7 @@ impl AnalysisWorkspace {
         self.observed_rolls = None;
         self.cube_decisions.clear();
         self.statistics = None;
-        self.notes_drafts.clear_for_match();
+        self.notes_drafts.as_mut(cx).retain_unsaved();
         self.welcome_mode = true;
 
         if cx.has_global::<LocalUiState>() {
@@ -1704,17 +1727,16 @@ impl AnalysisWorkspace {
     // ── Notes Persistence & 409 Conflict Preservation ────────────────────────
 
     pub(crate) fn load_current_note(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        sync_note_comment(
+            &self.notes_drafts,
+            self.current_note_target_key(),
+            &self.comment_input,
+            window,
+            cx,
+        );
         let Some(key) = self.current_note_target_key() else {
             return;
         };
-        // Immediately restore any preserved local draft into the comment input
-        let text = self
-            .notes_drafts
-            .get(key)
-            .map(|d| d.comment.clone())
-            .unwrap_or_default();
-        self.comment_input
-            .update(cx, |inp, cx| inp.set_value(text, window, cx));
 
         let Some(facade) = cx
             .try_global::<DesktopAppContext>()
@@ -1732,16 +1754,8 @@ impl AnalysisWorkspace {
             let Ok(Ok(ann)) = read.await else {
                 return;
             };
-            let _ = this.update_in(cx, |ws, window, cx| {
-                let draft = ws.notes_drafts.merge_loaded(&ann);
-                let comment_val = draft.comment.clone();
-                if ws.current_note_target_key() == Some(key)
-                    && ws.comment_input.read(cx).value().as_ref() != comment_val
-                {
-                    ws.comment_input
-                        .update(cx, |inp, cx| inp.set_value(comment_val, window, cx));
-                }
-                cx.notify();
+            let _ = this.update(cx, |ws, cx| {
+                ws.notes_drafts.as_mut(cx).merge_loaded(&ann);
             });
         })
         .detach();
@@ -1759,18 +1773,18 @@ impl AnalysisWorkspace {
         };
 
         let comment_val = self.comment_input.read(cx).value().to_string();
-        if let Err(err) = self
+        let submitted = self
             .notes_drafts
+            .as_mut(cx)
             .ensure_entry(key)
-            .set_comment(comment_val.clone())
-        {
-            self.notes_validation_error = Some(err);
-            cx.notify();
-            return;
-        }
-        let (tags, expected_version) = {
-            let d = self.notes_drafts.ensure_entry(key);
-            (d.tags.clone(), d.base_version)
+            .prepare_update(comment_val);
+        let submitted = match submitted {
+            Ok(update) => update,
+            Err(err) => {
+                self.notes_validation_error = Some(err);
+                cx.notify();
+                return;
+            }
         };
 
         self.notes_saving = true;
@@ -1779,11 +1793,6 @@ impl AnalysisWorkspace {
         let match_id = self.match_id;
         cx.notify();
 
-        let submitted = AnnotationUpdate {
-            tags,
-            comment: comment_val,
-            expected_version,
-        };
         let write = TokioBridge::spawn_write(cx, state::save_note(facade, key, submitted));
 
         cx.spawn_in(window, async move |this, cx| {
@@ -1792,22 +1801,24 @@ impl AnalysisWorkspace {
                 ws.notes_saving = false;
                 match res {
                     Ok(Ok((saved, submitted))) => {
-                        ws.notes_drafts.mark_saved(&saved, &submitted);
+                        ws.notes_drafts.as_mut(cx).mark_saved(&saved, &submitted);
                         ws.notes_saved_feedback = ws.current_note_target_key() == Some(key)
-                            && !ws.notes_drafts.has_dirty(key);
+                            && !ws.notes_drafts.read(cx).has_dirty(key);
                         if let Some(mid) = match_id {
                             cx.emit(WorkspaceEvent::AnnotationSaved { match_id: mid });
                         }
                     }
                     Ok(Err(err)) => {
                         if err.kind == ErrorKind::Conflict {
-                            ws.notes_drafts.mark_conflict(key, &err);
-                        } else {
+                            ws.notes_drafts.as_mut(cx).mark_conflict(key, &err);
+                        } else if ws.current_note_target_key() == Some(key) {
                             ws.notes_validation_error = Some(err.to_string());
                         }
                     }
                     Err(err) => {
-                        ws.notes_validation_error = Some(format!("Save interrupted: {err}"));
+                        if ws.current_note_target_key() == Some(key) {
+                            ws.notes_validation_error = Some(format!("Save interrupted: {err}"));
+                        }
                     }
                 }
                 cx.notify();
@@ -1823,6 +1834,9 @@ impl AnalysisWorkspace {
         cx: &mut Context<Self>,
     ) {
         let Some(key) = self.current_note_target_key() else {
+            return;
+        };
+        let Some(requested_draft) = self.notes_drafts.read(cx).get(key).cloned() else {
             return;
         };
         let Some(facade) = cx
@@ -1842,18 +1856,43 @@ impl AnalysisWorkspace {
                 return;
             };
             let _ = this.update_in(cx, |ws, window, cx| {
-                if keep_my_draft {
-                    ws.notes_drafts.rebase_draft_version(key, latest.version);
-                    ws.save_current_note(window, cx);
-                } else {
-                    ws.notes_drafts.accept_server_latest(key, &latest);
-                    ws.comment_input
-                        .update(cx, |inp, cx| inp.set_value(latest.comment, window, cx));
-                }
-                cx.notify();
+                ws.apply_note_conflict_resolution(
+                    key,
+                    &requested_draft,
+                    &latest,
+                    keep_my_draft,
+                    window,
+                    cx,
+                );
             });
         })
         .detach();
+    }
+
+    fn apply_note_conflict_resolution(
+        &mut self,
+        key: NoteTargetKey,
+        requested_draft: &NoteDraft,
+        latest: &Annotation,
+        keep_my_draft: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.current_note_target_key() != Some(key)
+            || self.notes_drafts.read(cx).get(key) != Some(requested_draft)
+        {
+            return;
+        }
+        if keep_my_draft {
+            self.notes_drafts
+                .as_mut(cx)
+                .rebase_draft_version(key, latest.version);
+            self.save_current_note(window, cx);
+        } else {
+            self.notes_drafts
+                .as_mut(cx)
+                .accept_server_latest(key, latest);
+        }
     }
 
     // ── Cards Operations ─────────────────────────────────────────────────────
@@ -2349,12 +2388,12 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let (Some(match_id), Some(game_no)) = (self.match_id, self.current_game_no) else {
+        let Some(game_no) = self.current_game_no else {
             return;
         };
         let players = self.player_names();
         open_move_notes_dialog(
-            match_id,
+            self.notes_drafts.clone(),
             game_no,
             self.source_moves.clone(),
             initial_move_id,
@@ -3464,7 +3503,7 @@ impl Render for AnalysisWorkspace {
 
             AnalysisDetailTab::Notes => {
                 let target_key = self.current_note_target_key();
-                let draft = target_key.and_then(|k| self.notes_drafts.get(k));
+                let draft = target_key.and_then(|k| self.notes_drafts.read(cx).get(k));
                 let notes_callbacks = NotesCallbacks {
                     on_select_scope: {
                         let e = ent.clone();
@@ -3484,7 +3523,9 @@ impl Render for AnalysisWorkspace {
                             e.update(cx, |ws, cx| {
                                 let raw = ws.tag_input.read(cx).value().to_string();
                                 if let Some(key) = ws.current_note_target_key() {
-                                    match ws.notes_drafts.ensure_entry(key).add_tag(&raw) {
+                                    let result =
+                                        ws.notes_drafts.as_mut(cx).ensure_entry(key).add_tag(&raw);
+                                    match result {
                                         Ok(()) => {
                                             ws.notes_validation_error = None;
                                             ws.tag_input.update(cx, |inp, cx| {
@@ -3505,7 +3546,10 @@ impl Render for AnalysisWorkspace {
                         Rc::new(move |tag, _, cx| {
                             e.update(cx, |ws, cx| {
                                 if let Some(key) = ws.current_note_target_key() {
-                                    ws.notes_drafts.ensure_entry(key).remove_tag(&tag);
+                                    ws.notes_drafts
+                                        .as_mut(cx)
+                                        .ensure_entry(key)
+                                        .remove_tag(&tag);
                                 }
                                 cx.notify();
                             })
