@@ -519,6 +519,10 @@ fn imported_and_native_comparison_retains_equities_depths_rank_paths_and_source_
     let mut pos = sample_position(Uuid::new_v4(), 1, 1);
     pos.dice = vec![6, 2];
     pos.notation = "24/18 13/11".into();
+    assert_eq!(
+        super::candidate_data::candidate_notation(En, &pos, "24/22 22/16"),
+        "24/16"
+    );
     let mut result = checker_result(json!([
         {"rank":1,"notation":"24/16","equity":-0.010413,"equity_kind":"cubeful","depth":"Opening Book V2","probabilities":{},"raw":null},
         {"rank":2,"notation":"24/18 13/11","equity":0.014604,"equity_kind":"cubeful","depth":"Opening Book V2","probabilities":{"win":0.55,"win_gammon":0.11,"win_backgammon":0.01,"lose_gammon":0.13,"lose_backgammon":0.02},"raw":null},

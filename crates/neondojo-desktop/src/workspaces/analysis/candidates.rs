@@ -11,8 +11,8 @@
 //!    bars with weight-1 doubles vs weight-2 non-doubles expected markers).
 
 use super::candidate_data::{
-    CheckerCandidate, board_key, build_candidate_compare_rows, comparison_options,
-    extract_candidates,
+    CheckerCandidate, board_key, build_candidate_compare_rows, candidate_notation,
+    comparison_options, extract_candidates,
 };
 use super::state::{
     Action2Cb, ActionCb, CheckerSubTab, ClickCb, CompareEngineSlot, DiceDistributionSnapshot,
@@ -287,6 +287,7 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
                 .previewed_notation
                 .is_some_and(|n| n.eq_ignore_ascii_case(cand.preview()));
             let notation_click = cand.preview().to_owned();
+            let raw_path = notation_click.clone();
             let on_preview = props.callbacks.on_preview_candidate.clone();
 
             let outcomes = cand.outcomes();
@@ -340,7 +341,12 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
                                         FontWeight::NORMAL
                                     })
                                     .text_color(p.text)
-                                    .child(cand.notation.clone()),
+                                    .id(SharedString::from(format!("candidate-move-{ix}")))
+                                    .test_support()
+                                    .tooltip(move |w, cx| {
+                                        Tooltip::new(raw_path.clone()).build(w, cx)
+                                    })
+                                    .child(candidate_notation(locale, pos, &cand.notation)),
                             )
                             .when(is_best, |el| {
                                 el.child(
@@ -817,15 +823,20 @@ fn render_compare_subtab(
             .fold(px(0.), Pixels::max)
     };
     let badge_width = text_width(played, FONT_SIZE_MICRO, FontWeight::NORMAL) + px(12.);
+    let move_labels = rows
+        .iter()
+        .map(|row| candidate_notation(locale, pos, row.display_notation))
+        .collect::<Vec<_>>();
     let move_width = rows
         .iter()
-        .map(|row| {
+        .zip(&move_labels)
+        .map(|(row, label)| {
             let weight = if row.played {
                 FontWeight::SEMIBOLD
             } else {
                 FontWeight::NORMAL
             };
-            text_width(row.display_notation, FONT_SIZE_TABLE, weight)
+            text_width(label, FONT_SIZE_TABLE, weight)
                 + if row.played { badge_width } else { px(0.) }
         })
         .fold(px(48.), Pixels::max)
@@ -907,8 +918,11 @@ fn render_compare_subtab(
                                                 ActionButton::new(SharedString::from(format!(
                                                     "compare-sort-delta-{si}"
                                                 )))
-                                                .dense_nav()
-                                                .label("|Δ|")
+                                                .label(if props.compare_sort_delta == Some(slot) {
+                                                    "|Δ| ↓"
+                                                } else {
+                                                    "|Δ|"
+                                                })
                                                 .tooltip(I18n::format(
                                                     locale,
                                                     "candidate",
@@ -936,7 +950,7 @@ fn render_compare_subtab(
                 ),
         );
 
-    for (ix, row) in rows.iter().enumerate() {
+    for (ix, (row, label)) in rows.iter().zip(move_labels).enumerate() {
         let on_prev = props.callbacks.on_preview_candidate.clone();
         let default_preview = row
             .slots
@@ -946,6 +960,7 @@ fn render_compare_subtab(
             .expect("each row has a candidate")
             .preview()
             .to_owned();
+        let raw_path = default_preview.clone();
         let ref_rank = row.slots[0].and_then(|candidate| candidate.xg_equity_rank);
         table = table.child(
             div()
@@ -970,6 +985,7 @@ fn render_compare_subtab(
                         .gap(px(4.0))
                         .id(SharedString::from(format!("compare-move-{ix}")))
                         .test_support()
+                        .tooltip(move |w, cx| Tooltip::new(raw_path.clone()).build(w, cx))
                         .w(move_width)
                         .flex_shrink_0()
                         .min_w_0()
@@ -982,7 +998,7 @@ fn render_compare_subtab(
                                     FontWeight::NORMAL
                                 })
                                 .text_color(p.text)
-                                .child(row.display_notation.to_owned()),
+                                .child(label),
                         )
                         .when(row.played, |el| {
                             el.child(
@@ -1028,7 +1044,9 @@ fn render_compare_subtab(
                     let rank_text = rank.map_or_else(|| "—".into(), |r| format!("#{r}{arrow}"));
                     let on_preview = props.callbacks.on_preview_candidate.clone();
                     let preview = candidate.preview().to_owned();
+                    let raw_path = preview.clone();
                     cell.cursor_pointer()
+                        .tooltip(move |w, cx| Tooltip::new(raw_path.clone()).build(w, cx))
                         .on_click(move |_, w, cx| {
                             cx.stop_propagation();
                             on_preview(preview.clone(), w, cx)

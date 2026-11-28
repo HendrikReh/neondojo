@@ -7,7 +7,8 @@ use neondojo::{
     model::Position,
 };
 use neondojo_i18n::{
-    I18n, Locale, format_decimal, format_equity_digits, format_percent, format_ply,
+    CheckerPositionRef, I18n, Locale, format_decimal, format_equity_digits, format_percent,
+    format_ply, localize_decision_in_position,
 };
 use std::{cmp::Reverse, collections::HashMap};
 
@@ -311,6 +312,25 @@ pub fn comparison_options<'a>(
         .collect();
     options.sort_by_key(|e| Reverse((e.job.as_ref().map(|job| job.plies), e.created_at)));
     options
+}
+
+/// Format the label with the original position so intermediate hits survive compaction.
+pub fn candidate_notation(locale: Locale, pos: &Position, notation: &str) -> String {
+    let board = <[i32; 26]>::try_from(pos.board.as_slice())
+        .ok()
+        .filter(|b| b.iter().all(|&v| i8::try_from(v).is_ok()))
+        .map(|b| b.map(|v| v as i8));
+    let context = || {
+        let [first, second] = pos.dice.as_slice() else {
+            return None;
+        };
+        Some(CheckerPositionRef {
+            board: board.as_ref()?,
+            player: u8::try_from(pos.player).ok()?,
+            dice: [u8::try_from(*first).ok()?, u8::try_from(*second).ok()?],
+        })
+    };
+    localize_decision_in_position(locale, notation, context())
 }
 
 pub fn board_key(pos: &Position, notation: &str) -> String {
