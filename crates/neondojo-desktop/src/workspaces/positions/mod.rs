@@ -416,8 +416,8 @@ mod tests {
     use super::*;
     use crate::configure_app;
     use chrono::{Duration, TimeZone, Utc};
-    use gpui_kit::test::TestWindowExt;
     use gpui_kit::{Bounds, WindowBounds, WindowOptions, point, size};
+    use gpui_kit::{component::WindowExt, test::TestWindowExt};
 
     fn desktop_window_options() -> WindowOptions {
         WindowOptions {
@@ -1078,6 +1078,28 @@ mod tests {
                 dv.open_hit_in_analysis(&checker_decision, cx);
                 dv.open_hit_in_analysis(&cube_decision, cx);
             });
+
+            // A rejected page must also retire the previous player's preview and bulk references.
+            for failed_page in [
+                Err("Search failed".into()),
+                Ok(neondojo::recurring_mistakes::DecisionSearchPage {
+                    items: vec![serde_json::json!({"kind":"checker"})],
+                    total: 1,
+                    page: 1,
+                    limit: 50,
+                }),
+            ] {
+                decisions_ent.update(cx, |view, cx| {
+                    view.set_items_for_test(vec![checker_decision.clone()], cx);
+                    view.apply_search_page(failed_page, cx);
+                    assert!(view.items().is_empty());
+                    assert!(view.practicable_page_items().is_empty());
+                });
+                window.render_frame(cx);
+                assert!(window.try_find("ds-preview-open-analysis").is_none());
+                window.click("ds-add-page-deck-btn", cx);
+                assert!(!window.has_active_dialog(cx));
+            }
 
             // 3. Switch to Similar Positions & Practice via TextNavBar click
             window.click("positions-tab-similar", cx);

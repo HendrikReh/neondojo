@@ -60,8 +60,9 @@ use neondojo::practice::evaluation::{
     CubeOfferAction, CubeResponseAction, PracticeAnswer, PracticeEvaluation, PracticeVerdict,
 };
 use neondojo::recurring_mistakes::{
-    CubeOwnerFilter, DecisionKind, DecisionSearchQuery, LossDirection, MistakeAnswer,
-    MistakeAttempt, MistakeAttemptRequest, MistakeKind, MistakeReference, MistakesQuery,
+    CubeOwnerFilter, DecisionKind, DecisionSearchPage, DecisionSearchQuery, LossDirection,
+    MistakeAnswer, MistakeAttempt, MistakeAttemptRequest, MistakeKind, MistakeReference,
+    MistakesQuery,
 };
 use neondojo_board::{BoardEvent, BoardView, BoardViewMode};
 use neondojo_i18n::{
@@ -283,6 +284,7 @@ pub struct DecisionSearchView {
     preview_board: Entity<BoardView>,
     preview_bookmarked: Option<bool>,
     bookmark_busy: bool,
+    bookmark_read: Option<gpui_kit::Task<()>>,
 
     // Table layout & resize
     table_layout: DecisionTableLayout,
@@ -408,6 +410,7 @@ impl DecisionSearchView {
             preview_board,
             preview_bookmarked: None,
             bookmark_busy: false,
+            bookmark_read: None,
             table_layout: DecisionTableLayout::default(),
             column_picker_open: false,
             resizing: None,
@@ -468,8 +471,9 @@ impl DecisionSearchView {
     }
 
     fn sync_preview_board(&mut self, cx: &mut Context<Self>) {
+        self.bookmark_read = None;
+        self.preview_bookmarked = None;
         let Some(hit) = self.active_preview().cloned() else {
-            self.preview_bookmarked = None;
             return;
         };
         let bp = position_to_board_position(&hit.position, true);
@@ -498,22 +502,22 @@ impl DecisionSearchView {
         }) else {
             return;
         };
-        let weak = cx.weak_entity();
-        cx.spawn(async move |_this, cx| {
-            let Ok(res) = task.await else {
-                return;
-            };
-            let _ = weak.update(cx, |view, cx| {
+        self.bookmark_read = Some(cx.spawn(async move |view, cx| {
+            let result = task.await;
+            let _ = view.update(cx, |view, cx| {
+                view.bookmark_read = None;
                 if view
                     .active_preview()
-                    .is_some_and(|p| p.position.id == pos_id)
+                    .is_some_and(|hit| hit.position.id == pos_id)
                 {
-                    view.preview_bookmarked = Some(res.is_ok());
-                    cx.notify();
+                    view.preview_bookmarked = result
+                        .ok()
+                        .and_then(Result::ok)
+                        .map(|bookmark| bookmark.saved);
                 }
+                cx.notify();
             });
-        })
-        .detach();
+        }));
     }
 
     fn toggle_preview_bookmark(&mut self, cx: &mut Context<Self>) {
@@ -526,7 +530,11 @@ impl DecisionSearchView {
         let Some(facade) = self.facade.clone() else {
             return;
         };
-        let currently_saved = self.preview_bookmarked.unwrap_or(false);
+        let Some(currently_saved) = self.preview_bookmarked else {
+            self.load_preview_bookmark_state(&hit, cx);
+            cx.notify();
+            return;
+        };
         let pos_id = hit.position.id;
         self.bookmark_busy = true;
         let Some(task) = spawn_facade_write(cx, move || async move {
@@ -541,13 +549,15 @@ impl DecisionSearchView {
         };
         let weak = cx.weak_entity();
         cx.spawn(async move |_this, cx| {
-            let Ok(res) = task.await else {
-                return;
-            };
+            let result = task.await;
             let _ = weak.update(cx, |view, cx| {
                 view.bookmark_busy = false;
-                if let Ok(saved) = res {
-                    view.preview_bookmarked = Some(saved);
+                if view
+                    .active_preview()
+                    .is_some_and(|hit| hit.position.id == pos_id)
+                {
+                    view.bookmark_read = None;
+                    view.preview_bookmarked = result.ok().and_then(Result::ok);
                 }
                 cx.notify();
             });
@@ -709,41 +719,56 @@ impl DecisionSearchView {
             let _ = this.update(cx, |view, cx| {
                 view.loading = false;
                 let locale = current_locale(cx);
-                match result {
-                    Ok(Ok(page)) => match page
-                        .items
-                        .into_iter()
-                        .map(serde_json::from_value::<DecisionHitRow>)
-                        .collect::<Result<Vec<_>, _>>()
-                    {
-                        Ok(items) => {
-                            view.total = page.total;
-                            view.page = page.page;
-                            view.items = items;
-                            if !view
-                                .items
-                                .iter()
-                                .any(|item| Some(item.ref_key()) == view.selected_key)
-                            {
-                                view.selected_key = view.items.first().map(DecisionHitRow::ref_key);
-                            }
-                            view.sync_preview_board(cx);
-                        }
-                        Err(err) => {
-                            tracing::warn!(%err, "Could not read analyzed decision");
-                            view.error =
-                                Some(I18n::t(locale, "app", "error.invalidResponse").into());
-                        }
-                    },
-                    Ok(Err(err)) => view.error = Some(format_domain_error(locale, &err).into()),
-                    Err(_) => {
-                        view.error = Some(I18n::t(locale, "app", "error.invalidResponse").into())
-                    }
-                }
+                let page = match result {
+                    Ok(result) => result.map_err(|e| format_domain_error(locale, &e).into()),
+                    Err(_) => Err(I18n::t(locale, "app", "error.invalidResponse").into()),
+                };
+                view.apply_search_page(page, cx);
                 cx.notify();
             });
         }));
         cx.notify();
+    }
+
+    pub(super) fn apply_search_page(
+        &mut self,
+        page: Result<DecisionSearchPage, SharedString>,
+        cx: &mut Context<Self>,
+    ) {
+        let result = page.and_then(|page| {
+            let items = page
+                .items
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<Result<Vec<DecisionHitRow>, _>>()
+                .map_err(|err| {
+                    tracing::warn!(%err, "Could not read analyzed decision");
+                    SharedString::from(I18n::t(current_locale(cx), "app", "error.invalidResponse"))
+                })?;
+            Ok((items, page.total, page.page))
+        });
+        match result {
+            Ok((items, total, page)) => {
+                self.items = items;
+                self.total = total;
+                self.page = page;
+                self.error = None;
+                if !self
+                    .items
+                    .iter()
+                    .any(|item| Some(item.ref_key()) == self.selected_key)
+                {
+                    self.selected_key = self.items.first().map(DecisionHitRow::ref_key);
+                }
+            }
+            Err(error) => {
+                self.items.clear();
+                self.selected_key = None;
+                self.total = 0;
+                self.error = Some(error);
+            }
+        }
+        self.sync_preview_board(cx);
     }
 
     fn open_add_to_deck_dialog(
@@ -1828,10 +1853,26 @@ impl DecisionSearchView {
                                     .label(I18n::t(
                                         locale,
                                         "position-bookmark",
-                                        if saved { "remove" } else { "save" },
+                                        match self.preview_bookmarked {
+                                            Some(true) => "remove",
+                                            Some(false) => "save",
+                                            None if self.bookmark_read.is_some() => "loading",
+                                            None => "retry",
+                                        },
                                     ))
                                     .active(saved)
-                                    .disabled(self.bookmark_busy)
+                                    .when(
+                                        self.preview_bookmarked.is_none()
+                                            && self.bookmark_read.is_none(),
+                                        |button| {
+                                            button.tooltip(I18n::t(
+                                                locale,
+                                                "position-bookmark",
+                                                "loadError",
+                                            ))
+                                        },
+                                    )
+                                    .disabled(self.bookmark_busy || self.bookmark_read.is_some())
                                     .palette(p)
                                     .on_click(move |_, _, cx| {
                                         ent_bm.update(cx, |v, cx| v.toggle_preview_bookmark(cx));
