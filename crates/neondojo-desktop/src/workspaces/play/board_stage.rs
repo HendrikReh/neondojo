@@ -293,6 +293,7 @@ impl PlayBoardStage {
                 bv.set_preview(None, BoardViewMode::Before, cx);
                 bv.set_cube_offer_pending(false, cx);
                 bv.set_show_pip_counts(false, cx);
+                bv.set_show_player_bars(false, cx);
                 bv.set_interaction(None, cx);
                 bv.set_review_outline(None, cx);
             });
@@ -461,6 +462,7 @@ impl PlayBoardStage {
             bv.set_preview(preview, view_mode, cx);
             bv.set_cube_offer_pending(cube_pending, cx);
             bv.set_show_pip_counts(show_pips, cx);
+            bv.set_show_player_bars(true, cx);
             bv.set_interaction(interaction, cx);
             bv.set_review_outline(review_outline, cx);
         });
@@ -701,6 +703,8 @@ impl Render for PlayBoardStage {
         let p = NeonTheme::current_palette(cx);
         let toolbar = self.render_turn_toolbar(p, cx);
 
+        let is_idle = self.snapshot.session.is_none();
+
         div()
             .id("play-board-stage")
             .test_support()
@@ -716,6 +720,7 @@ impl Render for PlayBoardStage {
                     .flex_1()
                     .w_full()
                     .min_h(px(280.0))
+                    .when(is_idle, |this| this.opacity(0.55))
                     .child(self.board_view.clone()),
             )
     }

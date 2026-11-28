@@ -1,6 +1,6 @@
 use super::{
-    ArchiveLayout, ArchiveSchema, BackupContents, MAX_ARCHIVE_BYTES, MAX_DATA_BYTES, Manifest,
-    TABLES, columns, relation, schema, sequences, transfer_settings,
+    ArchiveSchema, BackupContents, MAX_ARCHIVE_BYTES, MAX_DATA_BYTES, Manifest, columns, relation,
+    schema, sequences, transfer_settings,
 };
 use crate::api::{ApiError, ApiResult};
 use anyhow::{Context, Result, ensure};
@@ -94,8 +94,8 @@ async fn stream_snapshot(
         .await?;
     transfer_settings(&mut tx).await?;
     let schema = schema(&mut tx).await?;
-    for table in TABLES {
-        let columns = columns(&mut tx, table, ArchiveLayout::Current).await?;
+    for table in schema.current_layout.tables() {
+        let columns = columns(&mut tx, table, schema.current_layout).await?;
         outgoing.send(ExportEntry::Table(table)).await?;
         let mut stream = tx
             .copy_out_raw(&format!(
@@ -307,8 +307,9 @@ async fn scan<W: Write + Send + 'static>(
         if !matches!(manifest.format, LEGACY_FORMAT | FORMAT) {
             return Err(ApiError::invalid("Unsupported NeonDojo backup format"));
         }
-        let compatible = fingerprint.layout(&manifest.schema).is_some();
-        if compatible && archive.len() != TABLES.len() + 1 {
+        let layout = fingerprint.layout(&manifest.schema);
+        let compatible = layout.is_some();
+        if layout.is_some_and(|layout| archive.len() != layout.tables().len() + 1) {
             return Err(ApiError::invalid(
                 "Backup has a missing or unexpected entry",
             ));
@@ -317,8 +318,8 @@ async fn scan<W: Write + Send + 'static>(
         if !compatible && !summarize {
             return Err(super::schema_mismatch());
         }
-        let tables: &[&str] = if compatible {
-            TABLES
+        let tables: &[&str] = if let Some(layout) = layout {
+            layout.tables()
         } else if SUMMARY_TABLES
             .iter()
             .all(|table| archive.index_for_name(&entry(table)).is_some())

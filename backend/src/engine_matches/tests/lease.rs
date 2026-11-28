@@ -95,6 +95,14 @@ else:
             while !directory.path().join("rules").is_file() { sleep(Duration::from_millis(10)).await; }
         }) => result.expect("worker never started the opening request"),
     }
+    let details = super::super::series_details(&pool, id, 0).await.unwrap();
+    let json = serde_json::to_value(details).unwrap();
+    assert_eq!(json["live_progress"]["unit_number"], 1);
+    assert_eq!(json["live_progress"]["game_number"], 1);
+    assert_eq!(json["live_progress"]["completed_games"], 0);
+    assert_eq!(json["live_progress"]["score_a"], 0);
+    assert_eq!(json["live_progress"]["score_b"], 0);
+    assert!(json["live_progress"]["estimated_remaining_seconds"].is_null());
 
     let held = worker.acquire().await.unwrap();
     let original: chrono::DateTime<chrono::Utc> =
@@ -129,6 +137,8 @@ else:
         .await
         .unwrap();
     assert!(timeout(Duration::from_secs(5), run).await.unwrap().unwrap());
+    let details = super::super::series_details(&pool, id, 0).await.unwrap();
+    assert!(serde_json::to_value(details).unwrap()["live_progress"].is_null());
     for file in ["2", "3", "rules"] {
         let pid = std::fs::read_to_string(directory.path().join(file)).unwrap();
         timeout(Duration::from_secs(3), async {

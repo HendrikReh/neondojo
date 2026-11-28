@@ -18,7 +18,9 @@ use crate::tokio_bridge::TokioBridge;
 use crate::ui::action_button::ActionButton;
 use crate::ui::banners::{BannerKind, StatusBanner};
 use crate::ui::icons::ActionIconName;
-use crate::ui::modal::{ModalBusyLock, ModalConfig, ModalSize, open_modal_dialog};
+use crate::ui::modal::{
+    ModalBusyLock, ModalConfig, ModalSize, open_library_dialog, open_modal_dialog,
+};
 use crate::workspaces::extras::{engine_display_name, spawn_facade_read, spawn_facade_write};
 use gpui_kit::{
     App, AppContext, Context, Entity, EventEmitter, FontWeight, InteractiveElement, IntoElement,
@@ -27,22 +29,26 @@ use gpui_kit::{
     base::StyledExt,
     component::WindowExt,
     component::input::{Input, InputEvent, InputState},
+    component::tooltip::Tooltip,
     div,
     prelude::FluentBuilder,
     px,
 };
+use neondojo::domain_error::{DomainError, ErrorKind};
 use neondojo::engine_matches::{
     Competitor, CreateSeries, DiceMode, DuelFormat, Series, SeriesConfig, SeriesDetails,
     SeriesPage, SideCostSummary,
 };
+use neondojo::facade::BackendFacade;
 use neondojo::settings::EngineInfo;
 use neondojo_i18n::{
-    I18n, Locale, format_benchmark_duration, format_datetime_short_local, format_int,
+    I18n, Locale, Param, format_benchmark_duration, format_datetime_short_local, format_int,
     format_percent, format_ply, format_signed_decimal,
 };
 use neondojo_rules::options::engine_depths;
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::time::Duration;
 use uuid::Uuid;
 
 pub const MAX_MATCH_LENGTH: i32 = 25;
@@ -261,6 +267,98 @@ fn series_progress_text(locale: Locale, run: &Series) -> String {
         format_int(locale, i64::from(run.completed_matches)),
         format_int(locale, i64::from(run.total_matches)),
         I18n::t(locale, "engine-match", unit)
+    )
+}
+
+fn live_progress_labels(locale: Locale, details: &SeriesDetails) -> Option<[String; 4]> {
+    let live = details.live_progress?;
+    let config = &details.series.configuration;
+    let money = config.format == DuelFormat::MoneyCubeless;
+    let number = |value| Param::Int(i64::from(value));
+    let format = |key, params: &[(&str, Param)]| I18n::format(locale, "engine-match", key, params);
+    let unit = format(
+        if money {
+            "currentBlock"
+        } else {
+            "currentMatch"
+        },
+        &[
+            ("current", number(live.unit_number)),
+            ("total", number(details.series.total_matches)),
+        ],
+    );
+    let game = match config.block_games.filter(|_| money) {
+        Some(total) => format(
+            "currentBlockGame",
+            &[
+                ("current", number(live.game_number)),
+                ("total", number(total)),
+            ],
+        ),
+        None => format("currentGame", &[("current", number(live.game_number))]),
+    };
+    let score = format(
+        "currentScore",
+        &[("a", number(live.score_a)), ("b", number(live.score_b))],
+    );
+    let eta = live.estimated_remaining_seconds.map_or_else(
+        || I18n::t(locale, "engine-match", "estimatingTime").into(),
+        |seconds| {
+            format(
+                "remainingTime",
+                &[(
+                    "time",
+                    Param::Text(format_benchmark_duration(locale, seconds as f64 * 1_000.0)),
+                )],
+            )
+        },
+    );
+    Some([unit, game, score, eta])
+}
+
+fn saved_games_text(locale: Locale, games: i32) -> String {
+    I18n::format(
+        locale,
+        "engine-match",
+        "savedGames",
+        &[("games", Param::Int(i64::from(games)))],
+    )
+}
+
+fn cancelled_series_tooltip(locale: Locale, run: &Series) -> Option<String> {
+    if run.status != "cancelled" {
+        return None;
+    }
+    let config = &run.configuration;
+    let (length_label, length) = match config.format {
+        DuelFormat::MoneyCubeless => ("blockGames", config.block_games.unwrap_or_default()),
+        DuelFormat::Match => ("length", config.match_length),
+    };
+    Some(
+        [
+            format!(
+                "{} / {}",
+                competitor_label(locale, &config.a),
+                competitor_label(locale, &config.b)
+            ),
+            format!(
+                "{} {}",
+                I18n::t(locale, "engine-match", length_label),
+                format_int(locale, i64::from(length))
+            ),
+            I18n::t(
+                locale,
+                "engine-match",
+                match config.mode {
+                    DiceMode::Paired => "paired",
+                    DiceMode::Random => "random",
+                },
+            )
+            .to_owned(),
+            series_progress_text(locale, run),
+            saved_games_text(locale, run.saved_games_in_unit.unwrap_or_default()),
+        ]
+        .join(" · "),
     )
 }
 
@@ -743,6 +841,7 @@ pub struct EngineMatchWorkspace {
     offset: i32,
     details: Option<SeriesDetails>,
     loading: bool,
+    refresh_pending: bool,
     loading_older: bool,
     action_busy: bool,
     opening_match: Option<i32>,
@@ -754,6 +853,7 @@ pub struct EngineMatchWorkspace {
     _load_task: Option<Task<()>>,
     _older_task: Option<Task<()>>,
     _action_task: Option<Task<()>>,
+    _open_match_task: Option<Task<()>>,
 }
 
 impl EngineMatchWorkspace {
@@ -768,6 +868,7 @@ impl EngineMatchWorkspace {
             offset: 0,
             details: None,
             loading: false,
+            refresh_pending: false,
             loading_older: false,
             action_busy: false,
             opening_match: None,
@@ -779,6 +880,7 @@ impl EngineMatchWorkspace {
             _load_task: None,
             _older_task: None,
             _action_task: None,
+            _open_match_task: None,
         };
         ws.start_push_listener(cx);
         ws
@@ -813,7 +915,7 @@ impl EngineMatchWorkspace {
             loop {
                 let recv = handle
                     .spawn(async move {
-                        let res = rx.recv().await;
+                        let res = tokio::time::timeout(Duration::from_secs(3), rx.recv()).await;
                         (rx, res)
                     })
                     .await;
@@ -821,18 +923,33 @@ impl EngineMatchWorkspace {
                     break;
                 };
                 rx = next_rx;
-                match outcome {
-                    Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                        let alive = this
-                            .update(cx, |ws, cx| {
+                let notified = match outcome {
+                    Ok(Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_))) => true,
+                    Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => break,
+                    Err(_) => false,
+                };
+                if this
+                    .update(cx, |ws, cx| {
+                        // A worker in another NeonDojo process shares PostgreSQL,
+                        // but its notifications are local to that process.
+                        let active = ws
+                            .details
+                            .as_ref()
+                            .is_some_and(|details| is_series_active(&details.series.status))
+                            || ws.recent.as_ref().is_some_and(|page| {
+                                page.runs.iter().any(|run| is_series_active(&run.status))
+                            });
+                        if ws.visible && (notified || active) {
+                            if ws.loading {
+                                ws.refresh_pending |= notified;
+                            } else {
                                 ws.reload_series_and_selected(cx);
-                            })
-                            .is_ok();
-                        if !alive {
-                            break;
+                            }
                         }
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    })
+                    .is_err()
+                {
+                    break;
                 }
             }
         });
@@ -848,96 +965,83 @@ impl EngineMatchWorkspace {
     }
 
     fn reload_all(&mut self, cx: &mut Context<Self>) {
+        self.load_series(true, cx);
+    }
+
+    fn reload_series_and_selected(&mut self, cx: &mut Context<Self>) {
+        self.load_series(false, cx);
+    }
+
+    fn load_series(&mut self, refresh_engines: bool, cx: &mut Context<Self>) {
         let locale = current_locale(cx);
         let selected = self.effective_selected_id();
         let offset = self.offset;
         let Some(read_task) = spawn_facade_read(cx, move |facade| async move {
-            let engines = facade.list_engines().await;
+            let engines = if refresh_engines {
+                facade.list_engines().await.ok()
+            } else {
+                None
+            };
             let list = facade.list_engine_matches(None).await;
             let target_id = selected.or_else(|| {
                 list.as_ref()
                     .ok()
-                    .and_then(|p| p.runs.first().map(|r| r.id))
+                    .and_then(|page| page.runs.first().map(|run| run.id))
             });
             let details = match target_id {
                 Some(id) => Some(facade.get_engine_match(id, offset).await),
                 None => None,
             };
-            (engines, list, details)
+            (engines, list, target_id, details)
         }) else {
             return;
         };
 
         self.loading = true;
-        self.error_message = None;
+        self.refresh_pending = false;
+        if refresh_engines {
+            self.error_message = None;
+        }
         cx.notify();
 
         self._load_task = Some(cx.spawn(async move |this, cx| {
-            let Ok((eng_res, list_res, details_res)) = read_task.await else {
-                return;
-            };
+            let response = read_task.await;
             let _ = this.update(cx, |ws, cx| {
                 ws.loading = false;
-                if let Ok(engines) = eng_res {
-                    ws.engines = engines;
-                }
-                match list_res {
-                    Ok(page) => {
-                        ws.recent = Some(page);
+                let mut refresh = std::mem::take(&mut ws.refresh_pending);
+                if let Ok((engines, list, target_id, details)) = response {
+                    if let Some(engines) = engines {
+                        ws.engines = engines;
                     }
-                    Err(err) => {
-                        ws.error_message = Some(format_domain_error(locale, &err).into());
-                    }
-                }
-                if let Some(det) = details_res {
-                    match det {
-                        Ok(d) => {
-                            ws.selected_id = Some(d.series.id);
-                            ws.details = Some(d);
-                        }
-                        Err(err) => {
+                    match list {
+                        Ok(page) => ws.recent = Some(page),
+                        Err(err) if refresh_engines => {
                             ws.error_message = Some(format_domain_error(locale, &err).into());
                         }
+                        Err(_) => {}
+                    }
+                    match details {
+                        Some(Ok(details)) => {
+                            ws.selected_id = Some(details.series.id);
+                            ws.details = Some(details);
+                        }
+                        Some(Err(err)) if err.kind == ErrorKind::NotFound => {
+                            for page in ws.recent.iter_mut().chain(&mut ws.older_pages) {
+                                page.runs.retain(|run| Some(run.id) != target_id);
+                            }
+                            ws.selected_id = None;
+                            ws.details = None;
+                            ws.offset = 0;
+                            refresh = true;
+                        }
+                        Some(Err(err)) => {
+                            ws.error_message = Some(format_domain_error(locale, &err).into());
+                        }
+                        None => {}
                     }
                 }
-                cx.notify();
-            });
-        }));
-    }
-
-    fn reload_series_and_selected(&mut self, cx: &mut Context<Self>) {
-        let locale = current_locale(cx);
-        let selected = self.effective_selected_id();
-        let offset = self.offset;
-        let Some(read_task) = spawn_facade_read(cx, move |facade| async move {
-            let list = facade.list_engine_matches(None).await;
-            let target_id = selected.or_else(|| {
-                list.as_ref()
-                    .ok()
-                    .and_then(|p| p.runs.first().map(|r| r.id))
-            });
-            let details = match target_id {
-                Some(id) => Some(facade.get_engine_match(id, offset).await),
-                None => None,
-            };
-            (list, details)
-        }) else {
-            return;
-        };
-
-        self._load_task = Some(cx.spawn(async move |this, cx| {
-            let Ok((list_res, details_res)) = read_task.await else {
-                return;
-            };
-            let _ = this.update(cx, |ws, cx| {
-                if let Ok(page) = list_res {
-                    ws.recent = Some(page);
-                }
-                if let Some(Ok(d)) = details_res {
-                    ws.selected_id = Some(d.series.id);
-                    ws.details = Some(d);
-                } else if let Some(Err(err)) = details_res {
-                    ws.error_message = Some(format_domain_error(locale, &err).into());
+                if refresh && ws.visible {
+                    ws.reload_series_and_selected(cx);
                 }
                 cx.notify();
             });
@@ -1065,14 +1169,18 @@ impl EngineMatchWorkspace {
         );
     }
 
-    fn cancel_selected(&mut self, id: Uuid, cx: &mut Context<Self>) {
+    fn update_selected<Fut>(
+        &mut self,
+        update: impl FnOnce(BackendFacade) -> Fut + Send + 'static,
+        cx: &mut Context<Self>,
+    ) where
+        Fut: Future<Output = Result<Series, DomainError>>,
+    {
         if self.action_busy {
             return;
         }
         let locale = current_locale(cx);
-        let Some(write_task) = spawn_facade_write(cx, move |facade| async move {
-            facade.cancel_engine_match(id).await
-        }) else {
+        let Some(write_task) = spawn_facade_write(cx, update) else {
             return;
         };
         self.action_busy = true;
@@ -1097,6 +1205,50 @@ impl EngineMatchWorkspace {
         }));
     }
 
+    fn confirm_delete(&self, id: Uuid, window: &mut Window, cx: &mut Context<Self>) {
+        let locale = current_locale(cx);
+        let workspace = cx.entity();
+        open_library_dialog(
+            window,
+            cx,
+            I18n::t(locale, "engine-match", "deleteSeries"),
+            ModalBusyLock::new(false),
+            move |_: &mut Window, cx: &mut App| {
+                div()
+                    .text_body()
+                    .text_color(NeonTheme::current_palette(cx).text)
+                    .child(I18n::t(locale, "engine-match", "deleteSeriesDetails"))
+                    .into_any_element()
+            },
+            Some(move |_: &mut Window, cx: &mut App| {
+                let palette = NeonTheme::current_palette(cx);
+                let workspace = workspace.clone();
+                div()
+                    .h_flex()
+                    .gap(px(8.0))
+                    .child(
+                        ActionButton::new("duel-keep-series")
+                            .icon(ActionIconName::Cancel)
+                            .label(I18n::t(locale, "engine-match", "keepSeries"))
+                            .palette(palette)
+                            .on_click(|_, window, cx| window.close_dialog(cx)),
+                    )
+                    .child(
+                        ActionButton::new("duel-confirm-delete")
+                            .icon(ActionIconName::Delete)
+                            .label(I18n::t(locale, "engine-match", "deleteSeries"))
+                            .danger()
+                            .palette(palette)
+                            .on_click(move |_, window, cx| {
+                                window.close_dialog(cx);
+                                workspace.update(cx, |ws, cx| ws.delete_selected(id, cx));
+                            }),
+                    )
+                    .into_any_element()
+            }),
+        );
+    }
+
     fn delete_selected(&mut self, id: Uuid, cx: &mut Context<Self>) {
         if self.action_busy {
             return;
@@ -1117,10 +1269,15 @@ impl EngineMatchWorkspace {
                 ws.action_busy = false;
                 match res {
                     Ok(Ok(())) => {
-                        if ws.selected_id == Some(id) {
+                        if ws.effective_selected_id() == Some(id) {
                             ws.selected_id = None;
                             ws.details = None;
+                            ws.offset = 0;
                         }
+                        if let Some(recent) = ws.recent.as_mut() {
+                            recent.runs.retain(|run| run.id != id);
+                        }
+                        ws.older_pages.clear();
                         ws.reload_all(cx);
                     }
                     Ok(Err(err)) => {
@@ -1158,7 +1315,7 @@ impl EngineMatchWorkspace {
         self.error_message = None;
         cx.notify();
 
-        self._action_task = Some(cx.spawn(async move |this, cx| {
+        self._open_match_task = Some(cx.spawn(async move |this, cx| {
             let res = write_task.await;
             let _ = this.update(cx, |ws, cx| {
                 if ws.open_epoch != epoch {
@@ -1289,8 +1446,15 @@ impl EngineMatchWorkspace {
         let entity = cx.entity().clone();
         let series_id = series.id;
 
+        let block_progress = det
+            .live_progress
+            .zip(config.block_games)
+            .map_or(0.0, |(live, games)| {
+                live.completed_games as f32 / games as f32
+            });
         let progress_frac = if series.total_matches > 0 {
-            (series.completed_matches as f32 / series.total_matches as f32).clamp(0.0, 1.0)
+            ((series.completed_matches as f32 + block_progress) / series.total_matches as f32)
+                .clamp(0.0, 1.0)
         } else {
             0.0
         };
@@ -1305,7 +1469,10 @@ impl EngineMatchWorkspace {
                     .disabled(self.action_busy)
                     .palette(p)
                     .on_click(move |_, _, cx| {
-                        ent.update(cx, |ws, cx| ws.cancel_selected(series_id, cx));
+                        let cancel = move |facade: BackendFacade| async move {
+                            facade.cancel_engine_match(series_id).await
+                        };
+                        ent.update(cx, |ws, cx| ws.update_selected(cancel, cx));
                     }),
             );
         } else {
@@ -1313,13 +1480,30 @@ impl EngineMatchWorkspace {
             header_actions = header_actions.child(
                 ActionButton::new("duel-delete-btn")
                     .icon(ActionIconName::Delete)
-                    .tooltip(I18n::t(locale, "benchmark", "confirmDelete"))
+                    .label(I18n::t(locale, "engine-match", "deleteSeries"))
                     .danger()
                     .dense_nav()
                     .disabled(self.action_busy)
                     .palette(p)
+                    .on_click(move |_, window, cx| {
+                        ent.update(cx, |ws, cx| ws.confirm_delete(series_id, window, cx));
+                    }),
+            );
+        }
+        if series.status == "cancelled" && series.completed_matches < series.total_matches {
+            let ent = entity.clone();
+            header_actions = header_actions.child(
+                ActionButton::new("duel-resume-btn")
+                    .icon(ActionIconName::Play)
+                    .label(I18n::t(locale, "engine-match", "resume"))
+                    .primary()
+                    .disabled(self.action_busy)
+                    .palette(p)
                     .on_click(move |_, _, cx| {
-                        ent.update(cx, |ws, cx| ws.delete_selected(series_id, cx));
+                        let resume = move |facade: BackendFacade| async move {
+                            facade.resume_engine_match(series_id).await
+                        };
+                        ent.update(cx, |ws, cx| ws.update_selected(resume, cx));
                     }),
             );
         }
@@ -1400,6 +1584,19 @@ impl EngineMatchWorkspace {
                                         .w(gpui_kit::relative(progress_frac))
                                         .bg(p.accent),
                                 ),
+                        )
+                    })
+                    .when_some(live_progress_labels(locale, det), |this, labels| {
+                        this.child(
+                            div()
+                                .id("duel-live-progress")
+                                .h_flex()
+                                .flex_wrap()
+                                .gap(px(16.0))
+                                .text_label()
+                                .tabular_nums()
+                                .text_color(p.muted)
+                                .children(labels.into_iter().map(|label| div().child(label))),
                         )
                     }),
             );
@@ -2037,6 +2234,11 @@ impl Render for EngineMatchWorkspace {
                         .border_color(if selected { p.accent } else { p.border })
                         .bg(if selected { p.selected } else { p.surface_alt })
                         .cursor_pointer()
+                        .when_some(cancelled_series_tooltip(locale, &run), |row, tip| {
+                            row.tooltip(move |window, cx| {
+                                Tooltip::new(tip.clone()).build(window, cx)
+                            })
+                        })
                         .on_click(move |_, _, cx| {
                             ent.update(cx, |ws, cx| ws.select_series(run_id, cx));
                         })

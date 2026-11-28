@@ -235,7 +235,21 @@ impl AnalysisWorkspace {
             .try_global::<LocalUiState>()
             .and_then(|s| s.workspace_selection);
 
-        let board_view = cx.new(|_| BoardView::new("analysis-main-board", atlas));
+        let initial_board_cfg = cx
+            .try_global::<DesktopAppContext>()
+            .map(|ctx| ctx.board_config.clone())
+            .unwrap_or_else(|| neondojo_board::BoardThemeConfig {
+                board_theme: cx
+                    .try_global::<LocalUiState>()
+                    .map(|s| s.board_theme.clone())
+                    .unwrap_or_else(|| "forest".into()),
+                ..neondojo_board::BoardThemeConfig::default()
+            });
+        let board_view = cx.new(|cx| {
+            let mut bv = BoardView::new("analysis-main-board", atlas);
+            bv.set_theme_config(initial_board_cfg, cx);
+            bv
+        });
         let tag_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add tag…"));
         let comment_input =
             cx.new(|cx| InputState::new(window, cx).placeholder("Write note in Markdown…"));
@@ -372,6 +386,17 @@ impl AnalysisWorkspace {
     /// NEVER cancels or drops `job_controller` background subscriptions!
     pub fn set_visible(&mut self, visible: bool, cx: &mut Context<Self>) {
         self.visible = visible;
+        cx.notify();
+    }
+
+    /// Updates the board/checker/cube/dice artwork configuration live.
+    pub fn set_theme_config(
+        &mut self,
+        config: neondojo_board::BoardThemeConfig,
+        cx: &mut Context<Self>,
+    ) {
+        self.board_view
+            .update(cx, |bv, cx| bv.set_theme_config(config, cx));
         cx.notify();
     }
 

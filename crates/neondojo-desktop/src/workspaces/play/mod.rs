@@ -458,6 +458,15 @@ impl PlayWorkspace {
         self.render_count
     }
 
+    /// Updates the active board/checker/cube/dice artwork configuration live
+    /// (for example after Settings applies a built-in or BGBlitz theme).
+    pub fn set_theme_config(&mut self, config: BoardThemeConfig, cx: &mut Context<Self>) {
+        self.theme_config = config;
+        self.push_stage_snapshot(cx);
+        self.sync_preview_board(cx);
+        cx.notify();
+    }
+
     fn is_ui_busy(&self, cx: &App) -> bool {
         self.session_entity.read(cx).is_busy() || self.animation_entity.read(cx).is_animating()
     }
@@ -3453,6 +3462,16 @@ mod tests {
                 "Play empty-state setup dialog MUST NOT steal focus from header tab!"
             );
             assert!(window.find("play-setup-dialog").visible());
+            assert!(
+                !h.play
+                    .read(cx)
+                    .board_stage()
+                    .read(cx)
+                    .board_view()
+                    .read(cx)
+                    .show_player_bars(),
+                "idle Play table behind New Match dialog must hide player score bars"
+            );
 
             // Explicit user-triggered setup (e.g. clicking New Match) DOES focus the dialog.
             let play = h.play.clone();

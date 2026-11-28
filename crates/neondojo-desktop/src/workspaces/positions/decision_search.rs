@@ -17,13 +17,12 @@
 use super::columns::{DecisionTableColumn, DecisionTableLayout, POSITION_SELECTION_LIMIT};
 use super::practice_board::{CheckerPracticeDraft, position_to_board_position};
 use super::{
-    ALL_GAME_PLANS, ALL_MISTAKE_KINDS, board_theme_from_local_state, game_plan_label,
-    mistake_kind_label, spawn_facade_read, spawn_facade_write,
+    ALL_GAME_PLANS, ALL_MISTAKE_KINDS, game_plan_label, mistake_kind_label, spawn_facade_read,
+    spawn_facade_write,
 };
-use crate::app_context::DesktopAppContext;
+use crate::app_context::{DesktopAppContext, themed_board};
 use crate::events::WorkspaceEvent;
 use crate::i18n::{current_locale, format_domain_error};
-use crate::local_state::LocalUiState;
 use crate::review::cube_details::{
     CubeDecisionDetailsView, CubeEquityUnit, CubeEvaluationData, format_cube_context_line,
 };
@@ -64,13 +63,12 @@ use neondojo::recurring_mistakes::{
     CubeOwnerFilter, DecisionKind, DecisionSearchQuery, LossDirection, MistakeAnswer,
     MistakeAttempt, MistakeAttemptRequest, MistakeKind, MistakeReference, MistakesQuery,
 };
-use neondojo_board::{BoardEvent, BoardView, BoardViewMode, ThemeAtlasCache};
+use neondojo_board::{BoardEvent, BoardView, BoardViewMode};
 use neondojo_i18n::{
     I18n, Locale, Param, format_decimal, format_equity, format_int, localize_decision,
 };
 use serde::Deserialize;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 pub const DECISION_PAGE_SIZE: usize = 50;
@@ -305,19 +303,9 @@ impl DecisionSearchView {
         let sep = locale.decimal_separator();
         let app_ctx = cx.try_global::<DesktopAppContext>().cloned();
         let facade = app_ctx.as_ref().and_then(|c| c.facade());
-        let local_state = cx.try_global::<LocalUiState>().cloned().unwrap_or_default();
-        let atlas = app_ctx
-            .as_ref()
-            .map(|c| Arc::clone(&c.board_atlas))
-            .unwrap_or_else(|| Arc::new(Mutex::new(ThemeAtlasCache::default())));
-        let board_theme = board_theme_from_local_state(&local_state);
         let thresholds = ErrorThresholds::default();
 
-        let preview_board = cx.new(|cx| {
-            let mut bv = BoardView::new("decision-search-preview-board", atlas);
-            bv.set_theme_config(board_theme, cx);
-            bv
-        });
+        let preview_board = cx.new(|cx| themed_board("decision-search-preview-board", cx));
 
         let weak = cx.weak_entity();
         let ds = |k: &'static str| I18n::t(locale, "decision-search", k);
@@ -2233,19 +2221,7 @@ impl DecisionPracticeDialogView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let app_ctx = cx.try_global::<DesktopAppContext>().cloned();
-        let atlas = app_ctx
-            .as_ref()
-            .map(|c| Arc::clone(&c.board_atlas))
-            .unwrap_or_else(|| Arc::new(Mutex::new(ThemeAtlasCache::default())));
-        let local_state = cx.try_global::<LocalUiState>().cloned().unwrap_or_default();
-        let theme_cfg = board_theme_from_local_state(&local_state);
-
-        let board = cx.new(|cx| {
-            let mut bv = BoardView::new("decision-practice-board", atlas);
-            bv.set_theme_config(theme_cfg, cx);
-            bv
-        });
+        let board = cx.new(|cx| themed_board("decision-practice-board", cx));
 
         let board_sub = cx.subscribe_in(&board, window, |this, _, event: &BoardEvent, _, cx| {
             if this.outcome.is_some() || this.submitting {

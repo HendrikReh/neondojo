@@ -46,7 +46,7 @@ use self::reports::{
     ReportDetailTab, ReportsCallbacks, StudyReportsState, build_learning_review_positions,
     render_study_reports,
 };
-use crate::app_context::DesktopAppContext;
+use crate::app_context::{DesktopAppContext, themed_board};
 use crate::events::WorkspaceEvent;
 use crate::i18n::{current_locale, format_domain_error};
 use crate::keybindings::{
@@ -105,7 +105,6 @@ pub struct StudyWorkspace {
     selected_player: String,
     independent_only: bool,
     resumable_round_id: Option<Uuid>,
-    board_atlas: Arc<Mutex<ThemeAtlasCache>>,
 
     overview: StudyOverviewState,
     flashcards: FlashcardsState,
@@ -148,11 +147,34 @@ impl StudyWorkspace {
             .map(|c| Arc::clone(&c.board_atlas))
             .unwrap_or_else(|| Arc::new(Mutex::new(ThemeAtlasCache::default())));
 
-        let preview_board =
-            cx.new(|_| BoardView::new("study-card-preview-board", Arc::clone(&atlas)));
-        let fsrs_board = cx.new(|_| BoardView::new("study-fsrs-board", Arc::clone(&atlas)));
-        let round_board = cx.new(|_| BoardView::new("study-round-board", Arc::clone(&atlas)));
-        let report_board = cx.new(|_| BoardView::new("study-report-board", Arc::clone(&atlas)));
+        let initial_board_cfg = cx
+            .try_global::<DesktopAppContext>()
+            .map(|c| c.board_config.clone())
+            .unwrap_or_else(|| neondojo_board::BoardThemeConfig {
+                board_theme: local.board_theme.clone(),
+                ..neondojo_board::BoardThemeConfig::default()
+            });
+
+        let preview_board = cx.new(|cx| {
+            let mut bv = BoardView::new("study-card-preview-board", Arc::clone(&atlas));
+            bv.set_theme_config(initial_board_cfg.clone(), cx);
+            bv
+        });
+        let fsrs_board = cx.new(|cx| {
+            let mut bv = BoardView::new("study-fsrs-board", Arc::clone(&atlas));
+            bv.set_theme_config(initial_board_cfg.clone(), cx);
+            bv
+        });
+        let round_board = cx.new(|cx| {
+            let mut bv = BoardView::new("study-round-board", Arc::clone(&atlas));
+            bv.set_theme_config(initial_board_cfg.clone(), cx);
+            bv
+        });
+        let report_board = cx.new(|cx| {
+            let mut bv = BoardView::new("study-report-board", Arc::clone(&atlas));
+            bv.set_theme_config(initial_board_cfg, cx);
+            bv
+        });
 
         let fsrs_sub = cx.subscribe(&fsrs_board, |this, _, event: &BoardEvent, cx| {
             if let BoardEvent::PointClicked(pt) = event {
@@ -193,7 +215,6 @@ impl StudyWorkspace {
             selected_player: String::new(),
             independent_only: local.study.independent_only,
             resumable_round_id,
-            board_atlas: atlas,
             overview,
             flashcards,
             fsrs,
@@ -221,6 +242,27 @@ impl StudyWorkspace {
     pub fn set_visible(&mut self, visible: bool, cx: &mut Context<Self>) {
         self.visible = visible;
         self.sync_anki_webview_visibility(cx);
+        cx.notify();
+    }
+
+    /// Updates all Study workspace boards with a new board/checker/cube/dice theme.
+    pub fn set_theme_config(
+        &mut self,
+        config: neondojo_board::BoardThemeConfig,
+        cx: &mut Context<Self>,
+    ) {
+        self.flashcards
+            .preview_board_view
+            .update(cx, |bv, cx| bv.set_theme_config(config.clone(), cx));
+        self.fsrs
+            .board_view
+            .update(cx, |bv, cx| bv.set_theme_config(config.clone(), cx));
+        self.practice_round
+            .board_view
+            .update(cx, |bv, cx| bv.set_theme_config(config.clone(), cx));
+        self.reports
+            .preview_board_view
+            .update(cx, |bv, cx| bv.set_theme_config(config, cx));
         cx.notify();
     }
 
@@ -2408,8 +2450,7 @@ impl StudyWorkspace {
     }
 
     fn open_pips_modal(&mut self, card: CardQuestion, window: &mut Window, cx: &mut Context<Self>) {
-        let board_view =
-            cx.new(|_| BoardView::new("study-pips-board", Arc::clone(&self.board_atlas)));
+        let board_view = cx.new(|cx| themed_board("study-pips-board", cx));
         let on_submit = Rc::new(
             move |card_id: Uuid,
                   counts: [i32; 2],
@@ -2449,8 +2490,7 @@ impl StudyWorkspace {
     }
 
     fn open_score_variants(&mut self, card_id: Uuid, window: &mut Window, cx: &mut Context<Self>) {
-        let board_view =
-            cx.new(|_| BoardView::new("study-score-variants-board", Arc::clone(&self.board_atlas)));
+        let board_view = cx.new(|cx| themed_board("study-score-variants-board", cx));
         let state = cx.new(|_| ScoreVariantsModalState {
             card_id,
             practice: None,
@@ -2565,8 +2605,7 @@ impl StudyWorkspace {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_default();
-        let board_view =
-            cx.new(|_| BoardView::new("study-timed-preview-board", Arc::clone(&self.board_atlas)));
+        let board_view = cx.new(|cx| themed_board("study-timed-preview-board", cx));
         let anki_face_view = cx.new(|cx| crate::anki_webview::AnkiCardFaceView::new(None, cx));
         let state = cx.new(|_| TimedPreviewModalState {
             cards,
@@ -2999,12 +3038,7 @@ impl StudyWorkspace {
             game_plan_label(locale, game_plan),
             mistake_kind_label(locale, mistake_kind)
         );
-        let board_view = cx.new(|_| {
-            BoardView::new(
-                "study-mistake-practice-board",
-                Arc::clone(&self.board_atlas),
-            )
-        });
+        let board_view = cx.new(|cx| themed_board("study-mistake-practice-board", cx));
         let modal_state = cx.new(|_| MistakePracticeModalState {
             title,
             items: Vec::new(),

@@ -44,7 +44,6 @@ use gpui_kit::{
 use neondojo::game_plan::GamePlan;
 use neondojo::model::Position;
 use neondojo::recurring_mistakes::MistakeKind;
-use neondojo_board::BoardThemeConfig;
 use neondojo_i18n::{I18n, Locale};
 use saved_positions::{SavedPositionsEvent, SavedPositionsView};
 use similar_positions::{SimilarPositionsEvent, SimilarPositionsView};
@@ -96,14 +95,6 @@ pub(crate) fn mistake_kind_label(locale: Locale, kind: MistakeKind) -> &'static 
         MistakeKind::UnclassifiedCube => "unclassified_cube",
     };
     I18n::t(locale, "recurring-mistakes", key)
-}
-
-/// Resolves a [`BoardThemeConfig`] from [`LocalUiState::board_theme`].
-pub(crate) fn board_theme_from_local_state(state: &LocalUiState) -> BoardThemeConfig {
-    BoardThemeConfig {
-        board_theme: state.board_theme.clone(),
-        ..BoardThemeConfig::default()
-    }
 }
 
 /// Spawns an abortable `BackendFacade` read query onto [`TokioBridge`] inside

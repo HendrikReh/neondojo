@@ -2,8 +2,11 @@
 //!
 //! Covers all 61 semantic icons specified in `docs/design/action-icons-proposal.md`.
 
-use crate::assets::LOGO_PATH;
-use gpui_kit::{Hsla, Styled, Svg, px, svg};
+use crate::assets::{LOGO_PATH, NeonAssets};
+use gpui_kit::{
+    AssetSource, Hsla, Img, ObjectFit, RenderImage, Styled, StyledImage, Svg, img, px, svg,
+};
+use std::sync::{Arc, LazyLock};
 
 /// Default square icon dimension for desktop action controls (`20px`).
 pub const DEFAULT_ACTION_ICON_SIZE: f32 = 20.0;
@@ -284,7 +287,66 @@ pub fn action_icon(name: ActionIconName, size_px: f32, color: Hsla) -> Svg {
         .flex_shrink_0()
 }
 
-/// Renders the embedded text-free NeonDojo brand mark.
-pub fn brand_logo(size_px: f32) -> Svg {
-    svg().path(LOGO_PATH).size(px(size_px)).flex_shrink_0()
+const BRAND_LOGO_RASTER_PX: u32 = 256;
+
+static BRAND_LOGO_IMAGE: LazyLock<Arc<RenderImage>> = LazyLock::new(|| {
+    let bytes = NeonAssets
+        .load(LOGO_PATH)
+        .expect("read embedded NeonDojo logo asset")
+        .expect("neondojo-logo.svg must be embedded");
+    neondojo_board::rasterize_surface_svg(&bytes, BRAND_LOGO_RASTER_PX, BRAND_LOGO_RASTER_PX)
+        .expect("rasterize NeonDojo brand logo SVG")
+});
+
+/// Returns the cached full-color GPU texture for the NeonDojo brand mark.
+pub fn brand_logo_image() -> Arc<RenderImage> {
+    Arc::clone(&BRAND_LOGO_IMAGE)
+}
+
+/// Renders the embedded text-free NeonDojo brand mark in full color.
+///
+/// GPUI's `svg()` element paints monochrome alpha masks tinted by `text_color`,
+/// which skips rendering without an explicit text color and cannot display a
+/// multi-color SVG with gradients and glow filters. Rasterizing via `resvg`
+/// into a cached `RenderImage` and painting with `img()` preserves the full
+/// brand artwork at Retina DPI.
+pub fn brand_logo(size_px: f32) -> Img {
+    img(brand_logo_image())
+        .size(px(size_px))
+        .object_fit(ObjectFit::Contain)
+        .flex_shrink_0()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn brand_logo_rasterizes_full_color_bgra_artwork() {
+        let image = brand_logo_image();
+        assert_eq!(image.frame_count(), 1);
+        let size = image.size(0);
+        assert_eq!(size.width.0, BRAND_LOGO_RASTER_PX as i32);
+        assert_eq!(size.height.0, BRAND_LOGO_RASTER_PX as i32);
+
+        let bytes = image.as_bytes(0).expect("rendered logo frame bytes");
+        // Corner (0, 0) lies outside the rx=56 rounded tile and must be transparent.
+        assert_eq!(bytes[3], 0, "top-left corner should be transparent");
+
+        // Verify the rasterized BGRA frame preserves both the cyan torii (#3df2e0)
+        // and pink rising sun checker (#ff4fa3) rather than a monochrome mask.
+        let mut saw_cyan = false;
+        let mut saw_pink = false;
+        for px in bytes.as_chunks::<4>().0 {
+            let (b, g, r, a) = (px[0], px[1], px[2], px[3]);
+            if a > 200 && g > 180 && b > 180 && r < 120 {
+                saw_cyan = true;
+            }
+            if a > 200 && r > 200 && b > 120 && g < 130 {
+                saw_pink = true;
+            }
+        }
+        assert!(saw_cyan, "expected cyan torii pixels in rasterized logo");
+        assert!(saw_pink, "expected pink sun pixels in rasterized logo");
+    }
 }

@@ -82,6 +82,11 @@ impl BackendFacade {
         engine_matches::cancel_series(&self.state, id).await
     }
 
+    pub async fn resume_engine_match(&self, id: Uuid) -> Result<Series, DomainError> {
+        let _guard = self.db_access_guard()?;
+        engine_matches::resume_series(&self.state, id).await
+    }
+
     pub async fn delete_engine_match(&self, id: Uuid) -> Result<(), DomainError> {
         let _guard = self.db_access_guard()?;
         engine_matches::delete_series(&self.state, id).await

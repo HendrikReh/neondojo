@@ -6,10 +6,11 @@
 //! shell environment.
 
 use crate::local_state::LocalUiState;
-use gpui_kit::Global;
+use gpui_kit::{Context, Global};
 use neondojo::facade::BackendFacade;
 use neondojo::runtime::{CoreConfig, CoreRuntime};
-use neondojo_board::themes::ThemeAtlasCache;
+use neondojo_board::BoardView;
+use neondojo_board::themes::{BoardThemeConfig, ThemeAtlasCache};
 use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgConnectOptions;
 use std::fs;
@@ -202,18 +203,80 @@ fn default_gnubg_probe_dirs() -> Vec<PathBuf> {
     dirs
 }
 
-fn resolve_default_themes_dir() -> Option<PathBuf> {
-    let app_themes = LocalUiState::app_support_dir().join("themes");
-    if app_themes.is_dir() {
-        return Some(app_themes);
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        let repo_themes = cwd.join("themes");
-        if repo_themes.is_dir() {
-            return Some(repo_themes);
+fn dir_has_zip_archives(dir: &Path) -> bool {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let path = entry.path();
+        path.is_file()
+            && path
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
+    })
+}
+
+/// Candidate BGBlitz `themes/` directories in priority order:
+/// 1. User Application Support override (`~/Library/Application Support/NeonDojo/themes`)
+/// 2. Bundled `.app` resources (`<NeonDojo.app>/Contents/Resources/themes`)
+/// 3. Current working directory (`./themes`)
+/// 4. Ancestors of the running executable (finds `<repo>/themes` when launched from
+///    `target/local-desktop/NeonDojo.app/Contents/MacOS/neondojo-desktop` or `target/debug/...`).
+fn candidate_themes_dirs(
+    app_support: &Path,
+    cwd: Option<&Path>,
+    exe: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    candidates.push(app_support.join("themes"));
+
+    if let Some(exe_path) = exe
+        && let Some(macos_dir) = exe_path.parent()
+        && let Some(contents_dir) = macos_dir.parent()
+    {
+        let bundle_themes = contents_dir.join("Resources").join("themes");
+        if !candidates.contains(&bundle_themes) {
+            candidates.push(bundle_themes);
         }
     }
-    None
+
+    if let Some(cwd_path) = cwd {
+        let cwd_themes = cwd_path.join("themes");
+        if !candidates.contains(&cwd_themes) {
+            candidates.push(cwd_themes);
+        }
+    }
+
+    if let Some(exe_path) = exe {
+        for ancestor in exe_path.ancestors().skip(1).take(7) {
+            let repo_themes = ancestor.join("themes");
+            if !candidates.contains(&repo_themes) {
+                candidates.push(repo_themes);
+            }
+        }
+    }
+
+    candidates
+}
+
+pub fn resolve_themes_dir_from(
+    app_support: &Path,
+    cwd: Option<&Path>,
+    exe: Option<&Path>,
+) -> Option<PathBuf> {
+    let candidates = candidate_themes_dirs(app_support, cwd, exe);
+    if let Some(with_zips) = candidates.iter().find(|dir| dir_has_zip_archives(dir)) {
+        return Some(with_zips.clone());
+    }
+    candidates.into_iter().find(|dir| dir.is_dir())
+}
+
+fn resolve_default_themes_dir() -> Option<PathBuf> {
+    let app_support = LocalUiState::app_support_dir();
+    let cwd = std::env::current_dir().ok();
+    let exe = std::env::current_exe().ok();
+    resolve_themes_dir_from(&app_support, cwd.as_deref(), exe.as_deref())
 }
 
 /// Resolves Finder-safe desktop bootstrap settings from env vars, `bootstrap.json`,
@@ -328,6 +391,7 @@ pub struct DesktopAppContext {
     pub bootstrap: ResolvedBootstrap,
     pub connection: BackendConnectionState,
     pub board_atlas: Arc<Mutex<ThemeAtlasCache>>,
+    pub board_config: BoardThemeConfig,
     pub reset_generation: u64,
 }
 
@@ -335,10 +399,12 @@ impl Global for DesktopAppContext {}
 
 impl DesktopAppContext {
     pub fn new(bootstrap: ResolvedBootstrap) -> Self {
+        let themes_dir = bootstrap.custom_themes_dir.clone();
         Self {
             bootstrap,
             connection: BackendConnectionState::Idle,
-            board_atlas: Arc::new(Mutex::new(ThemeAtlasCache::default())),
+            board_atlas: Arc::new(Mutex::new(ThemeAtlasCache::new(themes_dir, 4))),
+            board_config: BoardThemeConfig::default(),
             reset_generation: 0,
         }
     }
@@ -380,6 +446,35 @@ impl DesktopAppContext {
         self.bootstrap.database_url = url;
         Ok(())
     }
+}
+
+/// Creates a board that follows the applied desktop artwork, including in dialogs.
+pub(crate) fn themed_board(id: &'static str, cx: &mut Context<BoardView>) -> BoardView {
+    let desktop = cx.try_global::<DesktopAppContext>();
+    let atlas = desktop
+        .map(|ctx| Arc::clone(&ctx.board_atlas))
+        .unwrap_or_else(|| Arc::new(Mutex::new(ThemeAtlasCache::default())));
+    let mut config = desktop
+        .map(|ctx| ctx.board_config.clone())
+        .unwrap_or_else(|| BoardThemeConfig {
+            board_theme: cx.try_global::<LocalUiState>().map_or_else(
+                || BoardThemeConfig::default().board_theme,
+                |state| state.board_theme.clone(),
+            ),
+            ..BoardThemeConfig::default()
+        });
+    let mut board = BoardView::new(id, atlas);
+    board.set_theme_config(config.clone(), cx);
+    cx.observe_global::<DesktopAppContext>(move |board, cx| {
+        if let Some(desktop) = cx.try_global::<DesktopAppContext>()
+            && desktop.board_config != config
+        {
+            config = desktop.board_config.clone();
+            board.set_theme_config(config.clone(), cx);
+        }
+    })
+    .detach();
+    board
 }
 
 #[cfg(test)]
@@ -442,5 +537,54 @@ mod tests {
         cfg.save_atomic(&cfg_path).unwrap();
         let loaded = BootstrapConfig::load_or_default(&cfg_path);
         assert_eq!(loaded, cfg);
+    }
+
+    #[test]
+    fn resolves_bgblitz_themes_from_bundle_resources_or_repo_ancestors_when_cwd_is_root() {
+        let dir = tempdir().expect("temp dir");
+        let app_support = dir.path().join("AppSupport");
+        let repo = dir.path().join("bgtutor");
+        let repo_themes = repo.join("themes");
+        let bundle_macos = repo
+            .join("target")
+            .join("local-desktop")
+            .join("NeonDojo.app")
+            .join("Contents")
+            .join("MacOS");
+        let bundle_resources_themes = repo
+            .join("target")
+            .join("local-desktop")
+            .join("NeonDojo.app")
+            .join("Contents")
+            .join("Resources")
+            .join("themes");
+        fs::create_dir_all(&repo_themes).unwrap();
+        fs::create_dir_all(&bundle_macos).unwrap();
+        let fake_exe = bundle_macos.join("neondojo-desktop");
+        fs::write(&fake_exe, b"").unwrap();
+        fs::write(repo_themes.join("bg_classic.zip"), b"PK").unwrap();
+
+        // Launched from Finder (cwd = /) without bundled themes -> finds <repo>/themes via exe ancestors.
+        let found_repo =
+            resolve_themes_dir_from(&app_support, Some(Path::new("/")), Some(&fake_exe));
+        assert_eq!(found_repo.as_deref(), Some(repo_themes.as_path()));
+
+        // When Contents/Resources/themes has ZIP archives, bundle Resources take priority over repo walk.
+        fs::create_dir_all(&bundle_resources_themes).unwrap();
+        fs::write(bundle_resources_themes.join("bg_classic.zip"), b"PK").unwrap();
+        let found_bundle =
+            resolve_themes_dir_from(&app_support, Some(Path::new("/")), Some(&fake_exe));
+        assert_eq!(
+            found_bundle.as_deref(),
+            Some(bundle_resources_themes.as_path())
+        );
+
+        // User Application Support override takes highest priority when populated with ZIPs.
+        let user_themes = app_support.join("themes");
+        fs::create_dir_all(&user_themes).unwrap();
+        fs::write(user_themes.join("custom.zip"), b"PK").unwrap();
+        let found_user =
+            resolve_themes_dir_from(&app_support, Some(Path::new("/")), Some(&fake_exe));
+        assert_eq!(found_user.as_deref(), Some(user_themes.as_path()));
     }
 }

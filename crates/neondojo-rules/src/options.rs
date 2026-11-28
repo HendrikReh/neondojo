@@ -99,5 +99,6 @@ mod tests {
         let releases: Value =
             serde_json::from_str(NEONGAMMON_RELEASES_JSON).expect("valid releases JSON");
         assert!(releases.get("3.2.2").is_some());
+        assert!(releases.get("4.0.0").is_some());
     }
 }

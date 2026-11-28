@@ -17,7 +17,7 @@
 [![Vite 7](https://img.shields.io/badge/Vite-7-646CFF?logo=vite&logoColor=white)](web/package.json)
 [![OpenAPI 3.1](https://img.shields.io/badge/OpenAPI-3.1-6BA539?logo=openapiinitiative&logoColor=white)](docs/development/api.md)
 [![GNUbg 1.08.003](https://img.shields.io/badge/GNUbg-1.08.003-6F42C1)](#requirements)
-[![NeonGammon 3.2.2 optional](https://img.shields.io/badge/NeonGammon-3.2.2%20optional-8250DF)](docs/open-sage-local.md)
+[![NeonGammon 4.0.0 optional](https://img.shields.io/badge/NeonGammon-4.0.0%20optional-8250DF)](docs/open-sage-local.md)
 [![Languages: 2](https://img.shields.io/badge/languages-EN%20%7C%20DE-0969DA)](docs/reference/settings.md#interface-appearance-and-language)
 
 NeonDojo is a local backgammon study app for Apple Silicon Macs. Import your matches, find positions in your library, and practice decisions you missed. You can review checker plays and cube decisions with GNU Backgammon (GNUbg) or install [NeonGammon](https://github.com/HendrikReh/neongammon) as a second engine. NeonDojo shows the engine’s analysis alongside your moves and lets you play matches against either engine.
@@ -48,7 +48,7 @@ NeonDojo’s headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The n
 - Docker Compose for the bundled PostgreSQL 17 database, or an existing PostgreSQL server
 - Python 3.10 or later for the frontend build and development scripts
 - A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
-- Optional: NeonGammon 3.2.2 as a second engine, running in a locked native ARM64 Python 3.12 environment on macOS 14 or later (3.2.1, 3.2.0 and 3.1.0 through 3.1.2 also support named difficulty presets; 3.0.0 remains supported for analysis and ordinary play without presets). See [Local NeonGammon setup](docs/open-sage-local.md).
+- Optional: NeonGammon 4.0.0 as a second engine, running in a locked native ARM64 Python 3.12 environment on macOS 14 or later (3.2.2, 3.2.1, 3.2.0 and 3.1.0 through 3.1.2 also support named difficulty presets; 3.0.0 remains supported for analysis and ordinary play without presets). See [Local NeonGammon setup](docs/open-sage-local.md).
 - The BGBlitz theme archives listed in `shared/configuration-options.json`, copied into `themes/`. They are local third-party files and not part of the repository. Without them, `npm run build`, `npm run dev` and `npm test` stop and name the missing ZIP files; set `NEONDOJO_ALLOW_MISSING_THEMES=1` only when intentionally building without them. Only `npm run themes:prepare --prefix web -- --update-options` rewrites the tracked theme list. See [Board artwork](docs/reference/settings.md#board-artwork) and [Board theme formats](themes/README.md).
 
 ### Database and engine
@@ -182,7 +182,7 @@ Read the [NeonDojo documentation on GitHub Pages](https://hendrikreh.github.io/n
 | | [Verification and tests](docs/development/testing.md) | Quality checks, PostgreSQL and GNUbg integration tests, import corpus, browser tests and native play tests |
 | | [Architecture and data](docs/development/architecture.md) | Repository layout, schema baseline, storage of matches and positions, private demo data |
 | | [UI navigation](docs/ui-navigation.md), [typography](docs/typography.md) and [action icons](docs/design/action-icons-proposal.md) | Text navigation, keyboard operation, type scale, tokens and Lucide action icons for interface changes |
-| | [Local NeonGammon setup](docs/open-sage-local.md) | Installing and checking NeonGammon 3.2.2, measurements and limits |
+| | [Local NeonGammon setup](docs/open-sage-local.md) | Installing and checking NeonGammon 4.0.0, measurements and limits |
 | | [Engine duel CPU budget](docs/engine-duel-cpu-budget.md) | Concept for comparing engines with the same computing budget |
 | | [Import corpus results](docs/import-corpus-results.md) | Results of importing the local match corpus |
 | | [Repository guidance](AGENTS.md) | Rules for changes to this repository |

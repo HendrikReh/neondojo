@@ -22,7 +22,8 @@ use crate::settings::analysis::{
 };
 use crate::settings::appearance::render_appearance_section;
 use crate::settings::board::{
-    BoardSectionCallbacks, appearance_to_board_config, render_board_section,
+    BoardArtworkPicker, BoardSectionCallbacks, appearance_to_board_config, preview_board_position,
+    render_board_section,
 };
 use crate::settings::draft_guard::{
     GuardedDestination, SettingsCategory, SettingsDraft, config_locale_to_locale,
@@ -68,7 +69,7 @@ use neondojo::profiles::{
 };
 use neondojo::settings::{EngineInfo, OpenSageInstallation};
 use neondojo_board::{
-    BgBlitzThemeEntry, BoardPosition, BoardView, ThemeAtlasCache, discover_bgblitz_themes,
+    BgBlitzThemeEntry, BoardThemeConfig, BoardView, ThemeAtlasCache, discover_bgblitz_themes,
 };
 use neondojo_i18n::{I18n, Locale};
 use neondojo_rules::options::engine_depths;
@@ -84,6 +85,7 @@ pub struct AppliedSettingsEvent {
     pub palette_id: NeonPaletteId,
     pub mode: ThemeMode,
     pub board_theme: String,
+    pub board_config: BoardThemeConfig,
     pub active_profile_name: SharedString,
     pub profile_modified: bool,
 }
@@ -114,6 +116,7 @@ pub struct SettingsDialogView {
     threshold_inputs: ThresholdInputEntities,
     tutor_threshold_input: Entity<DecimalInput>,
     preview_board: Entity<BoardView>,
+    open_board_picker: Option<BoardArtworkPicker>,
 
     // Async status & conflict flags
     busy: ModalBusyLock,
@@ -272,27 +275,70 @@ impl SettingsDialogView {
             .as_ref()
             .map(|c| Arc::clone(&c.board_atlas))
             .unwrap_or_else(|| Arc::new(Mutex::new(ThemeAtlasCache::default())));
-        let bgblitz_themes = app_ctx
+        let themes_dir = app_ctx
             .as_ref()
-            .and_then(|c| c.bootstrap.custom_themes_dir.as_deref())
-            .and_then(|dir| discover_bgblitz_themes(dir).ok())
+            .and_then(|c| c.bootstrap.custom_themes_dir.clone());
+        let mut bgblitz_themes: Vec<BgBlitzThemeEntry> = atlas
+            .lock()
+            .ok()
+            .map(|guard| guard.bgblitz_entries().into_iter().cloned().collect())
             .unwrap_or_default();
+        let needs_async_theme_scan = bgblitz_themes.is_empty() && themes_dir.is_some();
+        if needs_async_theme_scan
+            && cx.try_global::<TokioBridge>().is_none()
+            && let Some(dir) = themes_dir.as_deref()
+            && let Ok(entries) = discover_bgblitz_themes(dir)
+        {
+            if let Ok(mut guard) = atlas.lock() {
+                guard.set_bgblitz_entries(entries.clone());
+            }
+            bgblitz_themes = entries;
+        }
 
         let preview_board = cx.new(|cx| {
-            let mut board = BoardView::new("settings-board-preview", atlas);
+            let mut board = BoardView::new("settings-board-preview", Arc::clone(&atlas));
             board.set_theme_config(
                 appearance_to_board_config(&draft.draft_config.appearance),
                 cx,
             );
-            board.set_position(
-                BoardPosition {
-                    dice: vec![3, 1],
-                    ..BoardPosition::default()
-                },
+            board.set_position(preview_board_position(), cx);
+            board.set_players(
+                I18n::t(locale, "settings", "light"),
+                I18n::t(locale, "settings", "dark"),
                 cx,
             );
+            board.set_show_both_dice_colors(true, cx);
             board
         });
+
+        if needs_async_theme_scan
+            && let Some(dir) = themes_dir
+            && cx.try_global::<TokioBridge>().is_some()
+        {
+            let atlas_for_scan = Arc::clone(&atlas);
+            let task = TokioBridge::spawn_read(cx, async move {
+                tokio::task::spawn_blocking(move || discover_bgblitz_themes(&dir).ok())
+                    .await
+                    .ok()
+                    .flatten()
+            });
+            cx.spawn_in(window, async move |this, cx| {
+                let Ok(Some(entries)) = task.await else {
+                    return;
+                };
+                if let Ok(mut guard) = atlas_for_scan.lock() {
+                    guard.set_bgblitz_entries(entries.clone());
+                }
+                let _ = this.update_in(cx, |view, _, cx| {
+                    view.bgblitz_themes = entries;
+                    let cfg = appearance_to_board_config(&view.draft.draft_config.appearance);
+                    view.preview_board
+                        .update(cx, |b, cx| b.set_theme_config(cfg, cx));
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
 
         let mut subscriptions = Vec::new();
         subscriptions.push(cx.subscribe_in(
@@ -346,6 +392,7 @@ impl SettingsDialogView {
             threshold_inputs,
             tutor_threshold_input,
             preview_board,
+            open_board_picker: None,
             busy,
             loading: false,
             saving: false,
@@ -593,6 +640,7 @@ impl SettingsDialogView {
         if !self.draft.can_apply(self.saving) {
             return;
         }
+        self.open_board_picker = None;
         let destinations = self.draft.dirty_destinations();
 
         if let Some(facade) = self.facade.clone() {
@@ -736,12 +784,14 @@ impl SettingsDialogView {
         }
 
         if let Some(cb) = self.on_applied.clone() {
+            let board_config = appearance_to_board_config(&self.draft.draft_config.appearance);
             cb(
                 AppliedSettingsEvent {
                     locale,
                     palette_id,
                     mode,
                     board_theme,
+                    board_config,
                     active_profile_name: self.active_profile_name.clone(),
                     profile_modified: !self.profile_differences.is_empty(),
                 },
@@ -1046,6 +1096,7 @@ impl Render for SettingsDialogView {
                                         );
                                     } else {
                                         view.category = next;
+                                        view.open_board_picker = None;
                                         cx.notify();
                                     }
                                 });
@@ -1280,6 +1331,7 @@ impl Render for SettingsDialogView {
                 &self.draft.draft_config.appearance,
                 &self.preview_board,
                 &self.bgblitz_themes,
+                self.open_board_picker,
                 disabled,
                 p,
                 BoardSectionCallbacks {
@@ -1287,6 +1339,7 @@ impl Render for SettingsDialogView {
                         let ent = entity.clone();
                         move |theme, _, cx| {
                             ent.update(cx, |v, cx| {
+                                v.open_board_picker = None;
                                 v.draft.draft_config.appearance.board_theme = theme;
                                 let cfg =
                                     appearance_to_board_config(&v.draft.draft_config.appearance);
@@ -1331,6 +1384,15 @@ impl Render for SettingsDialogView {
                                     appearance_to_board_config(&v.draft.draft_config.appearance);
                                 v.preview_board
                                     .update(cx, |b, cx| b.set_theme_config(cfg, cx));
+                                cx.notify();
+                            });
+                        }
+                    }),
+                    on_toggle_picker: Rc::new({
+                        let ent = entity.clone();
+                        move |slot, _, cx| {
+                            ent.update(cx, |v, cx| {
+                                v.open_board_picker = slot;
                                 cx.notify();
                             });
                         }
@@ -1461,8 +1523,8 @@ impl Render for SettingsDialogView {
                     .h_flex()
                     .items_start()
                     .gap(px(18.0))
-                    .min_h(px(430.0))
-                    .max_h(px(560.0))
+                    .min_h(px(500.0))
+                    .max_h(px(620.0))
                     .child(sidebar)
                     .child(
                         div()
@@ -1470,9 +1532,13 @@ impl Render for SettingsDialogView {
                             .v_flex()
                             .flex_1()
                             .min_w(px(0.0))
-                            .max_h(px(560.0))
-                            .overflow_y_scroll()
-                            .pr(px(4.0))
+                            .max_h(px(620.0))
+                            .when(self.category == SettingsCategory::Board, |this| {
+                                this.h(px(620.0)).overflow_hidden()
+                            })
+                            .when(self.category != SettingsCategory::Board, |this| {
+                                this.overflow_y_scroll().pr(px(4.0))
+                            })
                             .when(self.loading, |this| {
                                 this.child(
                                     div()
@@ -1605,7 +1671,7 @@ pub fn open_settings_dialog(
 
     let config = ModalConfig::new(I18n::t(locale, "settings", "title"))
         .subtitle(I18n::t(locale, "settings", "description"))
-        .size(ModalSize::ExtraWide)
+        .size(ModalSize::Custom(1040.0))
         .busy_lock(busy);
 
     let view_for_body = view.clone();

@@ -1,7 +1,8 @@
 use super::{
     Competitor, CreateSeries, DiceMode, DuelFormat, ENGINE_DUELS_DATABASE_ID, GameOutcomes,
-    MAX_BLOCK_GAMES, MatchResult, MoneyStatistics, Series, SeriesConfig, SeriesDetails,
-    SeriesEngines, SeriesPage, SeriesStatistics, SideCostSummary, dice, runner, summarize,
+    LiveProgress, MAX_BLOCK_GAMES, MatchResult, MoneyStatistics, Series, SeriesConfig,
+    SeriesDetails, SeriesEngines, SeriesPage, SeriesStatistics, SideCostSummary, checkpoint, dice,
+    progress, runner, summarize,
 };
 use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Path, Query};
@@ -37,12 +38,17 @@ struct ResultPage {
 }
 
 const PAGE_SIZE: usize = 50;
+const SERIES_QUERY: &str = "SELECT r.*, CASE WHEN r.status IN ('cancelled','failed') THEN (
+    SELECT game_number FROM engine_match_game_checkpoints
+    WHERE run_id=r.id AND unit_index=r.completed_matches ORDER BY game_number DESC LIMIT 1
+    ) END AS saved_games_in_unit FROM engine_match_runs r";
 
 pub(crate) fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/engine-matches", get(list).post(create))
-        .route("/api/engine-matches/{id}", get(details))
+        .route("/api/engine-matches/{id}", get(details).delete(remove))
         .route("/api/engine-matches/{id}/cancel", post(cancel))
+        .route("/api/engine-matches/{id}/resume", post(resume))
         .route("/api/engine-matches/{id}/matches/{index}/sgf", get(sgf))
         .route(
             "/api/engine-matches/{id}/matches/{index}/library",
@@ -54,12 +60,12 @@ pub(crate) async fn list_series(
     pool: &PgPool,
     before: Option<Uuid>,
 ) -> Result<SeriesPage, DomainError> {
-    let mut runs: Vec<Series> = sqlx::query_as(
-        "SELECT * FROM engine_match_runs
-         WHERE $1::uuid IS NULL OR (created_at,id) <
+    let mut runs: Vec<Series> = sqlx::query_as(&format!(
+        "{SERIES_QUERY}
+         WHERE $1::uuid IS NULL OR (r.created_at,r.id) <
              (SELECT created_at,id FROM engine_match_runs WHERE id=$1)
-         ORDER BY created_at DESC,id DESC LIMIT $2",
-    )
+         ORDER BY r.created_at DESC,r.id DESC LIMIT $2",
+    ))
     .bind(before)
     .bind(PAGE_SIZE as i64 + 1)
     .fetch_all(pool)
@@ -206,6 +212,9 @@ pub(crate) async fn series_details(
     }
     let offset_usize = offset as usize;
     let series = load(pool, id).await?;
+    let live_progress = progress::load(pool, &series)
+        .await
+        .map_err(anyhow::Error::from)?;
     // Read only committed results up to this version of the progress counter.
     let mut results: Vec<MatchResult> = sqlx::query_as("SELECT match_index,seed,score_a,score_b,games,cpu_us_a,wall_us_a,moves_a,cpu_us_b,wall_us_b,moves_b,outcomes FROM engine_match_results WHERE run_id=$1 AND match_index<$2 ORDER BY match_index")
         .bind(id).bind(series.completed_matches).fetch_all(pool).await.map_err(anyhow::Error::from)?;
@@ -223,6 +232,7 @@ pub(crate) async fn series_details(
         .collect();
     Ok(SeriesDetails {
         series,
+        live_progress,
         statistics,
         matches,
         next_offset,
@@ -238,30 +248,57 @@ pub(crate) async fn cancel_series(state: &AppState, id: Uuid) -> Result<Series, 
     Ok(series)
 }
 
-pub(crate) async fn delete_series(state: &AppState, id: Uuid) -> Result<(), DomainError> {
-    let deleted = sqlx::query(
-        "DELETE FROM engine_match_runs WHERE id=$1 AND status NOT IN ('queued','running')",
+pub(crate) async fn resume_series(state: &AppState, id: Uuid) -> Result<Series, DomainError> {
+    let series: Option<Series> = sqlx::query_as(
+        "UPDATE engine_match_runs SET
+             status='queued',error=NULL,attempts=0,lease_token=NULL,lease_until=NULL
+         WHERE id=$1 AND status='cancelled' AND completed_matches<total_matches RETURNING *",
     )
     .bind(id)
-    .execute(&state.pool)
+    .fetch_optional(&state.pool)
     .await
-    .map_err(anyhow::Error::from)?
-    .rows_affected();
-    if deleted > 0 {
-        state.notify_engine_match_update(id);
-        return Ok(());
+    .map_err(anyhow::Error::from)?;
+    let Some(series) = series else {
+        load(&state.pool, id).await?;
+        return Err(DomainError::conflict(
+            "Only cancelled engine duels with unfinished matches or blocks can be resumed",
+        ));
+    };
+    state.notify_engine_match_update(series.id);
+    Ok(series)
+}
+
+pub(crate) async fn delete_series(state: &AppState, id: Uuid) -> Result<(), DomainError> {
+    let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
+    // Lock the series before reading its latest checkpoint so a concurrent
+    // resume cannot add more games or archive the same unit during removal.
+    let series: Series = sqlx::query_as("SELECT * FROM engine_match_runs WHERE id=$1 FOR UPDATE")
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(DomainError::missing)?;
+    if matches!(series.status.as_str(), "queued" | "running") {
+        return Err(DomainError::conflict(
+            "Cancel the engine duel before deleting it",
+        ));
     }
-    let exists: bool =
-        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM engine_match_runs WHERE id=$1)")
-            .bind(id)
-            .fetch_one(&state.pool)
-            .await
-            .map_err(anyhow::Error::from)?;
-    Err(if exists {
-        DomainError::conflict("Cancel the engine duel before deleting it")
-    } else {
-        DomainError::missing()
-    })
+    if let Some(saved) = checkpoint::load(&mut *tx, id, series.completed_matches).await? {
+        let archive =
+            runner::prepare_archive(&series, series.completed_matches, &saved.into_sgf().await?)
+                .await?;
+        store::insert_match_import(&mut tx, ENGINE_DUELS_DATABASE_ID, archive.prepare().await?)
+            .await?;
+    }
+    sqlx::query("DELETE FROM engine_match_runs WHERE id=$1")
+        .bind(id)
+        .execute(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    state.browse_wake.notify_one();
+    state.notify_engine_match_update(id);
+    Ok(())
 }
 
 pub(crate) async fn series_sgf(pool: &PgPool, id: Uuid, index: i32) -> Result<String, DomainError> {
@@ -325,7 +362,7 @@ async fn details(
 }
 
 async fn load(pool: &PgPool, id: Uuid) -> ApiResult<Series> {
-    sqlx::query_as("SELECT * FROM engine_match_runs WHERE id=$1")
+    sqlx::query_as(&format!("{SERIES_QUERY} WHERE r.id=$1"))
         .bind(id)
         .fetch_optional(pool)
         .await
@@ -336,6 +373,19 @@ async fn load(pool: &PgPool, id: Uuid) -> ApiResult<Series> {
 #[utoipa::path(post, path="/api/engine-matches/{id}/cancel", params(("id"=Uuid, Path)), responses((status=200, body=Series),(status=404, body=ErrorBody)), tag="Engine matches")]
 async fn cancel(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<Series>> {
     Ok(Json(cancel_series(&state, id).await?))
+}
+
+/// Queue a cancelled series from its last committed match or money block.
+#[utoipa::path(post, path="/api/engine-matches/{id}/resume", params(("id"=Uuid, Path)), responses((status=200, body=Series),(status=404, body=ErrorBody),(status=409, body=ErrorBody)), tag="Engine matches")]
+async fn resume(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<Series>> {
+    Ok(Json(resume_series(&state, id).await?))
+}
+
+/// Remove a stopped series. Played games stay in the match database.
+#[utoipa::path(delete, path="/api/engine-matches/{id}", params(("id"=Uuid, Path)), responses((status=204),(status=404, body=ErrorBody),(status=409, body=ErrorBody)), tag="Engine matches")]
+async fn remove(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    delete_series(&state, id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn stored_sgf(pool: &PgPool, id: Uuid, index: i32) -> ApiResult<String> {
@@ -380,7 +430,7 @@ async fn library_match(
 
 #[derive(OpenApi)]
 #[openapi(
-    paths(list, create, details, cancel, sgf, library_match),
+    paths(list, create, details, cancel, resume, remove, sgf, library_match),
     components(schemas(
         CreateSeries,
         Competitor,
@@ -389,6 +439,7 @@ async fn library_match(
         SeriesConfig,
         SeriesEngines,
         Series,
+        LiveProgress,
         MatchResult,
         MoneyStatistics,
         GameOutcomes,

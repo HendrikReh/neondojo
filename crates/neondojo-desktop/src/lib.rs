@@ -35,7 +35,9 @@ pub fn configure_app(state: LocalUiState, system_dark: bool, cx: &mut App) {
     let bootstrap = resolve_bootstrap_config(&state);
 
     init_locale(locale, cx);
-    cx.set_global(DesktopAppContext::new(bootstrap));
+    let mut app_ctx = DesktopAppContext::new(bootstrap);
+    app_ctx.board_config.board_theme = state.board_theme.clone();
+    cx.set_global(app_ctx);
     cx.set_global(state);
     NeonTheme::init(palette_id, mode, system_dark, cx);
     register_keybindings(cx);
@@ -379,10 +381,20 @@ mod tests {
             window.render_frame(cx);
             assert_eq!(NeonTheme::current_palette(cx).id, NeonPaletteId::Graphite);
 
-            // Visit Board (renders BoardView + BoardGalleryTile) and Analysis
+            // Visit Board (renders pinned BoardView + 3 artwork pickers alongside scrollable gallery)
             window.click("settings-cat-board", cx);
             window.render_frame(cx);
             assert!(window.find("board-gallery-forest").visible());
+            assert!(window.find("settings-board-preview-pane").visible());
+            assert!(window.find("settings-picker-checkers").visible());
+            assert!(window.find("settings-picker-cube").visible());
+            assert!(window.find("settings-picker-dice").visible());
+            window.click("settings-picker-dice", cx);
+            window.render_frame(cx);
+            assert!(window.find("settings-picker-menu-dice").visible());
+            window.click("settings-dice-walnut", cx);
+            window.render_frame(cx);
+            assert!(window.find("settings-board-preview-pane").visible());
 
             window.click("settings-cat-analysis", cx);
             window.render_frame(cx);

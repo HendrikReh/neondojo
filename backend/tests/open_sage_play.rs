@@ -67,6 +67,129 @@ async fn first_checker_decision(app: &axum::Router, mut session: Value) -> Value
 }
 
 #[sqlx::test(migrations = "./migrations")]
+#[ignore = "requires isolated PostgreSQL, GNUbg Python, and locked NeonGammon 3.2.2 and 4.0.0 interpreters"]
+async fn upgrading_neongammon_preserves_queued_jobs_and_paused_sessions(pool: PgPool) {
+    use neondojo::{import, jobs, store};
+
+    let previous = std::env::var("OPEN_SAGE_322_TEST_PYTHON").expect("locked 3.2.2 interpreter");
+    let current = std::env::var("OPEN_SAGE_TEST_PYTHON").expect("locked 4.0.0 interpreter");
+    let state = AppState::new(
+        pool.clone(),
+        Engine::new(std::env::var("GNUBG_BIN").unwrap_or("gnubg".into())),
+    );
+    let app = api::router(state.clone());
+    let releases: Value =
+        serde_json::from_str(include_str!("../../shared/neongammon-releases.json")).unwrap();
+    let install = async |version, path, package| {
+        let (status, result) = call(
+            app.clone(),
+            "PUT",
+            "/api/engines/bgsage",
+            json!({"version":version,"path":path}),
+        )
+        .await;
+        assert_eq!(status, 200, "{result}");
+        assert_eq!(result["snapshot"]["package_version"], package);
+        assert_eq!(
+            result["snapshot"]["artifact_fingerprint"],
+            releases[package]["fingerprint"]
+        );
+    };
+    let start_session = async || {
+        let (status, session) = call(
+            app.clone(),
+            "POST",
+            "/api/play/sessions",
+            json!({
+                "human_player":0,"match_length":5,"play_mode":"training",
+                "play_engine":"bgsage","play_difficulty":"full_strength",
+                "training_auto_analysis":false
+            }),
+        )
+        .await;
+        assert_eq!(status, 201, "{session}");
+        session
+    };
+
+    let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
+    let imported = store::import_match(
+        &pool,
+        "engine-upgrade.sgf",
+        "sgf",
+        sgf.as_bytes(),
+        sgf,
+        &import::parse_sgf(sgf).unwrap(),
+    )
+    .await
+    .unwrap();
+    let position = store::positions(&pool, Some(imported.r#match.id), None, None, 1)
+        .await
+        .unwrap()
+        .items
+        .pop()
+        .unwrap();
+    let submit_job = async || {
+        let (status, job) = call(
+            app.clone(),
+            "POST",
+            "/api/jobs",
+            json!({"position_id":position.id,"kind":"analysis","engine_id":"bgsage","plies":2}),
+        )
+        .await;
+        assert_eq!(status, 202, "{job}");
+        job
+    };
+
+    install(0, previous, "3.2.2").await;
+    let old_job = submit_job().await;
+    let old_session = first_checker_decision(&app, start_session().await).await;
+    let (status, paused) = action(&app, &old_session, "pause", json!({})).await;
+    assert_eq!(status, 200, "{paused}");
+    assert_eq!(paused["paused"], true);
+    assert_eq!(
+        paused["engine_snapshots"]["bot"]["open_sage"]["package_version"],
+        "3.2.2"
+    );
+
+    install(1, current, "4.0.0").await;
+    let new_job = submit_job().await;
+    assert_ne!(old_job["id"], new_job["id"]);
+    let new_session = start_session().await;
+    assert_eq!(
+        new_session["engine_snapshots"]["bot"]["open_sage"]["package_version"],
+        "4.0.0"
+    );
+
+    let (status, resumed) = action(&app, &paused, "resume", json!({})).await;
+    assert_eq!(status, 200, "{resumed}");
+    assert_eq!(resumed["paused"], false);
+    let (status, played) = action(&app, &resumed, "move", json!({"move":0})).await;
+    assert_eq!(status, 200, "{played}");
+    assert_eq!(played["engine_snapshots"], old_session["engine_snapshots"]);
+
+    for _ in 0..2 {
+        assert!(jobs::run_one(&state).await.unwrap());
+    }
+    for (submitted, package) in [(&old_job, "3.2.2"), (&new_job, "4.0.0")] {
+        let (status, completed) = call(
+            app.clone(),
+            "GET",
+            &format!("/api/jobs/{}", submitted["id"].as_str().unwrap()),
+            Value::Null,
+        )
+        .await;
+        assert_eq!(status, 200, "{completed}");
+        assert_eq!(completed["status"], "completed", "{completed}");
+        assert_eq!(completed["engine_snapshot"], submitted["engine_snapshot"]);
+        assert_eq!(
+            completed["engine_snapshot"]["open_sage"]["package_version"],
+            package
+        );
+        assert!(completed["result"]["candidates"][0]["equity"].is_number());
+    }
+}
+
+#[sqlx::test(migrations = "./migrations")]
 #[ignore = "requires isolated PostgreSQL, GNUbg Python, locked OPEN_SAGE_TEST_PYTHON"]
 async fn sage_full_game_both_colors_restores_pinned_engines_and_has_no_gnubg_pr(pool: PgPool) {
     let app = setup(&pool).await;

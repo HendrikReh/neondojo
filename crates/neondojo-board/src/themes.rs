@@ -14,7 +14,7 @@ use std::collections::{HashMap, VecDeque, hash_map::Entry};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock, Mutex};
 use zip::ZipArchive;
 
 /// Special `dice_theme` value meaning "follow the active board theme"
@@ -33,6 +33,59 @@ pub const MAX_CHECKER_VARIANTS: usize = 32;
 
 /// Gallery thumbnail target width in physical pixels (`~320×216` for 1.48 ratio).
 pub const GALLERY_THUMB_MAX_WIDTH: u32 = 320;
+/// Rasterized surface texture dimensions for built-in gallery previews
+/// (matches `NATIVE_FIELD` 534×414 ratio at crisp Retina resolution).
+const BUILTIN_GALLERY_SURFACE_W: u32 = 320;
+const BUILTIN_GALLERY_SURFACE_H: u32 = 248;
+
+/// Cached GPU textures for rendering a full built-in board preview in
+/// `BoardGalleryTile` without disturbing `ThemeAtlasCache` LRU slots.
+#[derive(Clone)]
+pub struct BuiltInGalleryAssets {
+    pub surface: Option<Arc<RenderImage>>,
+    pub white_checker: Option<Arc<RenderImage>>,
+    pub black_checker: Option<Arc<RenderImage>>,
+    pub cube: Option<Arc<RenderImage>>,
+}
+
+static BUILTIN_GALLERY_CACHE: LazyLock<Mutex<HashMap<BuiltInThemeId, BuiltInGalleryAssets>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Returns cached gallery preview textures for a built-in board theme,
+/// decoding embedded WebP sprites and rasterizing any SVG surface once.
+pub fn builtin_gallery_assets(theme: BuiltInThemeId) -> BuiltInGalleryAssets {
+    let mut cache = BUILTIN_GALLERY_CACHE
+        .lock()
+        .expect("builtin gallery cache lock");
+    cache
+        .entry(theme)
+        .or_insert_with(|| {
+            let surface = theme.surface_svg().and_then(|svg| {
+                rasterize_surface_svg(svg, BUILTIN_GALLERY_SURFACE_W, BUILTIN_GALLERY_SURFACE_H)
+                    .ok()
+            });
+            let white_checker = theme.checker_webps(true).and_then(|[b0, _]| {
+                image::load_from_memory(b0)
+                    .ok()
+                    .map(|img| render_image_from_rgba(img.to_rgba8()))
+            });
+            let black_checker = theme.checker_webps(false).and_then(|[b0, _]| {
+                image::load_from_memory(b0)
+                    .ok()
+                    .map(|img| render_image_from_rgba(img.to_rgba8()))
+            });
+            let cube = image::load_from_memory(theme.cube_webp())
+                .ok()
+                .map(|img| render_image_from_rgba(img.to_rgba8()));
+            BuiltInGalleryAssets {
+                surface,
+                white_checker,
+                black_checker,
+                cube,
+            }
+        })
+        .clone()
+}
 /// Quantization bucket for rasterized `resvg` surface textures.
 pub const SURFACE_RASTER_BUCKET_PX: u32 = 64;
 /// Default max resident full-resolution BGBlitz themes in GPU atlas memory.
@@ -1370,13 +1423,22 @@ impl ThemeAtlasCache {
             return Ok(0);
         };
         let entries = discover_bgblitz_themes(&dir)?;
+        self.set_bgblitz_entries(entries);
+        Ok(self.bgblitz_catalog_order.len())
+    }
+
+    /// Replaces the discovered BGBlitz gallery catalog (e.g. from a background scan).
+    pub fn set_bgblitz_entries(&mut self, entries: Vec<BgBlitzThemeEntry>) {
         self.bgblitz_catalog.clear();
         self.bgblitz_catalog_order.clear();
         for entry in entries {
             self.bgblitz_catalog_order.push(entry.id.clone());
             self.bgblitz_catalog.insert(entry.id.clone(), entry);
         }
-        Ok(self.bgblitz_catalog_order.len())
+    }
+
+    pub fn themes_dir(&self) -> Option<&Path> {
+        self.themes_dir.as_deref()
     }
 
     /// Registers an already-decoded BGBlitz theme directly (e.g. loaded off the
@@ -1540,6 +1602,32 @@ mod tests {
         let mut buf = vec![0x11, 0x22, 0x33, 0xFF, 0xAA, 0xBB, 0xCC, 0x40];
         rgba_to_bgra(&mut buf);
         assert_eq!(buf, vec![0x33, 0x22, 0x11, 0xFF, 0xCC, 0xBB, 0xAA, 0x40]);
+    }
+
+    #[test]
+    fn all_nine_builtin_themes_produce_cached_gallery_assets() {
+        for theme in BuiltInThemeId::ALL {
+            let assets = builtin_gallery_assets(theme);
+            assert!(assets.cube.is_some(), "gallery cube missing for {theme:?}");
+            if theme.surface_svg().is_some() {
+                assert!(
+                    assets.surface.is_some(),
+                    "gallery surface missing for {theme:?}"
+                );
+                assert!(
+                    assets.white_checker.is_some(),
+                    "gallery white checker missing for {theme:?}"
+                );
+                assert!(
+                    assets.black_checker.is_some(),
+                    "gallery black checker missing for {theme:?}"
+                );
+            } else {
+                assert!(assets.surface.is_none());
+                assert!(assets.white_checker.is_none());
+                assert!(assets.black_checker.is_none());
+            }
+        }
     }
 
     #[test]

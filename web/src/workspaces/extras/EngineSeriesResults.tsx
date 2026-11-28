@@ -29,6 +29,8 @@ export default function EngineSeriesResults({
   opening,
   onOpen,
   onCancel,
+  onResume,
+  onDelete,
   onReuse,
 }: {
   details: SeriesDetails;
@@ -41,6 +43,8 @@ export default function EngineSeriesResults({
   opening: number | undefined;
   onOpen: (matchIndex: number) => void;
   onCancel: () => void;
+  onResume: () => void;
+  onDelete: () => void;
   onReuse: (trigger: HTMLButtonElement) => void;
 }) {
   const { formatNumber, formatPercent } = useI18n();
@@ -52,6 +56,14 @@ export default function EngineSeriesResults({
   const rate = statistics.win_rate_a;
   const interval = statistics.confidence_interval_a;
   const playing = isActive(series.status);
+  const resumable =
+    series.status === 'cancelled' &&
+    series.completed_matches < series.total_matches;
+  const live = series.status === 'running' ? details.live_progress : undefined;
+  const blockGames = moneyDuel ? config.block_games : undefined;
+  const completedUnits =
+    series.completed_matches +
+    (live && blockGames ? live.completed_games / blockGames : 0);
   // Stored units (matches or blocks) in the statistics: complete pairs only.
   const counted = paired
     ? statistics.complete_pairs * 2
@@ -93,8 +105,8 @@ export default function EngineSeriesResults({
         {playing && (
           <>
             <progress
-              aria-label={text('matches')}
-              value={series.completed_matches}
+              aria-label={text(moneyDuel ? 'blocks' : 'matches')}
+              value={completedUnits}
               max={series.total_matches}
             />
             <ActionButton
@@ -106,6 +118,26 @@ export default function EngineSeriesResults({
             />
           </>
         )}
+        {resumable && (
+          <ActionButton
+            icon="play"
+            type="button"
+            className="primary"
+            label={text('resume')}
+            disabled={busy}
+            onClick={onResume}
+          />
+        )}
+        {!playing && (
+          <ActionButton
+            icon="delete"
+            type="button"
+            label={text('deleteSeries')}
+            aria-haspopup="dialog"
+            disabled={busy}
+            onClick={onDelete}
+          />
+        )}
         <ActionButton
           icon="copy"
           type="button"
@@ -113,7 +145,41 @@ export default function EngineSeriesResults({
           aria-haspopup="dialog"
           onClick={(event) => onReuse(event.currentTarget)}
         />
+        {live && (
+          <div className="engine-match-live-progress">
+            <span>
+              {text(moneyDuel ? 'currentBlock' : 'currentMatch', {
+                current: live.unit_number,
+                total: series.total_matches,
+              })}
+            </span>
+            <span>
+              {blockGames
+                ? text('currentBlockGame', {
+                    current: live.game_number,
+                    total: blockGames,
+                  })
+                : text('currentGame', { current: live.game_number })}
+            </span>
+            <span>
+              {text('currentScore', {
+                a: live.score_a,
+                b: live.score_b,
+              })}
+            </span>
+            <span>
+              {live.estimated_remaining_seconds == null
+                ? text('estimatingTime')
+                : text('remainingTime', {
+                    time: duration(live.estimated_remaining_seconds * 1_000),
+                  })}
+            </span>
+          </div>
+        )}
       </div>
+      {series.status === 'cancelled' && !!series.saved_games_in_unit && (
+        <p>{text('savedGames', { games: series.saved_games_in_unit })}</p>
+      )}
       {(series.status === 'failed' || series.error) && (
         <div className="engine-match-failure error">
           {series.status === 'failed' && (

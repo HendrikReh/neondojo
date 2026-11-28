@@ -1,4 +1,6 @@
 import ActionButton from '../../shared/ui/ActionButton';
+import LibraryDialog from '../../shared/ui/LibraryDialog';
+import Tooltip from '../../shared/ui/Tooltip';
 import { useEffect, useId, useRef, useState } from 'react';
 import { engineDisplayName } from '../../shared/engine/engine-version';
 import { formatPly } from '../../shared/format/ply';
@@ -7,14 +9,16 @@ import type { Match } from '../../shared/http/api';
 import {
   cancelSeries,
   createSeries,
+  deleteSeries,
   listSeries,
   loadSeries,
+  resumeSeries,
   seriesLibraryMatch,
   type Series,
   type SeriesDetails,
   type SeriesPage,
 } from './engine-match-api';
-import { engineMatchText } from './engine-match-messages';
+import { useEngineMatchText } from './engine-match-messages';
 import EngineSeriesResults from './EngineSeriesResults';
 import EngineSeriesSetup from './EngineSeriesSetup';
 import {
@@ -27,7 +31,6 @@ import {
   statusLabel,
   validNumber,
   type Competitor,
-  type Text,
 } from './engine-series';
 import { useI18n } from '../../shared/i18n/i18n';
 import { loadEngines, type EngineInfo } from '../../settings/settings-api';
@@ -42,7 +45,7 @@ export default function EngineMatchWorkspace({
   onOpenMatch: (match: Match) => void;
 }) {
   const { locale, formatNumber, formatError } = useI18n();
-  const text: Text = (key) => engineMatchText(locale, key);
+  const text = useEngineMatchText();
   const seriesHeading = useId();
   const resultsHeading = useId();
   const newSeriesButton = useRef<HTMLButtonElement>(null);
@@ -62,6 +65,8 @@ export default function EngineMatchWorkspace({
     details: SeriesDetails;
   }>();
   const [action, setAction] = useState(false);
+  const [deleteId, setDeleteId] = useState<string>();
+  const [deleteError, setDeleteError] = useState<unknown>();
   const [opening, setOpening] = useState<number>();
   // Only the latest open request may navigate, and only while this view is shown.
   const openRequest = useRef(0);
@@ -192,15 +197,43 @@ export default function EngineMatchWorkspace({
     }
   }
 
-  async function cancelRun(runId: string) {
+  async function updateRun(runId: string, update: typeof cancelSeries) {
     if (action) return;
     setAction(true);
     setError(undefined);
     try {
-      await cancelSeries(runId);
+      await update(runId);
       setRefresh((revision) => revision + 1);
     } catch (reason) {
       setError(reason);
+    } finally {
+      setAction(false);
+    }
+  }
+
+  async function removeSeries(runId: string) {
+    if (action) return;
+    setAction(true);
+    setDeleteError(undefined);
+    try {
+      await deleteSeries(runId);
+      openRequest.current += 1;
+      setOpening(undefined);
+      setResultPage(undefined);
+      setRecent(
+        (page) =>
+          page && {
+            ...page,
+            runs: page.runs.filter((run) => run.id !== runId),
+          },
+      );
+      setOlder(undefined);
+      setSelection('');
+      setOffset(0);
+      setDeleteId(undefined);
+      setRefresh((revision) => revision + 1);
+    } catch (reason) {
+      setDeleteError(reason);
     } finally {
       setAction(false);
     }
@@ -212,6 +245,20 @@ export default function EngineMatchWorkspace({
     dateStyle: 'short',
     timeStyle: 'short',
   });
+  function cancelledSeriesTooltip(run: Series) {
+    if (run.status !== 'cancelled') return undefined;
+    const { configuration: config } = run;
+    const format = isMoney(config)
+      ? `${text('blockGames')} ${formatNumber(config.block_games ?? 0)}`
+      : `${text('length')} ${formatNumber(config.match_length)}`;
+    return [
+      `${profile(config.a)} / ${profile(config.b)}`,
+      format,
+      text(config.mode),
+      progressLabel(run, text, formatNumber),
+      text('savedGames', { games: run.saved_games_in_unit ?? 0 }),
+    ].join(' · ');
+  }
   const rows = [...runs.values()].sort(
     (left, right) =>
       Number(isActive(right.status)) - Number(isActive(left.status)),
@@ -317,8 +364,10 @@ export default function EngineMatchWorkspace({
             <ul className="engine-match-series-list">
               {rows.map((run) => (
                 <li key={run.id}>
-                  <button
+                  <Tooltip
+                    as="button"
                     type="button"
+                    text={cancelledSeriesTooltip(run)}
                     aria-current={run.id === id ? 'true' : undefined}
                     onClick={() => chooseSeries(run.id)}
                   >
@@ -337,7 +386,7 @@ export default function EngineMatchWorkspace({
                       {isActive(run.status) &&
                         ` · ${progressLabel(run, text, formatNumber)}`}
                     </span>
-                  </button>
+                  </Tooltip>
                 </li>
               ))}
             </ul>
@@ -379,7 +428,12 @@ export default function EngineMatchWorkspace({
                 onOpen={(matchIndex) =>
                   void openInAnalysis(selected.series.id, matchIndex)
                 }
-                onCancel={() => void cancelRun(selected.series.id)}
+                onCancel={() => void updateRun(id, cancelSeries)}
+                onResume={() => void updateRun(id, resumeSeries)}
+                onDelete={() => {
+                  setDeleteError(undefined);
+                  setDeleteId(id);
+                }}
                 onReuse={(trigger) =>
                   openSetup(trigger, selected.series.configuration)
                 }
@@ -405,6 +459,37 @@ export default function EngineMatchWorkspace({
           start={() => void startSeries()}
           text={text}
         />
+      )}
+      {visible && deleteId && (
+        <LibraryDialog
+          title={text('deleteSeries')}
+          busy={action}
+          onClose={() => setDeleteId(undefined)}
+        >
+          <p>{text('deleteSeriesDetails')}</p>
+          {deleteError !== undefined && (
+            <p className="error" role="alert">
+              {formatError(deleteError)}
+            </p>
+          )}
+          <div className="library-dialog-actions">
+            <ActionButton
+              type="button"
+              icon="cancel"
+              label={text('keepSeries')}
+              disabled={action}
+              onClick={() => setDeleteId(undefined)}
+            />
+            <ActionButton
+              type="button"
+              icon="delete"
+              className="danger"
+              label={text('deleteSeries')}
+              disabled={action}
+              onClick={() => void removeSeries(deleteId)}
+            />
+          </div>
+        </LibraryDialog>
       )}
     </div>
   );

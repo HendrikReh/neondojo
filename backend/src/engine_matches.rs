@@ -1,14 +1,17 @@
 //! Persisted head-to-head series, with a versioned dice schedule per match or pair.
+mod checkpoint;
 mod dice;
+mod progress;
 mod routes;
 mod runner;
 mod stats;
 #[cfg(test)]
 mod tests;
 
+pub use progress::LiveProgress;
 pub(crate) use routes::{
-    EngineMatchDoc, cancel_series, create_series, delete_series, list_series, routes,
-    series_details, series_library_match, series_sgf,
+    EngineMatchDoc, cancel_series, create_series, delete_series, list_series, resume_series,
+    routes, series_details, series_library_match, series_sgf,
 };
 pub(crate) use runner::ENGINE_DUELS_DATABASE_ID;
 pub use runner::worker;
@@ -134,6 +137,9 @@ pub struct Series {
     pub status: String,
     pub total_matches: i32,
     pub completed_matches: i32,
+    /// Saved games in the unfinished match or block of an aborted series.
+    #[sqlx(default)]
+    pub saved_games_in_unit: Option<i32>,
     pub error: Option<String>,
     pub created_at: DateTime<Utc>,
 }
@@ -177,6 +183,7 @@ impl MatchCost {
 #[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct SeriesDetails {
     pub series: Series,
+    pub live_progress: Option<LiveProgress>,
     pub statistics: SeriesStatistics,
     pub matches: Vec<MatchResult>,
     pub next_offset: Option<i32>,

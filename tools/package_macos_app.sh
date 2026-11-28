@@ -98,6 +98,18 @@ cp "$binary" "$macos_dir/neondojo-desktop"
 chmod 755 "$macos_dir/neondojo-desktop"
 cp "$logo_svg" "$resources_dir/neondojo-logo.svg"
 
+# Bundle local BGBlitz theme ZIP archives when present in themes/ so the
+# packaged NeonDojo.app finds them even when launched outside the repo checkout.
+if [ -d "$root/themes" ]; then
+    shopt -s nullglob
+    theme_zips=("$root/themes/"*.zip "$root/themes/"*.ZIP)
+    shopt -u nullglob
+    if [ "${#theme_zips[@]}" -gt 0 ]; then
+        mkdir -p "$resources_dir/themes"
+        cp "${theme_zips[@]}" "$resources_dir/themes/"
+    fi
+fi
+
 # Optional .icns generation when sips and iconutil (plus an SVG rasterizer or
 # explicit NEONDOJO_ICON_PNG) are available.
 generate_icns() {

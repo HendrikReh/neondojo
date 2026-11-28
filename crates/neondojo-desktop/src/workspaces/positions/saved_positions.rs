@@ -17,11 +17,8 @@ use super::columns::{
     effective_sort_direction, toggle_position_selection, toggled_sort_direction,
 };
 use super::practice_board::position_to_board_position;
-use super::{
-    ALL_GAME_PLANS, board_theme_from_local_state, game_plan_label, spawn_facade_read,
-    spawn_facade_write,
-};
-use crate::app_context::DesktopAppContext;
+use super::{ALL_GAME_PLANS, game_plan_label, spawn_facade_read, spawn_facade_write};
+use crate::app_context::{DesktopAppContext, themed_board};
 use crate::i18n::{current_locale, format_domain_error};
 use crate::local_state::LocalUiState;
 use crate::review::severity::SeverityStyle;
@@ -56,12 +53,11 @@ use neondojo::position_browser::{
     PositionBrowserDirection, PositionBrowserHit, PositionBrowserSort, PositionFilterDefinition,
     SavedPositionFilter, UpdatePositionFilter,
 };
-use neondojo_board::{BoardView, ThemeAtlasCache};
+use neondojo_board::BoardView;
 use neondojo_i18n::{I18n, Locale, Param, format_decimal, format_int, localize_decision};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 /// Page size matching `POSITION_PAGE_SIZE` in `position-browser-api.ts`.
@@ -573,17 +569,8 @@ impl SavedPositionsView {
         let facade = app_ctx.as_ref().and_then(|c| c.facade());
         let local_state = cx.try_global::<LocalUiState>().cloned().unwrap_or_default();
         let table_layout = SavedTableLayout::from_prefs(&local_state.positions);
-        let atlas = app_ctx
-            .as_ref()
-            .map(|c| Arc::clone(&c.board_atlas))
-            .unwrap_or_else(|| Arc::new(Mutex::new(ThemeAtlasCache::default())));
-        let board_theme = board_theme_from_local_state(&local_state);
 
-        let preview_board = cx.new(|cx| {
-            let mut bv = BoardView::new("saved-positions-preview-board", atlas);
-            bv.set_theme_config(board_theme, cx);
-            bv
-        });
+        let preview_board = cx.new(|cx| themed_board("saved-positions-preview-board", cx));
 
         let make_input =
             |placeholder: &'static str, window: &mut Window, cx: &mut Context<Self>| {

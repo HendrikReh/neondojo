@@ -15,8 +15,8 @@
 
 use super::practice_board::{CheckerPracticeDraft, position_to_board_position};
 use super::practice_chart::SimilarPracticeChartView;
-use super::{board_theme_from_local_state, spawn_facade_read, spawn_facade_write};
-use crate::app_context::DesktopAppContext;
+use super::{spawn_facade_read, spawn_facade_write};
+use crate::app_context::{DesktopAppContext, themed_board};
 use crate::events::WorkspaceEvent;
 use crate::i18n::{current_locale, format_domain_error};
 use crate::local_state::{LocalUiState, PendingSimilarPractice};
@@ -39,7 +39,7 @@ use neondojo::similar_positions::{
     CheckerPracticeAnswer, CheckerPracticeMove, CheckerPracticeScore, SaveSimilarPracticeSummary,
     SimilarHit, SimilarPracticeSummary, SimilarQuery,
 };
-use neondojo_board::{BoardEvent, BoardView, BoardViewMode, ThemeAtlasCache, decode_match_context};
+use neondojo_board::{BoardEvent, BoardView, BoardViewMode, decode_match_context};
 use neondojo_i18n::{
     I18n, Locale, Param, format_datetime_medium_local, format_decimal, format_equity, format_int,
     localize_decision,
@@ -47,7 +47,6 @@ use neondojo_i18n::{
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 /// Similar-position results shown per page (backend returns up to 50 nearest hits).
@@ -255,18 +254,9 @@ impl SimilarPositionsView {
         let app_ctx = cx.try_global::<DesktopAppContext>().cloned();
         let facade = app_ctx.as_ref().and_then(|c| c.facade());
         let local_state = cx.try_global::<LocalUiState>().cloned().unwrap_or_default();
-        let atlas = app_ctx
-            .as_ref()
-            .map(|c| Arc::clone(&c.board_atlas))
-            .unwrap_or_else(|| Arc::new(Mutex::new(ThemeAtlasCache::default())));
-        let board_theme = board_theme_from_local_state(&local_state);
         let pending_queue = PendingSimilarPracticeQueue::load_from_local_state(&local_state);
 
-        let preview_board = cx.new(|cx| {
-            let mut bv = BoardView::new("similar-positions-preview-board", atlas);
-            bv.set_theme_config(board_theme, cx);
-            bv
-        });
+        let preview_board = cx.new(|cx| themed_board("similar-positions-preview-board", cx));
         let chart = cx.new(SimilarPracticeChartView::new);
 
         Self {
@@ -1260,19 +1250,7 @@ impl SimilarPracticeSessionView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
-        let app_ctx = cx.try_global::<DesktopAppContext>().cloned();
-        let atlas = app_ctx
-            .as_ref()
-            .map(|c| Arc::clone(&c.board_atlas))
-            .unwrap_or_else(|| Arc::new(Mutex::new(ThemeAtlasCache::default())));
-        let local_state = cx.try_global::<LocalUiState>().cloned().unwrap_or_default();
-        let theme_cfg = board_theme_from_local_state(&local_state);
-
-        let board = cx.new(|cx| {
-            let mut bv = BoardView::new("similar-practice-board", atlas);
-            bv.set_theme_config(theme_cfg, cx);
-            bv
-        });
+        let board = cx.new(|cx| themed_board("similar-practice-board", cx));
 
         let board_sub = cx.subscribe_in(&board, window, |this, _, event: &BoardEvent, _, cx| {
             let locked = this.feedback.is_some() || this.submitting_score || this.submitting_reveal;

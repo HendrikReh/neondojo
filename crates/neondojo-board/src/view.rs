@@ -7,14 +7,16 @@ use crate::animation::{ActiveVisual, BoardAnimationState, DieUsage, PlayFrame};
 use crate::audio::PlayAudioEngine;
 use crate::geometry::{
     ArrowGeometry, BoardGeometry, BoardHitboxes, BoardTransform, BoardViewMode, CheckerMotion,
-    DiePlacement, LogicalPoint, LogicalRect, MovePreview, NATIVE_FIELD, NATIVE_OFF_TRAY,
-    NATIVE_POINT_PITCH, NATIVE_WIDTH, NumberOrientation, POINT_COLUMNS, PlayOrientation,
-    board_flips, borne_off_counts, checker_center, checker_face_rect, cube_rect,
+    DiePlacement, LogicalPoint, LogicalRect, MovePreview, NATIVE_FIELD, NATIVE_HEIGHT,
+    NATIVE_OFF_TRAY, NATIVE_POINT_PITCH, NATIVE_WIDTH, NumberOrientation, POINT_COLUMNS,
+    PlayOrientation, board_flips, borne_off_counts, checker_center, checker_face_rect, cube_rect,
     decode_match_context, destination_dot_center, dice_placements, interactive_point_rects,
     move_arrow_geometry, number_strip_rects, pip_counts, point_stack_geometry, relative_point,
     tray_counts_for_frame, underlay_board,
 };
-use crate::themes::{BgBlitzThemeEntry, BoardThemeConfig, BuiltInThemeId, ThemeAtlasCache};
+use crate::themes::{
+    BgBlitzThemeEntry, BoardThemeConfig, BuiltInThemeId, ThemeAtlasCache, builtin_gallery_assets,
+};
 use gpui_kit::{
     App, BorderStyle, Bounds, BoxShadow, Context, Corners, ElementId, EventEmitter, Font,
     FontWeight, Hsla, InteractiveElement, IntoElement, LineCap, LineJoin, MouseButton,
@@ -204,6 +206,10 @@ impl BoardView {
     pub fn set_show_player_bars(&mut self, show: bool, cx: &mut Context<Self>) {
         self.show_player_bars = show;
         cx.notify();
+    }
+
+    pub fn show_player_bars(&self) -> bool {
+        self.show_player_bars
     }
 
     pub fn set_show_both_dice_colors(&mut self, show: bool, cx: &mut Context<Self>) {
@@ -630,12 +636,38 @@ impl Render for BoardView {
         let checker_palette = BuiltInThemeId::parse(self.theme_config.resolved_checker_id())
             .unwrap_or(BuiltInThemeId::Forest)
             .palette();
+        let (white_bar_sprite, black_bar_sprite) = {
+            let checker_id = self.theme_config.resolved_checker_id();
+            let mut atlas = self.atlas.lock().expect("atlas lock");
+            if let Some(bg) = atlas.get_or_load_bgblitz(checker_id) {
+                (
+                    bg.white_checkers.first().map(|(img, _)| Arc::clone(img)),
+                    bg.black_checkers.first().map(|(img, _)| Arc::clone(img)),
+                )
+            } else if let Some(builtin) = BuiltInThemeId::parse(checker_id) {
+                (
+                    atlas
+                        .builtin_checker_pair(builtin, true)
+                        .map(|pair| Arc::clone(&pair[0])),
+                    atlas
+                        .builtin_checker_pair(builtin, false)
+                        .map(|pair| Arc::clone(&pair[0])),
+                )
+            } else {
+                (None, None)
+            }
+        };
 
         let render_player_bar = |player_idx: usize| {
             let dot_color = if player_idx == 0 {
                 rgb(checker_palette.white_checker)
             } else {
                 rgb(checker_palette.black_checker)
+            };
+            let marker_sprite = if player_idx == 0 {
+                white_bar_sprite.clone()
+            } else {
+                black_bar_sprite.clone()
             };
             let crawford = if player_idx == 0 && context.crawford {
                 " · Crawford"
@@ -651,6 +683,22 @@ impl Render for BoardView {
             } else {
                 String::new()
             };
+            let marker = if let Some(sprite) = marker_sprite {
+                div()
+                    .w(px(15.0))
+                    .h(px(15.0))
+                    .flex_shrink_0()
+                    .child(img(sprite).size_full())
+            } else {
+                div()
+                    .w(px(10.0))
+                    .h(px(10.0))
+                    .rounded_full()
+                    .bg(dot_color)
+                    .border_1()
+                    .border_color(rgb(0xacb9a2))
+                    .flex_shrink_0()
+            };
             div()
                 .flex()
                 .flex_row()
@@ -665,15 +713,7 @@ impl Render for BoardView {
                         .flex_row()
                         .items_center()
                         .gap(px(6.0))
-                        .child(
-                            div()
-                                .w(px(10.0))
-                                .h(px(10.0))
-                                .rounded_full()
-                                .bg(dot_color)
-                                .border_1()
-                                .border_color(rgb(0xacb9a2)),
-                        )
+                        .child(marker)
                         .child(left_label),
                 )
                 .child(right_label)
@@ -1670,11 +1710,253 @@ fn scale_bounds_about_center(bounds: Bounds<Pixels>, factor: f32) -> Bounds<Pixe
     }
 }
 
+/// Fixed legal preview position mirrored 1:1 from `BoardSettingsSection.tsx`
+/// (checkers on points, both bars, and both bear-off trays).
+const GALLERY_PREVIEW_BOARD: [i32; 26] = [
+    -1, -1, 0, 0, 0, 0, 5, 0, 3, 0, 0, 0, -4, 4, 0, 0, 0, -3, 0, -5, 0, 0, 0, 0, 1, 1,
+];
+
+/// Paints a full 1:1 miniature built-in board preview matching the browser
+/// `BoardSettingsSection.tsx` gallery tiles (`<Board position={previewPosition} />`):
+/// frame, rail gradient & inlay, felt + `resvg` surface texture, bar, bear-off
+/// tray, 24 alternating points, all preview checkers (points, bars & trays),
+/// doubling cube, and themed dice.
+fn paint_builtin_gallery_preview(
+    theme: BuiltInThemeId,
+    bounds: Bounds<Pixels>,
+    window: &mut Window,
+) {
+    let w = f32::from(bounds.size.width);
+    let h = f32::from(bounds.size.height);
+    if w <= 1.0 || h <= 1.0 {
+        return;
+    }
+
+    let pal = theme.palette();
+    let assets = builtin_gallery_assets(theme);
+    let sx = w / NATIVE_WIDTH;
+    let sy = h / NATIVE_HEIGHT;
+
+    let map_pt = |x: f32, y: f32| point(bounds.origin.x + px(x * sx), bounds.origin.y + px(y * sy));
+    let map_rect = |r: LogicalRect| Bounds {
+        origin: map_pt(r.x, r.y),
+        size: size(px(r.width * sx), px(r.height * sy)),
+    };
+
+    // Frame + optional inlaid rail gradient.
+    let frame_bg = if pal.inlay.is_some() {
+        linear_gradient(
+            180.0,
+            linear_color_stop(pal.rail_highlight(), 0.0),
+            linear_color_stop(pal.rail_shadow(), 1.0),
+        )
+    } else {
+        rgb(pal.frame).into()
+    };
+    window.paint_quad(quad(
+        bounds,
+        Corners::all(px(4.0)),
+        frame_bg,
+        px(0.0),
+        Hsla::transparent_black(),
+        BorderStyle::Solid,
+    ));
+
+    if let Some(inlay_hex) = pal.inlay {
+        let inset = px(1.5);
+        let inlay_bounds = Bounds {
+            origin: point(bounds.origin.x + inset, bounds.origin.y + inset),
+            size: size(
+                (bounds.size.width - inset * 2.0).max(px(0.0)),
+                (bounds.size.height - inset * 2.0).max(px(0.0)),
+            ),
+        };
+        let mut inlay_color: Hsla = rgb(inlay_hex).into();
+        inlay_color.a = 0.58;
+        window.paint_quad(quad(
+            inlay_bounds,
+            Corners::all(px(3.0)),
+            Hsla::transparent_black(),
+            px(0.75),
+            inlay_color,
+            BorderStyle::Solid,
+        ));
+    }
+
+    // Playing field + SVG surface texture (for the 6 textured built-in themes).
+    let field_bounds = map_rect(NATIVE_FIELD);
+    window.paint_quad(quad(
+        field_bounds,
+        Corners::all(px(1.5)),
+        rgb(pal.felt),
+        px(0.0),
+        Hsla::transparent_black(),
+        BorderStyle::Solid,
+    ));
+    if let Some(surf) = assets.surface {
+        let _ = window.paint_image(
+            field_bounds,
+            field_bounds,
+            Corners::all(px(1.5)),
+            surf,
+            0,
+            false,
+        );
+    }
+
+    // Central bar and right bear-off tray.
+    let bar_rect = LogicalRect::new(
+        NATIVE_WIDTH / 2.0 - NATIVE_POINT_PITCH / 2.0,
+        NATIVE_FIELD.y,
+        NATIVE_POINT_PITCH,
+        NATIVE_FIELD.height,
+    );
+    let bar_border = if pal.inlay.is_some() {
+        pal.rail_shadow()
+    } else {
+        Hsla::transparent_black()
+    };
+    let bar_border_w = if pal.inlay.is_some() {
+        px(0.75)
+    } else {
+        px(0.0)
+    };
+    for r in [bar_rect, NATIVE_OFF_TRAY] {
+        window.paint_quad(quad(
+            map_rect(r),
+            Corners::all(px(1.0)),
+            rgb(pal.bar),
+            bar_border_w,
+            bar_border,
+            BorderStyle::Solid,
+        ));
+    }
+
+    // 24 alternating triangles.
+    for i in 0..12usize {
+        let center = BoardGeometry::native_point_x(i);
+        let left = center - NATIVE_POINT_PITCH / 2.0;
+        let right = center + NATIVE_POINT_PITCH / 2.0;
+
+        let top_color: Hsla = rgb(if i % 2 == 1 {
+            pal.point_light
+        } else {
+            pal.point_dark
+        })
+        .into();
+        let bot_color: Hsla = rgb(if i % 2 == 1 {
+            pal.point_dark
+        } else {
+            pal.point_light
+        })
+        .into();
+
+        paint_triangle(
+            window,
+            map_pt(left, NATIVE_FIELD.y),
+            map_pt(right, NATIVE_FIELD.y),
+            map_pt(center, 214.0),
+            top_color,
+        );
+        paint_triangle(
+            window,
+            map_pt(left, NATIVE_FIELD.bottom()),
+            map_pt(right, NATIVE_FIELD.bottom()),
+            map_pt(center, 256.0),
+            bot_color,
+        );
+    }
+
+    // Full preview position checkers on points, bars, and bear-off trays.
+    let off = borne_off_counts(&GALLERY_PREVIEW_BOARD);
+    let mut stacks: Vec<(i32, i32)> = POINT_COLUMNS
+        .iter()
+        .map(|pc| (pc.point, GALLERY_PREVIEW_BOARD[pc.point as usize]))
+        .collect();
+    stacks.push((0, GALLERY_PREVIEW_BOARD[0]));
+    stacks.push((25, GALLERY_PREVIEW_BOARD[25]));
+    if off[1] > 0 {
+        stacks.push((26, -off[1]));
+    }
+    if off[0] > 0 {
+        stacks.push((-1, off[0]));
+    }
+
+    for (pt, count) in stacks {
+        if count == 0 {
+            continue;
+        }
+        let stack = point_stack_geometry(pt, count, &BoardGeometry::BuiltIn);
+        let white = count > 0;
+        let sprite = if white {
+            assets.white_checker.as_ref()
+        } else {
+            assets.black_checker.as_ref()
+        };
+        for slot in stack.checker_rects() {
+            let b = map_rect(slot);
+            if let Some(img_sprite) = sprite {
+                let _ =
+                    window.paint_image(b, b, Corners::default(), Arc::clone(img_sprite), 0, false);
+            } else {
+                let fill_col: Hsla = rgb(if white {
+                    pal.white_checker
+                } else {
+                    pal.black_checker
+                })
+                .into();
+                let stroke_col: Hsla = if white {
+                    rgb(0xb4b4a0).into()
+                } else {
+                    rgb(0x1c362b).into()
+                };
+                let radius = (b.size.height.min(b.size.width) / 2.0 - px(0.25)).max(px(1.0));
+                paint_circle(
+                    window,
+                    b.center(),
+                    radius,
+                    fill_col,
+                    Some((stroke_col, px(0.6))),
+                );
+            }
+        }
+    }
+
+    // Centered left-rail doubling cube at exact built-in board coordinates.
+    if let Some(cube_img) = assets.cube {
+        let cube_logical = cube_rect(&BoardGeometry::BuiltIn, None, None);
+        let cb = map_rect(cube_logical);
+        let _ = window.paint_image(cb, cb, Corners::all(px(1.5)), cube_img, 0, false);
+    }
+
+    // Preview dice `[3, 2]` in exact built-in board coordinates.
+    let dice = dice_placements(
+        &BoardGeometry::BuiltIn,
+        &[(0, Some(3)), (0, Some(2))],
+        false,
+        false,
+    );
+    for die in dice {
+        let db = map_rect(die.rect);
+        paint_themed_die(
+            window,
+            db,
+            theme,
+            true,
+            die.value,
+            DieUsage::Unused,
+            1.0,
+            false,
+        );
+    }
+}
+
 /// Lightweight Settings → Board gallery thumbnail tile (`BoardSettingsSection.tsx`).
 ///
 /// Renders either a fast BGBlitz composite (`~320×216` BGRA thumbnail + 2 corner
-/// checkers at 10% width) or a compact built-in color preview swatch with
-/// selection outline and theme name.
+/// checkers at ~10% width) or a 1:1 miniature built-in board (`previewPosition`
+/// with frame, inlay, surface texture, bar, bear-off tray, 24 points, checkers,
+/// cube, and dice) with selection outline, badge, and theme name.
 pub struct BoardGalleryTile {
     pub theme_id: String,
     pub label: SharedString,
@@ -1687,92 +1969,98 @@ pub struct BoardGalleryTile {
 
 impl BoardGalleryTile {
     pub fn render_element(self, id: impl Into<ElementId>) -> impl IntoElement {
-        let thumb = if let Some(entry) = self.bgblitz_entry {
+        self.render_element_with_badge(id, None)
+    }
+
+    pub fn render_element_with_badge(
+        self,
+        id: impl Into<ElementId>,
+        selected_badge: Option<(SharedString, Hsla)>,
+    ) -> impl IntoElement {
+        let mut thumb = if let Some(entry) = self.bgblitz_entry {
             div()
                 .relative()
                 .w_full()
-                .h(px(96.0))
+                .h(px(78.0))
                 .rounded(px(4.0))
                 .overflow_hidden()
                 .child(img(entry.thumbnail_bg).size_full())
                 .child(
                     div()
                         .absolute()
-                        .bottom(px(8.0))
+                        .bottom(px(6.0))
                         .left(px(14.0))
-                        .w(px(16.0))
-                        .h(px(16.0))
+                        .w(px(13.0))
+                        .h(px(13.0))
                         .child(img(entry.thumbnail_white_checker).size_full()),
                 )
                 .child(
                     div()
                         .absolute()
-                        .top(px(8.0))
+                        .top(px(6.0))
                         .right(px(14.0))
-                        .w(px(16.0))
-                        .h(px(16.0))
+                        .w(px(13.0))
+                        .h(px(13.0))
                         .child(img(entry.thumbnail_black_checker).size_full()),
                 )
         } else {
-            let pal = BuiltInThemeId::parse(&self.theme_id)
-                .unwrap_or(BuiltInThemeId::Forest)
-                .palette();
+            let theme = BuiltInThemeId::parse(&self.theme_id).unwrap_or(BuiltInThemeId::Forest);
             div()
                 .relative()
                 .w_full()
-                .h(px(96.0))
+                .h(px(78.0))
                 .rounded(px(4.0))
-                .bg(rgb(pal.frame))
-                .p(px(6.0))
+                .overflow_hidden()
                 .child(
-                    div()
-                        .size_full()
-                        .rounded(px(2.0))
-                        .bg(rgb(pal.felt))
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .justify_around()
-                        .child(
-                            div()
-                                .w(px(18.0))
-                                .h(px(18.0))
-                                .rounded_full()
-                                .bg(rgb(pal.white_checker))
-                                .border_1()
-                                .border_color(rgb(pal.point_dark)),
-                        )
-                        .child(
-                            div()
-                                .w(px(18.0))
-                                .h(px(18.0))
-                                .rounded_full()
-                                .bg(rgb(pal.black_checker))
-                                .border_1()
-                                .border_color(rgb(pal.point_light)),
-                        ),
+                    canvas(
+                        |_, _, _| (),
+                        move |bounds, _, window, _| {
+                            paint_builtin_gallery_preview(theme, bounds, window);
+                        },
+                    )
+                    .size_full(),
                 )
         };
+
+        if self.selected
+            && let Some((badge_text, badge_fg)) = selected_badge
+        {
+            thumb = thumb.child(
+                div()
+                    .absolute()
+                    .top(px(4.0))
+                    .left(px(4.0))
+                    .px(px(5.0))
+                    .py(px(2.0))
+                    .rounded(px(4.0))
+                    .bg(self.accent)
+                    .text_color(badge_fg)
+                    .text_xs()
+                    .font_weight(FontWeight::SEMIBOLD)
+                    .child(format!("✓ {badge_text}")),
+            );
+        }
 
         let mut card = div()
             .id(id)
             .flex()
             .flex_col()
             .gap(px(6.0))
-            .p(px(8.0))
-            .rounded(px(6.0))
-            .border_1()
-            .border_color(if self.selected {
-                self.accent
-            } else {
-                self.border
-            });
+            .p(px(7.0))
+            .rounded(px(6.0));
         if self.selected {
-            card = card.bg(self.surface_selected);
+            card = card
+                .border_2()
+                .border_color(self.accent)
+                .bg(self.surface_selected);
+        } else {
+            card = card.border_1().border_color(self.border);
         }
-        card.child(thumb)
-            .child(div().text_xs().child(self.label))
-            .test_support()
+        let mut label_el = div().text_xs().child(self.label);
+        if self.selected {
+            label_el = label_el.font_weight(FontWeight::SEMIBOLD);
+        }
+        card.child(thumb).child(label_el).test_support()
     }
 }
 
@@ -1962,7 +2250,23 @@ mod tests {
                 }
                 .render_element("tile-forest");
 
-                let mut row = div().flex().flex_row().gap(px(8.0)).child(tile_builtin);
+                let tile_textured = BoardGalleryTile {
+                    theme_id: "viridian".into(),
+                    label: "Viridian".into(),
+                    selected: false,
+                    bgblitz_entry: None,
+                    accent: rgb(0x315bc5).into(),
+                    border: rgb(0xdce2ea).into(),
+                    surface_selected: rgb(0xeaf0ff).into(),
+                }
+                .render_element("tile-viridian");
+
+                let mut row = div()
+                    .flex()
+                    .flex_row()
+                    .gap(px(8.0))
+                    .child(tile_builtin)
+                    .child(tile_textured);
                 if let Some(entry) = self.entry.clone() {
                     let tile_bgblitz = BoardGalleryTile {
                         theme_id: entry.id.clone(),
@@ -2024,6 +2328,7 @@ mod tests {
         cx.update_window(window, |_, window, cx| {
             window.render_frame(cx);
             assert!(window.find("tile-forest").visible());
+            assert!(window.find("tile-viridian").visible());
             assert!(window.find("preview-board").visible());
 
             // Verify After mode cleared dice hitboxes and flush_evictions drops cleanly.

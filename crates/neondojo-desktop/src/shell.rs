@@ -535,10 +535,46 @@ impl AppShell {
         };
 
         app_ctx.set_connecting();
+        let themes_dir_for_scan = app_ctx.bootstrap.custom_themes_dir.clone();
+        let atlas_for_scan = Arc::clone(&app_ctx.board_atlas);
         cx.set_global(app_ctx);
         self.engine_status.gnubg_health = EngineHealth::Busy;
         self.engine_status.neongammon_health = EngineHealth::Busy;
         cx.notify();
+
+        if let Some(themes_dir) = themes_dir_for_scan
+            && cx.try_global::<TokioBridge>().is_some()
+        {
+            let theme_task = TokioBridge::spawn_read(cx, async move {
+                tokio::task::spawn_blocking(move || {
+                    neondojo_board::discover_bgblitz_themes(&themes_dir).ok()
+                })
+                .await
+                .ok()
+                .flatten()
+            });
+            cx.spawn_in(window, async move |this, cx| {
+                let Ok(Some(entries)) = theme_task.await else {
+                    return;
+                };
+                if let Ok(mut guard) = atlas_for_scan.lock() {
+                    guard.set_bgblitz_entries(entries);
+                }
+                let _ = this.update_in(cx, |shell, _, cx| {
+                    if let Some(play) = shell.workspaces.play.clone() {
+                        play.update(cx, |_, cx| cx.notify());
+                    }
+                    if let Some(analysis) = shell.workspaces.analysis.clone() {
+                        analysis.update(cx, |_, cx| cx.notify());
+                    }
+                    if let Some(study) = shell.workspaces.study.clone() {
+                        study.update(cx, |_, cx| cx.notify());
+                    }
+                    cx.notify();
+                });
+            })
+            .detach();
+        }
 
         let task = TokioBridge::spawn_read(cx, boot_core_and_snapshot(core_config));
 
@@ -568,6 +604,31 @@ impl AppShell {
                                 let locale = crate::settings::draft_guard::config_locale_to_locale(
                                     &cfg.current_configuration.general.locale,
                                 );
+                                let board_cfg = crate::settings::board::appearance_to_board_config(
+                                    &cfg.current_configuration.appearance,
+                                );
+                                if let Some(mut ctx) = cx.try_global::<DesktopAppContext>().cloned()
+                                {
+                                    ctx.board_config = board_cfg.clone();
+                                    cx.set_global(ctx);
+                                }
+                                if let Some(mut state) = cx.try_global::<LocalUiState>().cloned() {
+                                    state.board_theme = board_cfg.board_theme.clone();
+                                    cx.set_global(state);
+                                }
+                                if let Some(play) = shell.workspaces.play.clone() {
+                                    play.update(cx, |ws, cx| {
+                                        ws.set_theme_config(board_cfg.clone(), cx);
+                                    });
+                                }
+                                if let Some(analysis) = shell.workspaces.analysis.clone() {
+                                    analysis.update(cx, |ws, cx| {
+                                        ws.set_theme_config(board_cfg.clone(), cx);
+                                    });
+                                }
+                                if let Some(study) = shell.workspaces.study.clone() {
+                                    study.update(cx, |ws, cx| ws.set_theme_config(board_cfg, cx));
+                                }
                                 crate::i18n::set_locale(locale, cx);
                                 shell.apply_appearance(palette_id, mode, window, cx);
                             }
@@ -1091,6 +1152,25 @@ impl AppShell {
                     shell_entity.update(cx, |shell, cx| {
                         shell.profile.name = applied.active_profile_name;
                         shell.profile.modified = applied.profile_modified;
+                        if let Some(mut ctx) = cx.try_global::<DesktopAppContext>().cloned() {
+                            ctx.board_config = applied.board_config.clone();
+                            cx.set_global(ctx);
+                        }
+                        if let Some(play) = shell.workspaces.play.clone() {
+                            play.update(cx, |ws, cx| {
+                                ws.set_theme_config(applied.board_config.clone(), cx);
+                            });
+                        }
+                        if let Some(analysis) = shell.workspaces.analysis.clone() {
+                            analysis.update(cx, |ws, cx| {
+                                ws.set_theme_config(applied.board_config.clone(), cx);
+                            });
+                        }
+                        if let Some(study) = shell.workspaces.study.clone() {
+                            study.update(cx, |ws, cx| {
+                                ws.set_theme_config(applied.board_config.clone(), cx);
+                            });
+                        }
                         shell.sync_menus(cx);
                         cx.notify();
                     });

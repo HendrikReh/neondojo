@@ -184,7 +184,7 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn catalogs_have_identical_44_groups_and_2088_keys() {
+    fn catalogs_have_identical_44_groups_and_2100_keys() {
         let en = catalog(Locale::En);
         let de = catalog(Locale::De);
         assert_eq!(en.len(), 44);
@@ -193,8 +193,8 @@ mod tests {
 
         let en_total: usize = en.values().map(BTreeMap::len).sum();
         let de_total: usize = de.values().map(BTreeMap::len).sum();
-        assert_eq!(en_total, 2088);
-        assert_eq!(de_total, 2088);
+        assert_eq!(en_total, 2100);
+        assert_eq!(de_total, 2100);
 
         for (group, en_entries) in en {
             let de_entries = de
