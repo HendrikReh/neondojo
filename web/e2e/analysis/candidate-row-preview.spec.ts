@@ -198,6 +198,7 @@ for (const source of ['engine', 'file', 'book'] as const)
       (route) =>
         fulfillPositionAnalysisResult(route, {
           analysis_id: entry.id,
+          native_checker_equity_kind: source === 'file' ? null : 'cubeful',
           position_id: positionId,
           engine: entry.engine,
           depth: entry.depth,

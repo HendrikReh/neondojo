@@ -454,6 +454,7 @@ async fn exact_position_results_preserve_candidates_units_and_source_revision(po
     )
     .await;
     assert_eq!(result["analysis"]["candidates"][0]["equity"], 0.314159265);
+    assert_eq!(result["native_checker_equity_kind"], "cubeful");
     assert_eq!(
         result["analysis"]["candidates"].as_array().unwrap().len(),
         1
@@ -464,6 +465,47 @@ async fn exact_position_results_preserve_candidates_units_and_source_revision(po
     )
     .await;
     assert_eq!(saved[0]["id"], hint.id.to_string());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cubeless_checker_results_use_the_job_and_game_checkpoint_provenance(pool: PgPool) {
+    let (app, id, p) = setup(&pool).await;
+    let position_job = position_job(&pool, p[0], 1).await;
+    let game_job = match_job(&pool, id, p[0], Some(1), "GNU Backgammon", 1, "completed").await;
+    let path = |job: &Job| {
+        format!(
+            "/api/positions/{}/analysis-result?analysis_id=job:{}",
+            p[0], job.id
+        )
+    };
+    assert_eq!(
+        get(&app, &path(&game_job)).await.1["native_checker_equity_kind"],
+        "normalized_cubeful"
+    );
+    sqlx::query("UPDATE match_games SET cube_enabled=false WHERE match_uuid=$1 AND game_no=1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for job in [&position_job, &game_job] {
+        let (status, result) = get(&app, &path(job)).await;
+        assert_eq!(status, 200);
+        assert!(!result.is_null());
+        assert!(result["native_checker_equity_kind"].is_null());
+    }
+    sqlx::query("UPDATE jobs SET result=result || '{\"cube_enabled\": false}'::jsonb WHERE id=$1")
+        .bind(position_job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE match_analysis_games SET summary='{\"cube_enabled\": false}'::jsonb WHERE job_id=$1 AND game_no=1")
+        .bind(game_job.id).execute(&pool).await.unwrap();
+    for job in [&position_job, &game_job] {
+        let (status, result) = get(&app, &path(job)).await;
+        assert_eq!(status, 200);
+        assert_eq!(result["native_checker_equity_kind"], "cubeless");
+        assert_eq!(result["depth"], "1-ply");
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]

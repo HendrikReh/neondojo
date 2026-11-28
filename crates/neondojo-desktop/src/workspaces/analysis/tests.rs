@@ -449,6 +449,7 @@ fn checker_result(candidates: serde_json::Value) -> SelectedPositionAnalysis {
         position_id,
         engine: "eXtreme Gammon".into(),
         depth: Some("Mixed".into()),
+        native_checker_equity_kind: None,
         records: vec![record],
         decision: None,
         analysis: None,
@@ -565,6 +566,17 @@ fn imported_and_native_comparison_retains_equities_depths_rank_paths_and_source_
             native(2, "24/16", "24/18 18/16", 0.009203),
         ],
     });
+    use neondojo::analysis_catalog::NativeCheckerEquityKind;
+    assert_eq!(extract_candidates(&result, 0, None)[0].unit, "unknown");
+    result.native_checker_equity_kind = Some(NativeCheckerEquityKind::Cubeless);
+    let cubeless = extract_candidates(&result, 0, Some(Gnubg));
+    assert_eq!(cubeless[0].unit, "cubeless");
+    assert!(
+        build_candidate_compare_rows(&pos, [&xg, &cubeless, &[]], None)[0]
+            .delta(1)
+            .is_none()
+    );
+    result.native_checker_equity_kind = Some(NativeCheckerEquityKind::Cubeful);
     let gnu = extract_candidates(&result, 0, Some(Gnubg));
     assert_eq!(extract_candidates(&result, 0, None)[0].unit, "cubeful");
     let rows = build_candidate_compare_rows(&pos, [&xg, &gnu, &[]], None);
@@ -999,6 +1011,9 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
                 job: None,
             }];
             ws.position_result = Some(SelectedPositionAnalysis {
+                native_checker_equity_kind: Some(
+                    neondojo::analysis_catalog::NativeCheckerEquityKind::Cubeful,
+                ),
                 analysis_id: "job:1".into(),
                 position_id: pos1_id,
                 engine: "GNUbg".into(),

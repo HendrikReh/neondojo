@@ -5054,6 +5054,8 @@ export interface components {
              */
             id?: string | null;
         };
+        /** @enum {string} */
+        NativeCheckerEquityKind: "cubeful" | "cubeless" | "normalized_cubeful";
         NativePlayerStatistics: {
             /** Format: int32 */
             close_cube_decisions: number;
@@ -6081,6 +6083,7 @@ export interface components {
             decision?: null | components["schemas"]["Decision"];
             depth?: string | null;
             engine: string;
+            native_checker_equity_kind?: null | components["schemas"]["NativeCheckerEquityKind"];
             /** Format: uuid */
             position_id: string;
             /** @description Original imported candidates, cube values, units and perspective. */

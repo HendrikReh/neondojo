@@ -3,7 +3,30 @@ import {
   candidateEquityDifference,
   candidateLoss,
   isPlayedCandidate,
+  nativeCheckerCandidates,
 } from './candidate-comparison';
+
+test('native checker comparison uses the saved equity unit, including unknown legacy units', () => {
+  const result = {
+    analysis_id: 'job:checker',
+    position_id: 'position',
+    engine: 'GNUbg',
+    records: [],
+    analysis: {
+      engine: 'GNUbg',
+      plies: 2,
+      candidates: [
+        { rank: 1, notation: '8/5 6/5', equity: 0.15, probabilities: [] },
+      ],
+    },
+  };
+  for (const unit of ['cubeless', 'cubeful', null] as const) {
+    const saved = { ...result, native_checker_equity_kind: unit };
+    expect(nativeCheckerCandidates(saved)[0].equity_kind).toBe(
+      unit ?? 'unknown',
+    );
+  }
+});
 
 test('compares finite equity values in compatible units and reports signed differences', () => {
   const imported = { equity: -0.08, equity_kind: 'cubeful' };

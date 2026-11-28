@@ -215,16 +215,14 @@ pub fn extract_candidates(
         let native = result
             .analysis
             .as_ref()
-            .map(|a| (&a.candidates, "cubeful"))
-            .or_else(|| {
-                result
-                    .decision
-                    .as_ref()
-                    .map(|d| (&d.checker_candidates, "normalized_cubeful"))
-            });
-        if let Some((candidates, unit)) = native
+            .map(|a| &a.candidates)
+            .or_else(|| result.decision.as_ref().map(|d| &d.checker_candidates));
+        if let Some(candidates) = native
             && !candidates.is_empty()
         {
+            let unit = result
+                .native_checker_equity_kind
+                .map_or("unknown", |unit| unit.as_str());
             return candidates
                 .iter()
                 .map(|c| CheckerCandidate::native(c, unit))

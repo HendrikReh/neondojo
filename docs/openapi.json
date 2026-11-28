@@ -20220,6 +20220,14 @@
         },
         "additionalProperties": false
       },
+      "NativeCheckerEquityKind": {
+        "type": "string",
+        "enum": [
+          "cubeful",
+          "cubeless",
+          "normalized_cubeful"
+        ]
+      },
       "NativePlayerStatistics": {
         "type": "object",
         "required": [
@@ -23604,6 +23612,17 @@
           },
           "engine": {
             "type": "string"
+          },
+          "native_checker_equity_kind": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/NativeCheckerEquityKind",
+                "description": "Applied unit of native checker candidates, absent for imports or unverified legacy jobs."
+              }
+            ]
           },
           "position_id": {
             "type": "string",

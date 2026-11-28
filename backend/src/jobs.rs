@@ -449,7 +449,7 @@ async fn execute(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
     let configured_engine =
         configured_engine.for_checker_rules(cube_enabled, &position.gnubg_match_id)?;
     if job.kind == "analysis" {
-        return Ok(serde_json::to_value(
+        let mut result = serde_json::to_value(
             configured_engine
                 .analyze(
                     &position.position_id,
@@ -458,7 +458,9 @@ async fn execute(state: &AppState, job: &Job, token: Uuid) -> Result<Value> {
                     None,
                 )
                 .await?,
-        )?);
+        )?;
+        result["cube_enabled"] = Value::Bool(cube_enabled);
+        return Ok(result);
     }
     // 21 unordered pairs; doubles have weight 1 and other pairs weight 2.
     let dice: Vec<[i32; 2]> = (1..=6).flat_map(|a| (a..=6).map(move |b| [a, b])).collect();
