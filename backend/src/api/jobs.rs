@@ -185,9 +185,7 @@ impl AppState {
         mut after: i64,
     ) -> impl Stream<Item = JobEvent> + Send + 'static + use<> {
         let state = self.clone();
-        let mut notifications =
-            self.job_notifications
-                .subscribe(&self.pool, &self.shutdown, &self.background_tasks);
+        let mut notifications = self.subscribe_job_updates();
         async_stream::stream! {
             loop {
                 if state.shutdown.is_cancelled() { return; }

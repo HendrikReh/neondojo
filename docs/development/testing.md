@@ -2,7 +2,7 @@
 
 ## Verification
 
-Run the checks relevant to the change from the repository root. Install the frontend dependencies with `npm ci --prefix web`. `cargo test --workspace` includes every SQLx test that needs only PostgreSQL, so export `DATABASE_URL` as described under [PostgreSQL test server](#postgresql-test-server) first. Use `cargo test --workspace --lib` to run the Rust library tests without the SQLx integration tests.
+Run the checks relevant to the change from the repository root. Install the frontend dependencies with `npm ci --prefix web`. `cargo test --workspace` includes the backend SQLx tests that need only PostgreSQL, so export `DATABASE_URL` as described under [PostgreSQL test server](#postgresql-test-server) first. Use `cargo test --workspace --lib` to run the Rust library tests without the SQLx integration tests.
 
 ```sh
 cargo fmt --all --check
@@ -47,6 +47,12 @@ To repeat the observation, serve `web/dist` from the production build with a dis
 ### Continuous integration
 
 [GitHub Actions](https://github.com/HendrikReh/neondojo/blob/main/.github/workflows/ci.yml) runs the default tier every night at 02:17 UTC on `main` and on pushes to `release/**`. Pull requests and pushes to `main` do not trigger a run, so run the relevant checks locally before merging; `gh workflow run ci.yml --ref <branch>` starts a run for a pushed branch. The `Rust` job runs `cargo fmt`, Clippy, and `cargo test -p neondojo -p neondojo-rules -p neondojo-i18n` against a PostgreSQL 17 service on Ubuntu. The `Desktop (macOS GPUI)` job runs `cargo fmt`, Clippy, and headless `#[gpui_kit::test]` suites for `neondojo-board` and `neondojo-desktop` on `macos-15`. The `Python tools` job runs `python3 -m unittest discover -s tools -p 'test_*.py'`. The `Web` job runs Vitest, `typecheck:e2e`, and the production web build. The Rust toolchain is pinned in the workflow (`1.100.1`), so new Clippy lints only arrive when someone updates that pin.
+
+The macOS desktop CI job has no PostgreSQL service. To exercise live Library job tracking locally, export the maintenance `DATABASE_URL` from [PostgreSQL test server](#postgresql-test-server), then run the following test. It disconnects the listener in its SQLx-created database during a whole-match job and verifies that the displayed row and bulk status catch up.
+
+```sh
+cargo test -p neondojo-desktop --lib row_and_bulk_follow_commits_and_reconcile_after_listener_reconnect -- --ignored
+```
 
 CI has neither GNUbg, NeonGammon, import corpora, nor the BGBlitz theme archives. The `Web` job therefore prepares themes with `NEONDOJO_ALLOW_MISSING_THEMES=1`. That empties the archive catalog for the run, and the test that renders every archive theme is skipped. The Playwright suite, the ignored Rust tests, and the macOS-specific code paths still need a local run before a release.
 

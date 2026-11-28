@@ -98,6 +98,11 @@ impl AppState {
         }
     }
 
+    pub(crate) fn subscribe_job_updates(&self) -> broadcast::Receiver<Option<Uuid>> {
+        self.job_notifications
+            .subscribe(&self.pool, &self.shutdown, &self.background_tasks)
+    }
+
     pub fn subscribe_benchmark_updates(&self) -> broadcast::Receiver<Uuid> {
         self.benchmark_updates.subscribe()
     }

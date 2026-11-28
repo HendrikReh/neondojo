@@ -80,6 +80,11 @@ impl BackendFacade {
         api::watch_job_events_checked(&self.state, id, after).await
     }
 
+    /// A committed job event, or `None` to reconcile after LISTEN reconnects.
+    pub fn subscribe_job_updates(&self) -> broadcast::Receiver<Option<Uuid>> {
+        self.state.subscribe_job_updates()
+    }
+
     pub fn subscribe_benchmark_updates(&self) -> broadcast::Receiver<Uuid> {
         self.state.subscribe_benchmark_updates()
     }
