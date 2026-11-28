@@ -12,20 +12,27 @@
 
 use super::state::{
     Action2Cb, ActionCb, CandidateCompareRow, CheckerSubTab, ClickCb, CompareEngineSlot,
-    DiceDistributionSnapshot, DiceTabState, build_candidate_compare_rows,
+    DiceDistributionSnapshot, DiceTabState, build_candidate_compare_rows, same_roll,
 };
 use crate::i18n::current_locale;
 use crate::review::move_explanation::{MoveExplanationView, explain_checker_plays};
-use crate::theme::{NeonPalette, NeonTheme, NeonTypographyExt};
+use crate::theme::{
+    FONT_SIZE_MICRO, FONT_SIZE_TABLE, NeonPalette, NeonTheme, NeonTypographyExt,
+    tabular_nums_features,
+};
 use crate::ui::action_button::ActionButton;
 use crate::ui::banners::{BannerKind, StatusBanner};
 use crate::ui::icons::ActionIconName;
 use crate::ui::modal::{ModalConfig, ModalSize, open_modal_dialog};
 use crate::ui::text_nav::{TextNavBar, TextNavDensity, TextNavItem};
 use gpui_kit::{
-    App, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString,
-    StatefulInteractiveElement, Styled, TestSupportExt, Window, base::StyledExt,
-    component::WindowExt, div, prelude::FluentBuilder, px,
+    App, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, SharedString,
+    StatefulInteractiveElement, Styled, TestSupportExt, Window,
+    base::StyledExt,
+    component::{WindowExt, tooltip::Tooltip},
+    div,
+    prelude::FluentBuilder,
+    px,
 };
 use neondojo::{
     analysis_catalog::{AnalysisCatalogEntry, SelectedPositionAnalysis},
@@ -34,7 +41,9 @@ use neondojo::{
     model::{DiceStats, Position},
     opening_book::BookLookup,
 };
-use neondojo_i18n::{I18n, format_decimal, format_equity, format_percent};
+use neondojo_i18n::{
+    I18n, format_decimal, format_equity, format_percent, format_ply, localize_decision,
+};
 use uuid::Uuid;
 
 /// Callbacks wired from `AnalysisWorkspace` into the Overview / Checker pane.
@@ -46,7 +55,7 @@ pub struct CheckerCallbacks {
     pub on_toggle_opening_book: ClickCb,
     pub on_toggle_compare_sort_delta: ClickCb,
     pub on_pick_compare_slot: Action2Cb<CompareEngineSlot, Option<String>>,
-    pub on_dice_cell_click: Action2Cb<[u8; 2], String>,
+    pub on_dice_cell_click: Action2Cb<[u8; 2], Option<String>>,
     pub on_dice_manual_retry: ClickCb,
     pub on_dice_recalculate_dialog: ClickCb,
     pub on_dice_delete: Action2Cb<Uuid, Uuid>,
@@ -79,7 +88,11 @@ pub struct CheckerViewProps<'a> {
 }
 
 /// Renders the Overview / Checker inspector panel with its 4 sub-tabs.
-pub fn render_checker_inspector(props: CheckerViewProps<'_>, cx: &App) -> impl IntoElement {
+pub fn render_checker_inspector(
+    props: CheckerViewProps<'_>,
+    window: &Window,
+    cx: &App,
+) -> impl IntoElement {
     let p = props.palette;
     let sub_items = vec![
         TextNavItem::new(CheckerSubTab::Candidates.id(), "Candidates")
@@ -111,7 +124,7 @@ pub fn render_checker_inspector(props: CheckerViewProps<'_>, cx: &App) -> impl I
 
     let body = match props.active_subtab {
         CheckerSubTab::Candidates => render_candidates_subtab(&props, cx).into_any_element(),
-        CheckerSubTab::Compare => render_compare_subtab(&props, cx).into_any_element(),
+        CheckerSubTab::Compare => render_compare_subtab(&props, window, cx).into_any_element(),
         CheckerSubTab::Dice => render_dice_subtab(&props, cx).into_any_element(),
         CheckerSubTab::Observed => render_observed_rolls_subtab(&props, cx).into_any_element(),
     };
@@ -723,7 +736,11 @@ fn render_opening_book_section(
 
 // ── 3-Engine Compare Moves Matrix ────────────────────────────────────────────
 
-fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoElement {
+fn render_compare_subtab(
+    props: &CheckerViewProps<'_>,
+    window: &Window,
+    cx: &App,
+) -> impl IntoElement {
     let locale = current_locale(cx);
     let p = props.palette;
 
@@ -835,10 +852,50 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
             .into_any_element();
     }
 
+    let played = I18n::t(locale, "app", "common.played");
+    // Measure the visible notation and its badge in the fonts used below. Unusually
+    // long moves can wrap while the numeric columns keep the same start in every row.
+    let text_width = |text: &str, size: f32, weight| {
+        let mut style = window.text_style();
+        style.font_weight = weight;
+        style.font_features = tabular_nums_features();
+        text.lines()
+            .map(|line| {
+                window
+                    .text_system()
+                    .shape_line(
+                        line.to_owned().into(),
+                        px(size),
+                        &[style.to_run(line.len())],
+                        None,
+                    )
+                    .width
+            })
+            .fold(px(0.), Pixels::max)
+    };
+    let badge_width = text_width(played, FONT_SIZE_MICRO, FontWeight::NORMAL) + px(12.);
+    let move_width = rows
+        .iter()
+        .take(20)
+        .map(|row| {
+            let weight = if row.played {
+                FontWeight::SEMIBOLD
+            } else {
+                FontWeight::NORMAL
+            };
+            text_width(&row.display_notation, FONT_SIZE_TABLE, weight)
+                + if row.played { badge_width } else { px(0.) }
+        })
+        .fold(px(48.), Pixels::max)
+        .ceil()
+        .min(px(216.));
+
     let mut table = div()
         .id("analysis-compare-matrix")
         .test_support()
         .v_flex()
+        .self_start()
+        .max_w_full()
         .rounded(px(6.0))
         .border_1()
         .border_color(p.border)
@@ -856,7 +913,14 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
                 .border_color(p.border)
                 .text_table_heading()
                 .text_color(p.muted)
-                .child(div().flex_1().min_w(px(100.0)).child("Move"))
+                .child(
+                    div()
+                        .id("compare-move-header")
+                        .test_support()
+                        .w(move_width)
+                        .min_w_0()
+                        .child("Move"),
+                )
                 .child(div().w(px(86.0)).text_right().child("XG"))
                 .child(div().w(px(86.0)).text_right().child("GNUbg"))
                 .child(div().w(px(86.0)).text_right().child("NeonGammon"))
@@ -889,8 +953,11 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
                         .h_flex()
                         .items_center()
                         .gap(px(4.0))
-                        .flex_1()
-                        .min_w(px(100.0))
+                        .id(SharedString::from(format!("compare-move-{ix}")))
+                        .test_support()
+                        .w(move_width)
+                        .min_w_0()
+                        .flex_wrap()
                         .child(
                             div()
                                 .font_weight(if row.played {
@@ -909,7 +976,7 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
                                     .bg(p.selected)
                                     .text_micro()
                                     .text_color(p.accent)
-                                    .child("Played"),
+                                    .child(played),
                             )
                         }),
                 )
@@ -1100,7 +1167,10 @@ fn render_dice_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoElemen
         .test_support()
         .v_flex()
         .gap(px(8.0))
-        .child(header)
+        .when(
+            !matches!(props.dice_state, DiceTabState::Ready { .. }),
+            |el| el.child(header),
+        )
         .child(body)
         .into_any_element()
 }
@@ -1117,194 +1187,208 @@ fn render_dice_matrix(
     cx: &App,
 ) -> impl IntoElement {
     let locale = current_locale(cx);
-    let actual_dice: Option<[i32; 2]> = position.dice.as_slice().try_into().ok();
+    let actual_dice = <[i32; 2]>::try_from(position.dice.as_slice())
+        .ok()
+        .filter(|dice| dice.iter().all(|d| (1..=6).contains(d)));
+    let selected = selected_cell
+        .map(|dice| dice.map(i32::from))
+        .or(actual_dice)
+        .unwrap_or([1, 1]);
+    let on_recalc = callbacks.on_dice_recalculate_dialog.clone();
 
     let summary_bar = div()
         .h_flex()
+        .flex_wrap()
         .items_center()
         .justify_between()
-        .gap(px(8.0))
-        .px(px(8.0))
-        .py(px(6.0))
-        .rounded(px(6.0))
-        .bg(p.surface)
-        .border_1()
-        .border_color(p.border)
+        .gap(px(6.0))
+        .text_meta()
+        .text_color(p.muted)
+        .child(format!(
+            "{} · {}",
+            dist.engine,
+            format_ply(locale, dist.plies as u32)
+        ))
+        .child(I18n::t(locale, "app", "analysis.combinations"))
         .child(
             div()
-                .text_meta()
-                .tabular_nums()
+                .text_table()
+                .font_weight(FontWeight::SEMIBOLD)
                 .text_color(p.text)
-                .child(format!(
-                    "{} {}-ply · Ø {}",
-                    dist.engine,
-                    dist.plies,
-                    format_equity(locale, dist.mean_equity)
-                )),
+                .child(format!("Ø {}", format_equity(locale, dist.mean_equity))),
         )
-        .when_some(job_id, |el, jid| {
-            let on_del = callbacks.on_dice_delete.clone();
-            el.child(
-                ActionButton::new("dice-delete-btn")
-                    .icon(ActionIconName::Delete)
-                    .dense_nav()
-                    .danger()
-                    .tooltip("Delete dice calculation")
-                    .palette(p)
-                    .on_click(move |_, window, cx| {
-                        open_delete_dice_confirm(position_id, jid, on_del.clone(), window, cx);
-                    }),
-            )
-        });
+        .child(
+            div()
+                .h_flex()
+                .gap(px(4.0))
+                .child(
+                    ActionButton::new("dice-recalc-dialog-btn")
+                        .icon(ActionIconName::Refresh)
+                        .dense_nav()
+                        .tooltip(I18n::t(locale, "app", "analysis.recalculateDice"))
+                        .palette(p)
+                        .on_click(move |ev, w, cx| on_recalc(ev, w, cx)),
+                )
+                .when_some(job_id, |el, jid| {
+                    let on_del = callbacks.on_dice_delete.clone();
+                    el.child(
+                        ActionButton::new("dice-delete-btn")
+                            .icon(ActionIconName::Delete)
+                            .dense_nav()
+                            .danger()
+                            .tooltip(I18n::t(locale, "app", "analysis.deleteDice"))
+                            .palette(p)
+                            .on_click(move |_, window, cx| {
+                                open_delete_dice_confirm(
+                                    position_id,
+                                    jid,
+                                    on_del.clone(),
+                                    window,
+                                    cx,
+                                )
+                            }),
+                    )
+                }),
+        );
 
-    // 6×6 matrix (rows 1..=6, cols 1..=6)
+    let rolled_label = I18n::t(locale, "app", "analysis.rolled");
     let mut grid = div()
         .id("dice-equity-6x6-grid")
         .test_support()
         .v_flex()
-        .gap(px(3.0))
-        .p(px(6.0))
-        .rounded(px(6.0))
-        .bg(p.surface)
-        .border_1()
-        .border_color(p.border);
+        .w_full()
+        .gap(px(3.0));
 
-    // Column header row 1..=6
-    grid = grid.child(
-        div()
-            .h_flex()
-            .gap(px(3.0))
-            .child(
+    for a in 1..=6 {
+        let mut row = div().h_flex().gap(px(3.0));
+        for b in 1..=6 {
+            let roll = dist.find_roll(a, b);
+            let actual = actual_dice.is_some_and(|dice| same_roll(dice, [a, b]));
+            let selected = same_roll(selected, [a, b]);
+            let (bg, fg) = match roll {
+                Some(r) if r.best.equity >= dist.mean_equity => (p.success_bg, p.success_text),
+                Some(_) => (p.warning_bg, p.warning_text),
+                None => (p.surface_alt, p.muted),
+            };
+            let equity = roll
+                .map(|r| format_equity(locale, r.best.equity))
+                .unwrap_or_else(|| "—".into());
+            let notation = roll
+                .map(|r| localize_decision(locale, &r.best.notation))
+                .unwrap_or_else(|| "—".into());
+            let preview = roll.map(|r| r.best.path.as_ref().unwrap_or(&r.best.notation).clone());
+            let mut title = I18n::format(
+                locale,
+                "app",
+                "analysis.rollTitle",
+                &[
+                    ("first", a.into()),
+                    ("second", b.into()),
+                    ("move", notation.into()),
+                ],
+            );
+            if actual {
+                title.push_str(&format!(" · {rolled_label}"));
+            }
+            let on_select = callbacks.on_dice_cell_click.clone();
+            row = row.child(
                 div()
-                    .w(px(22.0))
-                    .text_micro()
-                    .text_color(p.muted)
-                    .child("Ø"),
-            )
-            .children((1..=6).map(|col| {
-                div()
-                    .flex_1()
-                    .text_center()
-                    .text_micro()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(p.muted)
-                    .child(format!("{col}"))
-            })),
-    );
-
-    for row_d in 1..=6 {
-        let mut row_el = div().h_flex().items_center().gap(px(3.0)).child(
-            div()
-                .w(px(22.0))
-                .text_micro()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(p.muted)
-                .child(format!("{row_d}")),
-        );
-
-        for col_d in 1..=6 {
-            let roll = dist.find_roll(row_d, col_d);
-            let is_actual = actual_dice
-                .is_some_and(|[a, b]| (a == row_d && b == col_d) || (a == col_d && b == row_d));
-            let is_selected = selected_cell.is_some_and(|[a, b]| {
-                (i32::from(a) == row_d && i32::from(b) == col_d)
-                    || (i32::from(a) == col_d && i32::from(b) == row_d)
-            });
-
-            let cell = if let Some(entry) = roll {
-                let above_mean = entry.best.equity >= dist.mean_equity;
-                let bg = if is_selected {
-                    p.selected
-                } else if above_mean {
-                    p.success_bg
-                } else {
-                    p.warning_bg
-                };
-                let fg = if is_selected {
-                    p.accent
-                } else if above_mean {
-                    p.success_text
-                } else {
-                    p.warning_text
-                };
-                let border = if is_actual || is_selected {
-                    p.accent
-                } else {
-                    p.border
-                };
-                let on_click = callbacks.on_dice_cell_click.clone();
-                let dice_pair = [row_d as u8, col_d as u8];
-                let best_notation = entry.best.notation.clone();
-
-                div()
-                    .id(SharedString::from(format!("dice-cell-{row_d}-{col_d}")))
+                    .id(SharedString::from(format!("dice-cell-{a}-{b}")))
                     .test_support()
                     .flex_1()
-                    .v_flex()
-                    .items_center()
-                    .justify_center()
-                    .py(px(4.0))
-                    .px(px(2.0))
-                    .rounded(px(4.0))
-                    .bg(bg)
+                    .min_w_0()
+                    .p(px(1.0))
+                    .rounded(px(5.0))
                     .border_1()
-                    .border_color(border)
+                    .border_dashed()
+                    .border_color(if actual {
+                        p.text
+                    } else {
+                        gpui_kit::transparent_black()
+                    })
                     .cursor_pointer()
-                    .on_click(move |_, w, cx| on_click(dice_pair, best_notation.clone(), w, cx))
+                    .role(gpui_kit::accesskit::Role::Button)
+                    .aria_toggled(selected.into())
+                    .aria_label(format!("{title} · {equity}"))
+                    .tooltip(move |window, cx| Tooltip::new(title.clone()).build(window, cx))
+                    .on_click(move |_, w, cx| on_select([a as u8, b as u8], preview.clone(), w, cx))
                     .child(
                         div()
-                            .text_micro()
-                            .tabular_nums()
-                            .font_weight(if is_actual {
-                                FontWeight::BOLD
-                            } else {
-                                FontWeight::MEDIUM
-                            })
+                            .v_flex()
+                            .items_center()
+                            .py(px(4.0))
+                            .gap(px(1.0))
+                            .bg(bg)
                             .text_color(fg)
-                            .child(format_equity(locale, entry.best.equity)),
-                    )
-                    .into_any_element()
-            } else {
-                div()
-                    .flex_1()
-                    .py(px(4.0))
-                    .text_center()
-                    .text_micro()
-                    .text_color(p.muted)
-                    .child("—")
-                    .into_any_element()
-            };
-            row_el = row_el.child(cell);
+                            .rounded(px(3.0))
+                            .border_1()
+                            .border_color(if selected { p.accent } else { bg })
+                            .child(div().text_micro().child(format!("{a} · {b}")))
+                            .child(
+                                div()
+                                    .text_table()
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(equity),
+                            ),
+                    ),
+            );
         }
-
-        grid = grid.child(row_el);
+        grid = grid.child(row);
     }
 
-    let detail_caption = selected_cell.and_then(|[a, b]| {
-        dist.find_roll(i32::from(a), i32::from(b)).map(|entry| {
-            format!(
-                "Preview roll {a}–{b}: {} ({})",
-                entry.best.notation,
-                format_equity(locale, entry.best.equity)
+    let detail = dist.find_roll(selected[0], selected[1]).map(|entry| {
+        let [a, b] = entry.dice;
+        let probability = format_percent(locale, entry.probability, 2);
+        div()
+            .id("dice-selected-roll-caption")
+            .test_support()
+            .h_flex()
+            .flex_wrap()
+            .items_center()
+            .gap(px(10.0))
+            .text_table()
+            .child(
+                div()
+                    .font_weight(FontWeight::BOLD)
+                    .child(format!("{a}–{b}")),
             )
-        })
+            .child(localize_decision(locale, &entry.best.notation))
+            .child(
+                div()
+                    .font_weight(FontWeight::BOLD)
+                    .child(format_equity(locale, entry.best.equity)),
+            )
+            .when(
+                actual_dice.is_some_and(|dice| same_roll(dice, selected)),
+                |el| el.child(div().text_micro().text_color(p.muted).child(rolled_label)),
+            )
+            .child(div().text_micro().text_color(p.muted).child(I18n::format(
+                locale,
+                "app",
+                "analysis.probability",
+                &[("value", probability.into())],
+            )))
     });
-
+    let mut legend = I18n::format(
+        locale,
+        "app",
+        "analysis.distributionMethod",
+        &[("plies", dist.plies.into())],
+    );
+    if actual_dice.is_some() {
+        legend.push(' ');
+        legend.push_str(I18n::t(locale, "app", "analysis.rolledLegend"));
+    }
     div()
         .v_flex()
-        .gap(px(6.0))
+        .w_full()
+        .max_w(px(660.0))
+        .self_center()
+        .gap(px(9.0))
         .child(summary_bar)
         .child(grid)
-        .when_some(detail_caption, |el, cap| {
-            el.child(
-                div()
-                    .id("dice-selected-roll-caption")
-                    .test_support()
-                    .text_meta()
-                    .text_color(p.accent)
-                    .child(cap),
-            )
-        })
+        .children(detail)
+        .child(div().text_meta().text_color(p.muted).child(legend))
 }
 
 fn open_delete_dice_confirm(

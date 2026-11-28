@@ -32,7 +32,7 @@ use neondojo::{
     model::{MatchGame, MoveSeverity},
     review_decisions::ReviewDecision,
 };
-use neondojo_i18n::{I18n, format_decimal, format_pr, localize_decision};
+use neondojo_i18n::{I18n, Locale, format_decimal, format_pr, localize_decision};
 
 // ── Cube Inspector Tab ───────────────────────────────────────────────────────
 
@@ -708,6 +708,14 @@ fn render_player_stats_card(
         )
 }
 
+pub(super) fn statistics_game_labels(locale: Locale, game_no: i32) -> (String, String) {
+    let game = &[("game", game_no.into())];
+    (
+        I18n::format(locale, "review-statistics", "game", game),
+        I18n::format(locale, "review-statistics", "openGame", game),
+    )
+}
+
 fn render_per_game_table(
     games: &[CatalogGameStatistics],
     callbacks: &StatsCallbacks,
@@ -740,15 +748,20 @@ fn render_per_game_table(
                 .border_color(p.border)
                 .text_table_heading()
                 .text_color(p.muted)
-                .child(div().w(px(52.0)).child("Game"))
+                .child(
+                    div()
+                        .w(px(72.0))
+                        .child(I18n::t(locale, "review-statistics", "games")),
+                )
                 .child(div().w(px(60.0)).child("Score"))
                 .child(div().flex_1().text_right().child("W PR"))
                 .child(div().flex_1().text_right().child("B PR"))
-                .child(div().w(px(84.0)).text_right().child("Action")),
+                .child(div().w(px(116.0)).text_right().child("Action")),
         );
 
     for g in games {
         let gno = g.game_no;
+        let (game_label, open_label) = statistics_game_labels(locale, gno);
         let on_open = callbacks.on_open_game.clone();
         let (wpr, bpr) = g
             .summary
@@ -774,9 +787,9 @@ fn render_per_game_table(
                             .h_flex()
                             .items_center()
                             .gap(px(4.0))
-                            .w(px(52.0))
+                            .w(px(72.0))
                             .text_color(p.text)
-                            .child(format!("G{gno}"))
+                            .child(game_label)
                             .when(g.needs_cube_rule_reanalysis, |el| {
                                 el.child(div().text_micro().text_color(p.warning_text).child("!"))
                             }),
@@ -799,9 +812,9 @@ fn render_per_game_table(
                         ),
                     )
                     .child(
-                        div().w(px(84.0)).h_flex().justify_end().child(
+                        div().w(px(116.0)).h_flex().justify_end().child(
                             ActionButton::new(SharedString::from(format!("stats-open-game-{gno}")))
-                                .label(I18n::t(locale, "review-statistics", "openGame"))
+                                .label(open_label)
                                 .palette(p)
                                 .on_click(move |_, w, cx| on_open(gno, w, cx)),
                         ),

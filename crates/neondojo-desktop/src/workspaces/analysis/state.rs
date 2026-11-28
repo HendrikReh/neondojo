@@ -8,10 +8,11 @@ use gpui_kit::{App, ClickEvent, Window};
 use neondojo::{
     analysis_catalog::AnalysisCatalogEntry,
     analysis_timing::{AnalysisRemainingTime, RemainingTimeState},
-    annotations::{Annotation, AnnotationKind},
+    annotations::{Annotation, AnnotationKind, AnnotationUpdate},
     api::MatchAnalysisEngine,
     domain_error::{DomainError, ErrorKind},
     engine::{Candidate, Distribution},
+    facade::BackendFacade,
     model::{Job, MatchGame, MoveSeverity, Position},
     move_assessments::MoveAssessment,
     move_catalog::StoredMove,
@@ -455,12 +456,15 @@ impl From<Distribution> for DiceDistributionSnapshot {
     }
 }
 
+/// Matches both orderings of a dice combination.
+pub(super) fn same_roll([a, b]: [i32; 2], [c, d]: [i32; 2]) -> bool {
+    (a == c && b == d) || (a == d && b == c)
+}
+
 impl DiceDistributionSnapshot {
     /// Looks up the unordered pair `(max(a, b), min(a, b))` or `(min, max)` for cell `(row, col)`.
     pub fn find_roll(&self, d1: i32, d2: i32) -> Option<&DiceRollEntry> {
-        self.rolls
-            .iter()
-            .find(|r| (r.dice[0] == d1 && r.dice[1] == d2) || (r.dice[0] == d2 && r.dice[1] == d1))
+        self.rolls.iter().find(|r| same_roll(r.dice, [d1, d2]))
     }
 }
 
@@ -916,6 +920,29 @@ impl NoteDraft {
     }
 }
 
+/// Return the submitted text and tags along with the server's normalized result.
+pub(super) async fn save_note(
+    facade: BackendFacade,
+    key: NoteTargetKey,
+    submitted: AnnotationUpdate,
+) -> Result<(Annotation, AnnotationUpdate), DomainError> {
+    run_facade(move || async move {
+        let saved = facade
+            .save_annotations(
+                key.kind,
+                key.target_id,
+                AnnotationUpdate {
+                    tags: submitted.tags.clone(),
+                    comment: submitted.comment.clone(),
+                    expected_version: submitted.expected_version,
+                },
+            )
+            .await?;
+        Ok((saved, submitted))
+    })
+    .await
+}
+
 /// Workspace-scoped cache keeping drafts alive across game/position/tab navigation.
 #[derive(Debug, Default, Clone)]
 pub struct NotesDraftCache {
@@ -949,12 +976,15 @@ impl NotesDraftCache {
             kind: ann.target_kind,
             target_id: ann.target_id,
         };
-        let should_replace = self.drafts.get(&key).is_none_or(|d| !d.dirty);
+        let should_replace = self
+            .drafts
+            .get(&key)
+            .is_none_or(|d| !d.dirty && ann.version >= d.base_version);
         if should_replace {
             self.drafts.insert(key, NoteDraft::from_annotation(ann));
         } else if let Some(draft) = self.drafts.get_mut(&key) {
             // Track latest server snapshot if it drifted while user had local edits.
-            if ann.version != draft.base_version {
+            if ann.version > draft.base_version {
                 draft.server_latest = Some(ServerNoteSnapshot {
                     tags: ann.tags.clone(),
                     comment: ann.comment.clone(),
@@ -965,13 +995,27 @@ impl NotesDraftCache {
         self.drafts.get(&key).expect("entry just inserted")
     }
 
-    /// Records a successful save, advancing `base_version` and clearing dirty/conflict flags.
-    pub fn mark_saved(&mut self, ann: &Annotation) {
+    /// Keep edits made while the write was in flight, using the returned version for the next save.
+    pub fn mark_saved(&mut self, ann: &Annotation, submitted: &AnnotationUpdate) {
         let key = NoteTargetKey {
             kind: ann.target_kind,
             target_id: ann.target_id,
         };
-        self.drafts.insert(key, NoteDraft::from_annotation(ann));
+        let Some(draft) = self.drafts.get_mut(&key) else {
+            return;
+        };
+        let changed_comment = draft.comment != submitted.comment;
+        let changed_tags = draft.tags != submitted.tags;
+        if !changed_comment {
+            draft.comment.clone_from(&ann.comment);
+        }
+        if !changed_tags {
+            draft.tags.clone_from(&ann.tags);
+        }
+        draft.dirty = changed_comment || changed_tags;
+        draft.base_version = ann.version;
+        draft.server_latest = None;
+        draft.conflict_error = None;
     }
 
     /// Records an HTTP 409 `ErrorKind::Conflict` while preserving the user's unsaved draft.

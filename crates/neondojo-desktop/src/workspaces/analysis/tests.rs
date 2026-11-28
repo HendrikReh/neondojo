@@ -28,7 +28,7 @@ use gpui_kit::{AppContext, TestAppContext, WindowOptions, test::TestWindowExt};
 use neondojo::{
     analysis_catalog::{AnalysisCatalogEntry, SelectedPositionAnalysis},
     analysis_timing::{AnalysisRemainingTime, RemainingTimeBasis, RemainingTimeState},
-    annotations::{Annotation, AnnotationKind},
+    annotations::{Annotation, AnnotationKind, AnnotationUpdate},
     api::MatchAnalysisEngine,
     domain_error::DomainError,
     engine::{Analysis, Candidate, DiceEvaluation, Distribution},
@@ -563,9 +563,67 @@ fn compare_matrix_monotonic_eta_cube_auto_select_and_responsive_stats_work() {
             .is_none()
     );
 
+    use neondojo_i18n::Locale;
+    assert_eq!(
+        super::cube_stats::statistics_game_labels(Locale::En, 1),
+        ("Game 1".into(), "Open game 1".into())
+    );
+    assert_eq!(
+        super::cube_stats::statistics_game_labels(Locale::De, 2),
+        ("Spiel 2".into(), "Spiel 2 öffnen".into())
+    );
+
     // Statistics responsive 2-column threshold >= 1050px.
     assert!(!stats_uses_two_columns(1049.0));
     assert!(stats_uses_two_columns(1050.0));
+}
+
+#[test]
+fn saving_multiline_comments_preserves_newer_edits_and_advances_version() {
+    let key = NoteTargetKey {
+        kind: AnnotationKind::Move,
+        target_id: Uuid::new_v4(),
+    };
+    let mut drafts = NotesDraftCache::default();
+    let submitted = AnnotationUpdate {
+        tags: vec![],
+        comment: "Line one\nLine two".into(),
+        expected_version: 0,
+    };
+    let saved = Annotation {
+        id: None,
+        target_kind: key.kind,
+        target_id: key.target_id,
+        tags: vec![],
+        comment: submitted.comment.clone(),
+        version: 1,
+        updated_at: None,
+    };
+    let text = "Line one\nLine two\nThird paragraph";
+    drafts.ensure_entry(key).set_comment(text.into()).unwrap();
+    drafts.mark_saved(&saved, &submitted);
+    let draft = drafts.get(key).unwrap();
+    assert_eq!(draft.comment, text);
+    assert_eq!(draft.base_version, 1);
+    assert!(draft.dirty);
+    let final_update = AnnotationUpdate {
+        comment: text.into(),
+        expected_version: 1,
+        tags: vec![],
+    };
+    drafts.mark_saved(
+        &Annotation {
+            comment: text.into(),
+            version: 2,
+            ..saved.clone()
+        },
+        &final_update,
+    );
+    assert_eq!(drafts.get(key).unwrap().comment, text);
+    assert!(!drafts.has_dirty(key));
+    // A read started before either save can arrive after both writes.
+    let current = drafts.merge_loaded(&saved);
+    assert_eq!((current.base_version, current.comment.as_str()), (2, text));
 }
 
 // ── 6. Headless GPUI Rendering & Interaction Tests ───────────────────────────
@@ -596,7 +654,16 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
     let match_id = Uuid::new_v4();
     let pos1 = sample_position(match_id, 1, 1);
     let pos1_id = pos1.id;
-    let dist_snap: DiceDistributionSnapshot = sample_distribution(0.05).into();
+    let mut distribution = sample_distribution(0.05);
+    distribution.rolls.retain(|r| r.dice != [6, 2]);
+    distribution
+        .rolls
+        .iter_mut()
+        .find(|r| r.dice == [6, 1])
+        .unwrap()
+        .best
+        .path = Some("13/7 8/7".into());
+    let dist_snap: DiceDistributionSnapshot = distribution.into();
 
     cx.update_window(window, |_, window, cx| {
         // Initially renders Welcome drop zone.
@@ -708,13 +775,77 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
         window.click("checker-subtab-dice", cx);
         window.render_frame(cx);
         assert!(window.find("dice-equity-6x6-grid").visible());
+        for first in 1..=6 {
+            for second in 1..=6 {
+                assert!(window.find(format!("dice-cell-{first}-{second}")).visible());
+            }
+        }
+        assert!(
+            window.find("dice-selected-roll-caption").visible(),
+            "actual roll selected initially"
+        );
         window.click("dice-cell-6-1", cx);
         window.render_frame(cx);
         assert!(window.find("dice-selected-roll-caption").visible());
         let ws_ref = entity.read(cx);
         assert_eq!(ws_ref.selected_dice_cell, Some([6, 1]));
         assert_eq!(ws_ref.preview.mode, BoardViewMode::Arrows);
-        assert!(ws_ref.preview.hypothetical_dice.is_some());
+        assert_eq!(
+            ws_ref
+                .preview
+                .hypothetical_dice
+                .as_ref()
+                .unwrap()
+                .best_notation,
+            "13/7 8/7"
+        );
+        window.click("dice-cell-1-6", cx);
+        assert_eq!(
+            entity
+                .read(cx)
+                .preview
+                .hypothetical_dice
+                .as_ref()
+                .unwrap()
+                .best_notation,
+            "13/7 8/7"
+        );
+        window.click("dice-cell-2-6", cx);
+        assert!(entity.read(cx).preview.hypothetical_dice.is_none());
+        assert!(window.try_find("dice-selected-roll-caption").is_none());
+
+        // White on the bar cannot enter against a closed board on double sixes.
+        entity.update(cx, |ws, cx| {
+            let mut closed = [0; 26];
+            closed[25] = 1;
+            closed[19..=24].fill(-2);
+            ws.positions[0].board = closed.to_vec();
+            let DiceTabState::Ready { distribution, .. } = &mut ws.dice_state else {
+                panic!("expected dice results")
+            };
+            let double = distribution
+                .rolls
+                .iter_mut()
+                .find(|r| r.dice == [6, 6])
+                .unwrap();
+            double.best.notation = "Cannot move".into();
+            double.best.equity = distribution.mean_equity - 0.1;
+            cx.notify();
+        });
+        window.render_frame(cx);
+        window.click("dice-cell-6-6", cx);
+        let ws = entity.read(cx);
+        let preview = ws.preview.hypothetical_dice.as_ref().unwrap();
+        assert_eq!(preview.dice, [6, 6]);
+        assert!(matches!(
+            neondojo_board::project_move(
+                &ws.positions[0].board.clone().try_into().unwrap(),
+                0,
+                &preview.dice,
+                &preview.best_notation
+            ),
+            neondojo_board::MovePreview::Ok { forced: true, .. }
+        ));
 
         // Switch to Cube, Statistics, Notes (with 409 conflict banner!), and Cards tabs.
         window.click("analysis-tab-errors", cx);
@@ -724,6 +855,47 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
         window.click("analysis-tab-statistics", cx);
         window.render_frame(cx);
         assert!(window.find("analysis-stats-empty").visible());
+
+        entity.update(cx, |ws, cx| {
+            use neondojo::analysis_statistics::catalog::{
+                CatalogAnalysisSummary, CatalogGameStatistics, MatchAnalysisStatistics,
+            };
+            ws.statistics = Some(MatchAnalysisStatistics {
+                analysis_id: None,
+                needs_cube_rule_reanalysis: false,
+                error_breakdown: None,
+                summary: Some(CatalogAnalysisSummary {
+                    engine: "GNUbg".into(),
+                    plies: Some(2),
+                    recorded_depth: None,
+                    total_games: 2,
+                    completed_games: 2,
+                    total_moves: 1,
+                    analyzed_moves: 1,
+                    players: Default::default(),
+                    performance_rating: None,
+                }),
+                games: ws
+                    .games
+                    .iter()
+                    .map(|g| CatalogGameStatistics {
+                        game_no: g.game_no,
+                        white_score: g.white_score,
+                        black_score: g.black_score,
+                        crawford: g.crawford,
+                        analyzed: true,
+                        needs_cube_rule_reanalysis: false,
+                        summary: None,
+                        error_breakdown: None,
+                    })
+                    .collect(),
+            });
+            cx.notify();
+        });
+        window.render_frame(cx);
+        window.click("stats-open-game-2", cx);
+        assert_eq!(entity.read(cx).current_game_no, Some(2));
+        assert_eq!(entity.read(cx).active_tab, AnalysisDetailTab::Overview);
 
         // Seed a 409 conflict draft on Notes and verify banner renders cleanly.
         entity.update(cx, |ws, cx| {
@@ -742,6 +914,34 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
         window.render_frame(cx);
         assert!(window.find("analysis-notes-inspector").visible());
         assert!(window.find("notes-conflict-banner").visible());
+        let field = entity.read(cx).comment_input.clone();
+        let state = field.read(cx);
+        assert!(state.input_bounds().size.height >= state.line_height().unwrap() * 4.);
+        field.update(cx, |input, cx| {
+            input.set_value("", window, cx);
+            input.focus(window, cx);
+        });
+        window.input("First paragraph", cx);
+        window.press("enter", cx);
+        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("Second\nThird".into()));
+        window.press("cmd-v", cx);
+        assert_eq!(field.read(cx).value(), "First paragraph\nSecond\nThird");
+    })
+    .expect("edit the current note");
+    cx.update_window(window, |_, window, cx| {
+        window.click("notes-scope-match", cx);
+        let field = entity.read(cx).comment_input.clone();
+        assert_eq!(field.read(cx).value(), "");
+        window.click("notes-scope-position", cx);
+        assert_eq!(field.read(cx).value(), "First paragraph\nSecond\nThird");
+        let long_line = "Checker play ".repeat(80);
+        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(long_line.clone()));
+        field.update(cx, |input, cx| input.focus(window, cx));
+        window.press("cmd-a", cx);
+        window.press("cmd-v", cx);
+        window.render_frame(cx);
+        assert_eq!(field.read(cx).value().as_ref(), &long_line);
+        assert!(field.read(cx).display_map().wrap_row_count() > 1);
 
         window.click("analysis-tab-cards", cx);
         window.render_frame(cx);
@@ -891,6 +1091,27 @@ async fn headless_persists_per_tab_widths_emits_workspace_events_and_renders_com
         window.click("checker-subtab-compare", cx);
         window.render_frame(cx);
         assert!(window.find("analysis-compare-matrix").visible());
+        let header = window.find("compare-move-header").bounds();
+        let played = window.find("compare-move-0").bounds();
+        assert_eq!(header.left(), played.left());
+        assert_eq!(header.right(), played.right());
+        assert!(played.size.width <= gpui_kit::px(130.0));
+
+        entity.update(cx, |ws, cx| {
+            let notation = "24/21 24/21 13/10 13/10";
+            ws.positions[0].dice = vec![3, 3];
+            ws.positions[0].notation = notation.into();
+            ws.compare_slots[0][0].notation = notation.into();
+            ws.compare_slots[1].clear();
+            cx.notify();
+        });
+        window.render_frame(cx);
+        let long_move = window.find("compare-move-0").bounds();
+        assert!(long_move.size.width > played.size.width);
+        assert_eq!(
+            long_move.right(),
+            window.find("compare-move-header").bounds().right()
+        );
 
         window.click("checker-subtab-observed", cx);
         window.render_frame(cx);
@@ -921,4 +1142,76 @@ async fn headless_persists_per_tab_widths_emits_workspace_events_and_renders_com
     let seen = events.lock().unwrap().clone();
     assert!(seen.contains(&format!("study:{match_id}")));
     assert!(seen.contains(&"search:4HPwATDgc/ABMA".to_string()));
+}
+
+#[gpui_kit::test]
+async fn move_notes_editor_restores_multiline_drafts_when_changing_decisions(
+    cx: &mut TestAppContext,
+) {
+    use gpui_kit::component::WindowExt;
+    init_headless_test_env(cx);
+    let (window, _) = cx
+        .update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |w, cx| {
+                cx.new(|cx| AnalysisWorkspace::new(w, cx))
+            })
+        })
+        .unwrap();
+    let match_id = Uuid::new_v4();
+    let pos = sample_position(match_id, 1, 1);
+    let moves = ["double", "take"]
+        .into_iter()
+        .enumerate()
+        .map(|(ix, action)| StoredMove {
+            id: Uuid::new_v4(),
+            match_uuid: match_id,
+            game_no: 1,
+            move_no: (ix + 1) as i32,
+            kind: "cube".into(),
+            player: ix as i32,
+            notation: action.into(),
+            position_uuid: None,
+            board: pos.board.clone(),
+            dice: vec![],
+            position_id: pos.position_id.clone(),
+            gnubg_match_id: pos.gnubg_match_id.clone(),
+        })
+        .collect();
+    let field = cx
+        .update_window(window, |_, window, cx| {
+            super::notes_cards::open_move_notes_dialog(
+                match_id,
+                1,
+                moves,
+                None,
+                ["White".into(), "Black".into()],
+                window,
+                cx,
+            );
+            window.render_frame(cx);
+            window.click("move-notes-comment", cx);
+            let field = window
+                .focused_input(cx)
+                .unwrap()
+                .as_textarea()
+                .unwrap()
+                .clone();
+            assert!(
+                field.read(cx).input_bounds().size.height
+                    >= field.read(cx).line_height().unwrap() * 4.
+            );
+            cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
+                "Double?\nReview the take.".into(),
+            ));
+            window.press("cmd-v", cx);
+            field
+        })
+        .unwrap();
+    cx.update_window(window, |_, window, cx| {
+        window.click("move-notes-item-1", cx);
+        assert_eq!(field.read(cx).value(), "");
+        window.click("move-notes-item-0", cx);
+        assert_eq!(field.read(cx).value(), "Double?\nReview the take.");
+    })
+    .unwrap();
 }

@@ -65,7 +65,7 @@ use gpui_kit::{
     StatefulInteractiveElement, Styled, Subscription, TestSupportExt, UniformListScrollHandle,
     Window,
     base::StyledExt,
-    component::input::{InputEvent, InputState},
+    component::input::{InputEvent, InputState, TextareaState},
     div, px,
 };
 use neondojo::{
@@ -105,7 +105,7 @@ pub struct AnalysisWorkspace {
     // Board & input child entities
     board_view: Entity<BoardView>,
     tag_input: Entity<InputState>,
-    comment_input: Entity<InputState>,
+    comment_input: Entity<TextareaState>,
     new_deck_input: Entity<InputState>,
     _comment_input_sub: Subscription,
 
@@ -251,8 +251,11 @@ impl AnalysisWorkspace {
             bv
         });
         let tag_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add tag…"));
-        let comment_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Write note in Markdown…"));
+        let comment_input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .rows(4)
+                .placeholder("Write note in Markdown…")
+        });
         let new_deck_input = cx.new(|cx| InputState::new(window, cx).placeholder("New deck name…"));
 
         let job_controller = cx.new(MatchAnalysisJobEntity::new);
@@ -1660,11 +1663,13 @@ impl AnalysisWorkspace {
             return;
         };
         // Immediately restore any preserved local draft into the comment input
-        if let Some(existing) = self.notes_drafts.get(key) {
-            let text = existing.comment.clone();
-            self.comment_input
-                .update(cx, |inp, cx| inp.set_value(text, window, cx));
-        }
+        let text = self
+            .notes_drafts
+            .get(key)
+            .map(|d| d.comment.clone())
+            .unwrap_or_default();
+        self.comment_input
+            .update(cx, |inp, cx| inp.set_value(text, window, cx));
 
         let Some(facade) = cx
             .try_global::<DesktopAppContext>()
@@ -1685,7 +1690,9 @@ impl AnalysisWorkspace {
             let _ = this.update_in(cx, |ws, window, cx| {
                 let draft = ws.notes_drafts.merge_loaded(&ann);
                 let comment_val = draft.comment.clone();
-                if ws.current_note_target_key() == Some(key) {
+                if ws.current_note_target_key() == Some(key)
+                    && ws.comment_input.read(cx).value().as_ref() != comment_val
+                {
                     ws.comment_input
                         .update(cx, |inp, cx| inp.set_value(comment_val, window, cx));
                 }
@@ -1727,31 +1734,22 @@ impl AnalysisWorkspace {
         let match_id = self.match_id;
         cx.notify();
 
-        let write = TokioBridge::spawn_write(cx, async move {
-            run_facade(move || async move {
-                facade
-                    .save_annotations(
-                        key.kind,
-                        key.target_id,
-                        AnnotationUpdate {
-                            tags,
-                            comment: comment_val,
-                            expected_version,
-                        },
-                    )
-                    .await
-            })
-            .await
-        });
+        let submitted = AnnotationUpdate {
+            tags,
+            comment: comment_val,
+            expected_version,
+        };
+        let write = TokioBridge::spawn_write(cx, state::save_note(facade, key, submitted));
 
         cx.spawn_in(window, async move |this, cx| {
             let res = write.await;
             let _ = this.update_in(cx, |ws, _window, cx| {
                 ws.notes_saving = false;
                 match res {
-                    Ok(Ok(saved)) => {
-                        ws.notes_drafts.mark_saved(&saved);
-                        ws.notes_saved_feedback = true;
+                    Ok(Ok((saved, submitted))) => {
+                        ws.notes_drafts.mark_saved(&saved, &submitted);
+                        ws.notes_saved_feedback = ws.current_note_target_key() == Some(key)
+                            && !ws.notes_drafts.has_dirty(key);
                         if let Some(mid) = match_id {
                             cx.emit(WorkspaceEvent::AnnotationSaved { match_id: mid });
                         }
@@ -3087,12 +3085,16 @@ impl Render for AnalysisWorkspace {
                             e.update(cx, |ws, cx| {
                                 ws.selected_dice_cell = Some(dice);
                                 ws.preview.candidate_notation = None;
-                                ws.preview.hypothetical_dice = Some(HypotheticalDicePreview {
-                                    dice,
-                                    best_notation,
-                                });
-                                if ws.preview.mode == BoardViewMode::Before {
-                                    ws.preview.mode = BoardViewMode::Arrows;
+                                if let Some(best_notation) = best_notation {
+                                    ws.preview.hypothetical_dice = Some(HypotheticalDicePreview {
+                                        dice,
+                                        best_notation,
+                                    });
+                                    if ws.preview.mode == BoardViewMode::Before {
+                                        ws.preview.mode = BoardViewMode::Arrows;
+                                    }
+                                } else {
+                                    ws.preview.reset();
                                 }
                                 ws.sync_board(cx);
                                 cx.notify();
@@ -3205,6 +3207,7 @@ impl Render for AnalysisWorkspace {
                         callbacks: checker_callbacks,
                         palette: p,
                     },
+                    window,
                     cx,
                 )
                 .into_any_element()
