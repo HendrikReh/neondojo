@@ -2,7 +2,7 @@
 
 NeonDojo is a local backgammon study app for Apple Silicon Macs. Import matches, review checker plays and cube decisions, and practice positions from your own games.
 
-[Install NeonDojo](../README.md#quick-start) or open the [illustrated user guide](user-guide/README.md) for a walkthrough of every workspace.
+[Install NeonDojo](https://github.com/HendrikReh/neondojo/blob/main/README.md#quick-start) or open the [illustrated user guide](user-guide/README.md) for a walkthrough of every workspace.
 
 ## Feature reference
 

@@ -4,7 +4,7 @@ Status: step 1 (measurement, option A) and cubeless money blocks (`money_cubeles
 
 ## Problem
 
-Engine duels currently pair `Competitor { engine_id, plies }` profiles ([engine_matches.rs](../backend/src/engine_matches.rs)). That compares labels, not effort:
+Engine duels currently pair `Competitor { engine_id, plies }` profiles ([engine_matches.rs](https://github.com/HendrikReh/neondojo/blob/main/backend/src/engine_matches.rs)). That compares labels, not effort:
 
 - Ply counting differed. GNUbg 0-ply is a static evaluation, while XG calls the same thing 1-ply. Since migration 0079 (now part of the schema baseline `0001_schema.sql`), NeonDojo uses the XG convention for both engines and converts only when it talks to GNUbg ([Ply convention](reference/settings.md#ply-convention)). Duels from before 0079 ran a GNUbg side labelled N-ply at today's N+1-ply. NeonGammon only offers 1–4-ply.
 - The work per ply differs. Move filters and pruning decide how many candidates are searched deeper. GNUbg duels currently use GNUbg's default move filter, while analysis uses Top14. NeonGammon passes no filter.
@@ -17,7 +17,7 @@ As a result, "GNUbg 3-ply vs. NeonGammon 3-ply" says little about which engine i
 
 | Aspect | GNUbg | NeonGammon |
 |---|---|---|
-| How a decision is made | Inside a GNUbg process via the native adapter: `set player N gnubg; nextturn` ([native.py](../backend/src/play/native.py)) | Persistent Python worker, `BgBotAnalyzer.checker_play` / `cube_decision` ([worker.py](../backend/src/engines/worker.py)) |
+| How a decision is made | Inside a GNUbg process via the native adapter: `set player N gnubg; nextturn` ([native.py](https://github.com/HendrikReh/neondojo/blob/main/backend/src/play/native.py)) | Persistent Python worker, `BgBotAnalyzer.checker_play` / `cube_decision` ([worker.py](https://github.com/HendrikReh/neondojo/blob/main/backend/src/engines/worker.py)) |
 | Process lifetime | One verified rules process per game. Later games load the preceding SGF checkpoint at startup | One worker per distinct saved NeonGammon profile for the match or money block (up to two). Each game verifies participating profiles at its boundaries |
 | Settings | NeonDojo 1–5-ply (GNUbg-native 0–4), cubeful (`cubeful off` with cube and Jacoby off for `money_cubeless`), deterministic, noise 0, default move filter | `eval_level`, `parallel_threads`, `cubeful` (`False` for `money_cubeless`); `filter_max_moves` and `filter_threshold` are supported by the library but not exposed |
 | Time limit | None. Only the 180 s timeout per call, which aborts | None. Only the 180 s timeout per call, which aborts and terminates the worker |
@@ -54,7 +54,7 @@ The user sets a budget, for example "≤ 150 ms CPU per turn". NeonDojo picks, f
 2. **Selection:** for each side, the most expensive configuration that stays within the budget. If the two sides' actual costs differ by more than a tolerance (for example ±15 %), the result shows that clearly.
 3. **Fine control:** plies alone are too coarse, since each ply is roughly an order of magnitude more expensive. That is exactly the criticism of "ply vs. ply". Move filters (GNUbg `movefilter`, NeonGammon `filter_max_moves`/`filter_threshold`) provide the intermediate steps, which is why they need to be exposed in the duel profile.
 
-Properties: the budget holds on average, not as a hard cap per turn. Play stays deterministic and the paired-dice comparison stays intact. The results are only valid for the measured machine. They are stored together with the machine record from the benchmark ([machine.rs](../backend/src/benchmarks/machine.rs)).
+Properties: the budget holds on average, not as a hard cap per turn. Play stays deterministic and the paired-dice comparison stays intact. The results are only valid for the measured machine. They are stored together with the machine record from the benchmark ([machine.rs](https://github.com/HendrikReh/neondojo/blob/main/backend/src/benchmarks/machine.rs)).
 
 ### C. Hard limit per turn (not now)
 
