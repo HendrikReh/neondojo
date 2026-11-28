@@ -18,7 +18,7 @@ use gpui_kit::{
     AnyElement, App, BoxShadow, ClickEvent, CursorStyle, ElementId, FocusHandle,
     InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
     ParentElement, Pixels, Point, SharedString, StatefulInteractiveElement, Styled, TestSupportExt,
-    Window, base::StyledExt, div, hsla, point, px,
+    Window, base::StyledExt, div, hsla, point, prelude::FluentBuilder, px,
 };
 use neondojo_i18n::I18n;
 use std::rc::Rc;
@@ -146,6 +146,7 @@ pub struct PlayBoardDialogProps {
     pub heading: SharedString,
     pub width_px: f32,
     pub max_height_px: f32,
+    pub footer: Option<AnyElement>,
     pub modal: bool,
     pub dismissible: bool,
     pub busy: bool,
@@ -200,7 +201,8 @@ pub fn render_play_board_dialog(
         .items_center()
         .justify_between()
         .gap(px(10.0))
-        .pb(px(10.0))
+        .flex_shrink_0()
+        .pb(px(8.0))
         .border_b_1()
         .border_color(p.border)
         .child(
@@ -257,14 +259,16 @@ pub fn render_play_board_dialog(
         );
     }
 
+    let body_scroller_id = SharedString::from(format!("{}-body", props.id));
     let mut card = div()
         .id(props.id.clone())
         .test_support()
         .v_flex()
         .gap(px(12.0))
-        .w(px(dialog_w))
-        .max_h(px(dialog_h_est))
-        .overflow_y_scroll()
+        .w_full()
+        .max_h_full()
+        .overflow_hidden()
+        .tab_group()
         .p(px(18.0))
         .rounded(px(10.0))
         .border_1()
@@ -277,14 +281,25 @@ pub fn render_play_board_dialog(
             spread_radius: px(0.0),
             inset: false,
         }])
-        .ml(px(dx * 2.0))
-        .mt(px(dy * 2.0))
+        .left(px(dx))
+        .top(px(dy))
         .on_mouse_down(MouseButton::Left, |_, _, cx| {
             // Stop backdrop dismissal when clicking inside the card.
             cx.stop_propagation();
         })
         .child(header)
-        .child(body);
+        .child(
+            div()
+                .id(body_scroller_id)
+                .test_support()
+                .v_flex()
+                .min_h(px(0.0))
+                .overflow_y_scroll()
+                .child(div().v_flex().flex_shrink_0().child(body)),
+        )
+        .when_some(props.footer, |el, footer| {
+            el.child(div().v_flex().flex_shrink_0().child(footer))
+        });
 
     if props.modal {
         let close_modal = on_close.clone();
@@ -331,7 +346,17 @@ pub fn render_play_board_dialog(
         .on_mouse_up(MouseButton::Left, move |_: &MouseUpEvent, window, cx| {
             on_drag_end(window, cx);
         })
-        .child(card);
+        .p(px(DIALOG_VIEWPORT_MARGIN))
+        .occlude()
+        .child(
+            div()
+                .size_full()
+                .max_w(px(dialog_w))
+                .max_h(px(dialog_h_est))
+                .v_flex()
+                .justify_center()
+                .child(card),
+        );
 
     if props.modal {
         let backdrop_close = on_close;

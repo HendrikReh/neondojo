@@ -142,6 +142,7 @@ impl PlayBoardStage {
         atlas: Arc<Mutex<ThemeAtlasCache>>,
         animation: Entity<PlayAnimationEntity>,
         turn: Entity<PlayTurnEntity>,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Self {
         let board_view = cx.new(|_cx| {
@@ -171,9 +172,13 @@ impl PlayBoardStage {
             cx.notify();
         });
 
-        let sub_board = cx.subscribe(&board_view, |this, _bv, event: &BoardEvent, cx| {
-            this.handle_board_event(*event, cx);
-        });
+        let sub_board = cx.subscribe_in(
+            &board_view,
+            window,
+            |this, _bv, event: &BoardEvent, window, cx| {
+                this.handle_board_event(*event, window, cx);
+            },
+        );
 
         Self {
             board_view,
@@ -195,7 +200,12 @@ impl PlayBoardStage {
         cx.notify();
     }
 
-    fn handle_board_event(&mut self, event: BoardEvent, cx: &mut Context<Self>) {
+    fn handle_board_event(
+        &mut self,
+        event: BoardEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(session) = self.snapshot.session.clone() else {
             return;
         };
@@ -221,7 +231,7 @@ impl PlayBoardStage {
                 });
                 if let Some(checker) = frame {
                     self.animation.update(cx, |anim, cx| {
-                        anim.enqueue(vec![PlayFrame::Checker(checker)], None, cx);
+                        anim.enqueue(vec![PlayFrame::Checker(checker)], Some(window), cx);
                     });
                 }
             }
@@ -572,6 +582,9 @@ impl PlayBoardStage {
                 .id("play-board-toolbar")
                 .test_support()
                 .v_flex()
+                .w(px(180.0))
+                .flex_shrink_0()
+                .self_start()
                 .gap(px(6.0))
                 .px(px(12.0))
                 .py(px(8.0))
@@ -581,9 +594,7 @@ impl PlayBoardStage {
                 .bg(p.surface)
                 .child(
                     div()
-                        .h_flex()
-                        .flex_wrap()
-                        .items_center()
+                        .v_flex()
                         .gap(px(8.0))
                         .child(div().text_panel().text_color(p.text).child(I18n::t(
                             locale,
@@ -708,20 +719,23 @@ impl Render for PlayBoardStage {
         div()
             .id("play-board-stage")
             .test_support()
-            .v_flex()
+            .flex()
+            .flex_row()
+            .items_stretch()
             .flex_1()
             .size_full()
             .min_w(px(0.0))
             .min_h(px(0.0))
             .gap(px(8.0))
-            .when_some(toolbar, |this, tb| this.child(tb))
             .child(
                 div()
                     .flex_1()
-                    .w_full()
-                    .min_h(px(280.0))
+                    .v_flex()
+                    .min_w(px(0.0))
+                    .min_h(px(0.0))
                     .when(is_idle, |this| this.opacity(0.55))
                     .child(self.board_view.clone()),
             )
+            .when_some(toolbar, |this, tb| this.child(tb))
     }
 }

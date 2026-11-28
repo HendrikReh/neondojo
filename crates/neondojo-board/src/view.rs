@@ -765,10 +765,13 @@ impl Render for BoardView {
                 paint_board(&snapshot, &transform, &dice, cube_logical, window, cx);
             },
         )
+        .absolute()
+        .inset_0()
         .size_full();
 
         let mut canvas_wrapper = div()
             .id(self.id.clone())
+            .relative()
             .flex_1()
             .w_full()
             .min_h(px(160.0))
