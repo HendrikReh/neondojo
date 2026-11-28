@@ -781,9 +781,10 @@ async fn new_match_picker_opens_the_paused_database_and_resumes_either_row(
                 Some(PAUSED_MATCHES_DATABASE_ID)
             );
             window.click(
-                SharedString::from(format!("library-row-open-{match_id}")),
+                SharedString::from(format!("library-row-check-{match_id}")),
                 cx,
             );
+            window.click("library-batch-resume-btn", cx);
         })
         .unwrap();
         assert_eq!(resumed.get(), Some(session_id));

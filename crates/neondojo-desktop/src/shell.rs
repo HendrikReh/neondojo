@@ -958,7 +958,7 @@ impl AppShell {
             WorkspaceEvent::OpenLibraryDatabase { database_id } => {
                 self.select_workspace(WorkspaceId::Library, window, cx);
                 if let Some(library) = &self.workspaces.library {
-                    library.update(cx, |ws, cx| ws.select_database(Some(database_id), cx));
+                    library.update(cx, |ws, cx| ws.open_database(Some(database_id), cx));
                 }
             }
             WorkspaceEvent::SearchPositionInLibrary { position_id } => {

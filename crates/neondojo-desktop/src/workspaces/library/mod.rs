@@ -560,10 +560,14 @@ impl LibraryWorkspace {
         }
     }
 
-    pub(crate) fn select_database(&mut self, db_id: Option<Uuid>, cx: &mut Context<Self>) {
+    pub(super) fn select_database(&mut self, db_id: Option<Uuid>, cx: &mut Context<Self>) {
         if self.selected_database_id == db_id {
             return;
         }
+        self.open_database(db_id, cx);
+    }
+
+    pub(crate) fn open_database(&mut self, db_id: Option<Uuid>, cx: &mut Context<Self>) {
         self.selected_database_id = db_id;
         self.page = 1;
         self.selection.clear();
