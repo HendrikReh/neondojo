@@ -208,7 +208,6 @@ pub struct OverviewCallbacks {
     pub on_open_mistakes: UiAction,
     pub on_practice_mistake: UiCallback2<GamePlan, MistakeKind>,
     pub on_save_new_cards_per_day: UiCallback<i32>,
-    pub on_select_player: UiCallback<String>,
     pub on_toggle_independent: UiAction,
     pub on_refresh: UiAction,
 }
@@ -217,6 +216,7 @@ pub struct OverviewCallbacks {
 #[allow(clippy::too_many_arguments)]
 pub fn render_study_overview(
     state: &StudyOverviewState,
+    player_picker: impl IntoElement,
     selected_player: &str,
     independent_only: bool,
     palette: NeonPalette,
@@ -587,31 +587,6 @@ pub fn render_study_overview(
     );
 
     // ── Section 3: Top-3 Recurring Mistake Groups + Player & Independent Filter
-    let players = state
-        .mistakes
-        .as_ref()
-        .map(|m| m.players.as_slice())
-        .unwrap_or(&[]);
-
-    let mut player_row = div()
-        .flex()
-        .flex_row()
-        .flex_wrap()
-        .items_center()
-        .gap(px(6.0));
-    for (idx, player_name) in players.iter().take(10).enumerate() {
-        let is_selected = player_name == selected_player;
-        let name_clone = player_name.clone();
-        let on_pick = callbacks.on_select_player.clone();
-        player_row = player_row.child(
-            ActionButton::new(SharedString::from(format!("study-overview-player-{idx}")))
-                .label(player_name.clone())
-                .active(is_selected)
-                .palette(palette)
-                .on_click(move |_, window, cx| on_pick(name_clone.clone(), window, cx)),
-        );
-    }
-
     let on_toggle_indep = callbacks.on_toggle_independent.clone();
     let indep_toggle = div()
         .id("study-overview-independent-toggle")
@@ -681,7 +656,7 @@ pub fn render_study_overview(
                         .on_click(move |_, window, cx| on_open_mistakes(window, cx))
                 }),
         )
-        .when(!players.is_empty(), |this| this.child(player_row))
+        .child(player_picker)
         .child(indep_toggle);
 
     if let Some(err) = &state.mistakes_error {
@@ -701,17 +676,25 @@ pub fn render_study_overview(
                 "chooseHelp",
             )));
     } else if let Some(data) = &state.mistakes {
-        mistakes_card = mistakes_card.child(div().text_meta().text_color(palette.muted).child(
-            I18n::format(
-                locale,
-                "study-overview",
-                "coverage",
-                &[
-                    ("decisions", Param::from(data.analyzed_decisions as i64)),
-                    ("matches", Param::from(data.analyzed_matches as i64)),
-                ],
-            ),
-        ));
+        let coverage = I18n::format(
+            locale,
+            "study-overview",
+            "coverage",
+            &[
+                ("decisions", Param::from(data.analyzed_decisions as i64)),
+                ("matches", Param::from(data.analyzed_matches as i64)),
+            ],
+        );
+        mistakes_card = mistakes_card.child(
+            div()
+                .id("study-overview-player-coverage")
+                .test_support()
+                .role(gpui_kit::Role::Label)
+                .aria_value(coverage.clone())
+                .text_meta()
+                .text_color(palette.muted)
+                .child(coverage),
+        );
         if data.unanalyzed_matches > 0 {
             mistakes_card =
                 mistakes_card.child(div().text_meta().text_color(palette.warning_text).child(
