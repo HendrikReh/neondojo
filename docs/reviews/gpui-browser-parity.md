@@ -67,7 +67,7 @@ The [paired screenshots](gpui-player-and-match-parity.webp) show the resumed Ind
 ## Findings during PR review
 
 - **Analysis sources and units.** The native catalog now scopes position jobs before pagination. Moving between checker positions discards old pages and cursors. Both clients use the equity unit recorded for the calculation, including cubeless GNUbg analysis. They omit comparisons when a legacy result's unit cannot be established.
-- **Library progress.** A game or position job now refreshes its owning match, which can show **Partial** as soon as that result commits. The PostgreSQL reconnect regression runs in the default backend CI suite.
+- **Library progress.** A game or position job now refreshes its owning match, which can show **Partial** as soon as that result commits. The match row and bulk panel read the same database snapshot when both are visible. The PostgreSQL reconnect regression runs in the default backend CI suite.
 - **Notes.** The inspector and Move notes dialog share drafts by annotation target. Switching matches or closing the dialog preserves unsaved text, including a paste over the save limit. A delayed conflict response cannot replace another target’s draft.
 - **Positions.** A failed or unreadable result page clears its decision references, preview and deck actions. The bookmark button reads membership for the selected occurrence before choosing Save or Remove.
 

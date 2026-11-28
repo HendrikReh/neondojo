@@ -1041,13 +1041,15 @@ mod library_job_watcher {
                     .execute(&mut *tx)
                     .await
                     .unwrap();
-                let stopped: Vec<bool> = sqlx::query_scalar("SELECT pg_terminate_backend(pid,5000) FROM pg_stat_activity WHERE datname=current_database() AND application_name='neondojo-job-events'")
-                    .fetch_all(&mut *tx).await.unwrap();
-                assert_eq!(stopped, [true]);
             }
             sqlx::query("INSERT INTO job_events(job_id,event,data) VALUES($1,$2,jsonb_build_object('status',$3::text,'progress',$4::int))")
                 .bind(job.id).bind(event).bind(status).bind(progress).execute(&mut *tx).await.unwrap();
             tx.commit().await.unwrap();
+            if status == "completed" {
+                let stopped: Vec<bool> = sqlx::query_scalar("SELECT pg_terminate_backend(pid,5000) FROM pg_stat_activity WHERE datname=current_database() AND application_name='neondojo-job-events'")
+                    .fetch_all(&pool).await.unwrap();
+                assert_eq!(stopped, [true]);
+            }
             expect_snapshot(&mut rx, match_id, job.id, status, progress).await;
         }
         reader.abort();

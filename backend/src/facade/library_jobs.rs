@@ -1,6 +1,10 @@
 //! Committed Library analysis progress for visible matches and tracked bulk jobs.
 use super::BackendFacade;
-use crate::{databases::LibraryBulkJobStatus, domain_error::DomainError};
+use crate::{
+    database_pool::begin_read_snapshot,
+    databases::{self, LibraryBulkJobStatus},
+    domain_error::DomainError,
+};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
@@ -25,24 +29,32 @@ impl LibraryJobScope {
         facade: &BackendFacade,
         changed_job: Option<Uuid>,
     ) -> Result<LibraryJobSnapshot, DomainError> {
-        let rows = if self.rows.is_empty() {
-            Vec::new()
-        } else {
-            facade
-                .library_analysis_statuses(&self.rows, changed_job)
-                .await?
-        };
-        let missing_row = changed_job.is_none() && rows.len() < self.rows.len();
         let ids = match changed_job.as_ref() {
             None => &self.bulk,
             Some(id) if self.bulk.contains(id) => std::slice::from_ref(id),
             Some(_) => &[][..],
         };
-        let bulk = if ids.is_empty() {
-            Vec::new()
-        } else {
-            facade.library_bulk_job_statuses(ids).await?
+        let (rows, bulk) = match (self.rows.as_slice(), ids) {
+            ([], []) => (Vec::new(), Vec::new()),
+            (matches, []) => (
+                facade
+                    .library_analysis_statuses(matches, changed_job)
+                    .await?,
+                Vec::new(),
+            ),
+            ([], jobs) => (Vec::new(), facade.library_bulk_job_statuses(jobs).await?),
+            (matches, jobs) => {
+                // A commit between reads must not give the row and bulk panel different statuses.
+                let _guard = facade.db_access_guard()?;
+                let mut tx = begin_read_snapshot(&facade.state.pool).await?;
+                let rows =
+                    databases::library_analysis_statuses(&mut *tx, matches, changed_job).await?;
+                let bulk = databases::library_bulk_job_statuses(&mut *tx, jobs).await?;
+                tx.commit().await.map_err(anyhow::Error::from)?;
+                (rows, bulk)
+            }
         };
+        let missing_row = changed_job.is_none() && rows.len() < self.rows.len();
         Ok(LibraryJobSnapshot {
             rows,
             missing_row,

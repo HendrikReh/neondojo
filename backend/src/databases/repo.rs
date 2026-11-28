@@ -143,8 +143,8 @@ pub(crate) async fn database_matches(
 
 /// Read the same analysis status as the Library page, limited to visible matches
 /// affected by a notification. A reconnect reconciles all supplied rows.
-pub(crate) async fn library_analysis_statuses(
-    pool: &PgPool,
+pub(crate) async fn library_analysis_statuses<'e>(
+    db: impl sqlx::PgExecutor<'e>,
     match_ids: &[Uuid],
     changed_job: Option<Uuid>,
 ) -> anyhow::Result<Vec<(Uuid, Option<String>)>> {
@@ -165,11 +165,11 @@ pub(crate) async fn library_analysis_statuses(
             .push_bind(id)
             .push(")");
     }
-    Ok(query.build_query_as().fetch_all(pool).await?)
+    Ok(query.build_query_as().fetch_all(db).await?)
 }
 
-pub(crate) async fn library_bulk_job_statuses(
-    pool: &PgPool,
+pub(crate) async fn library_bulk_job_statuses<'e>(
+    db: impl sqlx::PgExecutor<'e>,
     ids: &[Uuid],
 ) -> anyhow::Result<Vec<LibraryBulkJobStatus>> {
     Ok(sqlx::query_as(concat!(
@@ -181,7 +181,7 @@ pub(crate) async fn library_bulk_job_statuses(
         crate::play::review_blocked_sql!("j.match_uuid")
     ))
     .bind(ids)
-    .fetch_all(pool)
+    .fetch_all(db)
     .await?)
 }
 
