@@ -832,7 +832,7 @@ Shortcuts are ignored while you type in a text field. When a dialog is open, onl
 
 | Symptom | What to check |
 | --- | --- |
-| The footer shows *Backend / GNUbg unavailable* | Open <http://127.0.0.1:8787/api/health>. It reports whether the database responds and which GNUbg version was found. If the page does not load, the NeonDojo backend is not running; see the [project README](../../README.md). |
+| The footer shows *Backend / GNUbg unavailable* | Open <http://127.0.0.1:8787/api/health>. It reports whether the database responds and which GNUbg version was found. If the page does not load, the NeonDojo backend is not running; see the [project README](https://github.com/HendrikReh/neondojo/blob/main/README.md). |
 | Analyses fail | **Settings → Engines → Check installation**. GNUbg needs its neural-network weights. Playing also needs GNUbg's embedded Python. |
 | NeonGammon is unavailable (or difficulty presets are disabled) | Enter the Python path of its environment and choose **Verify and save**. Named **Difficulty presets** require `neongammon==3.1.0` (`3.0.0` remains supported for analysis and fixed-depth play). See [NeonGammon setup](../open-sage-local.md). |
 | A move shows a dash instead of a loss | The displayed analysis does not cover this position. Run **Analyze game**, or choose another **Displayed analysis**. |
@@ -842,7 +842,7 @@ Shortcuts are ignored while you type in a text field. When a dialog is open, onl
 | *Apply* reports a conflict | Another browser window saved newer settings. **Apply** retries your changed settings against the newer version. If the conflict remains, choose **Load latest and discard draft**, or save your changes as a new profile in **Settings → Profiles**. |
 | A benchmark is running and other work waits | This is intended. Engine work resumes when the benchmark finishes or is cancelled. |
 
-For installation and server details, see the [project README](../../README.md). Detailed behavior is described in the [reference](../index.md#feature-reference).
+For installation and server details, see the [project README](https://github.com/HendrikReh/neondojo/blob/main/README.md). Detailed behavior is described in the [reference](../index.md#feature-reference).
 
 ---
 

@@ -57,7 +57,7 @@ Each browser tab keeps its own database selection, search filters, sorting, Stud
 
 On the first launch after the profiles update, existing server and browser preferences are imported once into **Standard**. Profiles and current settings apply across the installation, including other browsers. On a version conflict, you can load the server version or save your local changes as a new profile. A recovery journal protects pending local changes.
 
-Running analyses and matches retain their captured settings. If the profile cannot load, workspaces use the last confirmed settings or the built-in defaults. The profile controls report the failure and offer a retry. Engine installation paths are device-specific, and book files are stored as references. Activation checks the referenced resources and reports missing items. See the [original profile specification](../superpowers/specs/2026-11-10-profiles-design.md) and [implementation plan](../superpowers/plans/2026-11-10-profiles.md).
+Running analyses and matches retain their captured settings. If the profile cannot load, workspaces use the last confirmed settings or the built-in defaults. The profile controls report the failure and offer a retry. Engine installation paths are device-specific, and book files are stored as references. Activation checks the referenced resources and reports missing items. See the [original profile specification](https://github.com/HendrikReh/neondojo/blob/main/docs/superpowers/specs/2026-11-10-profiles-design.md) and [implementation plan](https://github.com/HendrikReh/neondojo/blob/main/docs/superpowers/plans/2026-11-10-profiles.md).
 
 ## Themes and language
 
@@ -70,7 +70,7 @@ Under **Settings → Board**, choose a playing surface from the gallery. Choose 
 - **Add a theme:** place its archive in `themes/`, run `npm run themes:prepare --prefix web -- --update-options` and commit the updated list. Without the flag, preparation stops and names the unlisted archive.
 - **Remove a theme:** delete its archive, run `NEONDOJO_ALLOW_MISSING_THEMES=1 npm run themes:prepare --prefix web -- --update-options` and commit the shortened list.
 
-Restart the dev server after either change. [Board theme formats, sources and rights](../../themes/README.md)
+Restart the dev server after either change. [Board theme formats, sources and rights](https://github.com/HendrikReh/neondojo/blob/main/themes/README.md)
 
 ### Interface appearance and language
 
