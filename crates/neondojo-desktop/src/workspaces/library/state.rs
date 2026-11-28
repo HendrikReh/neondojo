@@ -8,7 +8,7 @@ use crate::ui::filter_chips::AppliedFilterChip;
 use chrono::{DateTime, NaiveDate, Utc};
 use gpui_kit::SharedString;
 use neondojo::annotations::{AnnotationHit, AnnotationKind, SearchQuery as AnnotationSearchQuery};
-use neondojo::api::JobStatusBatch;
+use neondojo::databases::LibraryBulkJobStatus;
 use neondojo::databases::{
     ActionResponse, Database, DatabaseMatch, LibraryOccurrence, LibraryQuery,
 };
@@ -1307,24 +1307,28 @@ impl LibrarySelectionState {
 
 // ── Bulk Analysis Progress Tracking ──────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TrackedBulkJob {
-    pub job_id: Uuid,
-    pub database_id: Option<Uuid>,
-    pub match_id: Option<Uuid>,
-    pub status: String,
-    pub progress: i32,
-    pub completed_games: i32,
-    pub total_games: i32,
+#[derive(Debug, Clone)]
+struct TrackedBulkJob {
+    database_id: Option<Uuid>,
+    job: LibraryBulkJobStatus,
 }
 
 impl TrackedBulkJob {
-    pub fn is_terminal(&self) -> bool {
-        !matches!(self.status.as_str(), "queued" | "running")
+    fn is_terminal(&self) -> bool {
+        matches!(self.job.status.as_str(), "completed" | "failed" | "missing")
     }
 }
 
-/// Tracks queued/running bulk-analysis jobs across refreshes and persists active IDs
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct BulkAnalysisProgress {
+    pub total: usize,
+    pub completed: usize,
+    pub failed: usize,
+    pub missing: usize,
+    pub loading: bool,
+}
+
+/// Tracks bulk-analysis jobs across refreshes and persists the accepted IDs
 /// in `LocalUiState::library.bulk_analysis_jobs`.
 #[derive(Debug, Default, Clone)]
 pub struct BulkAnalysisTracker {
@@ -1338,13 +1342,14 @@ impl BulkAnalysisTracker {
             jobs.insert(
                 job_id,
                 TrackedBulkJob {
-                    job_id,
                     database_id,
-                    match_id: None,
-                    status: "queued".to_string(),
-                    progress: 0,
-                    completed_games: 0,
-                    total_games: 0,
+                    job: LibraryBulkJobStatus {
+                        id: job_id,
+                        status: "loading".into(),
+                        progress: 0,
+                        completed_games: 0,
+                        total_games: 0,
+                    },
                 },
             );
         }
@@ -1355,23 +1360,20 @@ impl BulkAnalysisTracker {
         prefs.bulk_analysis_jobs = self
             .jobs
             .values()
-            .filter(|j| !j.is_terminal())
-            .map(|j| (j.job_id, j.database_id))
+            .map(|j| (j.job.id, j.database_id))
             .collect();
     }
 
-    pub fn track_jobs(&mut self, submitted: &[Job], database_id: Option<Uuid>) {
-        for job in submitted {
+    pub fn track_jobs(&mut self, submitted: &[(Job, Uuid)], continues_batch: bool) {
+        if !continues_batch && !self.has_active_jobs() {
+            self.jobs.clear();
+        }
+        for (job, database_id) in submitted {
             self.jobs.insert(
                 job.id,
                 TrackedBulkJob {
-                    job_id: job.id,
-                    database_id,
-                    match_id: job.match_uuid,
-                    status: job.status.clone(),
-                    progress: job.progress,
-                    completed_games: job.completed_games,
-                    total_games: job.total_games,
+                    database_id: Some(*database_id),
+                    job: job.into(),
                 },
             );
         }
@@ -1381,7 +1383,7 @@ impl BulkAnalysisTracker {
         self.jobs
             .values()
             .filter(|j| !j.is_terminal())
-            .map(|j| j.job_id)
+            .map(|j| j.job.id)
             .collect()
     }
 
@@ -1389,61 +1391,40 @@ impl BulkAnalysisTracker {
         self.jobs.values().any(|j| !j.is_terminal())
     }
 
-    /// Applies a single job status transition; returns `(changed, became_terminal)`.
-    pub fn apply_job(&mut self, job: &Job) -> (bool, bool) {
-        let Some(entry) = self.jobs.get_mut(&job.id) else {
-            return (false, false);
-        };
-        let was_terminal = entry.is_terminal();
-        let changed = entry.status != job.status
-            || entry.progress != job.progress
-            || entry.completed_games != job.completed_games
-            || entry.total_games != job.total_games;
-        entry.match_id = job.match_uuid;
-        entry.status = job.status.clone();
-        entry.progress = job.progress;
-        entry.completed_games = job.completed_games;
-        entry.total_games = job.total_games;
-        let became_terminal = !was_terminal && entry.is_terminal();
-        (changed, became_terminal)
+    /// Apply committed progress for this batch and report whether a job finished.
+    pub fn apply_batch(&mut self, statuses: Vec<LibraryBulkJobStatus>) -> (bool, bool) {
+        let mut changed = false;
+        let mut finished = false;
+        for job in statuses {
+            if let Some(tracked) = self.jobs.get_mut(&job.id)
+                && !tracked.is_terminal()
+                && tracked.job != job
+            {
+                tracked.job = job;
+                changed = true;
+                finished |= tracked.is_terminal();
+            }
+        }
+        (changed, finished)
     }
 
-    /// Applies a [`JobStatusBatch`] snapshot; returns `(any_changed, completed_match_ids)`.
-    pub fn apply_batch(&mut self, batch: &JobStatusBatch) -> (bool, Vec<Option<Uuid>>) {
-        let mut any_changed = false;
-        let mut finished_matches = Vec::new();
-        for job in &batch.jobs {
-            let (changed, became_terminal) = self.apply_job(job);
-            if changed {
-                any_changed = true;
-            }
-            if became_terminal {
-                finished_matches.push(job.match_uuid);
-            }
-        }
-        for missing_id in batch.missing.iter().chain(batch.restricted.iter()) {
-            if self.jobs.remove(missing_id).is_some() {
-                any_changed = true;
-            }
-        }
-        if !self.has_active_jobs() && !self.jobs.is_empty() {
-            // Keep completed batch summary visible briefly until next mutation or clear.
-        }
-        (any_changed, finished_matches)
-    }
-
-    /// Returns `(completed_count, total_count)` for the active scope, if any jobs exist.
-    pub fn scope_progress(&self, database_id: Option<Uuid>) -> Option<(usize, usize)> {
-        let relevant: Vec<&TrackedBulkJob> = self
+    pub fn scope_progress(&self, database_id: Option<Uuid>) -> Option<BulkAnalysisProgress> {
+        let mut progress = BulkAnalysisProgress::default();
+        for job in self
             .jobs
             .values()
             .filter(|j| database_id.is_none() || j.database_id == database_id)
-            .collect();
-        if relevant.is_empty() {
-            return None;
+        {
+            progress.total += 1;
+            match job.job.status.as_str() {
+                "completed" => progress.completed += 1,
+                "failed" => progress.failed += 1,
+                "missing" => progress.missing += 1,
+                "loading" => progress.loading = true,
+                _ => {}
+            }
         }
-        let completed = relevant.iter().filter(|j| j.is_terminal()).count();
-        Some((completed, relevant.len()))
+        (progress.total != 0).then_some(progress)
     }
 
     pub fn dismiss_if_finished(&mut self) {

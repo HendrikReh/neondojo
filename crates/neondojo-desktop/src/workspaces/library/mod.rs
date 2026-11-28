@@ -14,6 +14,7 @@
 
 mod dialogs;
 mod import_panel;
+mod job_watch;
 mod search_panels;
 mod sidebar;
 pub mod state;
@@ -30,7 +31,6 @@ use crate::theme::NeonTheme;
 use crate::tokio_bridge::{ReadTask, TokioBridge};
 use crate::ui::banners::BannerKind;
 use crate::ui::drop_zone::{DroppedMatchBatch, collect_dropped_match_files};
-use futures_util::StreamExt;
 use gpui_kit::{
     App, AppContext, Context, Entity, EventEmitter, InteractiveElement, IntoElement, ParentElement,
     PathPromptOptions, Render, SharedString, Styled, Subscription, TestSupportExt, Window,
@@ -39,7 +39,6 @@ use gpui_kit::{
     div, px,
 };
 use neondojo::annotations::{AnnotationHit, AnnotationKind};
-use neondojo::api::JobStatusBatch;
 use neondojo::databases::{ActionResponse, Database, DatabaseMatch};
 use neondojo::duplicate_matches::DuplicateMatchQuery;
 use neondojo::facade::BackendFacade;
@@ -55,7 +54,6 @@ use state::{
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, atomic::Ordering};
-use std::time::Duration;
 use uuid::Uuid;
 
 /// Executes a `BackendFacade` async call on Tokio's blocking pool via `handle.block_on`,
@@ -88,11 +86,6 @@ pub(super) struct LibraryInputs {
     pub position_id: Entity<InputState>,
     pub notes_query: Entity<InputState>,
     pub notes_tag: Entity<InputState>,
-}
-
-enum JobWatchUpdate {
-    Batch(JobStatusBatch),
-    RowJobsChanged(Option<Uuid>),
 }
 
 /// Complete native GPUI Match Library workspace entity.
@@ -143,13 +136,14 @@ pub struct LibraryWorkspace {
     // Monotonic epoch counters & abortable read tasks
     db_epoch: u64,
     matches_epoch: u64,
+    pending_job_refresh: bool,
     notes_epoch: u64,
     duplicates_epoch: u64,
     _databases_task: Option<ReadTask<()>>,
     _matches_task: Option<ReadTask<()>>,
     _notes_task: Option<ReadTask<()>>,
     _duplicates_task: Option<ReadTask<()>>,
-    _job_watch_task: Option<ReadTask<()>>,
+    job_watch: Option<job_watch::LibraryJobWatch>,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -379,13 +373,14 @@ impl LibraryWorkspace {
             pending_bulk_analysis_ids: None,
             db_epoch: 0,
             matches_epoch: 0,
+            pending_job_refresh: false,
             notes_epoch: 0,
             duplicates_epoch: 0,
             _databases_task: None,
             _matches_task: None,
             _notes_task: None,
             _duplicates_task: None,
-            _job_watch_task: None,
+            job_watch: None,
             _subscriptions: subscriptions,
         };
 
@@ -439,7 +434,7 @@ impl LibraryWorkspace {
                 self.sync_job_watcher(cx);
             }
         } else {
-            self._job_watch_task = None;
+            self.job_watch = None;
         }
         cx.notify();
     }
@@ -569,6 +564,10 @@ impl LibraryWorkspace {
         if self.selected_database_id == db_id {
             return;
         }
+        self.open_database(db_id, cx);
+    }
+
+    pub(crate) fn open_database(&mut self, db_id: Option<Uuid>, cx: &mut Context<Self>) {
         self.selected_database_id = db_id;
         self.page = 1;
         self.selection.clear();
@@ -758,15 +757,14 @@ impl LibraryWorkspace {
         cx.notify();
     }
 
-    pub(super) fn track_bulk_analysis_jobs(&mut self, jobs: &[Job], cx: &mut Context<Self>) {
-        self.bulk_tracker
-            .track_jobs(jobs, self.selected_database_id);
+    pub(super) fn track_bulk_analysis_jobs(
+        &mut self,
+        jobs: &[(Job, Uuid)],
+        continues_batch: bool,
+        cx: &mut Context<Self>,
+    ) {
+        self.bulk_tracker.track_jobs(jobs, continues_batch);
         self.persist_library_prefs(cx);
-        for job in jobs {
-            cx.emit(WorkspaceEvent::AnalysisJobChanged {
-                match_id: job.match_uuid,
-            });
-        }
         self.load_matches(cx);
         self.sync_job_watcher(cx);
         cx.notify();
@@ -840,6 +838,7 @@ impl LibraryWorkspace {
             self.page,
         );
         let locale = current_locale(cx);
+        self.pending_job_refresh = false;
         self.loading_matches = true;
         self.load_error = None;
         cx.notify();
@@ -872,6 +871,9 @@ impl LibraryWorkspace {
                     Err(err) => {
                         ws.load_error = Some(SharedString::from(format_domain_error(locale, &err)));
                     }
+                }
+                if ws.visible && ws.pending_job_refresh {
+                    ws.load_matches(cx);
                 }
                 cx.notify();
             });
@@ -1071,164 +1073,6 @@ impl LibraryWorkspace {
                 }
                 cx.notify();
             });
-        })
-        .detach();
-    }
-
-    // ── Live Bulk-Analysis & Active Row Job Watcher ──────────────────────────
-
-    fn sync_job_watcher(&mut self, cx: &mut Context<Self>) {
-        if !self.visible {
-            self._job_watch_task = None;
-            return;
-        }
-        let Some(facade) = self.facade.clone() else {
-            self._job_watch_task = None;
-            return;
-        };
-
-        let active_bulk_ids = self.bulk_tracker.active_job_ids();
-        let pending_row_matches: Vec<Uuid> = self
-            .matches
-            .iter()
-            .filter(|m| matches!(m.analysis_status.as_deref(), Some("queued" | "running")))
-            .map(|m| m.id)
-            .collect();
-
-        if active_bulk_ids.is_empty() && pending_row_matches.is_empty() {
-            self._job_watch_task = None;
-            return;
-        }
-
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<JobWatchUpdate>();
-
-        let read_task = TokioBridge::spawn_read(cx, async move {
-            let mut bulk_ids = active_bulk_ids;
-            let mut watched_row_jobs: Vec<(Uuid, Option<Uuid>)> = Vec::new();
-
-            if !pending_row_matches.is_empty() {
-                for match_id in pending_row_matches.into_iter().take(10) {
-                    let f = facade.clone();
-                    if let Ok(runs) = run_facade_async(move || async move {
-                        f.list_match_analysis_jobs(match_id, None).await
-                    })
-                    .await
-                    {
-                        for run in runs {
-                            if run.job.kind == "match"
-                                && run.job.game_no.is_none()
-                                && matches!(run.job.status.as_str(), "queued" | "running")
-                            {
-                                watched_row_jobs.push((run.job.id, run.job.match_uuid));
-                            }
-                        }
-                    }
-                }
-            }
-
-            loop {
-                if !bulk_ids.is_empty() {
-                    let batch_ids: Vec<Uuid> = bulk_ids.iter().copied().take(100).collect();
-                    let f = facade.clone();
-                    if let Ok(batch) =
-                        run_facade_async(move || async move { f.job_status_batch(batch_ids).await })
-                            .await
-                    {
-                        bulk_ids = batch
-                            .jobs
-                            .iter()
-                            .filter(|j| matches!(j.status.as_str(), "queued" | "running"))
-                            .map(|j| j.id)
-                            .collect();
-                        if tx.send(JobWatchUpdate::Batch(batch)).is_err() {
-                            break;
-                        }
-                    }
-                }
-
-                // Prefer push-streaming the first active job via `watch_job_events` so
-                // transitions surface immediately without tight polling.
-                let primary_watch = bulk_ids
-                    .first()
-                    .copied()
-                    .map(|id| (id, None))
-                    .or_else(|| watched_row_jobs.first().copied());
-
-                let Some((watch_id, row_match_id)) = primary_watch else {
-                    break;
-                };
-
-                let f = facade.clone();
-                let stream_res =
-                    run_facade_async(move || async move { f.watch_job_events(watch_id, 0).await })
-                        .await;
-
-                match stream_res {
-                    Ok(stream) => {
-                        tokio::pin!(stream);
-                        let wait = tokio::time::sleep(Duration::from_secs(3));
-                        tokio::pin!(wait);
-                        tokio::select! {
-                            maybe_ev = stream.next() => {
-                                if let Some(ev) = maybe_ev {
-                                    if matches!(ev.event.as_str(), "completed" | "failed" | "running" | "progress") {
-                                        if matches!(ev.event.as_str(), "completed" | "failed") {
-                                            watched_row_jobs.retain(|(id, _)| *id != watch_id);
-                                        }
-                                        if tx.send(JobWatchUpdate::RowJobsChanged(row_match_id)).is_err() {
-                                            break;
-                                        }
-                                    }
-                                } else {
-                                    watched_row_jobs.retain(|(id, _)| *id != watch_id);
-                                    if tx.send(JobWatchUpdate::RowJobsChanged(row_match_id)).is_err() {
-                                        break;
-                                    }
-                                }
-                            }
-                            _ = &mut wait => {}
-                        }
-                    }
-                    Err(_) => {
-                        tokio::time::sleep(Duration::from_secs(3)).await;
-                    }
-                }
-            }
-        });
-
-        self._job_watch_task = Some(read_task);
-
-        cx.spawn(async move |this, cx| {
-            while let Some(update) = rx.recv().await {
-                let alive = this
-                    .update(cx, |ws, cx| match update {
-                        JobWatchUpdate::Batch(batch) => {
-                            let (changed, finished) = ws.bulk_tracker.apply_batch(&batch);
-                            if changed {
-                                ws.persist_library_prefs(cx);
-                                for match_id in &finished {
-                                    cx.emit(WorkspaceEvent::AnalysisJobChanged {
-                                        match_id: *match_id,
-                                    });
-                                }
-                                if !finished.is_empty() {
-                                    ws.reload_all(cx);
-                                    cx.emit(WorkspaceEvent::LibraryMutated);
-                                }
-                                cx.notify();
-                            }
-                        }
-                        JobWatchUpdate::RowJobsChanged(match_id) => {
-                            cx.emit(WorkspaceEvent::AnalysisJobChanged { match_id });
-                            ws.reload_all(cx);
-                            cx.notify();
-                        }
-                    })
-                    .is_ok();
-                if !alive {
-                    break;
-                }
-            }
         })
         .detach();
     }

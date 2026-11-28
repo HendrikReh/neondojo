@@ -18,7 +18,7 @@ use super::state::{
     ActiveBoardTarget, AnalysisDetailTab, BoardWidthController, CubeAutoSelectState,
     DiceDistributionSnapshot, DiceTabState, DiceTransitionAction, InterleavedMoveRow,
     MAX_ANNOTATION_TAGS, MonotonicRemainingTimer, MoveHistoryFilter, NoteTargetKey,
-    NotesDraftCache, build_candidate_compare_rows, build_interleaved_move_rows, is_cube_only_game,
+    NotesDraftCache, build_interleaved_move_rows, is_cube_only_game,
 };
 use crate::configure_app;
 use crate::local_state::LocalUiState;
@@ -28,7 +28,7 @@ use gpui_kit::{AppContext, TestAppContext, WindowOptions, test::TestWindowExt};
 use neondojo::{
     analysis_catalog::{AnalysisCatalogEntry, SelectedPositionAnalysis},
     analysis_timing::{AnalysisRemainingTime, RemainingTimeBasis, RemainingTimeState},
-    annotations::{Annotation, AnnotationKind},
+    annotations::{Annotation, AnnotationKind, AnnotationUpdate},
     api::MatchAnalysisEngine,
     domain_error::DomainError,
     engine::{Analysis, Candidate, DiceEvaluation, Distribution},
@@ -435,12 +435,226 @@ fn notes_drafts_survive_navigation_enforce_limits_and_preserve_draft_on_409_conf
 
 // ── 5. Pure Helpers: 3-Engine Compare, Monotonic ETA, Cube Auto-Select, Stats 2-Col ──
 
+fn checker_result(candidates: serde_json::Value) -> SelectedPositionAnalysis {
+    let position_id = Uuid::new_v4();
+    let record = serde_json::from_value(serde_json::json!({
+        "id": Uuid::new_v4(), "match_uuid": Uuid::new_v4(), "position_uuid": position_id,
+        "source_format":"xg", "game_no":1, "source_move_no":1, "kind":"checker", "player":0,
+        "played":"24/18 13/11", "engine":"eXtreme Gammon", "method":"evaluation", "raw":null,
+        "depth":"Mixed", "candidates": candidates
+    }))
+    .unwrap();
+    SelectedPositionAnalysis {
+        analysis_id: "imported".into(),
+        position_id,
+        engine: "eXtreme Gammon".into(),
+        depth: Some("Mixed".into()),
+        native_checker_equity_kind: None,
+        records: vec![record],
+        decision: None,
+        analysis: None,
+    }
+}
+
+#[test]
+fn compare_sources_use_the_deepest_completed_result_for_this_position_and_provider() {
+    use super::{candidate_data::comparison_options, state::CompareEngineSlot};
+    let pos = sample_position(Uuid::new_v4(), 1, 1);
+    let entry = |id: &str, source: &str, engine: &str, depth, game_no, status: &str| {
+        let mut job = sample_job(pos.id, status, None, None);
+        job.plies = depth;
+        AnalysisCatalogEntry {
+            id: id.into(),
+            source: source.into(),
+            scope: "game".into(),
+            engine: engine.into(),
+            depth: None,
+            game_no: Some(game_no),
+            position_id: None,
+            created_at: Utc::now(),
+            status: status.into(),
+            complete: true,
+            checker_count: 1,
+            cube_count: 0,
+            job: Some(job),
+        }
+    };
+    let entries = [
+        entry("wrong game", "native", "GNUbg", 5, 2, "completed"),
+        entry("in progress", "native", "GNU Backgammon", 5, 1, "running"),
+        entry(
+            "GNU import",
+            "imported",
+            "GNU Backgammon",
+            4,
+            1,
+            "completed",
+        ),
+        entry("XG import", "imported", "eXtreme Gammon", 3, 1, "completed"),
+        entry("deep", "native", "GNU Backgammon", 3, 1, "completed"),
+        entry("shallow", "native", "GNU Backgammon", 1, 1, "completed"),
+    ];
+    let mut selected = entry("most recent", "native", "GNU Backgammon", 3, 1, "completed");
+    selected.created_at = entries[4].created_at + chrono::Duration::seconds(1);
+    let ids = |slot| {
+        comparison_options(&entries, Some(&selected), &pos, slot)
+            .into_iter()
+            .map(|e| e.id.as_str())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ids(CompareEngineSlot::Xg), ["XG import"]);
+    assert_eq!(
+        ids(CompareEngineSlot::Gnubg),
+        ["most recent", "deep", "shallow"]
+    );
+    assert!(ids(CompareEngineSlot::NeonGammon).is_empty());
+}
+
+#[test]
+fn imported_and_native_comparison_retains_equities_depths_rank_paths_and_source_units() {
+    use super::candidate_data::{build_candidate_compare_rows, extract_candidates};
+    use super::state::CompareEngineSlot::{Gnubg, Xg};
+    use neondojo_i18n::Locale::En;
+    use serde_json::json;
+    // The first decision of WC2014.xg, with the file's results deliberately out of equity order.
+    let mut pos = sample_position(Uuid::new_v4(), 1, 1);
+    pos.dice = vec![6, 2];
+    pos.notation = "24/18 13/11".into();
+    assert_eq!(
+        super::candidate_data::candidate_notation(En, &pos, "24/22 22/16"),
+        "24/16"
+    );
+    let mut result = checker_result(json!([
+        {"rank":1,"notation":"24/16","equity":-0.010413,"equity_kind":"cubeful","depth":"Opening Book V2","probabilities":{},"raw":null},
+        {"rank":2,"notation":"24/18 13/11","equity":0.014604,"equity_kind":"cubeful","depth":"Opening Book V2","probabilities":{"win":0.55,"win_gammon":0.11,"win_backgammon":0.01,"lose_gammon":0.13,"lose_backgammon":0.02},"raw":null},
+        {"rank":3,"notation":"24/18 6/4","equity":-0.122220,"equity_kind":"cubeful","depth":"3-ply","probabilities":{},"raw":null}
+    ]));
+    let mut opponent = result.records[0].clone();
+    opponent.data.player = 1;
+    opponent.data.candidates[0].notation = "opponent".into();
+    result.records.insert(0, opponent);
+    let xg = extract_candidates(&result, 0, Some(Xg));
+    assert_eq!(xg[0].rank(), 1);
+    assert_eq!(xg[0].notation, pos.notation);
+    assert_eq!(xg[0].depth.as_deref(), Some("Opening Book V2"));
+    assert_eq!(xg[2].depth.as_deref(), Some("3-ply"));
+    let outcomes = xg[0]
+        .outcomes()
+        .map(|p| neondojo_i18n::format_percent(En, p.unwrap(), 1));
+    assert_eq!(
+        outcomes,
+        ["55.0%", "10.0%", "1.0%", "45.0%", "11.0%", "2.0%"]
+    );
+    assert_eq!(
+        xg[1].difference_text(En, xg[1].loss(Some(&xg[0])), 6, false),
+        "0.025017"
+    );
+
+    let native = |rank, notation: &str, path: &str, equity| Candidate {
+        rank,
+        notation: notation.into(),
+        path: Some(path.into()),
+        equity,
+        probabilities: vec![],
+        plies: Some(1),
+    };
+    result.analysis = Some(Analysis {
+        cube_enabled: None,
+        engine: "GNUbg".into(),
+        plies: 2,
+        candidates: vec![
+            native(1, "24/18 13/11", "13/11 24/18", 0.015127),
+            native(2, "24/16", "24/18 18/16", 0.009203),
+        ],
+    });
+    use neondojo::analysis_catalog::NativeCheckerEquityKind;
+    assert_eq!(extract_candidates(&result, 0, None)[0].unit, "unknown");
+    result.native_checker_equity_kind = Some(NativeCheckerEquityKind::Cubeless);
+    let cubeless = extract_candidates(&result, 0, Some(Gnubg));
+    assert_eq!(cubeless[0].unit, "cubeless");
+    assert!(
+        build_candidate_compare_rows(&pos, [&xg, &cubeless, &[]], None)[0]
+            .delta(1)
+            .is_none()
+    );
+    result.native_checker_equity_kind = Some(NativeCheckerEquityKind::Cubeful);
+    let gnu = extract_candidates(&result, 0, Some(Gnubg));
+    assert_eq!(extract_candidates(&result, 0, None)[0].unit, "cubeful");
+    let rows = build_candidate_compare_rows(&pos, [&xg, &gnu, &[]], None);
+    assert_eq!(rows.len(), 3);
+    assert!(rows[0].played);
+    assert_eq!(rows[0].slots[1].unwrap().preview(), "13/11 24/18");
+    assert_eq!(gnu[0].depth.as_deref(), Some("1-ply"));
+    assert_eq!(gnu[0].equity_text(En, 6), "+0.015127");
+    assert_eq!(
+        gnu[0].difference_text(En, rows[0].delta(1), 6, true),
+        "+0.000523"
+    );
+    assert_eq!(
+        gnu[1].difference_text(En, rows[1].delta(1), 6, true),
+        "+0.019616"
+    );
+    assert!(rows[2].delta(1).is_none());
+    let sorted = build_candidate_compare_rows(&pos, [&xg, &gnu, &[]], Some(Gnubg));
+    assert_eq!(sorted[0].display_notation, "24/16");
+    assert_eq!(sorted[2].display_notation, "24/18 6/4");
+}
+
+#[test]
+fn candidate_comparison_preserves_missing_values_and_incompatible_units() {
+    use super::candidate_data::{
+        CheckerCandidate, build_candidate_compare_rows, extract_candidates,
+    };
+    use super::state::CompareEngineSlot::Xg;
+    use neondojo_i18n::Locale::En;
+    use serde_json::json;
+
+    let pos = sample_position(Uuid::new_v4(), 1, 1);
+    let result = checker_result(json!([
+        {"rank":1,"notation":"8/5 6/5","equity":0.50,"equity_kind":"mwc","depth":"XGRoller++","probabilities":[0.6,null,0.01,null,0.1,0.02],"raw":null},
+        {"rank":2,"notation":"13/10 6/5","equity":0.48,"equity_kind":"mwc","depth":null,"probabilities":{"win":0.5,"win_gammon":0.6,"win_backgammon":0.1},"raw":null},
+        {"rank":3,"notation":"8/4","equity":null,"equity_kind":"mwc","depth":null,"probabilities":{},"raw":null},
+        {"rank":4,"notation":"6/2","equity":0.0,"equity_kind":"unknown","depth":null,"probabilities":{},"raw":null}
+    ]));
+    let xg = extract_candidates(&result, 0, Some(Xg));
+    assert!(xg.iter().all(|c| c.xg_equity_rank.is_none()));
+    assert_eq!(xg[0].equity_text(En, 3), "50.000%");
+    assert_eq!(
+        xg[1].difference_text(En, xg[1].loss(Some(&xg[0])), 3, false),
+        "2.000 pp"
+    );
+    assert_eq!(xg[0].outcomes()[1], None);
+    assert_eq!(xg[0].outcomes()[2], Some(0.01));
+    assert_eq!(xg[0].outcomes()[3], Some(0.4));
+    assert_eq!(xg[1].outcomes()[0..3], [Some(0.5), None, None]);
+    assert_eq!(xg[2].equity_text(En, 6), "—");
+    assert_eq!(xg[2].loss(Some(&xg[0])), None);
+    assert_eq!(xg[2].depth, None);
+    assert_eq!(xg[3].loss(Some(&xg[3])), None);
+    let native = CheckerCandidate::native(
+        &Candidate {
+            rank: 1,
+            notation: "8/5 6/5".into(),
+            path: None,
+            equity: 0.500,
+            probabilities: vec![],
+            plies: None,
+        },
+        "normalized_cubeful",
+    );
+    let local = [native];
+    let rows = build_candidate_compare_rows(&pos, [&xg, &local, &[]], None);
+    assert_eq!(rows[0].delta(1), None);
+}
+
 #[test]
 fn compare_matrix_monotonic_eta_cube_auto_select_and_responsive_stats_work() {
+    use super::candidate_data::{CheckerCandidate, build_candidate_compare_rows};
+    use super::state::CompareEngineSlot;
     let match_id = Uuid::new_v4();
     let pos = sample_position(match_id, 1, 1);
 
-    let xg_cands = vec![
+    let xg_cands = [
         Candidate {
             rank: 1,
             notation: "8/5 6/5".into(),
@@ -458,7 +672,7 @@ fn compare_matrix_monotonic_eta_cube_auto_select_and_responsive_stats_work() {
             plies: Some(3),
         },
     ];
-    let gnubg_cands = vec![
+    let gnubg_cands = [
         Candidate {
             rank: 1,
             notation: "6/5 8/5".into(), // Same resulting board in different order!
@@ -476,15 +690,21 @@ fn compare_matrix_monotonic_eta_cube_auto_select_and_responsive_stats_work() {
             plies: Some(3),
         },
     ];
-    let rows = build_candidate_compare_rows(&pos, [&xg_cands, &gnubg_cands, &[]], true);
+    let xg_cands = xg_cands.map(|c| CheckerCandidate::native(&c, "cubeful"));
+    let gnubg_cands = gnubg_cands.map(|c| CheckerCandidate::native(&c, "normalized_cubeful"));
+    let rows = build_candidate_compare_rows(
+        &pos,
+        [&xg_cands, &gnubg_cands, &[]],
+        Some(CompareEngineSlot::Gnubg),
+    );
     assert_eq!(
         rows.len(),
         2,
         "equivalent notations align by resulting board"
     );
-    // Sorted by |Δ| descending: 13/10 6/5 has |0.080 - 0.030| = 0.050 > 0.000
+    // Sorted by |Δ| descending: 13/10 6/5 has 0.185 − 0.140 = 0.045.
     assert_eq!(rows[0].display_notation, "13/10 6/5");
-    assert!((rows[0].max_delta - 0.05).abs() < 1e-6);
+    assert!((rows[0].delta(1).unwrap() - 0.045).abs() < 1e-6);
 
     // Monotonic 1s countdown does not jump upward on minor poll jitter.
     let job_id = Uuid::new_v4();
@@ -563,9 +783,67 @@ fn compare_matrix_monotonic_eta_cube_auto_select_and_responsive_stats_work() {
             .is_none()
     );
 
+    use neondojo_i18n::Locale;
+    assert_eq!(
+        super::cube_stats::statistics_game_labels(Locale::En, 1),
+        ("Game 1".into(), "Open game 1".into())
+    );
+    assert_eq!(
+        super::cube_stats::statistics_game_labels(Locale::De, 2),
+        ("Spiel 2".into(), "Spiel 2 öffnen".into())
+    );
+
     // Statistics responsive 2-column threshold >= 1050px.
     assert!(!stats_uses_two_columns(1049.0));
     assert!(stats_uses_two_columns(1050.0));
+}
+
+#[test]
+fn saving_multiline_comments_preserves_newer_edits_and_advances_version() {
+    let key = NoteTargetKey {
+        kind: AnnotationKind::Move,
+        target_id: Uuid::new_v4(),
+    };
+    let mut drafts = NotesDraftCache::default();
+    let submitted = AnnotationUpdate {
+        tags: vec![],
+        comment: "Line one\nLine two".into(),
+        expected_version: 0,
+    };
+    let saved = Annotation {
+        id: None,
+        target_kind: key.kind,
+        target_id: key.target_id,
+        tags: vec![],
+        comment: submitted.comment.clone(),
+        version: 1,
+        updated_at: None,
+    };
+    let text = "Line one\nLine two\nThird paragraph";
+    drafts.ensure_entry(key).set_comment(text.into()).unwrap();
+    drafts.mark_saved(&saved, &submitted);
+    let draft = drafts.get(key).unwrap();
+    assert_eq!(draft.comment, text);
+    assert_eq!(draft.base_version, 1);
+    assert!(draft.dirty);
+    let final_update = AnnotationUpdate {
+        comment: text.into(),
+        expected_version: 1,
+        tags: vec![],
+    };
+    drafts.mark_saved(
+        &Annotation {
+            comment: text.into(),
+            version: 2,
+            ..saved.clone()
+        },
+        &final_update,
+    );
+    assert_eq!(drafts.get(key).unwrap().comment, text);
+    assert!(!drafts.has_dirty(key));
+    // A read started before either save can arrive after both writes.
+    let current = drafts.merge_loaded(&saved);
+    assert_eq!((current.base_version, current.comment.as_str()), (2, text));
 }
 
 // ── 6. Headless GPUI Rendering & Interaction Tests ───────────────────────────
@@ -576,6 +854,72 @@ fn init_headless_test_env(cx: &mut TestAppContext) {
         TokioBridge::init(cx).expect("init tokio bridge");
         configure_app(LocalUiState::default(), false, cx);
     });
+}
+
+#[gpui_kit::test]
+async fn catalog_pages_follow_checker_navigation_and_reject_stale_continuations(
+    cx: &mut TestAppContext,
+) {
+    use neondojo::analysis_catalog::AnalysisCatalogPage;
+    init_headless_test_env(cx);
+    let (window, workspace) = cx
+        .update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+                cx.new(|cx| AnalysisWorkspace::new(window, cx))
+            })
+        })
+        .unwrap();
+    let match_id = Uuid::new_v4();
+    let first = sample_position(match_id, 1, 1);
+    let second = sample_position(match_id, 1, 2);
+    let page = |id: &str, cursor: Option<&str>| AnalysisCatalogPage {
+        match_id,
+        source_revision: 1,
+        items: vec![AnalysisCatalogEntry {
+            id: id.into(),
+            source: "imported".into(),
+            scope: "match".into(),
+            engine: "XG".into(),
+            depth: None,
+            game_no: None,
+            position_id: None,
+            created_at: Utc::now(),
+            status: "completed".into(),
+            complete: true,
+            checker_count: 1,
+            cube_count: 0,
+            job: None,
+        }],
+        selected: None,
+        selected_id: Some("job:chosen".into()),
+        next_cursor: cursor.map(str::to_owned),
+    };
+    cx.update_window(window, |_, window, cx| {
+        workspace.update(cx, |ws, cx| {
+            ws.match_id = Some(match_id);
+            ws.positions = vec![first.clone(), second.clone()];
+            ws.select_checker_position(first.id, window, cx);
+            let (epoch, query) = ws.begin_catalog_read(None);
+            assert_eq!(query.position_id, Some(first.id));
+            assert!(ws.apply_catalog_page(epoch, page("xg", Some("first-next")), false));
+            assert_eq!(ws.effective_compare_ids(&first)[0].as_deref(), Some("xg"));
+            let (continuation, query) = ws.begin_catalog_read(ws.catalog_next_cursor.clone());
+            assert_eq!(query.position_id, Some(first.id));
+            assert_eq!(query.cursor.as_deref(), Some("first-next"));
+
+            ws.select_checker_position(second.id, window, cx);
+            assert!(ws.catalog_items.is_empty());
+            assert!(ws.catalog_next_cursor.is_none());
+            assert_eq!(ws.catalog_selected_id.as_deref(), Some("job:chosen"));
+            let (second_read, query) = ws.begin_catalog_read(None);
+            assert_eq!(query.position_id, Some(second.id));
+            ws.select_checker_position(first.id, window, cx);
+            assert!(!ws.apply_catalog_page(continuation, page("late append", None), true));
+            assert!(!ws.apply_catalog_page(second_read, page("late head", None), false));
+            assert!(ws.catalog_items.is_empty());
+        });
+    })
+    .unwrap();
 }
 
 #[gpui_kit::test]
@@ -596,7 +940,16 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
     let match_id = Uuid::new_v4();
     let pos1 = sample_position(match_id, 1, 1);
     let pos1_id = pos1.id;
-    let dist_snap: DiceDistributionSnapshot = sample_distribution(0.05).into();
+    let mut distribution = sample_distribution(0.05);
+    distribution.rolls.retain(|r| r.dice != [6, 2]);
+    distribution
+        .rolls
+        .iter_mut()
+        .find(|r| r.dice == [6, 1])
+        .unwrap()
+        .best
+        .path = Some("13/7 8/7".into());
+    let dist_snap: DiceDistributionSnapshot = distribution.into();
 
     cx.update_window(window, |_, window, cx| {
         // Initially renders Welcome drop zone.
@@ -659,6 +1012,9 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
                 job: None,
             }];
             ws.position_result = Some(SelectedPositionAnalysis {
+                native_checker_equity_kind: Some(
+                    neondojo::analysis_catalog::NativeCheckerEquityKind::Cubeful,
+                ),
                 analysis_id: "job:1".into(),
                 position_id: pos1_id,
                 engine: "GNUbg".into(),
@@ -666,6 +1022,7 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
                 records: vec![],
                 decision: None,
                 analysis: Some(Analysis {
+                    cube_enabled: Some(true),
                     engine: "GNUbg".into(),
                     plies: 3,
                     candidates: vec![
@@ -708,13 +1065,77 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
         window.click("checker-subtab-dice", cx);
         window.render_frame(cx);
         assert!(window.find("dice-equity-6x6-grid").visible());
+        for first in 1..=6 {
+            for second in 1..=6 {
+                assert!(window.find(format!("dice-cell-{first}-{second}")).visible());
+            }
+        }
+        assert!(
+            window.find("dice-selected-roll-caption").visible(),
+            "actual roll selected initially"
+        );
         window.click("dice-cell-6-1", cx);
         window.render_frame(cx);
         assert!(window.find("dice-selected-roll-caption").visible());
         let ws_ref = entity.read(cx);
         assert_eq!(ws_ref.selected_dice_cell, Some([6, 1]));
         assert_eq!(ws_ref.preview.mode, BoardViewMode::Arrows);
-        assert!(ws_ref.preview.hypothetical_dice.is_some());
+        assert_eq!(
+            ws_ref
+                .preview
+                .hypothetical_dice
+                .as_ref()
+                .unwrap()
+                .best_notation,
+            "13/7 8/7"
+        );
+        window.click("dice-cell-1-6", cx);
+        assert_eq!(
+            entity
+                .read(cx)
+                .preview
+                .hypothetical_dice
+                .as_ref()
+                .unwrap()
+                .best_notation,
+            "13/7 8/7"
+        );
+        window.click("dice-cell-2-6", cx);
+        assert!(entity.read(cx).preview.hypothetical_dice.is_none());
+        assert!(window.try_find("dice-selected-roll-caption").is_none());
+
+        // White on the bar cannot enter against a closed board on double sixes.
+        entity.update(cx, |ws, cx| {
+            let mut closed = [0; 26];
+            closed[25] = 1;
+            closed[19..=24].fill(-2);
+            ws.positions[0].board = closed.to_vec();
+            let DiceTabState::Ready { distribution, .. } = &mut ws.dice_state else {
+                panic!("expected dice results")
+            };
+            let double = distribution
+                .rolls
+                .iter_mut()
+                .find(|r| r.dice == [6, 6])
+                .unwrap();
+            double.best.notation = "Cannot move".into();
+            double.best.equity = distribution.mean_equity - 0.1;
+            cx.notify();
+        });
+        window.render_frame(cx);
+        window.click("dice-cell-6-6", cx);
+        let ws = entity.read(cx);
+        let preview = ws.preview.hypothetical_dice.as_ref().unwrap();
+        assert_eq!(preview.dice, [6, 6]);
+        assert!(matches!(
+            neondojo_board::project_move(
+                &ws.positions[0].board.clone().try_into().unwrap(),
+                0,
+                &preview.dice,
+                &preview.best_notation
+            ),
+            neondojo_board::MovePreview::Ok { forced: true, .. }
+        ));
 
         // Switch to Cube, Statistics, Notes (with 409 conflict banner!), and Cards tabs.
         window.click("analysis-tab-errors", cx);
@@ -725,6 +1146,47 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
         window.render_frame(cx);
         assert!(window.find("analysis-stats-empty").visible());
 
+        entity.update(cx, |ws, cx| {
+            use neondojo::analysis_statistics::catalog::{
+                CatalogAnalysisSummary, CatalogGameStatistics, MatchAnalysisStatistics,
+            };
+            ws.statistics = Some(MatchAnalysisStatistics {
+                analysis_id: None,
+                needs_cube_rule_reanalysis: false,
+                error_breakdown: None,
+                summary: Some(CatalogAnalysisSummary {
+                    engine: "GNUbg".into(),
+                    plies: Some(2),
+                    recorded_depth: None,
+                    total_games: 2,
+                    completed_games: 2,
+                    total_moves: 1,
+                    analyzed_moves: 1,
+                    players: Default::default(),
+                    performance_rating: None,
+                }),
+                games: ws
+                    .games
+                    .iter()
+                    .map(|g| CatalogGameStatistics {
+                        game_no: g.game_no,
+                        white_score: g.white_score,
+                        black_score: g.black_score,
+                        crawford: g.crawford,
+                        analyzed: true,
+                        needs_cube_rule_reanalysis: false,
+                        summary: None,
+                        error_breakdown: None,
+                    })
+                    .collect(),
+            });
+            cx.notify();
+        });
+        window.render_frame(cx);
+        window.click("stats-open-game-2", cx);
+        assert_eq!(entity.read(cx).current_game_no, Some(2));
+        assert_eq!(entity.read(cx).active_tab, AnalysisDetailTab::Overview);
+
         // Seed a 409 conflict draft on Notes and verify banner renders cleanly.
         entity.update(cx, |ws, cx| {
             let key = NoteTargetKey {
@@ -732,16 +1194,46 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
                 target_id: pos1_id,
             };
             ws.notes_drafts
+                .as_mut(cx)
                 .ensure_entry(key)
                 .set_comment("Preserved draft text".into())
                 .unwrap();
             ws.notes_drafts
+                .as_mut(cx)
                 .mark_conflict(key, &DomainError::conflict("Stale version 1 vs 2"));
             ws.select_detail_tab(AnalysisDetailTab::Notes, window, cx);
         });
         window.render_frame(cx);
         assert!(window.find("analysis-notes-inspector").visible());
         assert!(window.find("notes-conflict-banner").visible());
+        let field = entity.read(cx).comment_input.clone();
+        let state = field.read(cx);
+        assert!(state.input_bounds().size.height >= state.line_height().unwrap() * 4.);
+        field.update(cx, |input, cx| {
+            input.set_value("", window, cx);
+            input.focus(window, cx);
+        });
+        window.input("First paragraph", cx);
+        window.press("enter", cx);
+        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("Second\nThird".into()));
+        window.press("cmd-v", cx);
+        assert_eq!(field.read(cx).value(), "First paragraph\nSecond\nThird");
+    })
+    .expect("edit the current note");
+    cx.update_window(window, |_, window, cx| {
+        window.click("notes-scope-match", cx);
+        let field = entity.read(cx).comment_input.clone();
+        assert_eq!(field.read(cx).value(), "");
+        window.click("notes-scope-position", cx);
+        assert_eq!(field.read(cx).value(), "First paragraph\nSecond\nThird");
+        let long_line = "Checker play ".repeat(80);
+        cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(long_line.clone()));
+        field.update(cx, |input, cx| input.focus(window, cx));
+        window.press("cmd-a", cx);
+        window.press("cmd-v", cx);
+        window.render_frame(cx);
+        assert_eq!(field.read(cx).value().as_ref(), &long_line);
+        assert!(field.read(cx).display_map().wrap_row_count() > 1);
 
         window.click("analysis-tab-cards", cx);
         window.render_frame(cx);
@@ -844,22 +1336,28 @@ async fn headless_persists_per_tab_widths_emits_workspace_events_and_renders_com
             ws.current_game_no = Some(1);
             ws.positions = vec![pos1.clone()];
             ws.compare_slots = [
-                vec![Candidate {
-                    rank: 1,
-                    notation: "8/5 6/5".into(),
-                    path: None,
-                    equity: 0.21,
-                    probabilities: vec![],
-                    plies: Some(3),
-                }],
-                vec![Candidate {
-                    rank: 1,
-                    notation: "8/5 6/5".into(),
-                    path: None,
-                    equity: 0.20,
-                    probabilities: vec![],
-                    plies: Some(3),
-                }],
+                vec![super::candidate_data::CheckerCandidate::native(
+                    &Candidate {
+                        rank: 1,
+                        notation: "8/5 6/5".into(),
+                        path: None,
+                        equity: 0.21,
+                        probabilities: vec![],
+                        plies: Some(3),
+                    },
+                    "cubeful",
+                )],
+                vec![super::candidate_data::CheckerCandidate::native(
+                    &Candidate {
+                        rank: 1,
+                        notation: "8/5 6/5".into(),
+                        path: None,
+                        equity: 0.20,
+                        probabilities: vec![],
+                        plies: Some(3),
+                    },
+                    "cubeful",
+                )],
                 vec![],
             ];
             ws.observed_rolls = Some(DiceStats {
@@ -890,8 +1388,41 @@ async fn headless_persists_per_tab_widths_emits_workspace_events_and_renders_com
         // Switch to Compare moves & Observed rolls sub-tabs.
         window.click("checker-subtab-compare", cx);
         window.render_frame(cx);
-        assert!(window.find("analysis-compare-matrix").visible());
+    })
+    .unwrap();
 
+    for width in [1440.0, 1920.0] {
+        cx.simulate_window_resize(
+            window,
+            gpui_kit::size(gpui_kit::px(width), gpui_kit::px(900.0)),
+        );
+        cx.update_window(window, |_, window, cx| {
+            let mut short_width = gpui_kit::px(0.0);
+            for (notation, dice) in [("8/5 6/5", [3, 1]), ("24/21 24/21 13/10 13/10", [3, 3])] {
+                entity.update(cx, |ws, cx| {
+                    ws.positions[0].dice = dice.to_vec();
+                    ws.positions[0].notation = notation.into();
+                    ws.compare_slots[0][0].notation = notation.into();
+                    ws.compare_slots[1][0].notation = notation.into();
+                    cx.notify();
+                });
+                window.render_frame(cx);
+                assert!(window.find("analysis-compare-matrix").visible());
+                let header = window.find("compare-move-header").bounds();
+                let played = window.find("compare-move-0").bounds();
+                assert_eq!(header.left(), played.left());
+                assert_eq!(header.right(), played.right());
+                if dice[0] == dice[1] {
+                    assert!(played.size.width > short_width);
+                } else {
+                    assert!(played.size.width <= gpui_kit::px(130.0));
+                    short_width = played.size.width;
+                }
+            }
+        })
+        .unwrap();
+    }
+    cx.update_window(window, |_, window, cx| {
         window.click("checker-subtab-observed", cx);
         window.render_frame(cx);
         assert!(window.find("analysis-observed-rolls-bars").visible());
@@ -921,4 +1452,153 @@ async fn headless_persists_per_tab_widths_emits_workspace_events_and_renders_com
     let seen = events.lock().unwrap().clone();
     assert!(seen.contains(&format!("study:{match_id}")));
     assert!(seen.contains(&"search:4HPwATDgc/ABMA".to_string()));
+}
+
+#[gpui_kit::test]
+async fn move_notes_editor_restores_multiline_drafts_when_changing_decisions(
+    cx: &mut TestAppContext,
+) {
+    use gpui_kit::component::WindowExt;
+    init_headless_test_env(cx);
+    let (window, workspace) = cx
+        .update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |w, cx| {
+                cx.new(|cx| AnalysisWorkspace::new(w, cx))
+            })
+        })
+        .unwrap();
+    let match_id = Uuid::new_v4();
+    let pos = sample_position(match_id, 1, 1);
+    let moves = ["8/5 6/5", "take"]
+        .into_iter()
+        .enumerate()
+        .map(|(ix, action)| StoredMove {
+            id: Uuid::new_v4(),
+            match_uuid: match_id,
+            game_no: 1,
+            move_no: (ix + 1) as i32,
+            kind: if ix == 0 { "checker" } else { "cube" }.into(),
+            player: ix as i32,
+            notation: action.into(),
+            position_uuid: (ix == 0).then_some(pos.id),
+            board: pos.board.clone(),
+            dice: vec![],
+            position_id: pos.position_id.clone(),
+            gnubg_match_id: pos.gnubg_match_id.clone(),
+        })
+        .collect();
+    let field = cx
+        .update_window(window, |_, window, cx| {
+            workspace.update(cx, |ws, cx| {
+                ws.open_match(match_id, Some(1), Some(pos.id), None, window, cx);
+                ws.active_tab = AnalysisDetailTab::Notes;
+                ws.source_moves = moves;
+                ws.open_move_notes_for(None, window, cx);
+            });
+            window.render_frame(cx);
+            window.click("move-notes-comment", cx);
+            let field = window
+                .focused_input(cx)
+                .unwrap()
+                .as_textarea()
+                .unwrap()
+                .clone();
+            assert!(
+                field.read(cx).input_bounds().size.height
+                    >= field.read(cx).line_height().unwrap() * 4.
+            );
+            cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string(
+                "Checker play\nReview the hit.".into(),
+            ));
+            window.press("cmd-v", cx);
+            field
+        })
+        .unwrap();
+    cx.update_window(window, |_, window, cx| {
+        window.click("move-notes-item-1", cx);
+        assert_eq!(field.read(cx).value(), "");
+        window.click("move-notes-item-0", cx);
+        assert_eq!(field.read(cx).value(), "Checker play\nReview the hit.");
+        window.close_dialog(cx);
+        let inspector = workspace.read(cx).comment_input.clone();
+        assert_eq!(inspector.read(cx).value(), "Checker play\nReview the hit.");
+        workspace.update(cx, |ws, cx| ws.open_move_notes_for(None, window, cx));
+        window.render_frame(cx);
+        window.click("move-notes-comment", cx);
+        let reopened = window
+            .focused_input(cx)
+            .unwrap()
+            .as_textarea()
+            .unwrap()
+            .clone();
+        assert_ne!(reopened, field);
+        assert_eq!(reopened.read(cx).value(), "Checker play\nReview the hit.");
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
+async fn over_limit_note_survives_match_switch_and_delayed_conflict_resolution(
+    cx: &mut TestAppContext,
+) {
+    init_headless_test_env(cx);
+    let (window, workspace) = cx
+        .update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+                cx.new(|cx| AnalysisWorkspace::new(window, cx))
+            })
+        })
+        .unwrap();
+    let first = Uuid::new_v4();
+    let second = Uuid::new_v4();
+    let text = "x".repeat(super::state::MAX_COMMENT_CHARS + 1);
+    let key = NoteTargetKey {
+        kind: AnnotationKind::Match,
+        target_id: first,
+    };
+    let latest = Annotation {
+        id: None,
+        target_kind: key.kind,
+        target_id: first,
+        tags: Vec::new(),
+        comment: "Server version".into(),
+        version: 2,
+        updated_at: None,
+    };
+    cx.update_window(window, |_, window, cx| {
+        workspace.update(cx, |ws, cx| {
+            ws.active_tab = AnalysisDetailTab::Notes;
+            ws.notes_scope = AnnotationKind::Match;
+            ws.open_match(first, Some(1), None, None, window, cx);
+            let drafts = ws.notes_drafts.clone();
+            assert!(
+                drafts
+                    .as_mut(cx)
+                    .ensure_entry(key)
+                    .prepare_update(text.clone())
+                    .is_err()
+            );
+            drafts
+                .as_mut(cx)
+                .mark_conflict(key, &DomainError::conflict("Conflict"));
+            let original = drafts.read(cx).get(key).unwrap().clone();
+            ws.open_match(second, Some(1), None, None, window, cx);
+            ws.load_current_note(window, cx);
+            ws.apply_note_conflict_resolution(key, &original, &latest, false, window, cx);
+            assert_eq!(ws.comment_input.read(cx).value(), "");
+            assert_eq!(drafts.read(cx).get(key), Some(&original));
+            ws.open_match(first, Some(1), None, None, window, cx);
+            ws.load_current_note(window, cx);
+            assert_eq!(ws.comment_input.read(cx).value().as_ref(), text);
+            let update = drafts
+                .as_mut(cx)
+                .ensure_entry(key)
+                .prepare_update("Corrected".into())
+                .unwrap();
+            assert_eq!(update.comment, "Corrected");
+            ws.apply_note_conflict_resolution(key, &original, &latest, false, window, cx);
+            assert_eq!(drafts.read(cx).get(key).unwrap().comment, "Corrected");
+        });
+    })
+    .unwrap();
 }

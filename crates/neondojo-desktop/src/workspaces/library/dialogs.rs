@@ -31,7 +31,6 @@ use neondojo::databases::{
     Database, DatabaseMatch, DatabaseWrite, ExportFormat, LibraryAction, MetadataWrite,
 };
 use neondojo::facade::BackendFacade;
-use neondojo::model::Job;
 use neondojo::settings::EngineInfo;
 use neondojo_i18n::{I18n, Param};
 use neondojo_rules::options::engine_depths;
@@ -1052,7 +1051,7 @@ struct BulkAnalysisModalView {
     engines: Vec<EngineInfo>,
     selected_engine: MatchAnalysisEngine,
     selected_plies: i32,
-    accepted_jobs: Vec<Job>,
+    accepted_count: usize,
     failures: Vec<(DatabaseMatch, String)>,
     busy: ModalBusyLock,
     loading_engines: bool,
@@ -1076,7 +1075,7 @@ impl BulkAnalysisModalView {
             engines: Vec::new(),
             selected_engine: MatchAnalysisEngine::Gnubg,
             selected_plies: 3,
-            accepted_jobs: Vec::new(),
+            accepted_count: 0,
             failures: Vec::new(),
             busy,
             loading_engines: true,
@@ -1205,7 +1204,7 @@ impl BulkAnalysisModalView {
                         plies: Some(plies),
                     };
                     match facade.create_match_analysis(m.id, req).await {
-                        Ok(job) => jobs.push(job),
+                        Ok(job) => jobs.push((job, m.database_id)),
                         Err(err) => failed.push((m, format_domain_error(locale, &err))),
                     }
                 }
@@ -1223,9 +1222,9 @@ impl BulkAnalysisModalView {
                     Ok((jobs, failed)) => {
                         if !jobs.is_empty() {
                             workspace.update(cx, |ws, cx| {
-                                ws.track_bulk_analysis_jobs(&jobs, cx);
+                                ws.track_bulk_analysis_jobs(&jobs, view.accepted_count > 0, cx);
                             });
-                            view.accepted_jobs.extend(jobs);
+                            view.accepted_count += jobs.len();
                         }
                         view.failures = failed;
                         if view.failures.is_empty() {
@@ -1381,7 +1380,7 @@ impl Render for BulkAnalysisModalView {
                         )))
                     }),
             )
-            .when(!self.accepted_jobs.is_empty(), |el| {
+            .when(self.accepted_count > 0, |el| {
                 el.child(
                     StatusBanner::new(
                         "library-bulk-accepted",
@@ -1390,7 +1389,7 @@ impl Render for BulkAnalysisModalView {
                             locale,
                             "library",
                             "analysisAccepted",
-                            &[("count", Param::from(self.accepted_jobs.len() as i64))],
+                            &[("count", Param::from(self.accepted_count as i64))],
                         ),
                     )
                     .palette(p),

@@ -61,7 +61,7 @@ export function nativeCheckerCandidates(
     result?.analysis?.candidates ?? result?.decision?.checker_candidates ?? [];
   return candidates.map((candidate) => ({
     ...candidate,
-    equity_kind: result?.decision ? 'normalized_cubeful' : 'cubeful',
+    equity_kind: result?.native_checker_equity_kind ?? 'unknown',
     depth: candidate.plies == null ? null : formatPly(candidate.plies),
   }));
 }

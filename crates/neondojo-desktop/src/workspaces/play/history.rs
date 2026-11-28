@@ -216,6 +216,7 @@ pub fn render_play_history_panel(
     show_decisions: bool,
     show_review_actions: bool,
     paused: bool,
+    narrow: bool,
     palette: NeonPalette,
     cb: PlayHistoryCallbacks,
     cx: &App,
@@ -352,8 +353,13 @@ pub fn render_play_history_panel(
         .id("play-history-panel")
         .test_support()
         .v_flex()
-        .w(px(310.0))
-        .h_full()
+        .when(narrow, |el| el.w_full().h(gpui_kit::relative(0.25)))
+        .when(!narrow, |el| {
+            el.w(gpui_kit::relative(0.18))
+                .min_w(px(220.0))
+                .max_w(px(360.0))
+                .h_full()
+        })
         .flex_shrink_0()
         .gap(px(8.0))
         .p(px(12.0))

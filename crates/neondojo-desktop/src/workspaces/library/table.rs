@@ -67,16 +67,31 @@ impl LibraryWorkspace {
         let bulk_progress_badge = self
             .bulk_tracker
             .scope_progress(self.selected_database_id)
-            .map(|(completed, total)| {
-                I18n::format(
+            .map(|progress| {
+                let has_errors = progress.failed > 0 || progress.missing > 0;
+                if progress.loading {
+                    return (
+                        I18n::t(locale, "library", "loading").to_string(),
+                        has_errors,
+                    );
+                }
+                let mut label = I18n::format(
                     locale,
                     "library",
                     "bulkAnalysisProgress",
                     &[
-                        ("completed", Param::from(completed as i64)),
-                        ("total", Param::from(total as i64)),
+                        ("completed", Param::from(progress.completed as i64)),
+                        ("total", Param::from(progress.total as i64)),
                     ],
-                )
+                );
+                for (key, count) in [("failed", progress.failed), ("notFound", progress.missing)] {
+                    if count > 0 {
+                        let count = neondojo_i18n::format_uint(locale, count as u64);
+                        label
+                            .push_str(&format!(" · {} ({count})", I18n::t(locale, "library", key)));
+                    }
+                }
+                (label, has_errors)
             });
 
         let toolbar = div()
@@ -117,7 +132,7 @@ impl LibraryWorkspace {
                                 .child(badge),
                         )
                     })
-                    .when_some(bulk_progress_badge, |el, badge| {
+                    .when_some(bulk_progress_badge, |el, (badge, has_errors)| {
                         let finished = !self.bulk_tracker.has_active_jobs();
                         let ent = entity.clone();
                         el.child(
@@ -130,11 +145,23 @@ impl LibraryWorkspace {
                                 .px(px(8.0))
                                 .py(px(2.0))
                                 .rounded(px(5.0))
-                                .bg(if finished { p.success_bg } else { p.selected })
+                                .bg(if has_errors {
+                                    p.warning_bg
+                                } else if finished {
+                                    p.success_bg
+                                } else {
+                                    p.selected
+                                })
                                 .border_1()
                                 .border_color(p.border)
                                 .text_meta()
-                                .text_color(if finished { p.success_text } else { p.accent })
+                                .text_color(if has_errors {
+                                    p.warning_text
+                                } else if finished {
+                                    p.success_text
+                                } else {
+                                    p.accent
+                                })
                                 .child(badge)
                                 .when(finished, |inner| {
                                     inner.child(

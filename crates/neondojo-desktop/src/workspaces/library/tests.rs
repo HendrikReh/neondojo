@@ -3,7 +3,6 @@ use super::*;
 use crate::configure_app;
 use chrono::{NaiveDate, Utc};
 use gpui_kit::{WindowOptions, test::TestWindowExt};
-use neondojo::api::JobStatusBatch;
 use neondojo::databases::{ActionItem, ActionResponse, Database, DatabaseMatch, LibraryOccurrence};
 use neondojo::duplicate_matches::{DuplicateMatchGroup, DuplicateMatchKind};
 use neondojo::model::{ImportWarning, ImportWarningKind, Job};
@@ -392,6 +391,54 @@ fn column_layout_visibility_min_one_reorder_resize_hidden_sort_and_prefs_round_t
 }
 
 #[test]
+fn restored_bulk_jobs_count_completed_failed_and_missing_separately() {
+    let db = Uuid::new_v4();
+    let completed = sample_job(Uuid::new_v4(), Uuid::new_v4(), "completed", 100);
+    let mut cancelled = sample_job(Uuid::new_v4(), Uuid::new_v4(), "failed", 45);
+    cancelled.error = Some("Cancelled by user".into());
+    let missing = sample_job(Uuid::new_v4(), Uuid::new_v4(), "queued", 0);
+
+    let mut original = BulkAnalysisTracker::default();
+    original.track_jobs(
+        &[
+            (completed.clone(), db),
+            (cancelled.clone(), db),
+            (missing.clone(), db),
+        ],
+        false,
+    );
+    let mut prefs = crate::local_state::LibraryUiPrefs::default();
+    original.write_to_prefs(&mut prefs);
+    let mut restored = BulkAnalysisTracker::from_prefs(&prefs);
+    assert!(restored.scope_progress(Some(db)).unwrap().loading);
+    let mut unavailable = neondojo::databases::LibraryBulkJobStatus::from(&missing);
+    unavailable.status = "missing".into();
+
+    assert_eq!(
+        restored.apply_batch(vec![(&completed).into(), (&cancelled).into(), unavailable]),
+        (true, true)
+    );
+    assert_eq!(
+        restored.scope_progress(Some(db)),
+        Some(BulkAnalysisProgress {
+            total: 3,
+            completed: 1,
+            failed: 1,
+            missing: 1,
+            loading: false
+        })
+    );
+    // A previously queued snapshot cannot undo the terminal reconciliation.
+    assert_eq!(
+        restored.apply_batch(vec![(&missing).into()]),
+        (false, false)
+    );
+    assert!(restored.active_job_ids().is_empty());
+    restored.dismiss_if_finished();
+    assert!(restored.scope_progress(None).is_none());
+}
+
+#[test]
 fn database_rules_filter_chips_notes_validation_and_bulk_tracker_work() {
     let unsorted = sample_database(Uuid::from_u128(1), "Unsorted", true, true, 12);
     let empty_bot = sample_database(BOT_DATABASE_ID, "Bot Matches", true, false, 0);
@@ -442,20 +489,31 @@ fn database_rules_filter_chips_notes_validation_and_bulk_tracker_work() {
     let mut tracker = BulkAnalysisTracker::default();
     let j1 = sample_job(Uuid::new_v4(), Uuid::new_v4(), "queued", 0);
     let j2 = sample_job(Uuid::new_v4(), Uuid::new_v4(), "running", 40);
-    tracker.track_jobs(&[j1.clone(), j2.clone()], Some(unsorted.id));
-    assert_eq!(tracker.scope_progress(Some(unsorted.id)), Some((0, 2)));
+    tracker.track_jobs(
+        &[(j1.clone(), unsorted.id), (j2.clone(), unsorted.id)],
+        false,
+    );
+    assert_eq!(
+        tracker.scope_progress(Some(unsorted.id)),
+        Some(BulkAnalysisProgress {
+            total: 2,
+            ..Default::default()
+        })
+    );
 
     let mut j1_done = j1.clone();
     j1_done.status = "completed".to_string();
     j1_done.progress = 100;
-    let (changed, finished) = tracker.apply_batch(&JobStatusBatch {
-        jobs: vec![j1_done],
-        missing: Vec::new(),
-        restricted: Vec::new(),
-    });
-    assert!(changed);
-    assert_eq!(finished.len(), 1);
-    assert_eq!(tracker.scope_progress(Some(unsorted.id)), Some((1, 2)));
+    let (changed, finished) = tracker.apply_batch(vec![(&j1_done).into()]);
+    assert!(changed && finished);
+    assert_eq!(
+        tracker.scope_progress(Some(unsorted.id)),
+        Some(BulkAnalysisProgress {
+            total: 2,
+            completed: 1,
+            ..Default::default()
+        })
+    );
 
     // Import warning formatter covers all 6 variants cleanly.
     for kind in [
@@ -634,6 +692,107 @@ async fn headless_row_clicks_route_paused_and_competition_to_play_and_normal_to_
         &events[2],
         WorkspaceEvent::OpenPlaySession { session_id, resume: true } if *session_id == comp_session
     ));
+}
+
+#[gpui_kit::test]
+async fn new_match_picker_opens_the_paused_database_and_resumes_either_row(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::shell::{AppShell, AppView, WorkspaceId};
+    use std::{cell::Cell, rc::Rc};
+
+    let (window, shell) = cx.update(|cx| {
+        gpui_kit::init(cx);
+        configure_app(LocalUiState::default(), false, cx);
+        gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+            cx.new(|cx| AppShell::new(None, window, cx))
+        })
+        .unwrap()
+    });
+    let rows = [
+        (Uuid::new_v4(), Uuid::new_v4()),
+        (Uuid::new_v4(), Uuid::new_v4()),
+    ];
+    let resumed = Rc::new(Cell::new(None));
+
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("workspace-tab-library", cx);
+        let library = shell.read(cx).library_workspace().unwrap();
+        library.update(cx, |ws, cx| {
+            let matches = rows
+                .iter()
+                .enumerate()
+                .map(|(i, &(match_id, session_id))| {
+                    let mut m = sample_match(match_id, i as i64 + 1, PAUSED_MATCHES_DATABASE_ID);
+                    m.play_paused = true;
+                    m.play_session_id = Some(session_id);
+                    m
+                })
+                .collect();
+            ws.seed_test_data(
+                vec![sample_database(
+                    PAUSED_MATCHES_DATABASE_ID,
+                    "Paused Matches",
+                    true,
+                    false,
+                    2,
+                )],
+                matches,
+            );
+            cx.notify();
+        });
+        let observed = resumed.clone();
+        cx.subscribe(&library, move |_, event, _| {
+            if let WorkspaceEvent::OpenPlaySession {
+                session_id,
+                resume: true,
+            } = event
+            {
+                observed.set(Some(*session_id));
+            }
+        })
+        .detach();
+
+        window.render_frame(cx);
+        window.click("workspace-tab-play", cx);
+    })
+    .unwrap();
+    for (match_id, session_id) in rows {
+        cx.update_window(window, |_, window, cx| {
+            window.press("cmd-n", cx);
+            window.render_frame(cx);
+            window.click("play-setup-paused-matches", cx);
+        })
+        .unwrap();
+        cx.update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            assert_eq!(
+                shell.read(cx).active_view(),
+                AppView::Workspace(WorkspaceId::Library)
+            );
+            assert_eq!(
+                shell
+                    .read(cx)
+                    .library_workspace()
+                    .unwrap()
+                    .read(cx)
+                    .selected_database_id,
+                Some(PAUSED_MATCHES_DATABASE_ID)
+            );
+            window.click(
+                SharedString::from(format!("library-row-check-{match_id}")),
+                cx,
+            );
+            window.click("library-batch-resume-btn", cx);
+        })
+        .unwrap();
+        assert_eq!(resumed.get(), Some(session_id));
+        assert_eq!(
+            cx.update(|cx| shell.read(cx).active_view()),
+            AppView::Workspace(WorkspaceId::Play)
+        );
+    }
 }
 
 #[gpui_kit::test]

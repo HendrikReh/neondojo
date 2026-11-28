@@ -4,7 +4,7 @@
 //!
 //! Features:
 //! - Auto-searches once on first visit for `My player profile` (via `list_recurring_mistakes`
-//!   and `get_my_player_profile` + `search_decisions`)
+//!   and `search_decisions`)
 //! - Filter bar with `DecimalInput` min/max equity loss defaulting to profile Error threshold
 //! - Resizable 9-column dense results table with Loss asc/desc sort & server pagination
 //! - Right-hand preview pane reusing `BoardView`, `format_cube_context_line`,
@@ -60,8 +60,9 @@ use neondojo::practice::evaluation::{
     CubeOfferAction, CubeResponseAction, PracticeAnswer, PracticeEvaluation, PracticeVerdict,
 };
 use neondojo::recurring_mistakes::{
-    CubeOwnerFilter, DecisionKind, DecisionSearchQuery, LossDirection, MistakeAnswer,
-    MistakeAttempt, MistakeAttemptRequest, MistakeKind, MistakeReference, MistakesQuery,
+    CubeOwnerFilter, DecisionKind, DecisionSearchPage, DecisionSearchQuery, LossDirection,
+    MistakeAnswer, MistakeAttempt, MistakeAttemptRequest, MistakeKind, MistakeReference,
+    MistakesQuery,
 };
 use neondojo_board::{BoardEvent, BoardView, BoardViewMode};
 use neondojo_i18n::{
@@ -121,7 +122,7 @@ impl DecisionHitRow {
         if !self.is_openable() {
             return None;
         }
-        if self.has_position() {
+        if self.kind == "checker" && self.has_position() {
             Some(WorkspaceEvent::OpenMatchInAnalysis {
                 match_id: self.position.match_uuid,
                 game_no: Some(self.reference.game_no),
@@ -260,7 +261,8 @@ pub struct DecisionSearchView {
     databases: Vec<Database>,
     players: Vec<String>,
     error_thresholds: ErrorThresholds,
-    profile_player_name: Option<String>,
+    metadata_task: Option<gpui_kit::Task<()>>,
+    search_task: Option<gpui_kit::Task<()>>,
 
     // Filters
     draft: DecisionFilterDraft,
@@ -282,6 +284,7 @@ pub struct DecisionSearchView {
     preview_board: Entity<BoardView>,
     preview_bookmarked: Option<bool>,
     bookmark_busy: bool,
+    bookmark_read: Option<gpui_kit::Task<()>>,
 
     // Table layout & resize
     table_layout: DecisionTableLayout,
@@ -388,7 +391,8 @@ impl DecisionSearchView {
             databases: Vec::new(),
             players: Vec::new(),
             error_thresholds: thresholds,
-            profile_player_name: None,
+            metadata_task: None,
+            search_task: None,
             draft: DecisionFilterDraft::default(),
             min_loss_input,
             max_loss_input,
@@ -406,6 +410,7 @@ impl DecisionSearchView {
             preview_board,
             preview_bookmarked: None,
             bookmark_busy: false,
+            bookmark_read: None,
             table_layout: DecisionTableLayout::default(),
             column_picker_open: false,
             resizing: None,
@@ -423,8 +428,7 @@ impl DecisionSearchView {
                     .try_global::<DesktopAppContext>()
                     .and_then(|c| c.facade());
             }
-            if !self.initialized && self.facade.is_some() {
-                self.initialized = true;
+            if !self.initialized && self.metadata_task.is_none() && self.facade.is_some() {
                 self.bootstrap_and_autosearch(cx);
             }
         }
@@ -467,8 +471,9 @@ impl DecisionSearchView {
     }
 
     fn sync_preview_board(&mut self, cx: &mut Context<Self>) {
+        self.bookmark_read = None;
+        self.preview_bookmarked = None;
         let Some(hit) = self.active_preview().cloned() else {
-            self.preview_bookmarked = None;
             return;
         };
         let bp = position_to_board_position(&hit.position, true);
@@ -497,22 +502,22 @@ impl DecisionSearchView {
         }) else {
             return;
         };
-        let weak = cx.weak_entity();
-        cx.spawn(async move |_this, cx| {
-            let Ok(res) = task.await else {
-                return;
-            };
-            let _ = weak.update(cx, |view, cx| {
+        self.bookmark_read = Some(cx.spawn(async move |view, cx| {
+            let result = task.await;
+            let _ = view.update(cx, |view, cx| {
+                view.bookmark_read = None;
                 if view
                     .active_preview()
-                    .is_some_and(|p| p.position.id == pos_id)
+                    .is_some_and(|hit| hit.position.id == pos_id)
                 {
-                    view.preview_bookmarked = Some(res.is_ok());
-                    cx.notify();
+                    view.preview_bookmarked = result
+                        .ok()
+                        .and_then(Result::ok)
+                        .map(|bookmark| bookmark.saved);
                 }
+                cx.notify();
             });
-        })
-        .detach();
+        }));
     }
 
     fn toggle_preview_bookmark(&mut self, cx: &mut Context<Self>) {
@@ -525,7 +530,11 @@ impl DecisionSearchView {
         let Some(facade) = self.facade.clone() else {
             return;
         };
-        let currently_saved = self.preview_bookmarked.unwrap_or(false);
+        let Some(currently_saved) = self.preview_bookmarked else {
+            self.load_preview_bookmark_state(&hit, cx);
+            cx.notify();
+            return;
+        };
         let pos_id = hit.position.id;
         self.bookmark_busy = true;
         let Some(task) = spawn_facade_write(cx, move || async move {
@@ -540,13 +549,15 @@ impl DecisionSearchView {
         };
         let weak = cx.weak_entity();
         cx.spawn(async move |_this, cx| {
-            let Ok(res) = task.await else {
-                return;
-            };
+            let result = task.await;
             let _ = weak.update(cx, |view, cx| {
                 view.bookmark_busy = false;
-                if let Ok(saved) = res {
-                    view.preview_bookmarked = Some(saved);
+                if view
+                    .active_preview()
+                    .is_some_and(|hit| hit.position.id == pos_id)
+                {
+                    view.bookmark_read = None;
+                    view.preview_bookmarked = result.ok().and_then(Result::ok);
                 }
                 cx.notify();
             });
@@ -555,70 +566,71 @@ impl DecisionSearchView {
         cx.notify();
     }
 
-    /// Loads databases, profile thresholds, and My player profile, then auto-searches
-    /// once on first visit when a resolved player exists.
+    /// The same scoped player list and resolved virtual profile used by the browser.
     fn bootstrap_and_autosearch(&mut self, cx: &mut Context<Self>) {
         let Some(facade) = self.facade.clone() else {
             return;
         };
-        let db_id = self.draft.database_id;
+        let database_id = self.draft.database_id;
         let Some(task) = spawn_facade_read(cx, move || async move {
-            let dbs = facade.list_databases().await;
-            let cfg = facade.get_configuration().await;
-            let my_profile = facade.get_my_player_profile().await;
-            let resolve = my_profile
-                .ok()
-                .and_then(|m| m.profile.map(|p| p.name))
-                .or_else(|| {
-                    cfg.as_ref()
-                        .ok()
-                        .map(|c| c.current_configuration.general.player_name.clone())
-                        .filter(|n| !n.trim().is_empty())
-                });
-            let mistakes = facade
+            let players = facade
                 .list_recurring_mistakes(MistakesQuery {
-                    database_id: db_id,
-                    resolve: resolve.clone(),
+                    database_id,
                     ..MistakesQuery::default()
                 })
-                .await;
-            (dbs, cfg, mistakes, resolve)
+                .await?;
+            let databases = facade.list_databases().await?;
+            let thresholds = match facade.get_configuration().await {
+                Ok(cfg) => cfg.current_configuration.analysis.error_thresholds,
+                Err(err) if err.body.code.as_deref() == Some("configuration_not_initialized") => {
+                    ErrorThresholds::default()
+                }
+                Err(err) => return Err(err),
+            };
+            Ok((players, databases, thresholds))
         }) else {
             return;
         };
-        let weak = cx.weak_entity();
-        cx.spawn(async move |_this, cx| {
-            let Ok((dbs_res, cfg_res, mistakes_res, resolve)) = task.await else {
-                return;
-            };
-            let _ = weak.update(cx, |view, cx| {
-                if let Ok(dbs) = dbs_res {
-                    view.databases = dbs;
-                }
-                if let Ok(cfg) = cfg_res {
-                    view.error_thresholds = cfg.current_configuration.analysis.error_thresholds;
-                    view.profile_player_name = resolve;
-                }
-                if let Ok(mistakes) = mistakes_res {
-                    view.players = mistakes.players;
-                    if !view.player_manually_chosen
-                        && view.draft.player.is_empty()
-                        && let Some(resolved) = mistakes.resolved_player
-                    {
-                        view.draft.player = resolved;
+        self.error = None;
+        self.metadata_task = Some(cx.spawn(async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |view, cx| {
+                view.metadata_task = None;
+                let locale = current_locale(cx);
+                match result {
+                    Ok(Ok((players, databases, thresholds))) => {
+                        view.initialized = true;
+                        view.databases = databases;
+                        view.error_thresholds = thresholds;
+                        view.players = players.players;
+                        if !view.players.contains(&view.draft.player) {
+                            view.draft.player = if view.player_manually_chosen {
+                                String::new()
+                            } else {
+                                players.resolved_player.unwrap_or_default()
+                            };
+                        }
+                        if !view.auto_search_done
+                            && !view.player_manually_chosen
+                            && !view.draft.player.is_empty()
+                        {
+                            view.auto_search_done = true;
+                            view.submit_search(cx);
+                        }
                     }
-                    if !view.auto_search_done
-                        && !view.player_manually_chosen
-                        && !view.draft.player.is_empty()
-                    {
-                        view.auto_search_done = true;
-                        view.submit_search(cx);
+                    Ok(Err(err)) => {
+                        view.initialized = false;
+                        view.error = Some(format_domain_error(locale, &err).into());
+                    }
+                    Err(_) => {
+                        view.initialized = false;
+                        view.error = Some(I18n::t(locale, "app", "error.invalidResponse").into());
                     }
                 }
                 cx.notify();
             });
-        })
-        .detach();
+        }));
+        cx.notify();
     }
 
     pub fn submit_search(&mut self, cx: &mut Context<Self>) {
@@ -635,11 +647,15 @@ impl DecisionSearchView {
     }
 
     pub fn clear_filters(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let database_changed = self.draft.database_id.is_some();
         let keep_player = self.draft.player.clone();
         self.draft = DecisionFilterDraft {
             player: keep_player,
             ..DecisionFilterDraft::default()
         };
+        if database_changed {
+            self.bootstrap_and_autosearch(cx);
+        }
         let default_loss = self.error_thresholds.error.to_string();
         self.min_loss_input
             .update(cx, |i, cx| i.set_canonical_value(&default_loss, window, cx));
@@ -698,39 +714,61 @@ impl DecisionSearchView {
             self.loading = false;
             return;
         };
-        let weak = cx.weak_entity();
-        cx.spawn(async move |_this, cx| {
-            let Ok(res) = task.await else {
-                return;
-            };
-            let _ = weak.update(cx, |view, cx| {
+        self.search_task = Some(cx.spawn(async move |this, cx| {
+            let result = task.await;
+            let _ = this.update(cx, |view, cx| {
                 view.loading = false;
-                match res {
-                    Ok(page) => {
-                        view.total = page.total;
-                        view.page = page.page;
-                        view.items = page
-                            .items
-                            .into_iter()
-                            .filter_map(|v| serde_json::from_value::<DecisionHitRow>(v).ok())
-                            .collect();
-                        let keys: Vec<String> =
-                            view.items.iter().map(DecisionHitRow::ref_key).collect();
-                        if !view.selected_key.as_ref().is_some_and(|k| keys.contains(k)) {
-                            view.selected_key = keys.into_iter().next();
-                        }
-                        view.sync_preview_board(cx);
-                    }
-                    Err(err) => {
-                        let locale = current_locale(cx);
-                        view.error = Some(format_domain_error(locale, &err).into());
-                    }
-                }
+                let locale = current_locale(cx);
+                let page = match result {
+                    Ok(result) => result.map_err(|e| format_domain_error(locale, &e).into()),
+                    Err(_) => Err(I18n::t(locale, "app", "error.invalidResponse").into()),
+                };
+                view.apply_search_page(page, cx);
                 cx.notify();
             });
-        })
-        .detach();
+        }));
         cx.notify();
+    }
+
+    pub(super) fn apply_search_page(
+        &mut self,
+        page: Result<DecisionSearchPage, SharedString>,
+        cx: &mut Context<Self>,
+    ) {
+        let result = page.and_then(|page| {
+            let items = page
+                .items
+                .into_iter()
+                .map(serde_json::from_value)
+                .collect::<Result<Vec<DecisionHitRow>, _>>()
+                .map_err(|err| {
+                    tracing::warn!(%err, "Could not read analyzed decision");
+                    SharedString::from(I18n::t(current_locale(cx), "app", "error.invalidResponse"))
+                })?;
+            Ok((items, page.total, page.page))
+        });
+        match result {
+            Ok((items, total, page)) => {
+                self.items = items;
+                self.total = total;
+                self.page = page;
+                self.error = None;
+                if !self
+                    .items
+                    .iter()
+                    .any(|item| Some(item.ref_key()) == self.selected_key)
+                {
+                    self.selected_key = self.items.first().map(DecisionHitRow::ref_key);
+                }
+            }
+            Err(error) => {
+                self.items.clear();
+                self.selected_key = None;
+                self.total = 0;
+                self.error = Some(error);
+            }
+        }
+        self.sync_preview_board(cx);
     }
 
     fn open_add_to_deck_dialog(
@@ -878,6 +916,9 @@ impl DecisionSearchView {
 
         // Player selector
         let mut player_row = div()
+            .id("ds-player-list")
+            .max_h(px(90.0))
+            .overflow_y_scroll()
             .h_flex()
             .flex_wrap()
             .items_center()
@@ -887,7 +928,7 @@ impl DecisionSearchView {
             player_row =
                 player_row.child(div().text_meta().text_color(p.muted).child(rm("noPlayers")));
         } else {
-            for pl in self.players.iter().take(12) {
+            for pl in &self.players {
                 let pl_name = pl.clone();
                 let ent_pl = ent.clone();
                 player_row = player_row.child(
@@ -1055,7 +1096,7 @@ impl DecisionSearchView {
                         .on_click(move |_, _, cx| {
                             ent_d.update(cx, |v, cx| {
                                 v.draft.database_id = None;
-                                cx.notify();
+                                v.bootstrap_and_autosearch(cx);
                             });
                         })
                 });
@@ -1070,7 +1111,7 @@ impl DecisionSearchView {
                         .on_click(move |_, _, cx| {
                             ent_d.update(cx, |v, cx| {
                                 v.draft.database_id = Some(db_id);
-                                cx.notify();
+                                v.bootstrap_and_autosearch(cx);
                             });
                         }),
                 );
@@ -1264,14 +1305,19 @@ impl DecisionSearchView {
                     .flex_wrap()
                     .items_center()
                     .gap(px(8.0))
-                    .child(div().text_label().tabular_nums().text_color(p.muted).child(
-                        I18n::format(
-                            locale,
-                            "decision-search",
-                            "found",
-                            &[("count", Param::from(self.total as i64))],
-                        ),
-                    ))
+                    .when(
+                        self.applied_query.is_some() && !self.loading && self.error.is_none(),
+                        |el| {
+                            el.child(div().text_label().tabular_nums().text_color(p.muted).child(
+                                I18n::format(
+                                    locale,
+                                    "decision-search",
+                                    "found",
+                                    &[("count", Param::from(self.total as i64))],
+                                ),
+                            ))
+                        },
+                    )
                     .child({
                         let ent_pr = ent.clone();
                         ActionButton::new("ds-practice-page-btn")
@@ -1604,13 +1650,28 @@ impl DecisionSearchView {
                     .on_retry(
                         I18n::t(locale, "recurring-mistakes", "retry"),
                         move |_, _, cx| {
-                            ent_r.update(cx, |v, cx| v.execute_search(cx));
+                            ent_r.update(cx, |v, cx| {
+                                if v.initialized {
+                                    v.execute_search(cx);
+                                } else {
+                                    v.bootstrap_and_autosearch(cx);
+                                }
+                            });
                         },
                     ),
             );
         }
 
-        if self.items.is_empty() && !self.loading {
+        if self.error.is_some() {
+            return container;
+        }
+        if self.loading || self.metadata_task.is_some() {
+            container = container.child(div().text_meta().text_color(p.muted).child(ds("loading")));
+            if self.items.is_empty() {
+                return container;
+            }
+        }
+        if self.items.is_empty() {
             let desc = if self.applied_query.is_none() {
                 if self.draft.player.is_empty() {
                     ds("choosePlayer").to_string()
@@ -1792,10 +1853,26 @@ impl DecisionSearchView {
                                     .label(I18n::t(
                                         locale,
                                         "position-bookmark",
-                                        if saved { "remove" } else { "save" },
+                                        match self.preview_bookmarked {
+                                            Some(true) => "remove",
+                                            Some(false) => "save",
+                                            None if self.bookmark_read.is_some() => "loading",
+                                            None => "retry",
+                                        },
                                     ))
                                     .active(saved)
-                                    .disabled(self.bookmark_busy)
+                                    .when(
+                                        self.preview_bookmarked.is_none()
+                                            && self.bookmark_read.is_none(),
+                                        |button| {
+                                            button.tooltip(I18n::t(
+                                                locale,
+                                                "position-bookmark",
+                                                "loadError",
+                                            ))
+                                        },
+                                    )
+                                    .disabled(self.bookmark_busy || self.bookmark_read.is_some())
                                     .palette(p)
                                     .on_click(move |_, _, cx| {
                                         ent_bm.update(cx, |v, cx| v.toggle_preview_bookmark(cx));
@@ -1881,7 +1958,15 @@ impl Focusable for DecisionSearchView {
 }
 
 impl Render for DecisionSearchView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.draft.min_loss.is_none() {
+            let inherited = self.error_thresholds.error.to_string();
+            if self.min_loss_input.read(cx).canonical_value() != inherited {
+                self.min_loss_input.update(cx, |input, cx| {
+                    input.set_canonical_value(&inherited, window, cx)
+                });
+            }
+        }
         let locale = current_locale(cx);
         let p = NeonTheme::current_palette(cx);
 

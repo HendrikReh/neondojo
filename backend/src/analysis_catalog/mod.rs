@@ -2,7 +2,9 @@
 mod results;
 mod selection;
 
-pub use results::{PositionJobsQuery, PositionResultQuery, SelectedPositionAnalysis};
+pub use results::{
+    NativeCheckerEquityKind, PositionJobsQuery, PositionResultQuery, SelectedPositionAnalysis,
+};
 pub(crate) use results::{list_position_jobs, load_position_result, remove_position_job};
 pub(crate) use selection::{SelectedAnalysis, resolve_selection, resolve_selection_on};
 
@@ -47,6 +49,7 @@ pub struct AnalysisCatalogEntry {
     #[schema(value_type = AnalysisScope)]
     pub scope: String,
     pub engine: String,
+    #[sqlx(rename = "catalog_depth")]
     pub depth: Option<String>,
     pub game_no: Option<i32>,
     pub position_id: Option<Uuid>,
@@ -130,13 +133,25 @@ pub(crate) fn routes() -> Router<AppState> {
         )
 }
 
+// A native match can span games with different cube rules. The selected
+// position result reports the applied unit for its own game or position job.
+const CATALOG_ENTRY: &str = "SELECT a.*,to_jsonb(j) AS job,
+    CASE WHEN j.id IS NOT NULL THEN j.plies || '-ply' ELSE a.depth END AS catalog_depth
+    FROM analysis_catalog_sources a LEFT JOIN jobs j ON j.id=a.job_id";
+
 async fn entry_on(
     connection: &mut PgConnection,
     match_id: Uuid,
     analysis_id: &str,
 ) -> ApiResult<Option<AnalysisCatalogEntry>> {
-    Ok(sqlx::query_as("SELECT a.*,to_jsonb(j) AS job FROM analysis_catalog_sources a LEFT JOIN jobs j ON j.id=a.job_id WHERE a.match_id=$1 AND a.analysis_id=$2")
-        .bind(match_id).bind(analysis_id).fetch_optional(connection).await.map_err(anyhow::Error::from)?)
+    Ok(sqlx::query_as(&format!(
+        "{CATALOG_ENTRY} WHERE a.match_id=$1 AND a.analysis_id=$2"
+    ))
+    .bind(match_id)
+    .bind(analysis_id)
+    .fetch_optional(connection)
+    .await
+    .map_err(anyhow::Error::from)?)
 }
 
 pub(crate) async fn list_catalog(
@@ -213,8 +228,20 @@ pub(crate) async fn list_catalog(
     } else {
         None
     };
-    let mut items:Vec<AnalysisCatalogEntry>=sqlx::query_as("SELECT a.*,to_jsonb(j) AS job FROM analysis_catalog_sources a LEFT JOIN jobs j ON j.id=a.job_id WHERE a.match_id=$1 AND ($2::uuid IS NULL OR a.scope<>'position' OR a.position_id=$2) AND ($3::timestamptz IS NULL OR (a.created_at,a.analysis_id)<($3,$4)) ORDER BY a.created_at DESC,a.analysis_id DESC LIMIT $5")
-        .bind(id).bind(query.position_id).bind(cursor.as_ref().map(|c|c.created_at)).bind(cursor.as_ref().map(|c|&c.id)).bind(limit+1).fetch_all(&mut *tx).await.map_err(anyhow::Error::from)?;
+    let mut items: Vec<AnalysisCatalogEntry> = sqlx::query_as(&format!(
+        "{CATALOG_ENTRY}
+         WHERE a.match_id=$1 AND ($2::uuid IS NULL OR a.scope<>'position' OR a.position_id=$2)
+           AND ($3::timestamptz IS NULL OR (a.created_at,a.analysis_id)<($3,$4))
+         ORDER BY a.created_at DESC,a.analysis_id DESC LIMIT $5"
+    ))
+    .bind(id)
+    .bind(query.position_id)
+    .bind(cursor.as_ref().map(|c| c.created_at))
+    .bind(cursor.as_ref().map(|c| &c.id))
+    .bind(limit + 1)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
     let next_cursor = if items.len() > limit as usize {
         items.pop();
         items

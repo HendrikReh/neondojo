@@ -23,15 +23,15 @@ use crate::ui::modal::{ModalConfig, ModalSize, open_modal_dialog};
 use crate::ui::text_nav::{TextNavBar, TextNavDensity, TextNavItem};
 use gpui_kit::{
     App, AppContext, Entity, FontWeight, InteractiveElement, IntoElement, ParentElement,
-    SharedString, StatefulInteractiveElement, Styled, TestSupportExt, Window,
+    SharedString, StatefulInteractiveElement, Styled, Subscription, TestSupportExt, Window,
     base::StyledExt,
-    component::input::{Input, InputState},
+    component::input::{Input, InputEvent, InputState, Textarea, TextareaState},
     div,
     prelude::FluentBuilder,
     px,
 };
 use neondojo::{
-    annotations::{AnnotationKind, AnnotationUpdate},
+    annotations::AnnotationKind,
     imported_analysis::ImportedAnalysisRecord,
     learning::{CardSuggestion, CardSuggestions, Deck, SuggestionReference},
     model::{ImportWarning, ImportWarningKind},
@@ -63,7 +63,7 @@ pub struct NotesViewProps<'a> {
     pub saved_feedback: bool,
     pub validation_error: Option<&'a str>,
     pub tag_input: &'a Entity<InputState>,
-    pub comment_input: &'a Entity<InputState>,
+    pub comment_input: &'a Entity<TextareaState>,
     pub import_warnings: &'a [ImportWarning],
     pub has_game_target: bool,
     pub has_position_target: bool,
@@ -198,7 +198,12 @@ pub fn render_notes_inspector(props: NotesViewProps<'_>, cx: &App) -> impl IntoE
         );
     }
 
-    if let Some(val_err) = props.validation_error {
+    let validation = if comment_len > MAX_COMMENT_CHARS {
+        Some(I18n::t(locale, "annotation", "commentTooLong"))
+    } else {
+        props.validation_error
+    };
+    if let Some(val_err) = validation {
         root = root.child(
             StatusBanner::new(
                 "notes-validation-error",
@@ -306,7 +311,7 @@ pub fn render_notes_inspector(props: NotesViewProps<'_>, cx: &App) -> impl IntoE
                         .text_label()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(p.text)
-                        .child("Comment (Markdown)"),
+                        .child(I18n::t(locale, "annotation", "comment")),
                 )
                 .child(
                     div()
@@ -319,11 +324,9 @@ pub fn render_notes_inspector(props: NotesViewProps<'_>, cx: &App) -> impl IntoE
                         )),
                 ),
         )
-        .child(
-            div()
-                .min_h(px(120.0))
-                .child(Input::new(props.comment_input)),
-        )
+        .child(div().id("note-comment").test_support().child(
+            Textarea::new(props.comment_input).aria_label(I18n::t(locale, "annotation", "comment")),
+        ))
         .child(
             div()
                 .h_flex()
@@ -347,14 +350,18 @@ pub fn render_notes_inspector(props: NotesViewProps<'_>, cx: &App) -> impl IntoE
                 )
                 .child(
                     ActionButton::new("note-save-btn")
-                        .label(if props.saving {
-                            "Saving…"
-                        } else {
-                            "Save note"
-                        })
+                        .label(I18n::t(
+                            locale,
+                            "annotation",
+                            if props.saving { "saving" } else { "save" },
+                        ))
                         .icon(ActionIconName::Save)
                         .primary()
-                        .disabled(props.saving || props.target_key.is_none())
+                        .disabled(
+                            props.saving
+                                || props.target_key.is_none()
+                                || comment_len > MAX_COMMENT_CHARS,
+                        )
                         .palette(p)
                         .on_click(move |ev, w, cx| on_save(ev, w, cx)),
                 ),
@@ -416,22 +423,78 @@ fn format_import_warning(w: &ImportWarning) -> String {
 
 // ── MoveNotesDialog Modal ────────────────────────────────────────────────────
 
+/// The last target and value put in a particular editor. GPUI may deliver a
+/// cache notification before the Change event for text already in the field.
+#[derive(Default)]
+pub(super) struct NoteEditorBinding {
+    target: Option<NoteTargetKey>,
+    text: String,
+}
+
+impl NoteEditorBinding {
+    pub(super) fn record_input(
+        &mut self,
+        input: &Entity<TextareaState>,
+        drafts: &Entity<NotesDraftCache>,
+        cx: &mut App,
+    ) -> Result<(), String> {
+        let value = input.read(cx).value();
+        if value.as_ref() != self.text {
+            self.text = value.to_string();
+            if let Some(target) = self.target {
+                return drafts
+                    .as_mut(cx)
+                    .ensure_entry(target)
+                    .set_comment(self.text.clone());
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn sync(
+        &mut self,
+        drafts: &Entity<NotesDraftCache>,
+        target: Option<NoteTargetKey>,
+        input: &Entity<TextareaState>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> bool {
+        // Preserve pending input for its original target before following the cache.
+        // Over-limit drafts also belong in the cache; Save validates them again.
+        let _ = self.record_input(input, drafts, cx);
+        self.target = target;
+        let comment = target
+            .and_then(|key| drafts.read(cx).get(key))
+            .map_or("", |d| d.comment.as_str());
+        if self.text == comment {
+            return false;
+        }
+        self.text = comment.to_owned();
+        input.update(cx, |field, cx| {
+            field.set_value(self.text.clone(), window, cx)
+        });
+        true
+    }
+}
+
 struct MoveNotesDialogState {
     moves: Vec<StoredMove>,
     selected_idx: usize,
     imported: Vec<ImportedAnalysisRecord>,
-    drafts: NotesDraftCache,
+    drafts: Entity<NotesDraftCache>,
     saving: bool,
     status_msg: Option<String>,
     board_view: Entity<BoardView>,
-    comment_input: Entity<InputState>,
+    comment_input: Entity<TextareaState>,
+    comment_binding: NoteEditorBinding,
+    _comment_subscription: Subscription,
     tag_input: Entity<InputState>,
 }
 
 /// Opens the `MoveNotesDialog` modal browsing all game decisions (checker + cube)
 /// with a mini `BoardView`, imported analysis records, and per-move notes editor.
 pub fn open_move_notes_dialog(
-    match_id: Uuid,
+    drafts: Entity<NotesDraftCache>,
     game_no: i32,
     moves: Vec<StoredMove>,
     initial_move_id: Option<Uuid>,
@@ -454,19 +517,52 @@ pub fn open_move_notes_dialog(
         bv.set_show_player_bars(false, cx);
         bv
     });
-    let comment_input = cx.new(|cx| InputState::new(window, cx).placeholder("Move comment…"));
+    let comment_input = cx.new(|cx| {
+        TextareaState::new(window, cx).rows(4).placeholder(I18n::t(
+            current_locale(cx),
+            "annotation",
+            "commentPlaceholder",
+        ))
+    });
     let tag_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add tag…"));
 
-    let state = cx.new(|_| MoveNotesDialogState {
-        moves,
-        selected_idx: initial_idx,
-        imported: Vec::new(),
-        drafts: NotesDraftCache::default(),
-        saving: false,
-        status_msg: None,
-        board_view,
-        comment_input,
-        tag_input,
+    let state = cx.new(|cx| {
+        cx.observe_in(
+            &drafts,
+            window,
+            |m: &mut MoveNotesDialogState, drafts, window, cx| {
+                let key = m.moves.get(m.selected_idx).map(move_note_key);
+                if m.comment_binding
+                    .sync(&drafts, key, &m.comment_input, window, cx)
+                {
+                    m.status_msg = None;
+                }
+                cx.notify();
+            },
+        )
+        .detach();
+        let subscription = cx.subscribe(
+            &comment_input,
+            |m: &mut MoveNotesDialogState, field, event, cx| {
+                if matches!(event, InputEvent::Change) {
+                    m.status_msg = m.comment_binding.record_input(&field, &m.drafts, cx).err();
+                    cx.notify();
+                }
+            },
+        );
+        MoveNotesDialogState {
+            moves,
+            selected_idx: initial_idx,
+            imported: Vec::new(),
+            drafts,
+            saving: false,
+            status_msg: None,
+            board_view,
+            comment_input,
+            comment_binding: NoteEditorBinding::default(),
+            _comment_subscription: subscription,
+            tag_input,
+        }
     });
 
     load_move_notes_selection(&state, window, cx);
@@ -499,6 +595,7 @@ pub fn open_move_notes_dialog(
                     let st = body_state.clone();
                     div()
                         .id(SharedString::from(format!("move-notes-item-{ix}")))
+                        .test_support()
                         .px(px(6.0))
                         .py(px(4.0))
                         .rounded(px(4.0))
@@ -511,6 +608,7 @@ pub fn open_move_notes_dialog(
                         .on_click(move |_, w, cx| {
                             st.update(cx, |m, cx| {
                                 m.selected_idx = ix;
+                                m.imported.clear();
                                 m.status_msg = None;
                                 cx.notify();
                             });
@@ -522,20 +620,17 @@ pub fn open_move_notes_dialog(
             let right_detail = if let Some(mv) = cur_move {
                 let st_save = body_state.clone();
                 let st_tag = body_state.clone();
-                let target_kind = if mv.kind == "checker" && mv.position_uuid.is_some() {
-                    AnnotationKind::Position
-                } else {
-                    AnnotationKind::Move
-                };
-                let target_id = mv.position_uuid.unwrap_or(mv.id);
-                let key = NoteTargetKey {
-                    kind: target_kind,
-                    target_id,
-                };
-                let draft = s.drafts.get(key);
+                let key = move_note_key(mv);
+                let draft = s.drafts.read(cx).get(key);
                 let tags = draft.map(|d| d.tags.clone()).unwrap_or_default();
                 let saving = s.saving;
-                let status = s.status_msg.clone();
+                let over_limit =
+                    s.comment_input.read(cx).value().chars().count() > MAX_COMMENT_CHARS;
+                let status = if over_limit {
+                    Some(I18n::t(current_locale(cx), "annotation", "commentTooLong").to_owned())
+                } else {
+                    s.status_msg.clone()
+                };
 
                 div()
                     .v_flex()
@@ -614,9 +709,9 @@ pub fn open_move_notes_dialog(
                                             st_tag.read(cx).tag_input.read(cx).value().to_string();
                                         let tag_ent = st_tag.read(cx).tag_input.clone();
                                         st_tag.update(cx, |m, cx| {
-                                            if let Err(err) =
-                                                m.drafts.ensure_entry(key).add_tag(&raw)
-                                            {
+                                            let result =
+                                                m.drafts.as_mut(cx).ensure_entry(key).add_tag(&raw);
+                                            if let Err(err) = result {
                                                 m.status_msg = Some(err);
                                             }
                                             cx.notify();
@@ -639,7 +734,13 @@ pub fn open_move_notes_dialog(
                             }),
                         ))
                     })
-                    .child(Input::new(&s.comment_input))
+                    .child(div().id("move-notes-comment").test_support().child(
+                        Textarea::new(&s.comment_input).aria_label(I18n::t(
+                            current_locale(cx),
+                            "annotation",
+                            "comment",
+                        )),
+                    ))
                     .child(
                         div()
                             .h_flex()
@@ -653,16 +754,16 @@ pub fn open_move_notes_dialog(
                             )
                             .child(
                                 ActionButton::new("move-notes-save")
-                                    .label(if saving {
-                                        "Saving…"
-                                    } else {
-                                        "Save move note"
-                                    })
+                                    .label(I18n::t(
+                                        current_locale(cx),
+                                        "annotation",
+                                        if saving { "saving" } else { "save" },
+                                    ))
                                     .primary()
-                                    .disabled(saving)
+                                    .disabled(saving || over_limit)
                                     .palette(p)
                                     .on_click(move |_, _w, cx| {
-                                        save_move_note_from_dialog(&st_save, match_id, key, cx);
+                                        save_move_note_from_dialog(&st_save, key, cx);
                                     }),
                             ),
                     )
@@ -687,6 +788,22 @@ pub fn open_move_notes_dialog(
         None::<fn(&mut Window, &mut App) -> gpui_kit::AnyElement>,
         None,
     );
+}
+
+fn move_note_key(mv: &StoredMove) -> NoteTargetKey {
+    if mv.kind == "checker"
+        && let Some(position_id) = mv.position_uuid
+    {
+        NoteTargetKey {
+            kind: AnnotationKind::Position,
+            target_id: position_id,
+        }
+    } else {
+        NoteTargetKey {
+            kind: AnnotationKind::Move,
+            target_id: mv.id,
+        }
+    }
 }
 
 fn load_move_notes_selection(
@@ -723,13 +840,13 @@ fn load_move_notes_selection(
     };
     board_view.update(cx, |bv, cx| bv.set_position(bp, cx));
 
-    let target_kind = if mv.kind == "checker" && mv.position_uuid.is_some() {
-        AnnotationKind::Position
-    } else {
-        AnnotationKind::Move
-    };
-    let target_id = mv.position_uuid.unwrap_or(mv.id);
+    let key = move_note_key(&mv);
     let move_id = mv.id;
+    let drafts = state.read(cx).drafts.clone();
+    state.update(cx, |m, cx| {
+        m.comment_binding
+            .sync(&drafts, Some(key), &comment_input, window, cx);
+    });
 
     let Some(facade) = cx
         .try_global::<DesktopAppContext>()
@@ -740,7 +857,7 @@ fn load_move_notes_selection(
 
     let read = TokioBridge::spawn_read(cx, async move {
         run_facade(move || async move {
-            let ann = facade.get_annotations(target_kind, target_id).await?;
+            let ann = facade.get_annotations(key.kind, key.target_id).await?;
             let imported = facade
                 .get_move_imported_analysis(move_id)
                 .await
@@ -756,18 +873,20 @@ fn load_move_notes_selection(
             let Ok(Ok((ann, imported))) = read.await else {
                 return;
             };
-            let _ = cx.update(|window, cx| {
+            let _ = cx.update(|_window, cx| {
                 let Some(st) = state_weak.upgrade() else {
                     return;
                 };
-                let mut comment_val = String::new();
                 st.update(cx, |m, cx| {
-                    let draft = m.drafts.merge_loaded(&ann);
-                    comment_val = draft.comment.clone();
-                    m.imported = imported;
-                    cx.notify();
+                    m.drafts.as_mut(cx).merge_loaded(&ann);
+                    if m.moves
+                        .get(m.selected_idx)
+                        .is_some_and(|mv| mv.id == move_id)
+                    {
+                        m.imported = imported;
+                        cx.notify();
+                    }
                 });
-                comment_input.update(cx, |inp, cx| inp.set_value(comment_val, window, cx));
             });
         })
         .detach();
@@ -775,7 +894,6 @@ fn load_move_notes_selection(
 
 fn save_move_note_from_dialog(
     state: &Entity<MoveNotesDialogState>,
-    _match_id: Uuid,
     key: NoteTargetKey,
     cx: &mut App,
 ) {
@@ -786,52 +904,53 @@ fn save_move_note_from_dialog(
         return;
     };
     let comment_val = state.read(cx).comment_input.read(cx).value().to_string();
-    let (tags, expected_version) = state.update(cx, |m, cx| {
-        let d = m.drafts.ensure_entry(key);
-        let _ = d.set_comment(comment_val.clone());
+    let drafts = state.read(cx).drafts.clone();
+    let submitted = drafts
+        .as_mut(cx)
+        .ensure_entry(key)
+        .prepare_update(comment_val);
+    let submitted = match submitted {
+        Ok(update) => update,
+        Err(error) => {
+            state.update(cx, |m, cx| {
+                m.status_msg = Some(error);
+                cx.notify();
+            });
+            return;
+        }
+    };
+    state.update(cx, |m, cx| {
         m.saving = true;
         cx.notify();
-        (d.tags.clone(), d.base_version)
     });
 
-    let write = TokioBridge::spawn_write(cx, async move {
-        run_facade(move || async move {
-            facade
-                .save_annotations(
-                    key.kind,
-                    key.target_id,
-                    AnnotationUpdate {
-                        tags,
-                        comment: comment_val,
-                        expected_version,
-                    },
-                )
-                .await
-        })
-        .await
-    });
+    let write = TokioBridge::spawn_write(cx, super::state::save_note(facade, key, submitted));
 
     let state_weak = state.downgrade();
     cx.spawn(async move |cx| {
         let res = write.await;
         cx.update(|cx| {
+            let status = match res {
+                Ok(Ok((saved, submitted))) => {
+                    drafts.as_mut(cx).mark_saved(&saved, &submitted);
+                    (!drafts.read(cx).has_dirty(key)).then(|| "Saved".to_string())
+                }
+                Ok(Err(err)) => {
+                    drafts.as_mut(cx).mark_conflict(key, &err);
+                    Some(err.to_string())
+                }
+                Err(err) => Some(format!("Save interrupted: {err}")),
+            };
             let Some(st) = state_weak.upgrade() else {
                 return;
             };
             st.update(cx, |m, cx| {
                 m.saving = false;
-                match res {
-                    Ok(Ok(saved)) => {
-                        m.drafts.mark_saved(&saved);
-                        m.status_msg = Some("Saved".to_string());
-                    }
-                    Ok(Err(err)) => {
-                        m.drafts.mark_conflict(key, &err);
-                        m.status_msg = Some(err.to_string());
-                    }
-                    Err(err) => {
-                        m.status_msg = Some(format!("Save interrupted: {err}"));
-                    }
+                if m.moves
+                    .get(m.selected_idx)
+                    .is_some_and(|mv| move_note_key(mv) == key)
+                {
+                    m.status_msg = status;
                 }
                 cx.notify();
             });

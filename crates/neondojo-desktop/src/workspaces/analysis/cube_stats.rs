@@ -32,7 +32,7 @@ use neondojo::{
     model::{MatchGame, MoveSeverity},
     review_decisions::ReviewDecision,
 };
-use neondojo_i18n::{I18n, format_decimal, format_pr, localize_decision};
+use neondojo_i18n::{I18n, Locale, format_decimal, format_pr, localize_decision};
 
 // ── Cube Inspector Tab ───────────────────────────────────────────────────────
 
@@ -708,6 +708,14 @@ fn render_player_stats_card(
         )
 }
 
+pub(super) fn statistics_game_labels(locale: Locale, game_no: i32) -> (String, String) {
+    let game = &[("game", game_no.into())];
+    (
+        I18n::format(locale, "review-statistics", "game", game),
+        I18n::format(locale, "review-statistics", "openGame", game),
+    )
+}
+
 fn render_per_game_table(
     games: &[CatalogGameStatistics],
     callbacks: &StatsCallbacks,
@@ -740,15 +748,19 @@ fn render_per_game_table(
                 .border_color(p.border)
                 .text_table_heading()
                 .text_color(p.muted)
-                .child(div().w(px(52.0)).child("Game"))
+                .child(
+                    div()
+                        .w(px(95.0))
+                        .child(I18n::t(locale, "review-statistics", "games")),
+                )
                 .child(div().w(px(60.0)).child("Score"))
                 .child(div().flex_1().text_right().child("W PR"))
-                .child(div().flex_1().text_right().child("B PR"))
-                .child(div().w(px(84.0)).text_right().child("Action")),
+                .child(div().flex_1().text_right().child("B PR")),
         );
 
     for g in games {
         let gno = g.game_no;
+        let (game_label, open_label) = statistics_game_labels(locale, gno);
         let on_open = callbacks.on_open_game.clone();
         let (wpr, bpr) = g
             .summary
@@ -757,56 +769,56 @@ fn render_per_game_table(
             .map(|r| (r.players[0].value, r.players[1].value))
             .unwrap_or((None, None));
 
-        table =
-            table.child(
-                div()
-                    .h_flex()
-                    .items_center()
-                    .gap(px(6.0))
-                    .px(px(8.0))
-                    .py(px(5.0))
-                    .border_b_1()
-                    .border_color(p.border)
-                    .text_table()
-                    .tabular_nums()
-                    .child(
-                        div()
-                            .h_flex()
-                            .items_center()
-                            .gap(px(4.0))
-                            .w(px(52.0))
-                            .text_color(p.text)
-                            .child(format!("G{gno}"))
-                            .when(g.needs_cube_rule_reanalysis, |el| {
-                                el.child(div().text_micro().text_color(p.warning_text).child("!"))
-                            }),
-                    )
-                    .child(div().w(px(60.0)).text_color(p.muted).child(format!(
-                        "{}–{}{}",
-                        g.white_score,
-                        g.black_score,
-                        if g.crawford { " Cr" } else { "" }
-                    )))
-                    .child(div().flex_1().text_right().text_color(p.text).child(
+        table = table.child(
+            div()
+                .h_flex()
+                .items_center()
+                .gap(px(6.0))
+                .px(px(8.0))
+                .py(px(5.0))
+                .border_b_1()
+                .border_color(p.border)
+                .text_table()
+                .tabular_nums()
+                .child(
+                    div()
+                        .h_flex()
+                        .items_center()
+                        .gap(px(4.0))
+                        .w(px(95.0))
+                        .text_color(p.text)
+                        .child(
+                            ActionButton::new(SharedString::from(format!("stats-open-game-{gno}")))
+                                .label(game_label)
+                                .tooltip(open_label)
+                                .tab_stop()
+                                .palette(p)
+                                .on_click(move |_, w, cx| on_open(gno, w, cx)),
+                        )
+                        .when(g.needs_cube_rule_reanalysis, |el| {
+                            el.child(div().text_micro().text_color(p.warning_text).child("!"))
+                        }),
+                )
+                .child(div().w(px(60.0)).text_color(p.muted).child(format!(
+                    "{}–{}{}",
+                    g.white_score,
+                    g.black_score,
+                    if g.crawford { " Cr" } else { "" }
+                )))
+                .child(
+                    div().flex_1().text_right().text_color(p.text).child(
                         wpr.map(|v| format_pr(locale, v)).unwrap_or_else(|| {
                             if g.analyzed { "—" } else { "Pending" }.to_string()
                         }),
-                    ))
-                    .child(
-                        div().flex_1().text_right().text_color(p.text).child(
-                            bpr.map(|v| format_pr(locale, v))
-                                .unwrap_or_else(|| "—".to_string()),
-                        ),
-                    )
-                    .child(
-                        div().w(px(84.0)).h_flex().justify_end().child(
-                            ActionButton::new(SharedString::from(format!("stats-open-game-{gno}")))
-                                .label(I18n::t(locale, "review-statistics", "openGame"))
-                                .palette(p)
-                                .on_click(move |_, w, cx| on_open(gno, w, cx)),
-                        ),
                     ),
-            );
+                )
+                .child(
+                    div().flex_1().text_right().text_color(p.text).child(
+                        bpr.map(|v| format_pr(locale, v))
+                            .unwrap_or_else(|| "—".to_string()),
+                    ),
+                ),
+        );
     }
 
     table.into_any_element()

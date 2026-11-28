@@ -54,6 +54,23 @@ impl BackendFacade {
         Ok(databases::browse(&self.state.pool, query).await?)
     }
 
+    pub async fn library_analysis_statuses(
+        &self,
+        match_ids: &[Uuid],
+        changed_job: Option<Uuid>,
+    ) -> Result<Vec<(Uuid, Option<String>)>, DomainError> {
+        let _guard = self.db_access_guard()?;
+        Ok(databases::library_analysis_statuses(&self.state.pool, match_ids, changed_job).await?)
+    }
+
+    pub async fn library_bulk_job_statuses(
+        &self,
+        job_ids: &[Uuid],
+    ) -> Result<Vec<databases::LibraryBulkJobStatus>, DomainError> {
+        let _guard = self.db_access_guard()?;
+        Ok(databases::library_bulk_job_statuses(&self.state.pool, job_ids).await?)
+    }
+
     pub async fn get_match(&self, id: Uuid) -> Result<MatchSummary, DomainError> {
         let _guard = self.db_access_guard()?;
         api::get_match_by_id(&self.state, id).await

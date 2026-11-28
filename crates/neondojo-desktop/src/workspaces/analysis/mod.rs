@@ -8,6 +8,7 @@
 //! async `BackendFacade` loading.
 
 pub mod board_pane;
+mod candidate_data;
 pub mod candidates;
 pub mod cube_stats;
 pub mod header;
@@ -23,9 +24,8 @@ use self::board_pane::{
     BoardPaneCallbacks, BoardPaneProps, BoardPreviewState, HypotheticalDicePreview,
     compute_game_plans, render_board_pane, sync_board_view,
 };
-use self::candidates::{
-    CheckerCallbacks, CheckerViewProps, extract_candidates, render_checker_inspector,
-};
+use self::candidate_data::{CheckerCandidate, comparison_options, extract_candidates};
+use self::candidates::{CheckerCallbacks, CheckerViewProps, render_checker_inspector};
 use self::cube_stats::{
     CubeCallbacks, CubeViewProps, StatsCallbacks, StatsDrilldownTarget, StatsViewProps,
     render_cube_inspector, render_statistics_inspector,
@@ -34,13 +34,13 @@ use self::header::{HeaderCallbacks, HeaderProps, render_analysis_header};
 use self::jobs::{AnalysisJobEvent, MatchAnalysisJobEntity};
 use self::move_history::{MoveHistoryCallbacks, render_move_history_pane};
 use self::notes_cards::{
-    CardsCallbacks, CardsViewProps, NotesCallbacks, NotesViewProps, open_move_notes_dialog,
-    render_cards_inspector, render_notes_inspector,
+    CardsCallbacks, CardsViewProps, NoteEditorBinding, NotesCallbacks, NotesViewProps,
+    open_move_notes_dialog, render_cards_inspector, render_notes_inspector,
 };
 use self::state::{
     ActiveBoardTarget, AnalysisDetailTab, BoardWidthController, CheckerSubTab, CompareEngineSlot,
     CubeAutoSelectState, CubeFilterState, DiceTabState, DiceTransitionAction, InterleavedMoveRow,
-    MOVE_LIST_PANE_WIDTH, MoveAssessmentSnapshot, MoveHistoryFilter, NoteTargetKey,
+    MOVE_LIST_PANE_WIDTH, MoveAssessmentSnapshot, MoveHistoryFilter, NoteDraft, NoteTargetKey,
     NotesDraftCache, build_interleaved_move_rows, catalog_entry_engine, run_facade,
 };
 use crate::app_context::DesktopAppContext;
@@ -65,17 +65,18 @@ use gpui_kit::{
     StatefulInteractiveElement, Styled, Subscription, TestSupportExt, UniformListScrollHandle,
     Window,
     base::StyledExt,
-    component::input::{InputEvent, InputState},
+    component::input::{InputEvent, InputState, TextareaState},
     div, px,
 };
 use neondojo::{
-    analysis_catalog::{AnalysisCatalogEntry, AnalysisCatalogQuery, SelectedPositionAnalysis},
+    analysis_catalog::{
+        AnalysisCatalogEntry, AnalysisCatalogPage, AnalysisCatalogQuery, SelectedPositionAnalysis,
+    },
     analysis_statistics::catalog::{CatalogStatisticsQuery, MatchAnalysisStatistics},
-    annotations::{AnnotationKind, AnnotationUpdate},
+    annotations::{Annotation, AnnotationKind},
     api::{MatchAnalysisEngine, PositionJobKind, PositionQuery},
     databases::DatabaseMatch,
     domain_error::ErrorKind,
-    engine::Candidate,
     learning::{
         AddCards, CardSuggestions, Deck, SaveSuggestions, SuggestionQuery, SuggestionReference,
     },
@@ -105,7 +106,8 @@ pub struct AnalysisWorkspace {
     // Board & input child entities
     board_view: Entity<BoardView>,
     tag_input: Entity<InputState>,
-    comment_input: Entity<InputState>,
+    comment_input: Entity<TextareaState>,
+    comment_binding: NoteEditorBinding,
     new_deck_input: Entity<InputState>,
     _comment_input_sub: Subscription,
 
@@ -151,6 +153,7 @@ pub struct AnalysisWorkspace {
     pub(crate) catalog_source_revision: i64,
     pub(crate) catalog_next_cursor: Option<String>,
     pub(crate) catalog_loading: bool,
+    catalog_epoch: u64,
 
     // Overview / Checker sub-tabs
     pub(crate) checker_subtab: CheckerSubTab,
@@ -159,9 +162,9 @@ pub struct AnalysisWorkspace {
     pub(crate) opening_book: Option<BookLookup>,
     pub(crate) opening_book_expanded: bool,
     pub(crate) opening_book_loading: bool,
-    pub(crate) compare_slots: [Vec<Candidate>; 3],
+    pub(crate) compare_slots: [Vec<CheckerCandidate>; 3],
     pub(crate) compare_slot_ids: [Option<String>; 3],
-    pub(crate) compare_sort_delta: bool,
+    pub(crate) compare_sort_delta: Option<CompareEngineSlot>,
     pub(crate) dice_state: DiceTabState,
     pub(crate) selected_dice_cell: Option<[u8; 2]>,
     pub(crate) observed_rolls: Option<DiceStats>,
@@ -187,7 +190,7 @@ pub struct AnalysisWorkspace {
 
     // Notes tab (persistent drafts across navigation + 409 conflict preservation)
     pub(crate) notes_scope: AnnotationKind,
-    pub(crate) notes_drafts: NotesDraftCache,
+    pub(crate) notes_drafts: Entity<NotesDraftCache>,
     pub(crate) notes_saving: bool,
     pub(crate) notes_saved_feedback: bool,
     pub(crate) notes_validation_error: Option<String>,
@@ -213,7 +216,7 @@ pub struct AnalysisWorkspace {
     game_load_task: Option<ReadTask<()>>,
     position_load_task: Option<ReadTask<()>>,
     stats_load_task: Option<ReadTask<()>>,
-    cube_load_task: Option<ReadTask<()>>,
+    cube_load_task: Option<gpui_kit::Task<()>>,
     rolls_load_task: Option<ReadTask<()>>,
 }
 
@@ -251,20 +254,41 @@ impl AnalysisWorkspace {
             bv
         });
         let tag_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add tag…"));
-        let comment_input =
-            cx.new(|cx| InputState::new(window, cx).placeholder("Write note in Markdown…"));
+        let comment_input = cx.new(|cx| {
+            TextareaState::new(window, cx)
+                .rows(4)
+                .placeholder(neondojo_i18n::I18n::t(
+                    crate::i18n::current_locale(cx),
+                    "annotation",
+                    "commentPlaceholder",
+                ))
+        });
         let new_deck_input = cx.new(|cx| InputState::new(window, cx).placeholder("New deck name…"));
 
         let job_controller = cx.new(MatchAnalysisJobEntity::new);
         let job_subscription = cx.subscribe_in(&job_controller, window, Self::on_job_event);
 
+        let notes_drafts = cx.new(|_| NotesDraftCache::default());
+        cx.observe_in(&notes_drafts, window, |ws, drafts, window, cx| {
+            if ws.active_tab == AnalysisDetailTab::Notes {
+                let key = ws.current_note_target_key();
+                if ws
+                    .comment_binding
+                    .sync(&drafts, key, &ws.comment_input, window, cx)
+                {
+                    ws.notes_validation_error = None;
+                    ws.notes_saved_feedback = false;
+                }
+                cx.notify();
+            }
+        })
+        .detach();
         let comment_input_sub = cx.subscribe(&comment_input, |this, inp, event, cx| {
-            if matches!(event, InputEvent::Change)
-                && let Some(key) = this.current_note_target_key()
-            {
-                let value = inp.read(cx).value().to_string();
-                let res = this.notes_drafts.ensure_entry(key).set_comment(value);
-                this.notes_validation_error = res.err();
+            if matches!(event, InputEvent::Change) {
+                this.notes_validation_error = this
+                    .comment_binding
+                    .record_input(&inp, &this.notes_drafts, cx)
+                    .err();
                 this.notes_saved_feedback = false;
                 cx.notify();
             }
@@ -281,6 +305,7 @@ impl AnalysisWorkspace {
             board_view,
             tag_input,
             comment_input,
+            comment_binding: NoteEditorBinding::default(),
             new_deck_input,
             _comment_input_sub: comment_input_sub,
             match_id: None,
@@ -316,6 +341,7 @@ impl AnalysisWorkspace {
             catalog_source_revision: 0,
             catalog_next_cursor: None,
             catalog_loading: false,
+            catalog_epoch: 0,
             checker_subtab: CheckerSubTab::Candidates,
             position_result: None,
             position_result_loading: false,
@@ -324,7 +350,7 @@ impl AnalysisWorkspace {
             opening_book_loading: false,
             compare_slots: [Vec::new(), Vec::new(), Vec::new()],
             compare_slot_ids: [None, None, None],
-            compare_sort_delta: false,
+            compare_sort_delta: None,
             dice_state: DiceTabState::Idle,
             selected_dice_cell: None,
             observed_rolls: None,
@@ -344,7 +370,7 @@ impl AnalysisWorkspace {
             compare_stats_a: None,
             compare_stats_b: None,
             notes_scope: AnnotationKind::Position,
-            notes_drafts: NotesDraftCache::default(),
+            notes_drafts,
             notes_saving: false,
             notes_saved_feedback: false,
             notes_validation_error: None,
@@ -411,6 +437,9 @@ impl AnalysisWorkspace {
         cx: &mut Context<Self>,
     ) {
         let same_match = self.match_id == Some(match_id);
+        if position_id.is_some() && self.active_tab == AnalysisDetailTab::Cube {
+            self.active_tab = AnalysisDetailTab::Overview;
+        }
         self.welcome_mode = false;
         self.game_menu_open = false;
         self.catalog_menu_open = false;
@@ -444,6 +473,7 @@ impl AnalysisWorkspace {
             self.catalog_selected = None;
             self.catalog_selected_id = None;
             self.catalog_next_cursor = None;
+            self.catalog_loading = false;
             self.position_result = None;
             self.opening_book = None;
             self.compare_slots = [Vec::new(), Vec::new(), Vec::new()];
@@ -458,7 +488,9 @@ impl AnalysisWorkspace {
             self.stats_drilldown = None;
             self.compare_stats_a = None;
             self.compare_stats_b = None;
-            self.notes_drafts.clear_for_match();
+            self.notes_drafts.as_mut(cx).retain_unsaved();
+            self.notes_validation_error = None;
+            self.notes_saved_feedback = false;
             self.card_suggestions = None;
             self.selected_suggestions.clear();
             self.suggestion_boards.clear();
@@ -522,7 +554,7 @@ impl AnalysisWorkspace {
         self.observed_rolls = None;
         self.cube_decisions.clear();
         self.statistics = None;
-        self.notes_drafts.clear_for_match();
+        self.notes_drafts.as_mut(cx).retain_unsaved();
         self.welcome_mode = true;
 
         if cx.has_global::<LocalUiState>() {
@@ -763,6 +795,7 @@ impl AnalysisWorkspace {
             return;
         };
         let epoch = self.match_epoch;
+        let (catalog_epoch, catalog_query) = self.begin_catalog_read(None);
         let read = TokioBridge::spawn_read(cx, async move {
             run_facade(move || async move {
                 let summary = facade.get_match(match_id).await?;
@@ -773,14 +806,7 @@ impl AnalysisWorkspace {
                     .await
                     .unwrap_or_default();
                 let catalog = facade
-                    .list_analysis_catalog(
-                        match_id,
-                        AnalysisCatalogQuery {
-                            limit: Some(50),
-                            cursor: None,
-                            position_id: None,
-                        },
-                    )
+                    .list_analysis_catalog(match_id, catalog_query)
                     .await
                     .ok();
                 let decks = facade.list_decks().await.unwrap_or_default();
@@ -809,11 +835,7 @@ impl AnalysisWorkspace {
                     ws.selected_deck_id = ws.decks.first().map(|d| d.id);
                 }
                 if let Some(cat) = catalog {
-                    ws.catalog_items = cat.items;
-                    ws.catalog_selected = cat.selected;
-                    ws.catalog_selected_id = cat.selected_id;
-                    ws.catalog_source_revision = cat.source_revision;
-                    ws.catalog_next_cursor = cat.next_cursor;
+                    ws.apply_catalog_page(catalog_epoch, cat, false);
                 }
                 if retained && !ws.active_tab.available_when_retained() {
                     ws.active_tab = AnalysisDetailTab::Overview;
@@ -1021,7 +1043,7 @@ impl AnalysisWorkspace {
                     {
                         ws.select_cube_decision(cube_id, cube_dno, None, window, cx);
                     } else {
-                        ws.active_target = None;
+                        ws.set_board_target(None, window, cx);
                         ws.sync_board(cx);
                     }
                 }
@@ -1040,7 +1062,7 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.active_target = Some(ActiveBoardTarget::Checker { position_id });
+        self.set_board_target(Some(ActiveBoardTarget::Checker { position_id }), window, cx);
         self.preview.reset();
         self.selected_dice_cell = None;
         self.copied_feedback = false;
@@ -1065,11 +1087,12 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.active_target = Some(ActiveBoardTarget::Cube {
+        let target = ActiveBoardTarget::Cube {
             review_id,
             decision_no,
             return_position_id: return_position_id.or_else(|| self.active_checker_position_id()),
-        });
+        };
+        self.set_board_target(Some(target), window, cx);
         self.preview.reset();
         self.sync_board(cx);
         if self.active_tab == AnalysisDetailTab::Notes {
@@ -1084,18 +1107,50 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(cube_id) = self
-            .cube_decisions
-            .iter()
-            .find(|c| {
-                c.decision.decision_no == decision_no
-                    && self.current_game_no.is_none_or(|g| c.game_no == g)
-            })
-            .map(|c| c.id.clone())
-        {
-            self.active_tab = AnalysisDetailTab::Cube;
-            self.select_cube_decision(cube_id, decision_no, None, window, cx);
+        let (Some(match_id), Some(game_no)) = (self.match_id, self.current_game_no) else {
+            return;
+        };
+        self.cube_filter.reset();
+        self.cube_filter.game_no = Some(game_no);
+        self.active_tab = AnalysisDetailTab::Cube;
+        self.set_board_target(None, window, cx);
+        self.preview.reset();
+        self.load_cube_page(match_id, Some(decision_no), window, cx);
+    }
+
+    fn set_board_target(
+        &mut self,
+        target: Option<ActiveBoardTarget>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let previous_position = self.active_checker_position_id();
+        self.active_target = target;
+        if previous_position != self.active_checker_position_id() {
+            // The selection belongs to the match. Only entries and the cursor are position-scoped.
+            self.catalog_items.clear();
+            self.catalog_next_cursor = None;
+            if let Some(match_id) = self.match_id {
+                self.refresh_catalog(match_id, None, window, cx);
+            }
         }
+    }
+
+    fn effective_compare_ids(&self, pos: &Position) -> [Option<String>; 3] {
+        CompareEngineSlot::ALL.map(|slot| {
+            let options = comparison_options(
+                &self.catalog_items,
+                self.catalog_selected.as_ref(),
+                pos,
+                slot,
+            );
+            let preferred = self.compare_slot_ids[slot as usize].as_deref();
+            options
+                .iter()
+                .find(|e| Some(e.id.as_str()) == preferred)
+                .or_else(|| options.first())
+                .map(|e| e.id.clone())
+        })
     }
 
     fn load_position_details(
@@ -1110,6 +1165,11 @@ impl AnalysisWorkspace {
         else {
             return;
         };
+        let Some(pos) = self.active_position().filter(|pos| pos.id == position_id) else {
+            return;
+        };
+        let player = pos.player;
+        let compare_ids = self.effective_compare_ids(pos);
         self.position_epoch = self.position_epoch.wrapping_add(1);
         let epoch = self.position_epoch;
         self.position_result_loading = true;
@@ -1117,7 +1177,8 @@ impl AnalysisWorkspace {
 
         let analysis_id = self.catalog_selected_id.clone();
         let active_engine = self.active_engine(cx);
-        let compare_ids = self.compare_slot_ids.clone();
+        self.compare_slots = Default::default();
+        self.position_result = None;
 
         let read = TokioBridge::spawn_read(cx, async move {
             run_facade(move || async move {
@@ -1138,14 +1199,16 @@ impl AnalysisWorkspace {
                     .unwrap_or_default();
 
                 // Load 3-engine compare candidates if slot ids exist
-                let mut slot_cands: [Vec<Candidate>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+                let mut slot_cands: [Vec<CheckerCandidate>; 3] =
+                    [Vec::new(), Vec::new(), Vec::new()];
                 for (si, cid) in compare_ids.iter().enumerate() {
                     if let Some(id) = cid.as_deref()
                         && let Ok(Some(res)) = facade
                             .get_position_analysis_result(position_id, Some(id))
                             .await
                     {
-                        slot_cands[si] = extract_candidates(&res);
+                        slot_cands[si] =
+                            extract_candidates(&res, player, Some(CompareEngineSlot::ALL[si]));
                     }
                 }
                 Ok((result, bookmarked, book, pos_jobs, slot_cands))
@@ -1208,6 +1271,35 @@ impl AnalysisWorkspace {
         .detach();
     }
 
+    fn begin_catalog_read(&mut self, cursor: Option<String>) -> (u64, AnalysisCatalogQuery) {
+        self.catalog_epoch = self.catalog_epoch.wrapping_add(1);
+        (
+            self.catalog_epoch,
+            AnalysisCatalogQuery {
+                limit: Some(50),
+                cursor,
+                position_id: self.active_checker_position_id(),
+            },
+        )
+    }
+
+    fn apply_catalog_page(&mut self, epoch: u64, page: AnalysisCatalogPage, append: bool) -> bool {
+        if self.catalog_epoch != epoch || self.match_id != Some(page.match_id) {
+            return false;
+        }
+        if append {
+            self.catalog_items.extend(page.items);
+        } else {
+            self.catalog_items = page.items;
+        }
+        self.catalog_selected = page.selected;
+        self.catalog_selected_id = page.selected_id;
+        self.catalog_source_revision = page.source_revision;
+        self.catalog_next_cursor = page.next_cursor;
+        self.catalog_loading = false;
+        true
+    }
+
     fn refresh_catalog(
         &mut self,
         match_id: Uuid,
@@ -1215,84 +1307,54 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let append = cursor.is_some();
+        let (epoch, query) = self.begin_catalog_read(cursor);
         let Some(facade) = cx
             .try_global::<DesktopAppContext>()
             .and_then(|ctx| ctx.facade())
         else {
             return;
         };
-        let append = cursor.is_some();
         self.catalog_loading = true;
         let read = TokioBridge::spawn_read(cx, async move {
-            run_facade(move || async move {
-                facade
-                    .list_analysis_catalog(
-                        match_id,
-                        AnalysisCatalogQuery {
-                            limit: Some(50),
-                            cursor,
-                            position_id: None,
-                        },
-                    )
-                    .await
-            })
-            .await
+            run_facade(move || async move { facade.list_analysis_catalog(match_id, query).await })
+                .await
         });
 
         cx.spawn_in(window, async move |this, cx| {
             let Ok(Ok(page)) = read.await else {
                 let _ = this.update(cx, |ws, cx| {
-                    ws.catalog_loading = false;
-                    cx.notify();
+                    if ws.match_id == Some(match_id) && ws.catalog_epoch == epoch {
+                        ws.catalog_loading = false;
+                        cx.notify();
+                    }
                 });
                 return;
             };
-            let _ = this.update_in(cx, |ws, _window, cx| {
-                ws.catalog_loading = false;
-                if ws.match_id != Some(match_id) {
+            let _ = this.update_in(cx, |ws, window, cx| {
+                let previous = ws
+                    .active_position()
+                    .map(|pos| ws.effective_compare_ids(pos));
+                let previous_revision = ws.catalog_source_revision;
+                let previous_selection = ws.catalog_selected.as_ref().map(|entry| entry.id.clone());
+                if !ws.apply_catalog_page(epoch, page, append) {
                     return;
                 }
-                if append {
-                    ws.catalog_items.extend(page.items);
-                } else {
-                    ws.catalog_items = page.items;
+                if (previous
+                    != ws
+                        .active_position()
+                        .map(|pos| ws.effective_compare_ids(pos))
+                    || previous_revision != ws.catalog_source_revision
+                    || previous_selection.as_deref()
+                        != ws.catalog_selected.as_ref().map(|entry| entry.id.as_str()))
+                    && let Some(id) = ws.active_checker_position_id()
+                {
+                    ws.load_position_details(id, window, cx);
                 }
-                ws.catalog_selected = page.selected;
-                ws.catalog_selected_id = page.selected_id;
-                ws.catalog_source_revision = page.source_revision;
-                ws.catalog_next_cursor = page.next_cursor;
-                ws.seed_default_compare_slots();
                 cx.notify();
             });
         })
         .detach();
-    }
-
-    fn seed_default_compare_slots(&mut self) {
-        if self.compare_slot_ids[0].is_none() {
-            self.compare_slot_ids[0] = self
-                .catalog_items
-                .iter()
-                .find(|e| e.source == "imported")
-                .map(|e| e.id.clone());
-        }
-        if self.compare_slot_ids[1].is_none() {
-            self.compare_slot_ids[1] = self
-                .catalog_items
-                .iter()
-                .find(|e| e.engine.to_ascii_lowercase().contains("gnu"))
-                .map(|e| e.id.clone());
-        }
-        if self.compare_slot_ids[2].is_none() {
-            self.compare_slot_ids[2] = self
-                .catalog_items
-                .iter()
-                .find(|e| {
-                    let l = e.engine.to_ascii_lowercase();
-                    l.contains("neongammon") || l.contains("sage")
-                })
-                .map(|e| e.id.clone());
-        }
     }
 
     fn select_displayed_analysis(
@@ -1400,6 +1462,16 @@ impl AnalysisWorkspace {
     }
 
     fn load_cube_decisions(&mut self, match_id: Uuid, window: &mut Window, cx: &mut Context<Self>) {
+        self.load_cube_page(match_id, None, window, cx);
+    }
+
+    fn load_cube_page(
+        &mut self,
+        match_id: Uuid,
+        target: Option<i32>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(facade) = cx
             .try_global::<DesktopAppContext>()
             .and_then(|ctx| ctx.facade())
@@ -1407,7 +1479,7 @@ impl AnalysisWorkspace {
             return;
         };
         self.cube_loading = true;
-        let query = ReviewQuery {
+        let mut query = ReviewQuery {
             job_id: None,
             analysis_id: self.catalog_selected_id.clone(),
             game_no: self.cube_filter.game_no,
@@ -1417,28 +1489,82 @@ impl AnalysisWorkspace {
             errors_only: self.cube_filter.errors_only,
             limit: Some(100),
             after: None,
-            page: Some(1),
+            page: target.is_none().then_some(1),
         };
+        let epoch = self.game_epoch;
         let read = TokioBridge::spawn_read(cx, async move {
-            run_facade(move || async move { facade.list_review_decisions(match_id, query).await })
-                .await
+            run_facade(move || async move {
+                loop {
+                    let mut page = facade
+                        .list_review_decisions(match_id, query.clone())
+                        .await?;
+                    if target.is_none_or(|dno| {
+                        page.items.iter().any(|row| row.decision.decision_no == dno)
+                    }) || page.next_cursor.is_none()
+                    {
+                        return Ok(page);
+                    }
+                    query.after = page.next_cursor.take();
+                }
+            })
+            .await
         });
-        self.cube_load_task = Some(TokioBridge::spawn_read(cx, async move {}));
-
-        cx.spawn_in(window, async move |this, cx| {
-            let Ok(Ok(page)) = read.await else {
-                let _ = this.update(cx, |ws, cx| {
-                    ws.cube_loading = false;
-                    cx.notify();
-                });
-                return;
-            };
+        self.cube_load_task = Some(cx.spawn_in(window, async move |this, cx| {
+            let result = read.await;
             let _ = this.update_in(cx, |ws, window, cx| {
                 ws.cube_loading = false;
-                if ws.match_id != Some(match_id) {
+                if ws.match_id != Some(match_id)
+                    || (target.is_some()
+                        && (ws.game_epoch != epoch || ws.active_tab != AnalysisDetailTab::Cube))
+                {
                     return;
                 }
+                let page = match result {
+                    Ok(Ok(page)) => page,
+                    Ok(Err(err)) => {
+                        if target.is_some() || ws.active_tab == AnalysisDetailTab::Cube {
+                            let message = crate::i18n::format_domain_error(
+                                crate::i18n::current_locale(cx),
+                                &err,
+                            );
+                            cx.emit(WorkspaceEvent::ShowNotice(make_notice(
+                                "cube-load",
+                                BannerKind::Error,
+                                message,
+                            )));
+                        }
+                        cx.notify();
+                        return;
+                    }
+                    Err(_) => {
+                        cx.notify();
+                        return;
+                    }
+                };
                 ws.cube_decisions = page.items;
+                if let Some(dno) = target {
+                    if let Some(id) = ws
+                        .cube_decisions
+                        .iter()
+                        .find(|row| row.decision.decision_no == dno)
+                        .map(|row| row.id.clone())
+                    {
+                        ws.select_cube_decision(id, dno, None, window, cx);
+                    } else {
+                        let message = neondojo_i18n::I18n::t(
+                            crate::i18n::current_locale(cx),
+                            "app",
+                            "error.positionMissing",
+                        );
+                        cx.emit(WorkspaceEvent::ShowNotice(make_notice(
+                            "cube-target-missing",
+                            BannerKind::Error,
+                            message,
+                        )));
+                    }
+                    cx.notify();
+                    return;
+                }
                 if ws.active_tab == AnalysisDetailTab::Cube {
                     let current_sel = match &ws.active_target {
                         Some(ActiveBoardTarget::Cube { review_id, .. }) => Some(review_id.as_str()),
@@ -1454,8 +1580,7 @@ impl AnalysisWorkspace {
                 }
                 cx.notify();
             });
-        })
-        .detach();
+        }));
     }
 
     fn load_statistics(&mut self, match_id: Uuid, cx: &mut Context<Self>) {
@@ -1597,15 +1722,12 @@ impl AnalysisWorkspace {
     // ── Notes Persistence & 409 Conflict Preservation ────────────────────────
 
     pub(crate) fn load_current_note(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let key = self.current_note_target_key();
+        self.comment_binding
+            .sync(&self.notes_drafts, key, &self.comment_input, window, cx);
         let Some(key) = self.current_note_target_key() else {
             return;
         };
-        // Immediately restore any preserved local draft into the comment input
-        if let Some(existing) = self.notes_drafts.get(key) {
-            let text = existing.comment.clone();
-            self.comment_input
-                .update(cx, |inp, cx| inp.set_value(text, window, cx));
-        }
 
         let Some(facade) = cx
             .try_global::<DesktopAppContext>()
@@ -1623,14 +1745,8 @@ impl AnalysisWorkspace {
             let Ok(Ok(ann)) = read.await else {
                 return;
             };
-            let _ = this.update_in(cx, |ws, window, cx| {
-                let draft = ws.notes_drafts.merge_loaded(&ann);
-                let comment_val = draft.comment.clone();
-                if ws.current_note_target_key() == Some(key) {
-                    ws.comment_input
-                        .update(cx, |inp, cx| inp.set_value(comment_val, window, cx));
-                }
-                cx.notify();
+            let _ = this.update(cx, |ws, cx| {
+                ws.notes_drafts.as_mut(cx).merge_loaded(&ann);
             });
         })
         .detach();
@@ -1648,18 +1764,18 @@ impl AnalysisWorkspace {
         };
 
         let comment_val = self.comment_input.read(cx).value().to_string();
-        if let Err(err) = self
+        let submitted = self
             .notes_drafts
+            .as_mut(cx)
             .ensure_entry(key)
-            .set_comment(comment_val.clone())
-        {
-            self.notes_validation_error = Some(err);
-            cx.notify();
-            return;
-        }
-        let (tags, expected_version) = {
-            let d = self.notes_drafts.ensure_entry(key);
-            (d.tags.clone(), d.base_version)
+            .prepare_update(comment_val);
+        let submitted = match submitted {
+            Ok(update) => update,
+            Err(err) => {
+                self.notes_validation_error = Some(err);
+                cx.notify();
+                return;
+            }
         };
 
         self.notes_saving = true;
@@ -1668,44 +1784,32 @@ impl AnalysisWorkspace {
         let match_id = self.match_id;
         cx.notify();
 
-        let write = TokioBridge::spawn_write(cx, async move {
-            run_facade(move || async move {
-                facade
-                    .save_annotations(
-                        key.kind,
-                        key.target_id,
-                        AnnotationUpdate {
-                            tags,
-                            comment: comment_val,
-                            expected_version,
-                        },
-                    )
-                    .await
-            })
-            .await
-        });
+        let write = TokioBridge::spawn_write(cx, state::save_note(facade, key, submitted));
 
         cx.spawn_in(window, async move |this, cx| {
             let res = write.await;
             let _ = this.update_in(cx, |ws, _window, cx| {
                 ws.notes_saving = false;
                 match res {
-                    Ok(Ok(saved)) => {
-                        ws.notes_drafts.mark_saved(&saved);
-                        ws.notes_saved_feedback = true;
+                    Ok(Ok((saved, submitted))) => {
+                        ws.notes_drafts.as_mut(cx).mark_saved(&saved, &submitted);
+                        ws.notes_saved_feedback = ws.current_note_target_key() == Some(key)
+                            && !ws.notes_drafts.read(cx).has_dirty(key);
                         if let Some(mid) = match_id {
                             cx.emit(WorkspaceEvent::AnnotationSaved { match_id: mid });
                         }
                     }
                     Ok(Err(err)) => {
                         if err.kind == ErrorKind::Conflict {
-                            ws.notes_drafts.mark_conflict(key, &err);
-                        } else {
+                            ws.notes_drafts.as_mut(cx).mark_conflict(key, &err);
+                        } else if ws.current_note_target_key() == Some(key) {
                             ws.notes_validation_error = Some(err.to_string());
                         }
                     }
                     Err(err) => {
-                        ws.notes_validation_error = Some(format!("Save interrupted: {err}"));
+                        if ws.current_note_target_key() == Some(key) {
+                            ws.notes_validation_error = Some(format!("Save interrupted: {err}"));
+                        }
                     }
                 }
                 cx.notify();
@@ -1721,6 +1825,9 @@ impl AnalysisWorkspace {
         cx: &mut Context<Self>,
     ) {
         let Some(key) = self.current_note_target_key() else {
+            return;
+        };
+        let Some(requested_draft) = self.notes_drafts.read(cx).get(key).cloned() else {
             return;
         };
         let Some(facade) = cx
@@ -1740,18 +1847,43 @@ impl AnalysisWorkspace {
                 return;
             };
             let _ = this.update_in(cx, |ws, window, cx| {
-                if keep_my_draft {
-                    ws.notes_drafts.rebase_draft_version(key, latest.version);
-                    ws.save_current_note(window, cx);
-                } else {
-                    ws.notes_drafts.accept_server_latest(key, &latest);
-                    ws.comment_input
-                        .update(cx, |inp, cx| inp.set_value(latest.comment, window, cx));
-                }
-                cx.notify();
+                ws.apply_note_conflict_resolution(
+                    key,
+                    &requested_draft,
+                    &latest,
+                    keep_my_draft,
+                    window,
+                    cx,
+                );
             });
         })
         .detach();
+    }
+
+    fn apply_note_conflict_resolution(
+        &mut self,
+        key: NoteTargetKey,
+        requested_draft: &NoteDraft,
+        latest: &Annotation,
+        keep_my_draft: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.current_note_target_key() != Some(key)
+            || self.notes_drafts.read(cx).get(key) != Some(requested_draft)
+        {
+            return;
+        }
+        if keep_my_draft {
+            self.notes_drafts
+                .as_mut(cx)
+                .rebase_draft_version(key, latest.version);
+            self.save_current_note(window, cx);
+        } else {
+            self.notes_drafts
+                .as_mut(cx)
+                .accept_server_latest(key, latest);
+        }
     }
 
     // ── Cards Operations ─────────────────────────────────────────────────────
@@ -2089,21 +2221,24 @@ impl AnalysisWorkspace {
         let Some(res) = self.position_result.as_ref() else {
             return;
         };
-        let cands = extract_candidates(res);
+        let Some(pos) = self.active_position() else {
+            return;
+        };
+        let cands = extract_candidates(res, pos.player, None);
         if cands.is_empty() {
             return;
         }
         let cur_idx = self.preview.candidate_notation.as_deref().and_then(|n| {
             cands
                 .iter()
-                .position(|c| c.notation.eq_ignore_ascii_case(n))
+                .position(|c| c.preview().eq_ignore_ascii_case(n))
         });
         let next_idx = match cur_idx {
             Some(i) => (i as isize + delta).clamp(0, (cands.len() - 1) as isize) as usize,
             None => 0,
         };
         self.preview.hypothetical_dice = None;
-        self.preview.candidate_notation = Some(cands[next_idx].notation.clone());
+        self.preview.candidate_notation = Some(cands[next_idx].preview().to_owned());
         if self.preview.mode == BoardViewMode::Before {
             self.preview.mode = BoardViewMode::Arrows;
         }
@@ -2244,12 +2379,12 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let (Some(match_id), Some(game_no)) = (self.match_id, self.current_game_no) else {
+        let Some(game_no) = self.current_game_no else {
             return;
         };
         let players = self.player_names();
         open_move_notes_dialog(
-            match_id,
+            self.notes_drafts.clone(),
             game_no,
             self.source_moves.clone(),
             initial_move_id,
@@ -2998,9 +3133,10 @@ impl Render for AnalysisWorkspace {
                     },
                     on_toggle_compare_sort_delta: {
                         let e = ent.clone();
-                        Rc::new(move |_, _, cx| {
+                        Rc::new(move |slot, _, cx| {
                             e.update(cx, |ws, cx| {
-                                ws.compare_sort_delta = !ws.compare_sort_delta;
+                                ws.compare_sort_delta =
+                                    (ws.compare_sort_delta != Some(slot)).then_some(slot);
                                 cx.notify();
                             })
                         })
@@ -3009,12 +3145,9 @@ impl Render for AnalysisWorkspace {
                         let e = ent.clone();
                         Rc::new(move |slot, id, w, cx| {
                             e.update(cx, |ws, cx| {
-                                let idx = match slot {
-                                    CompareEngineSlot::Xg => 0,
-                                    CompareEngineSlot::Gnubg => 1,
-                                    CompareEngineSlot::NeonGammon => 2,
-                                };
-                                ws.compare_slot_ids[idx] = id;
+                                ws.compare_slot_ids[slot as usize] = id;
+                                ws.preview.reset();
+                                ws.sync_board(cx);
                                 if let Some(pid) = ws.active_checker_position_id() {
                                     ws.load_position_details(pid, w, cx);
                                 }
@@ -3028,12 +3161,16 @@ impl Render for AnalysisWorkspace {
                             e.update(cx, |ws, cx| {
                                 ws.selected_dice_cell = Some(dice);
                                 ws.preview.candidate_notation = None;
-                                ws.preview.hypothetical_dice = Some(HypotheticalDicePreview {
-                                    dice,
-                                    best_notation,
-                                });
-                                if ws.preview.mode == BoardViewMode::Before {
-                                    ws.preview.mode = BoardViewMode::Arrows;
+                                if let Some(best_notation) = best_notation {
+                                    ws.preview.hypothetical_dice = Some(HypotheticalDicePreview {
+                                        dice,
+                                        best_notation,
+                                    });
+                                    if ws.preview.mode == BoardViewMode::Before {
+                                        ws.preview.mode = BoardViewMode::Arrows;
+                                    }
+                                } else {
+                                    ws.preview.reset();
                                 }
                                 ws.sync_board(cx);
                                 cx.notify();
@@ -3137,6 +3274,7 @@ impl Render for AnalysisWorkspace {
                             &self.compare_slot_ids[2],
                         ],
                         catalog_items: &self.catalog_items,
+                        catalog_selected: self.catalog_selected.as_ref(),
                         compare_sort_delta: self.compare_sort_delta,
                         dice_state: &self.dice_state,
                         selected_dice_cell: self.selected_dice_cell,
@@ -3146,6 +3284,7 @@ impl Render for AnalysisWorkspace {
                         callbacks: checker_callbacks,
                         palette: p,
                     },
+                    window,
                     cx,
                 )
                 .into_any_element()
@@ -3355,7 +3494,7 @@ impl Render for AnalysisWorkspace {
 
             AnalysisDetailTab::Notes => {
                 let target_key = self.current_note_target_key();
-                let draft = target_key.and_then(|k| self.notes_drafts.get(k));
+                let draft = target_key.and_then(|k| self.notes_drafts.read(cx).get(k));
                 let notes_callbacks = NotesCallbacks {
                     on_select_scope: {
                         let e = ent.clone();
@@ -3375,7 +3514,9 @@ impl Render for AnalysisWorkspace {
                             e.update(cx, |ws, cx| {
                                 let raw = ws.tag_input.read(cx).value().to_string();
                                 if let Some(key) = ws.current_note_target_key() {
-                                    match ws.notes_drafts.ensure_entry(key).add_tag(&raw) {
+                                    let result =
+                                        ws.notes_drafts.as_mut(cx).ensure_entry(key).add_tag(&raw);
+                                    match result {
                                         Ok(()) => {
                                             ws.notes_validation_error = None;
                                             ws.tag_input.update(cx, |inp, cx| {
@@ -3396,7 +3537,10 @@ impl Render for AnalysisWorkspace {
                         Rc::new(move |tag, _, cx| {
                             e.update(cx, |ws, cx| {
                                 if let Some(key) = ws.current_note_target_key() {
-                                    ws.notes_drafts.ensure_entry(key).remove_tag(&tag);
+                                    ws.notes_drafts
+                                        .as_mut(cx)
+                                        .ensure_entry(key)
+                                        .remove_tag(&tag);
                                 }
                                 cx.notify();
                             })

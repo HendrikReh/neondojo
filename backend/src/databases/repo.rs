@@ -141,6 +141,50 @@ pub(crate) async fn database_matches(
     Ok(ids.iter().filter_map(|id| rows.remove(id)).collect())
 }
 
+/// Read the same analysis status as the Library page, limited to visible matches
+/// affected by a notification. A reconnect reconciles all supplied rows.
+pub(crate) async fn library_analysis_statuses<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    match_ids: &[Uuid],
+    changed_job: Option<Uuid>,
+) -> anyhow::Result<Vec<(Uuid, Option<String>)>> {
+    let mut query = QueryBuilder::new("SELECT m.id,analysis.status FROM matches m");
+    query
+        .push(MATCH_PLAY_JOIN)
+        .push(MATCH_ANALYSIS_JOINS)
+        .push(" WHERE m.id=ANY(")
+        .push_bind(match_ids)
+        .push(")");
+    if let Some(id) = changed_job {
+        query
+            .push(
+                " AND m.id=(SELECT coalesce(j.match_uuid,p.match_uuid) FROM jobs j
+                   LEFT JOIN positions p ON p.id=j.position_uuid
+                   WHERE j.kind IN ('match','analysis') AND j.id=",
+            )
+            .push_bind(id)
+            .push(")");
+    }
+    Ok(query.build_query_as().fetch_all(db).await?)
+}
+
+pub(crate) async fn library_bulk_job_statuses<'e>(
+    db: impl sqlx::PgExecutor<'e>,
+    ids: &[Uuid],
+) -> anyhow::Result<Vec<LibraryBulkJobStatus>> {
+    Ok(sqlx::query_as(concat!(
+        "SELECT requested.id,coalesce(j.status,'missing') AS status,
+                coalesce(j.progress,0) AS progress, coalesce(j.completed_games,0) AS completed_games,
+                coalesce(j.total_games,0) AS total_games
+         FROM unnest($1::uuid[]) AS requested(id)
+         LEFT JOIN jobs j ON j.id=requested.id AND j.kind='match' AND j.game_no IS NULL AND NOT ",
+        crate::play::review_blocked_sql!("j.match_uuid")
+    ))
+    .bind(ids)
+    .fetch_all(db)
+    .await?)
+}
+
 pub(super) async fn database_match(pool: &PgPool, id: Uuid) -> ApiResult<DatabaseMatch> {
     sqlx::query_as(&format!(
         "SELECT {MATCH_COLUMNS} FROM matches m{MATCH_PLAY_JOIN}{MATCH_NOTE_JOIN}{MATCH_ANALYSIS_JOINS} WHERE m.id=$1"

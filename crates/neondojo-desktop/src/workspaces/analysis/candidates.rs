@@ -10,31 +10,43 @@
 //! 4. `ObservedRollsView` (**Game / Match Rolls**: 21 unordered pair frequency
 //!    bars with weight-1 doubles vs weight-2 non-doubles expected markers).
 
+use super::candidate_data::{
+    CheckerCandidate, board_key, build_candidate_compare_rows, candidate_notation,
+    comparison_options, extract_candidates,
+};
 use super::state::{
-    Action2Cb, ActionCb, CandidateCompareRow, CheckerSubTab, ClickCb, CompareEngineSlot,
-    DiceDistributionSnapshot, DiceTabState, build_candidate_compare_rows,
+    Action2Cb, ActionCb, CheckerSubTab, ClickCb, CompareEngineSlot, DiceDistributionSnapshot,
+    DiceTabState, same_roll,
 };
 use crate::i18n::current_locale;
 use crate::review::move_explanation::{MoveExplanationView, explain_checker_plays};
-use crate::theme::{NeonPalette, NeonTheme, NeonTypographyExt};
+use crate::theme::{
+    FONT_SIZE_MICRO, FONT_SIZE_TABLE, NeonPalette, NeonTheme, NeonTypographyExt,
+    tabular_nums_features,
+};
 use crate::ui::action_button::ActionButton;
 use crate::ui::banners::{BannerKind, StatusBanner};
 use crate::ui::icons::ActionIconName;
 use crate::ui::modal::{ModalConfig, ModalSize, open_modal_dialog};
 use crate::ui::text_nav::{TextNavBar, TextNavDensity, TextNavItem};
 use gpui_kit::{
-    App, FontWeight, InteractiveElement, IntoElement, ParentElement, SharedString,
-    StatefulInteractiveElement, Styled, TestSupportExt, Window, base::StyledExt,
-    component::WindowExt, div, prelude::FluentBuilder, px,
+    App, FontWeight, InteractiveElement, IntoElement, ParentElement, Pixels, SharedString,
+    StatefulInteractiveElement, Styled, TestSupportExt, Window,
+    base::StyledExt,
+    component::{WindowExt, tooltip::Tooltip},
+    div,
+    prelude::FluentBuilder,
+    px,
 };
 use neondojo::{
     analysis_catalog::{AnalysisCatalogEntry, SelectedPositionAnalysis},
     api::MatchAnalysisEngine,
-    engine::Candidate,
     model::{DiceStats, Position},
     opening_book::BookLookup,
 };
-use neondojo_i18n::{I18n, format_decimal, format_equity, format_percent};
+use neondojo_i18n::{
+    I18n, format_decimal, format_equity, format_percent, format_ply, localize_decision,
+};
 use uuid::Uuid;
 
 /// Callbacks wired from `AnalysisWorkspace` into the Overview / Checker pane.
@@ -44,9 +56,9 @@ pub struct CheckerCallbacks {
     pub on_preview_candidate: ActionCb<String>,
     pub on_recalculate_position: ClickCb,
     pub on_toggle_opening_book: ClickCb,
-    pub on_toggle_compare_sort_delta: ClickCb,
+    pub on_toggle_compare_sort_delta: ActionCb<CompareEngineSlot>,
     pub on_pick_compare_slot: Action2Cb<CompareEngineSlot, Option<String>>,
-    pub on_dice_cell_click: Action2Cb<[u8; 2], String>,
+    pub on_dice_cell_click: Action2Cb<[u8; 2], Option<String>>,
     pub on_dice_manual_retry: ClickCb,
     pub on_dice_recalculate_dialog: ClickCb,
     pub on_dice_delete: Action2Cb<Uuid, Uuid>,
@@ -65,10 +77,11 @@ pub struct CheckerViewProps<'a> {
     pub opening_book: Option<&'a BookLookup>,
     pub opening_book_expanded: bool,
     pub opening_book_loading: bool,
-    pub compare_slots: [&'a Vec<Candidate>; 3],
+    pub compare_slots: [&'a [CheckerCandidate]; 3],
     pub compare_slot_ids: [&'a Option<String>; 3],
     pub catalog_items: &'a [AnalysisCatalogEntry],
-    pub compare_sort_delta: bool,
+    pub catalog_selected: Option<&'a AnalysisCatalogEntry>,
+    pub compare_sort_delta: Option<CompareEngineSlot>,
     pub dice_state: &'a DiceTabState,
     pub selected_dice_cell: Option<[u8; 2]>,
     pub observed_rolls: Option<&'a DiceStats>,
@@ -79,7 +92,11 @@ pub struct CheckerViewProps<'a> {
 }
 
 /// Renders the Overview / Checker inspector panel with its 4 sub-tabs.
-pub fn render_checker_inspector(props: CheckerViewProps<'_>, cx: &App) -> impl IntoElement {
+pub fn render_checker_inspector(
+    props: CheckerViewProps<'_>,
+    window: &Window,
+    cx: &App,
+) -> impl IntoElement {
     let p = props.palette;
     let sub_items = vec![
         TextNavItem::new(CheckerSubTab::Candidates.id(), "Candidates")
@@ -111,7 +128,7 @@ pub fn render_checker_inspector(props: CheckerViewProps<'_>, cx: &App) -> impl I
 
     let body = match props.active_subtab {
         CheckerSubTab::Candidates => render_candidates_subtab(&props, cx).into_any_element(),
-        CheckerSubTab::Compare => render_compare_subtab(&props, cx).into_any_element(),
+        CheckerSubTab::Compare => render_compare_subtab(&props, window, cx).into_any_element(),
         CheckerSubTab::Dice => render_dice_subtab(&props, cx).into_any_element(),
         CheckerSubTab::Observed => render_observed_rolls_subtab(&props, cx).into_any_element(),
     };
@@ -133,48 +150,6 @@ pub fn render_checker_inspector(props: CheckerViewProps<'_>, cx: &App) -> impl I
         .child(body)
 }
 
-/// Extracts ranked `Candidate` items from a `SelectedPositionAnalysis` (either
-/// single-position analysis, native match decision, or imported candidates).
-pub fn extract_candidates(result: &SelectedPositionAnalysis) -> Vec<Candidate> {
-    if let Some(analysis) = &result.analysis
-        && !analysis.candidates.is_empty()
-    {
-        return analysis.candidates.clone();
-    }
-    if let Some(dec) = &result.decision
-        && !dec.checker_candidates.is_empty()
-    {
-        return dec.checker_candidates.clone();
-    }
-    if let Some(rec) = result
-        .records
-        .iter()
-        .find(|r| r.data.kind == "checker" && !r.data.candidates.is_empty())
-    {
-        return rec
-            .data
-            .candidates
-            .iter()
-            .map(|c| {
-                let probs: Vec<f64> = c
-                    .probabilities
-                    .as_array()
-                    .map(|arr| arr.iter().filter_map(|v| v.as_f64()).collect())
-                    .unwrap_or_default();
-                Candidate {
-                    rank: c.rank,
-                    notation: c.notation.clone(),
-                    path: None,
-                    equity: c.equity.unwrap_or(0.0),
-                    probabilities: probs,
-                    plies: c.depth_plies,
-                }
-            })
-            .collect();
-    }
-    Vec::new()
-}
-
 fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoElement {
     let locale = current_locale(cx);
     let p = props.palette;
@@ -190,11 +165,15 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
             .into_any_element();
     };
 
-    let candidates: Vec<Candidate> = props
+    let candidates = props
         .position_result
-        .map(extract_candidates)
+        .map(|result| extract_candidates(result, pos.player, None))
         .unwrap_or_default();
-    let best_eq = candidates.first().map(|c| c.equity).unwrap_or(0.0);
+    let best = candidates.iter().find(|c| c.rank() == 1);
+    let mixed_units = candidates
+        .first()
+        .is_some_and(|first| candidates.iter().any(|c| c.unit != first.unit));
+    let played_key = board_key(pos, &pos.notation);
 
     let header = div()
         .h_flex()
@@ -207,11 +186,22 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
                 .text_color(p.muted)
                 .child(match props.position_result {
                     Some(res) => format!(
-                        "{}{}",
+                        "{}{}{}",
                         res.engine,
                         res.depth
                             .as_deref()
                             .map(|d| format!(" · {d}"))
+                            .unwrap_or_default(),
+                        candidates
+                            .first()
+                            .map(|c| format!(
+                                " · {}",
+                                if mixed_units {
+                                    I18n::t(locale, "candidate", "mixedUnits")
+                                } else {
+                                    c.unit_label(locale)
+                                }
+                            ))
                             .unwrap_or_default()
                     ),
                     None if props.position_result_loading => "Loading evaluation…".to_string(),
@@ -256,47 +246,54 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
             .overflow_hidden();
 
         // 10 dense columns header: #, Move, Equity, Loss, W, WG, WBG, L, LG, LBG
-        container = container.child(
-            div()
-                .h_flex()
-                .items_center()
-                .gap(px(4.0))
-                .px(px(8.0))
-                .py(px(5.0))
-                .bg(p.surface_alt)
-                .border_b_1()
-                .border_color(p.border)
-                .text_table_heading()
-                .text_color(p.muted)
-                .child(div().w(px(22.0)).child("#"))
-                .child(div().flex_1().min_w(px(110.0)).child("Move"))
-                .child(div().w(px(56.0)).text_right().child("Equity"))
-                .child(div().w(px(52.0)).text_right().child("Loss"))
-                .child(div().w(px(42.0)).text_right().child("W"))
-                .child(div().w(px(40.0)).text_right().child("WG"))
-                .child(div().w(px(38.0)).text_right().child("WBG"))
-                .child(div().w(px(42.0)).text_right().child("L"))
-                .child(div().w(px(40.0)).text_right().child("LG"))
-                .child(div().w(px(38.0)).text_right().child("LBG")),
-        );
+        container =
+            container.child(
+                div()
+                    .h_flex()
+                    .items_center()
+                    .gap(px(4.0))
+                    .px(px(8.0))
+                    .py(px(5.0))
+                    .bg(p.surface_alt)
+                    .border_b_1()
+                    .border_color(p.border)
+                    .text_table_heading()
+                    .text_color(p.muted)
+                    .child(div().w(px(22.0)).child("#"))
+                    .child(div().flex_1().min_w(px(110.0)).child(I18n::t(
+                        locale,
+                        "app",
+                        "common.move",
+                    )))
+                    .child(div().w(px(56.0)).text_right().child("Equity"))
+                    .child(div().w(px(52.0)).text_right().child(I18n::t(
+                        locale,
+                        "candidate",
+                        "loss",
+                    )))
+                    .child(div().w(px(42.0)).text_right().child("W"))
+                    .child(div().w(px(40.0)).text_right().child("WG"))
+                    .child(div().w(px(38.0)).text_right().child("WBG"))
+                    .child(div().w(px(42.0)).text_right().child("L"))
+                    .child(div().w(px(40.0)).text_right().child("LG"))
+                    .child(div().w(px(38.0)).text_right().child("LBG")),
+            );
 
         for (ix, cand) in candidates.iter().enumerate() {
-            let loss = (best_eq - cand.equity).max(0.0);
-            let is_best = cand.rank == 1;
-            let is_played = cand
-                .notation
-                .trim()
-                .eq_ignore_ascii_case(pos.notation.trim());
+            let loss = cand.loss(best);
+            let is_best = cand.rank() == 1;
+            let is_played = board_key(pos, cand.preview()) == played_key;
             let is_preview = props
                 .previewed_notation
-                .is_some_and(|n| n.eq_ignore_ascii_case(&cand.notation));
-            let notation_click = cand.notation.clone();
+                .is_some_and(|n| n.eq_ignore_ascii_case(cand.preview()));
+            let notation_click = cand.preview().to_owned();
+            let raw_path = notation_click.clone();
             let on_preview = props.callbacks.on_preview_candidate.clone();
 
+            let outcomes = cand.outcomes();
             let prob_cell = |idx: usize| -> String {
-                cand.probabilities
-                    .get(idx)
-                    .map(|v| format_percent(locale, *v, 1))
+                outcomes[idx]
+                    .map(|v| format_percent(locale, v, 1))
                     .unwrap_or_else(|| "—".to_string())
             };
 
@@ -326,7 +323,7 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
                         div()
                             .w(px(22.0))
                             .text_color(p.muted)
-                            .child(format!("{}", cand.rank)),
+                            .child(cand.rank().to_string()),
                     )
                     .child(
                         div()
@@ -335,6 +332,7 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
                             .gap(px(4.0))
                             .flex_1()
                             .min_w(px(110.0))
+                            .flex_wrap()
                             .child(
                                 div()
                                     .font_weight(if is_best || is_played {
@@ -343,7 +341,12 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
                                         FontWeight::NORMAL
                                     })
                                     .text_color(p.text)
-                                    .child(cand.notation.clone()),
+                                    .id(SharedString::from(format!("candidate-move-{ix}")))
+                                    .test_support()
+                                    .tooltip(move |w, cx| {
+                                        Tooltip::new(raw_path.clone()).build(w, cx)
+                                    })
+                                    .child(candidate_notation(locale, pos, &cand.notation)),
                             )
                             .when(is_best, |el| {
                                 el.child(
@@ -378,13 +381,13 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
                                         .child("Preview"),
                                 )
                             })
-                            .when_some(cand.plies, |el, pl| {
-                                el.child(
-                                    div()
-                                        .text_micro()
-                                        .text_color(p.muted)
-                                        .child(format!("{pl}p")),
-                                )
+                            .child({
+                                div()
+                                    .id(SharedString::from(format!("candidate-depth-{ix}")))
+                                    .test_support()
+                                    .text_micro()
+                                    .text_color(p.muted)
+                                    .child(cand.depth.clone().unwrap_or_else(|| "—".into()))
                             }),
                     )
                     .child(
@@ -392,22 +395,22 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
                             .w(px(56.0))
                             .text_right()
                             .text_color(p.text)
-                            .child(format_equity(locale, cand.equity)),
+                            .id(SharedString::from(format!("candidate-equity-{ix}")))
+                            .test_support()
+                            .v_flex()
+                            .child(cand.equity_text(locale, 3))
+                            .when(mixed_units, |el| {
+                                el.child(div().text_micro().child(cand.unit_label(locale)))
+                            }),
                     )
                     .child(
                         div()
                             .w(px(52.0))
                             .text_right()
-                            .text_color(if loss > 0.0005 {
-                                p.danger_text
-                            } else {
-                                p.muted
-                            })
-                            .child(if loss > 0.0005 {
-                                format!("-{}", format_decimal(locale, loss, 3, 3))
-                            } else {
-                                "0.000".to_string()
-                            }),
+                            .text_color(p.text)
+                            .id(SharedString::from(format!("candidate-loss-{ix}")))
+                            .test_support()
+                            .child(cand.difference_text(locale, loss, 3, false)),
                     )
                     .child(
                         div()
@@ -457,11 +460,11 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
     };
 
     // Synchronous MoveExplanationView comparing best vs played/previewed play
-    let explanation_view = candidates.first().and_then(|best| {
+    let explanation_view = best.and_then(|best| {
         let compare_notation = props.previewed_notation.unwrap_or(pos.notation.as_str());
         if compare_notation
             .trim()
-            .eq_ignore_ascii_case(best.notation.trim())
+            .eq_ignore_ascii_case(best.preview().trim())
         {
             return None;
         }
@@ -471,19 +474,19 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
             board_arr,
             pos.player,
             dice_arr,
-            &best.notation,
+            best.preview(),
             compare_notation,
         )
         .ok()?;
-        let best_chances: Option<[f64; 6]> = best.probabilities.as_slice().try_into().ok();
+        let best_chances = best.explanation_chances();
         let played_chances: Option<[f64; 6]> = candidates
             .iter()
             .find(|c| {
-                c.notation
+                c.preview()
                     .trim()
                     .eq_ignore_ascii_case(compare_notation.trim())
             })
-            .and_then(|c| c.probabilities.as_slice().try_into().ok());
+            .and_then(CheckerCandidate::explanation_chances);
         Some(
             MoveExplanationView::from_explanation(
                 "analysis-move-explanation",
@@ -723,7 +726,11 @@ fn render_opening_book_section(
 
 // ── 3-Engine Compare Moves Matrix ────────────────────────────────────────────
 
-fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoElement {
+fn render_compare_subtab(
+    props: &CheckerViewProps<'_>,
+    window: &Window,
+    cx: &App,
+) -> impl IntoElement {
     let locale = current_locale(cx);
     let p = props.palette;
 
@@ -735,36 +742,14 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
             .into_any_element();
     };
 
-    let rows: Vec<CandidateCompareRow> = build_candidate_compare_rows(
-        pos,
-        [
-            props.compare_slots[0].as_slice(),
-            props.compare_slots[1].as_slice(),
-            props.compare_slots[2].as_slice(),
-        ],
-        props.compare_sort_delta,
-    );
-
-    let on_sort = props.callbacks.on_toggle_compare_sort_delta.clone();
-
-    // Engine slot run selectors
-    let slot_pickers = div().h_flex().flex_wrap().gap(px(6.0)).children(
+    let rows = build_candidate_compare_rows(pos, props.compare_slots, props.compare_sort_delta);
+    let toolbar = div().h_flex().flex_wrap().gap(px(6.0)).children(
         CompareEngineSlot::ALL
             .into_iter()
             .enumerate()
             .map(|(si, slot)| {
-                let matching: Vec<&AnalysisCatalogEntry> = props
-                    .catalog_items
-                    .iter()
-                    .filter(|e| match slot {
-                        CompareEngineSlot::Xg => e.source == "imported",
-                        CompareEngineSlot::Gnubg => e.engine.to_ascii_lowercase().contains("gnu"),
-                        CompareEngineSlot::NeonGammon => {
-                            let l = e.engine.to_ascii_lowercase();
-                            l.contains("neongammon") || l.contains("sage")
-                        }
-                    })
-                    .collect();
+                let matching =
+                    comparison_options(props.catalog_items, props.catalog_selected, pos, slot);
                 let active_id = props.compare_slot_ids[si].as_deref();
                 let next_id = if matching.is_empty() {
                     None
@@ -795,25 +780,6 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
             }),
     );
 
-    let toolbar = div()
-        .h_flex()
-        .items_center()
-        .justify_between()
-        .flex_wrap()
-        .gap(px(8.0))
-        .child(slot_pickers)
-        .child(
-            ActionButton::new("compare-sort-delta-btn")
-                .label(if props.compare_sort_delta {
-                    "Sorted by |Δ|"
-                } else {
-                    "Sort by |Δ|"
-                })
-                .active(props.compare_sort_delta)
-                .palette(p)
-                .on_click(move |ev, w, cx| on_sort(ev, w, cx)),
-        );
-
     if rows.is_empty() {
         return div()
             .id("analysis-compare-empty")
@@ -835,10 +801,69 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
             .into_any_element();
     }
 
+    let played = I18n::t(locale, "app", "common.played");
+    // Measure the visible notation and its badge in the fonts used below. Unusually
+    // long moves can wrap while the numeric columns keep the same start in every row.
+    let text_width = |text: &str, size: f32, weight| {
+        let mut style = window.text_style();
+        style.font_weight = weight;
+        style.font_features = tabular_nums_features();
+        text.lines()
+            .map(|line| {
+                window
+                    .text_system()
+                    .shape_line(
+                        line.to_owned().into(),
+                        px(size),
+                        &[style.to_run(line.len())],
+                        None,
+                    )
+                    .width
+            })
+            .fold(px(0.), Pixels::max)
+    };
+    let badge_width = text_width(played, FONT_SIZE_MICRO, FontWeight::NORMAL) + px(12.);
+    let move_labels = rows
+        .iter()
+        .map(|row| candidate_notation(locale, pos, row.display_notation))
+        .collect::<Vec<_>>();
+    let move_width = rows
+        .iter()
+        .zip(&move_labels)
+        .map(|(row, label)| {
+            let weight = if row.played {
+                FontWeight::SEMIBOLD
+            } else {
+                FontWeight::NORMAL
+            };
+            text_width(label, FONT_SIZE_TABLE, weight)
+                + if row.played { badge_width } else { px(0.) }
+        })
+        .fold(px(48.), Pixels::max)
+        .ceil()
+        .min(px(216.));
+
+    let rank_label = I18n::t(locale, "app", "analysis.rank");
+    let equity_label = I18n::t(locale, "app", "common.equity");
+    let loss_label = I18n::t(locale, "candidate", "loss");
+    let depth_label = I18n::t(locale, "app", "analysis.depth");
+    let has_xg_comparison = !props.compare_slots[0].is_empty()
+        && props.compare_slots[1..].iter().any(|list| !list.is_empty());
+    let best = props
+        .compare_slots
+        .map(|list| list.iter().find(|candidate| candidate.rank() == 1));
+    let mixed_units = props.compare_slots.map(|list| {
+        list.first()
+            .is_some_and(|first| list.iter().any(|c| c.unit != first.unit))
+    });
+    let engine_width = px(130.);
     let mut table = div()
         .id("analysis-compare-matrix")
         .test_support()
         .v_flex()
+        .self_start()
+        .w(move_width + engine_width * 3. + px(36.))
+        .flex_shrink_0()
         .rounded(px(6.0))
         .border_1()
         .border_color(p.border)
@@ -856,18 +881,87 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
                 .border_color(p.border)
                 .text_table_heading()
                 .text_color(p.muted)
-                .child(div().flex_1().min_w(px(100.0)).child("Move"))
-                .child(div().w(px(86.0)).text_right().child("XG"))
-                .child(div().w(px(86.0)).text_right().child("GNUbg"))
-                .child(div().w(px(86.0)).text_right().child("NeonGammon"))
-                .child(div().w(px(54.0)).text_right().child("|Δ|")),
+                .child(
+                    div()
+                        .id("compare-move-header")
+                        .test_support()
+                        .w(move_width)
+                        .flex_shrink_0()
+                        .min_w_0()
+                        .child(I18n::t(locale, "app", "common.move")),
+                )
+                .children(
+                    CompareEngineSlot::ALL
+                        .into_iter()
+                        .enumerate()
+                        .map(|(si, slot)| {
+                            let source = props.compare_slots[si].first().map(|c| {
+                                if mixed_units[si] {
+                                    I18n::t(locale, "candidate", "mixedUnits")
+                                } else {
+                                    c.unit_label(locale)
+                                }
+                            });
+                            let on_sort = props.callbacks.on_toggle_compare_sort_delta.clone();
+                            div()
+                                .w(engine_width)
+                                .flex_shrink_0()
+                                .v_flex()
+                                .child(
+                                    div()
+                                        .h_flex()
+                                        .items_center()
+                                        .gap(px(4.))
+                                        .child(slot.label())
+                                        .when(si != 0, |el| {
+                                            el.child(
+                                                ActionButton::new(SharedString::from(format!(
+                                                    "compare-sort-delta-{si}"
+                                                )))
+                                                .label(if props.compare_sort_delta == Some(slot) {
+                                                    "|Δ| ↓"
+                                                } else {
+                                                    "|Δ|"
+                                                })
+                                                .tooltip(I18n::format(
+                                                    locale,
+                                                    "candidate",
+                                                    "sortByXgDifference",
+                                                    &[("engine", slot.label().into())],
+                                                ))
+                                                .active(props.compare_sort_delta == Some(slot))
+                                                .disabled(
+                                                    !rows.iter().any(|row| row.delta(si).is_some()),
+                                                )
+                                                .palette(p)
+                                                .on_click(move |_, w, cx| on_sort(slot, w, cx)),
+                                            )
+                                        }),
+                                )
+                                .when_some(source, |el, unit| {
+                                    el.child(div().text_micro().child(unit))
+                                })
+                                .child(
+                                    div()
+                                        .text_micro()
+                                        .child(format!("{rank_label} · {equity_label}")),
+                                )
+                        }),
+                ),
         );
 
-    for (ix, row) in rows.iter().take(20).enumerate() {
+    for (ix, (row, label)) in rows.iter().zip(move_labels).enumerate() {
         let on_prev = props.callbacks.on_preview_candidate.clone();
-        let notation = row.display_notation.clone();
-        let ref_rank = row.slots.iter().flatten().map(|s| s.rank).next();
-
+        let default_preview = row
+            .slots
+            .iter()
+            .flatten()
+            .next()
+            .expect("each row has a candidate")
+            .preview()
+            .to_owned();
+        let raw_path = default_preview.clone();
+        let ref_rank = row.slots[0].and_then(|candidate| candidate.xg_equity_rank);
         table = table.child(
             div()
                 .id(SharedString::from(format!("compare-row-{ix}")))
@@ -880,17 +974,22 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
                 .border_b_1()
                 .border_color(p.border)
                 .bg(if row.played { p.surface_alt } else { p.surface })
-                .cursor_pointer()
                 .text_table()
                 .tabular_nums()
-                .on_click(move |_, w, cx| on_prev(notation.clone(), w, cx))
+                .cursor_pointer()
+                .on_click(move |_, w, cx| on_prev(default_preview.clone(), w, cx))
                 .child(
                     div()
                         .h_flex()
                         .items_center()
                         .gap(px(4.0))
-                        .flex_1()
-                        .min_w(px(100.0))
+                        .id(SharedString::from(format!("compare-move-{ix}")))
+                        .test_support()
+                        .tooltip(move |w, cx| Tooltip::new(raw_path.clone()).build(w, cx))
+                        .w(move_width)
+                        .flex_shrink_0()
+                        .min_w_0()
+                        .flex_wrap()
                         .child(
                             div()
                                 .font_weight(if row.played {
@@ -899,7 +998,7 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
                                     FontWeight::NORMAL
                                 })
                                 .text_color(p.text)
-                                .child(row.display_notation.clone()),
+                                .child(label),
                         )
                         .when(row.played, |el| {
                             el.child(
@@ -909,43 +1008,101 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
                                     .bg(p.selected)
                                     .text_micro()
                                     .text_color(p.accent)
-                                    .child("Played"),
+                                    .child(played),
                             )
                         }),
                 )
-                .children((0..3).map(|si| {
-                    let text = match &row.slots[si] {
-                        Some(sv) => {
-                            let delta_arrow = ref_rank
-                                .filter(|&r| r != sv.rank)
-                                .map(|r| if sv.rank < r { " ↑" } else { " ↓" })
-                                .unwrap_or("");
-                            format!("#{} -{:.3}{delta_arrow}", sv.rank, sv.loss)
-                        }
-                        None => "—".to_string(),
+                .children(row.slots.iter().enumerate().map(|(si, slot)| {
+                    let cell = div()
+                        .id(SharedString::from(format!("compare-cell-{ix}-{si}")))
+                        .test_support()
+                        .v_flex()
+                        .w(engine_width)
+                        .flex_shrink_0();
+                    let Some(candidate) = slot else {
+                        return cell
+                            .text_color(p.muted)
+                            .child("—")
+                            .on_click(|_, _, cx| cx.stop_propagation());
                     };
-                    div()
-                        .w(px(86.0))
-                        .text_right()
-                        .text_color(if row.slots[si].is_some() {
-                            p.text
-                        } else {
-                            p.muted
+                    let field = |name: &str, text: String| {
+                        div()
+                            .id(SharedString::from(format!("compare-{name}-{ix}-{si}")))
+                            .test_support()
+                            .child(text)
+                    };
+                    let rank = if si == 0 {
+                        ref_rank
+                    } else {
+                        Some(candidate.rank)
+                    };
+                    let arrow = match (si, ref_rank) {
+                        (1 | 2, Some(xg)) if candidate.rank < xg => " ↑",
+                        (1 | 2, Some(xg)) if candidate.rank > xg => " ↓",
+                        _ => "",
+                    };
+                    let rank_text = rank.map_or_else(|| "—".into(), |r| format!("#{r}{arrow}"));
+                    let on_preview = props.callbacks.on_preview_candidate.clone();
+                    let preview = candidate.preview().to_owned();
+                    let raw_path = preview.clone();
+                    cell.cursor_pointer()
+                        .tooltip(move |w, cx| Tooltip::new(raw_path.clone()).build(w, cx))
+                        .on_click(move |_, w, cx| {
+                            cx.stop_propagation();
+                            on_preview(preview.clone(), w, cx)
                         })
-                        .child(text)
-                }))
-                .child(
-                    div()
-                        .w(px(54.0))
-                        .text_right()
-                        .font_weight(FontWeight::MEDIUM)
-                        .text_color(if row.max_delta >= 0.02 {
-                            p.warning_text
-                        } else {
-                            p.muted
+                        .child(
+                            div()
+                                .h_flex()
+                                .items_center()
+                                .gap(px(5.))
+                                .child(field("rank", rank_text).text_color(p.muted))
+                                .child(
+                                    field("equity", candidate.equity_text(locale, 6))
+                                        .font_weight(FontWeight::MEDIUM),
+                                ),
+                        )
+                        .when(mixed_units[si], |el| {
+                            el.child(div().text_micro().child(candidate.unit_label(locale)))
                         })
-                        .child(format_decimal(locale, row.max_delta, 3, 3)),
-                ),
+                        .child(
+                            field(
+                                "loss",
+                                format!(
+                                    "{loss_label} {}",
+                                    candidate.difference_text(
+                                        locale,
+                                        candidate.loss(best[si]),
+                                        6,
+                                        false
+                                    )
+                                ),
+                            )
+                            .text_micro()
+                            .text_color(p.muted),
+                        )
+                        .child(
+                            field(
+                                "depth",
+                                candidate.depth.clone().unwrap_or_else(|| "—".into()),
+                            )
+                            .text_micro()
+                            .tooltip(move |w, cx| Tooltip::new(depth_label).build(w, cx)),
+                        )
+                        .when(si != 0 && has_xg_comparison, |el| {
+                            el.child(
+                                field(
+                                    "delta",
+                                    format!(
+                                        "Δ {}",
+                                        candidate.difference_text(locale, row.delta(si), 6, true)
+                                    ),
+                                )
+                                .text_micro()
+                                .text_color(p.muted),
+                            )
+                        })
+                })),
         );
     }
 
@@ -953,7 +1110,13 @@ fn render_compare_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoEle
         .v_flex()
         .gap(px(8.0))
         .child(toolbar)
-        .child(table)
+        .child(
+            div()
+                .id("analysis-compare-scroll")
+                .max_w_full()
+                .overflow_x_scroll()
+                .child(table),
+        )
         .into_any_element()
 }
 
@@ -1100,7 +1263,10 @@ fn render_dice_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl IntoElemen
         .test_support()
         .v_flex()
         .gap(px(8.0))
-        .child(header)
+        .when(
+            !matches!(props.dice_state, DiceTabState::Ready { .. }),
+            |el| el.child(header),
+        )
         .child(body)
         .into_any_element()
 }
@@ -1117,194 +1283,208 @@ fn render_dice_matrix(
     cx: &App,
 ) -> impl IntoElement {
     let locale = current_locale(cx);
-    let actual_dice: Option<[i32; 2]> = position.dice.as_slice().try_into().ok();
+    let actual_dice = <[i32; 2]>::try_from(position.dice.as_slice())
+        .ok()
+        .filter(|dice| dice.iter().all(|d| (1..=6).contains(d)));
+    let selected = selected_cell
+        .map(|dice| dice.map(i32::from))
+        .or(actual_dice)
+        .unwrap_or([1, 1]);
+    let on_recalc = callbacks.on_dice_recalculate_dialog.clone();
 
     let summary_bar = div()
         .h_flex()
+        .flex_wrap()
         .items_center()
         .justify_between()
-        .gap(px(8.0))
-        .px(px(8.0))
-        .py(px(6.0))
-        .rounded(px(6.0))
-        .bg(p.surface)
-        .border_1()
-        .border_color(p.border)
+        .gap(px(6.0))
+        .text_meta()
+        .text_color(p.muted)
+        .child(format!(
+            "{} · {}",
+            dist.engine,
+            format_ply(locale, dist.plies as u32)
+        ))
+        .child(I18n::t(locale, "app", "analysis.combinations"))
         .child(
             div()
-                .text_meta()
-                .tabular_nums()
+                .text_table()
+                .font_weight(FontWeight::SEMIBOLD)
                 .text_color(p.text)
-                .child(format!(
-                    "{} {}-ply · Ø {}",
-                    dist.engine,
-                    dist.plies,
-                    format_equity(locale, dist.mean_equity)
-                )),
+                .child(format!("Ø {}", format_equity(locale, dist.mean_equity))),
         )
-        .when_some(job_id, |el, jid| {
-            let on_del = callbacks.on_dice_delete.clone();
-            el.child(
-                ActionButton::new("dice-delete-btn")
-                    .icon(ActionIconName::Delete)
-                    .dense_nav()
-                    .danger()
-                    .tooltip("Delete dice calculation")
-                    .palette(p)
-                    .on_click(move |_, window, cx| {
-                        open_delete_dice_confirm(position_id, jid, on_del.clone(), window, cx);
-                    }),
-            )
-        });
+        .child(
+            div()
+                .h_flex()
+                .gap(px(4.0))
+                .child(
+                    ActionButton::new("dice-recalc-dialog-btn")
+                        .icon(ActionIconName::Refresh)
+                        .dense_nav()
+                        .tooltip(I18n::t(locale, "app", "analysis.recalculateDice"))
+                        .palette(p)
+                        .on_click(move |ev, w, cx| on_recalc(ev, w, cx)),
+                )
+                .when_some(job_id, |el, jid| {
+                    let on_del = callbacks.on_dice_delete.clone();
+                    el.child(
+                        ActionButton::new("dice-delete-btn")
+                            .icon(ActionIconName::Delete)
+                            .dense_nav()
+                            .danger()
+                            .tooltip(I18n::t(locale, "app", "analysis.deleteDice"))
+                            .palette(p)
+                            .on_click(move |_, window, cx| {
+                                open_delete_dice_confirm(
+                                    position_id,
+                                    jid,
+                                    on_del.clone(),
+                                    window,
+                                    cx,
+                                )
+                            }),
+                    )
+                }),
+        );
 
-    // 6×6 matrix (rows 1..=6, cols 1..=6)
+    let rolled_label = I18n::t(locale, "app", "analysis.rolled");
     let mut grid = div()
         .id("dice-equity-6x6-grid")
         .test_support()
         .v_flex()
-        .gap(px(3.0))
-        .p(px(6.0))
-        .rounded(px(6.0))
-        .bg(p.surface)
-        .border_1()
-        .border_color(p.border);
+        .w_full()
+        .gap(px(3.0));
 
-    // Column header row 1..=6
-    grid = grid.child(
-        div()
-            .h_flex()
-            .gap(px(3.0))
-            .child(
+    for a in 1..=6 {
+        let mut row = div().h_flex().gap(px(3.0));
+        for b in 1..=6 {
+            let roll = dist.find_roll(a, b);
+            let actual = actual_dice.is_some_and(|dice| same_roll(dice, [a, b]));
+            let selected = same_roll(selected, [a, b]);
+            let (bg, fg) = match roll {
+                Some(r) if r.best.equity >= dist.mean_equity => (p.success_bg, p.success_text),
+                Some(_) => (p.warning_bg, p.warning_text),
+                None => (p.surface_alt, p.muted),
+            };
+            let equity = roll
+                .map(|r| format_equity(locale, r.best.equity))
+                .unwrap_or_else(|| "—".into());
+            let notation = roll
+                .map(|r| localize_decision(locale, &r.best.notation))
+                .unwrap_or_else(|| "—".into());
+            let preview = roll.map(|r| r.best.path.as_ref().unwrap_or(&r.best.notation).clone());
+            let mut title = I18n::format(
+                locale,
+                "app",
+                "analysis.rollTitle",
+                &[
+                    ("first", a.into()),
+                    ("second", b.into()),
+                    ("move", notation.into()),
+                ],
+            );
+            if actual {
+                title.push_str(&format!(" · {rolled_label}"));
+            }
+            let on_select = callbacks.on_dice_cell_click.clone();
+            row = row.child(
                 div()
-                    .w(px(22.0))
-                    .text_micro()
-                    .text_color(p.muted)
-                    .child("Ø"),
-            )
-            .children((1..=6).map(|col| {
-                div()
-                    .flex_1()
-                    .text_center()
-                    .text_micro()
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(p.muted)
-                    .child(format!("{col}"))
-            })),
-    );
-
-    for row_d in 1..=6 {
-        let mut row_el = div().h_flex().items_center().gap(px(3.0)).child(
-            div()
-                .w(px(22.0))
-                .text_micro()
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(p.muted)
-                .child(format!("{row_d}")),
-        );
-
-        for col_d in 1..=6 {
-            let roll = dist.find_roll(row_d, col_d);
-            let is_actual = actual_dice
-                .is_some_and(|[a, b]| (a == row_d && b == col_d) || (a == col_d && b == row_d));
-            let is_selected = selected_cell.is_some_and(|[a, b]| {
-                (i32::from(a) == row_d && i32::from(b) == col_d)
-                    || (i32::from(a) == col_d && i32::from(b) == row_d)
-            });
-
-            let cell = if let Some(entry) = roll {
-                let above_mean = entry.best.equity >= dist.mean_equity;
-                let bg = if is_selected {
-                    p.selected
-                } else if above_mean {
-                    p.success_bg
-                } else {
-                    p.warning_bg
-                };
-                let fg = if is_selected {
-                    p.accent
-                } else if above_mean {
-                    p.success_text
-                } else {
-                    p.warning_text
-                };
-                let border = if is_actual || is_selected {
-                    p.accent
-                } else {
-                    p.border
-                };
-                let on_click = callbacks.on_dice_cell_click.clone();
-                let dice_pair = [row_d as u8, col_d as u8];
-                let best_notation = entry.best.notation.clone();
-
-                div()
-                    .id(SharedString::from(format!("dice-cell-{row_d}-{col_d}")))
+                    .id(SharedString::from(format!("dice-cell-{a}-{b}")))
                     .test_support()
                     .flex_1()
-                    .v_flex()
-                    .items_center()
-                    .justify_center()
-                    .py(px(4.0))
-                    .px(px(2.0))
-                    .rounded(px(4.0))
-                    .bg(bg)
+                    .min_w_0()
+                    .p(px(1.0))
+                    .rounded(px(5.0))
                     .border_1()
-                    .border_color(border)
+                    .border_dashed()
+                    .border_color(if actual {
+                        p.text
+                    } else {
+                        gpui_kit::transparent_black()
+                    })
                     .cursor_pointer()
-                    .on_click(move |_, w, cx| on_click(dice_pair, best_notation.clone(), w, cx))
+                    .role(gpui_kit::accesskit::Role::Button)
+                    .aria_toggled(selected.into())
+                    .aria_label(format!("{title} · {equity}"))
+                    .tooltip(move |window, cx| Tooltip::new(title.clone()).build(window, cx))
+                    .on_click(move |_, w, cx| on_select([a as u8, b as u8], preview.clone(), w, cx))
                     .child(
                         div()
-                            .text_micro()
-                            .tabular_nums()
-                            .font_weight(if is_actual {
-                                FontWeight::BOLD
-                            } else {
-                                FontWeight::MEDIUM
-                            })
+                            .v_flex()
+                            .items_center()
+                            .py(px(4.0))
+                            .gap(px(1.0))
+                            .bg(bg)
                             .text_color(fg)
-                            .child(format_equity(locale, entry.best.equity)),
-                    )
-                    .into_any_element()
-            } else {
-                div()
-                    .flex_1()
-                    .py(px(4.0))
-                    .text_center()
-                    .text_micro()
-                    .text_color(p.muted)
-                    .child("—")
-                    .into_any_element()
-            };
-            row_el = row_el.child(cell);
+                            .rounded(px(3.0))
+                            .border_1()
+                            .border_color(if selected { p.accent } else { bg })
+                            .child(div().text_micro().child(format!("{a} · {b}")))
+                            .child(
+                                div()
+                                    .text_table()
+                                    .font_weight(FontWeight::BOLD)
+                                    .child(equity),
+                            ),
+                    ),
+            );
         }
-
-        grid = grid.child(row_el);
+        grid = grid.child(row);
     }
 
-    let detail_caption = selected_cell.and_then(|[a, b]| {
-        dist.find_roll(i32::from(a), i32::from(b)).map(|entry| {
-            format!(
-                "Preview roll {a}–{b}: {} ({})",
-                entry.best.notation,
-                format_equity(locale, entry.best.equity)
+    let detail = dist.find_roll(selected[0], selected[1]).map(|entry| {
+        let [a, b] = entry.dice;
+        let probability = format_percent(locale, entry.probability, 2);
+        div()
+            .id("dice-selected-roll-caption")
+            .test_support()
+            .h_flex()
+            .flex_wrap()
+            .items_center()
+            .gap(px(10.0))
+            .text_table()
+            .child(
+                div()
+                    .font_weight(FontWeight::BOLD)
+                    .child(format!("{a}–{b}")),
             )
-        })
+            .child(localize_decision(locale, &entry.best.notation))
+            .child(
+                div()
+                    .font_weight(FontWeight::BOLD)
+                    .child(format_equity(locale, entry.best.equity)),
+            )
+            .when(
+                actual_dice.is_some_and(|dice| same_roll(dice, selected)),
+                |el| el.child(div().text_micro().text_color(p.muted).child(rolled_label)),
+            )
+            .child(div().text_micro().text_color(p.muted).child(I18n::format(
+                locale,
+                "app",
+                "analysis.probability",
+                &[("value", probability.into())],
+            )))
     });
-
+    let mut legend = I18n::format(
+        locale,
+        "app",
+        "analysis.distributionMethod",
+        &[("plies", dist.plies.into())],
+    );
+    if actual_dice.is_some() {
+        legend.push(' ');
+        legend.push_str(I18n::t(locale, "app", "analysis.rolledLegend"));
+    }
     div()
         .v_flex()
-        .gap(px(6.0))
+        .w_full()
+        .max_w(px(660.0))
+        .self_center()
+        .gap(px(9.0))
         .child(summary_bar)
         .child(grid)
-        .when_some(detail_caption, |el, cap| {
-            el.child(
-                div()
-                    .id("dice-selected-roll-caption")
-                    .test_support()
-                    .text_meta()
-                    .text_color(p.accent)
-                    .child(cap),
-            )
-        })
+        .children(detail)
+        .child(div().text_meta().text_color(p.muted).child(legend))
 }
 
 fn open_delete_dice_confirm(

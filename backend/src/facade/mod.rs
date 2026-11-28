@@ -9,6 +9,8 @@
 mod analysis;
 mod extras;
 mod library;
+mod library_jobs;
+pub use library_jobs::{LibraryJobScope, LibraryJobSnapshot};
 mod play;
 mod players;
 mod positions;

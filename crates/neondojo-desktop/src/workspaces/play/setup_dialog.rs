@@ -266,6 +266,7 @@ pub struct PlaySetupCallbacks {
     pub on_open_settings: PlayVoidCallback,
     pub on_submit: PlayVoidCallback,
     pub on_resume: PlayVoidCallback,
+    pub on_open_paused_matches: PlayVoidCallback,
 }
 
 /// Renders the complete New Match setup form inside `PlayBoardDialog`.
@@ -279,8 +280,9 @@ pub fn render_play_setup_form(
     busy: bool,
     palette: NeonPalette,
     cb: PlaySetupCallbacks,
+    wide: bool,
     cx: &App,
-) -> AnyElement {
+) -> (AnyElement, AnyElement) {
     let locale = current_locale(cx);
     let p = palette;
     let sage_info = engines.iter().find(|e| e.id == "bgsage");
@@ -300,6 +302,7 @@ pub fn render_play_setup_form(
             let avail = engine_available("gnubg");
             let on_engine = cb.on_engine.clone();
             ActionButton::new("play-setup-engine-gnubg")
+                .tab_stop()
                 .label(if avail {
                     "GNUbg".to_string()
                 } else {
@@ -314,6 +317,7 @@ pub fn render_play_setup_form(
             let avail = engine_available("bgsage");
             let on_engine = cb.on_engine.clone();
             ActionButton::new("play-setup-engine-bgsage")
+                .tab_stop()
                 .label(if avail {
                     "NeonGammon".to_string()
                 } else {
@@ -335,7 +339,7 @@ pub fn render_play_setup_form(
         } else {
             I18n::t(locale, "play", "difficultyPresets")
         };
-        let mut preset_row = div().flex().flex_row().flex_wrap().gap(px(6.0));
+        let mut preset_row = div().v_flex().gap(px(4.0));
         for preset in SAGE_PRESETS {
             let preset_disabled = sage_info.is_some_and(|info| {
                 !info.available
@@ -360,6 +364,7 @@ pub fn render_play_setup_form(
                     "play-setup-preset-{}",
                     preset.i18n_key
                 )))
+                .tab_stop()
                 .label(label)
                 .active(choices.bot_difficulty == Some(diff))
                 .disabled(busy || preset_disabled)
@@ -380,6 +385,7 @@ pub fn render_play_setup_form(
             choices.bot_difficulty.is_none() && !choices.bot_top_two && choices.bot_plies == ply;
         depth_row = depth_row.child(
             ActionButton::new(SharedString::from(format!("play-setup-ply-{ply}")))
+                .tab_stop()
                 .label(format_ply(locale, ply.max(0) as u32))
                 .active(active)
                 .disabled(busy)
@@ -391,6 +397,7 @@ pub fn render_play_setup_form(
         let on_top_two = cb.on_top_two.clone();
         depth_row = depth_row.child(
             ActionButton::new("play-setup-top-two")
+                .tab_stop()
                 .label(format!(
                     "{} + {}",
                     format_ply(locale, 2),
@@ -410,6 +417,7 @@ pub fn render_play_setup_form(
         .child({
             let on_human = cb.on_human_player.clone();
             ActionButton::new("play-setup-color-white")
+                .tab_stop()
                 .label(I18n::t(locale, "play", "white"))
                 .active(choices.human_player == 0)
                 .disabled(busy)
@@ -419,6 +427,7 @@ pub fn render_play_setup_form(
         .child({
             let on_human = cb.on_human_player.clone();
             ActionButton::new("play-setup-color-black")
+                .tab_stop()
                 .label(I18n::t(locale, "play", "black"))
                 .active(choices.human_player == 1)
                 .disabled(busy)
@@ -441,6 +450,7 @@ pub fn render_play_setup_form(
         };
         length_row = length_row.child(
             ActionButton::new(SharedString::from(format!("play-setup-length-{len}")))
+                .tab_stop()
                 .label(label)
                 .active(choices.match_length == len)
                 .disabled(busy)
@@ -468,6 +478,8 @@ pub fn render_play_setup_form(
                 .bg(if active { p.selected } else { p.surface_alt })
                 .when(!busy, |this| {
                     this.cursor_pointer()
+                        .tab_index(0)
+                        .focus_visible(move |style| style.border_color(p.accent).border_2())
                         .on_click(move |_: &ClickEvent, window, cx| on_mode(mode, window, cx))
                 })
                 .child(
@@ -486,6 +498,7 @@ pub fn render_play_setup_form(
                         .v_flex()
                         .gap(px(2.0))
                         .flex_1()
+                        .min_w(px(0.0))
                         .child(
                             div()
                                 .text_label()
@@ -493,11 +506,13 @@ pub fn render_play_setup_form(
                                 .text_color(p.text)
                                 .child(I18n::t(locale, "play-mode", key)),
                         )
-                        .child(div().text_meta().text_color(p.muted).child(I18n::t(
-                            locale,
-                            "play-mode",
-                            help_key,
-                        ))),
+                        .child(
+                            div()
+                                .w_full()
+                                .text_meta()
+                                .text_color(p.muted)
+                                .child(I18n::t(locale, "play-mode", help_key)),
+                        ),
                 ),
         );
     }
@@ -518,21 +533,16 @@ pub fn render_play_setup_form(
     let on_settings = cb.on_open_settings.clone();
     let on_submit = cb.on_submit.clone();
     let on_resume = cb.on_resume.clone();
+    let on_open_paused_matches = cb.on_open_paused_matches;
 
-    div()
-        .id("play-setup-form")
-        .test_support()
-        .v_flex()
-        .gap(px(12.0))
-        .when_some(error_banner, |this, err| this.child(err))
-        .when(busy, |this| {
-            this.child(
-                div()
-                    .text_meta()
-                    .text_color(p.accent)
-                    .child(I18n::t(locale, "play", "thinking")),
-            )
-        })
+    let column = || {
+        div()
+            .v_flex()
+            .min_w(px(0.0))
+            .gap(px(10.0))
+            .when(wide, |el| el.flex_1())
+    };
+    let players_and_engines = column()
         .child(
             div()
                 .v_flex()
@@ -571,66 +581,6 @@ pub fn render_play_setup_form(
             div()
                 .h_flex()
                 .items_center()
-                .gap(px(12.0))
-                .child(div().text_label().text_color(p.muted).child(I18n::t(
-                    locale,
-                    "play",
-                    "humanColor",
-                )))
-                .child(color_row),
-        )
-        .child(
-            div()
-                .v_flex()
-                .gap(px(6.0))
-                .child(
-                    div()
-                        .text_label()
-                        .text_color(p.muted)
-                        .child(I18n::t(locale, "play", "length")),
-                )
-                .child(length_row),
-        )
-        .child(
-            div()
-                .v_flex()
-                .gap(px(6.0))
-                .child(div().text_label().text_color(p.muted).child(I18n::t(
-                    locale,
-                    "play-mode",
-                    "mode",
-                )))
-                .child(mode_col)
-                .when(choices.mode == PlayMode::Tutor, |this| {
-                    this.child(
-                        div()
-                            .text_meta()
-                            .tabular_nums()
-                            .text_color(p.muted)
-                            .child(format!(
-                                "{} · {}",
-                                I18n::t(locale, "play-mode", "threshold"),
-                                format_decimal(locale, choices.tutor_threshold, 3, 6)
-                            )),
-                    )
-                })
-                .when(choices.mode == PlayMode::Training, |this| {
-                    let on_auto = cb.on_auto_analysis.clone();
-                    let next = !choices.training_auto_analysis;
-                    this.child(
-                        ActionButton::new("play-setup-training-auto")
-                            .label(I18n::t(locale, "play-mode", "automatic"))
-                            .active(choices.training_auto_analysis)
-                            .disabled(busy)
-                            .palette(p)
-                            .on_click(move |_: &ClickEvent, window, cx| on_auto(next, window, cx)),
-                    )
-                }),
-        )
-        .child(
-            div()
-                .h_flex()
-                .items_center()
                 .justify_between()
                 .gap(px(8.0))
                 .pt(px(8.0))
@@ -645,6 +595,7 @@ pub fn render_play_setup_form(
                 )
                 .child(
                     ActionButton::new("play-setup-open-settings")
+                        .tab_stop()
                         .icon(ActionIconName::Settings)
                         .tooltip(I18n::t(locale, "play", "changeEngine"))
                         .compact()
@@ -652,42 +603,142 @@ pub fn render_play_setup_form(
                         .palette(p)
                         .on_click(move |_: &ClickEvent, window, cx| on_settings(window, cx)),
                 ),
-        )
+        );
+    let match_options =
+        column()
+            .child(
+                div()
+                    .h_flex()
+                    .items_center()
+                    .gap(px(12.0))
+                    .child(div().text_label().text_color(p.muted).child(I18n::t(
+                        locale,
+                        "play",
+                        "humanColor",
+                    )))
+                    .child(color_row),
+            )
+            .child(
+                div()
+                    .v_flex()
+                    .gap(px(6.0))
+                    .child(
+                        div()
+                            .text_label()
+                            .text_color(p.muted)
+                            .child(I18n::t(locale, "play", "length")),
+                    )
+                    .child(length_row),
+            )
+            .child(
+                div()
+                    .v_flex()
+                    .gap(px(6.0))
+                    .child(div().text_label().text_color(p.muted).child(I18n::t(
+                        locale,
+                        "play-mode",
+                        "mode",
+                    )))
+                    .child(mode_col)
+                    .when(choices.mode == PlayMode::Tutor, |this| {
+                        this.child(div().text_meta().tabular_nums().text_color(p.muted).child(
+                            format!(
+                                "{} · {}",
+                                I18n::t(locale, "play-mode", "threshold"),
+                                format_decimal(locale, choices.tutor_threshold, 3, 6)
+                            ),
+                        ))
+                    })
+                    .when(choices.mode == PlayMode::Training, |this| {
+                        let on_auto = cb.on_auto_analysis.clone();
+                        let next = !choices.training_auto_analysis;
+                        this.child(
+                            ActionButton::new("play-setup-training-auto")
+                                .tab_stop()
+                                .label(I18n::t(locale, "play-mode", "automatic"))
+                                .active(choices.training_auto_analysis)
+                                .disabled(busy)
+                                .palette(p)
+                                .on_click(move |_: &ClickEvent, window, cx| {
+                                    on_auto(next, window, cx)
+                                }),
+                        )
+                    }),
+            );
+    let body = div()
+        .id("play-setup-form")
+        .test_support()
+        .v_flex()
+        .gap(px(12.0))
+        .when_some(error_banner, |this, err| this.child(err))
+        .when(busy, |this| {
+            this.child(
+                div()
+                    .text_meta()
+                    .text_color(p.accent)
+                    .child(I18n::t(locale, "play", "thinking")),
+            )
+        })
         .child(
             div()
-                .h_flex()
-                .items_center()
-                .gap(px(8.0))
-                .pt(px(4.0))
-                .child(
-                    ActionButton::new("play-setup-start")
-                        .icon(ActionIconName::Play)
-                        .label(I18n::t(locale, "play", "start"))
-                        .primary()
-                        .disabled(busy)
-                        .palette(p)
-                        .on_click(move |_: &ClickEvent, window, cx| on_submit(window, cx)),
-                )
-                .when_some(session, |this, s| {
-                    let key = if s.paused {
-                        "resumeMatch"
-                    } else {
-                        "backToMatch"
-                    };
-                    let icon = if s.paused {
-                        ActionIconName::Resume
-                    } else {
-                        ActionIconName::Back
-                    };
-                    this.child(
-                        ActionButton::new("play-setup-resume-or-back")
-                            .icon(icon)
-                            .label(I18n::t(locale, "play", key))
-                            .disabled(busy)
-                            .palette(p)
-                            .on_click(move |_: &ClickEvent, window, cx| on_resume(window, cx)),
-                    )
-                }),
+                .flex()
+                .gap(px(16.0))
+                .when(!wide, |el| el.flex_col())
+                .when(wide, |el| el.flex_row().items_start())
+                .child(players_and_engines)
+                .child(match_options),
         )
-        .into_any_element()
+        .into_any_element();
+    let footer = div()
+        .h_flex()
+        .items_center()
+        .gap(px(8.0))
+        .flex_wrap()
+        .justify_end()
+        .pt(px(8.0))
+        .border_t_1()
+        .border_color(p.border)
+        .child(
+            ActionButton::new("play-setup-start")
+                .icon(ActionIconName::Play)
+                .tab_stop()
+                .label(I18n::t(locale, "play", "start"))
+                .primary()
+                .shortcut("Cmd+Enter")
+                .disabled(busy)
+                .palette(p)
+                .on_click(move |_: &ClickEvent, window, cx| on_submit(window, cx)),
+        )
+        .when_some(session, |this, s| {
+            let key = if s.paused {
+                "resumeMatch"
+            } else {
+                "backToMatch"
+            };
+            let icon = if s.paused {
+                ActionIconName::Resume
+            } else {
+                ActionIconName::Back
+            };
+            this.child(
+                ActionButton::new("play-setup-resume-or-back")
+                    .icon(icon)
+                    .tab_stop()
+                    .label(I18n::t(locale, "play", key))
+                    .disabled(busy)
+                    .palette(p)
+                    .on_click(move |_: &ClickEvent, window, cx| on_resume(window, cx)),
+            )
+        })
+        .child(
+            ActionButton::new("play-setup-paused-matches")
+                .icon(ActionIconName::Open)
+                .tab_stop()
+                .label(I18n::t(locale, "library", "pausedMatches"))
+                .disabled(busy)
+                .palette(p)
+                .on_click(move |_: &ClickEvent, window, cx| on_open_paused_matches(window, cx)),
+        )
+        .into_any_element();
+    (body, footer)
 }

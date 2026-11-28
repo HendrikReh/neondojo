@@ -36,8 +36,8 @@ use crate::app_context::DesktopAppContext;
 use crate::events::WorkspaceEvent;
 use crate::i18n::{current_locale, format_domain_error};
 use crate::keybindings::{
-    CTX_BOARD_REVIEW, CTX_PLAY, OfferDouble, PrimaryPlayStep, RequestHint, ReturnToLiveGame,
-    ShowFinalBoard, ShowInitialBoard, UndoCheckerStep,
+    CTX_BOARD_REVIEW, CTX_PLAY, CTX_PLAY_SETUP, OfferDouble, PrimaryPlayStep, RequestHint,
+    ReturnToLiveGame, ShowFinalBoard, ShowInitialBoard, StartPlayMatch, UndoCheckerStep,
 };
 use crate::local_state::LocalUiState;
 use crate::settings::draft_guard::SettingsCategory;
@@ -77,15 +77,17 @@ use crate::workspaces::play::setup_dialog::{
 use crate::workspaces::play::turn::PlayTurnEntity;
 use gpui_kit::{
     AnyElement, App, AppContext, ClickEvent, Context, Entity, EventEmitter, FocusHandle, Focusable,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString, Styled, Subscription,
-    TestSupportExt, Window,
+    InteractiveElement, IntoElement, KeyContext, ParentElement, Render, SharedString, Styled,
+    Subscription, TestSupportExt, Window,
     base::StyledExt,
     component::input::{InputEvent, InputState},
     div,
     prelude::FluentBuilder,
     px,
 };
-use neondojo::play::{FeedbackOperation, PlayMode, PlayPhase, PlaySession};
+use neondojo::play::{
+    FeedbackOperation, PAUSED_MATCHES_DATABASE_ID, PlayMode, PlayPhase, PlaySession,
+};
 use neondojo::settings::EngineInfo;
 use neondojo_board::{
     BearoffDirection, BoardThemeConfig, BoardView, BoardViewMode, PlayFrame, PlayOrientation,
@@ -210,11 +212,14 @@ impl PlayWorkspace {
                 PlayAnimationEntity::new(local_state.play_sounds)
             }
         });
-        let board_stage = cx.new({
-            let anim = animation_entity.clone();
-            let turn = turn_entity.clone();
-            let atlas_stage = Arc::clone(&atlas);
-            move |cx| PlayBoardStage::new(atlas_stage, anim, turn, cx)
+        let board_stage = cx.new(|cx| {
+            PlayBoardStage::new(
+                Arc::clone(&atlas),
+                animation_entity.clone(),
+                turn_entity.clone(),
+                window,
+                cx,
+            )
         });
         let preview_board = cx.new(|cx| {
             let mut bv = BoardView::new("play-candidate-preview-board", atlas);
@@ -254,11 +259,13 @@ impl PlayWorkspace {
         let sub_name = cx.subscribe_in(
             &setup_name_input,
             window,
-            |this, state, event: &InputEvent, _window, cx| {
+            |this, state, event: &InputEvent, window, cx| {
                 if matches!(event, InputEvent::Change) {
                     this.setup_choices.player_name = state.read(cx).value().to_string();
                     this.setup_choices.name_edited = true;
                     cx.notify();
+                } else if matches!(event, InputEvent::PressEnter { .. }) {
+                    this.start_setup_match(window, cx);
                 }
             },
         );
@@ -1294,6 +1301,15 @@ impl PlayWorkspace {
         });
     }
 
+    fn start_setup_match(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.visible && self.setup_open && !self.is_ui_busy(cx) {
+            let request = self.setup_choices.to_create_request();
+            self.session_entity.update(cx, |session, cx| {
+                session.create_session(request, window, cx);
+            });
+        }
+    }
+
     fn handle_primary_step(
         &mut self,
         _: &PrimaryPlayStep,
@@ -1990,10 +2006,7 @@ impl PlayWorkspace {
                     let w = weak.clone();
                     Rc::new(move |win, cx| {
                         let _ = w.update(cx, |ws, cx| {
-                            let req = ws.setup_choices.to_create_request();
-                            ws.session_entity.update(cx, |s, cx| {
-                                s.create_session(req, win, cx);
-                            });
+                            ws.start_setup_match(win, cx);
                         });
                     })
                 },
@@ -2003,9 +2016,19 @@ impl PlayWorkspace {
                         let _ = w.update(cx, |ws, cx| ws.resume_match(win, cx));
                     })
                 },
+                on_open_paused_matches: {
+                    let w = weak.clone();
+                    Rc::new(move |_win, cx| {
+                        let _ = w.update(cx, |_, cx| {
+                            cx.emit(WorkspaceEvent::OpenLibraryDatabase {
+                                database_id: PAUSED_MATCHES_DATABASE_ID,
+                            });
+                        });
+                    })
+                },
             };
 
-            let body = render_play_setup_form(
+            let (body, footer) = render_play_setup_form(
                 &self.setup_choices,
                 &self.setup_name_input,
                 &self.engines,
@@ -2014,6 +2037,7 @@ impl PlayWorkspace {
                 ui_busy,
                 p,
                 cb,
+                window.viewport_size().width >= px(880.0),
                 cx,
             );
             let on_close = {
@@ -2033,8 +2057,9 @@ impl PlayWorkspace {
                 PlayBoardDialogProps {
                     id: "play-setup-dialog".into(),
                     heading: SharedString::from(I18n::t(locale, "play", "newMatch")),
-                    width_px: 580.0,
+                    width_px: 960.0,
                     max_height_px: 760.0,
+                    footer: Some(footer),
                     modal: false,
                     dismissible: true,
                     busy: ui_busy,
@@ -2092,6 +2117,7 @@ impl PlayWorkspace {
                     heading: SharedString::from(I18n::t(locale, "play-resign", "forfeitMatch")),
                     width_px: 440.0,
                     max_height_px: 420.0,
+                    footer: None,
                     modal: true,
                     dismissible: true,
                     busy: ui_busy,
@@ -2140,6 +2166,7 @@ impl PlayWorkspace {
                     heading: SharedString::from(I18n::t(locale, "play", "pauseMatch")),
                     width_px: 430.0,
                     max_height_px: 360.0,
+                    footer: None,
                     modal: true,
                     dismissible: true,
                     busy: ui_busy,
@@ -2187,6 +2214,7 @@ impl PlayWorkspace {
                     heading: SharedString::from(I18n::t(locale, "play-mode", "review")),
                     width_px: 620.0,
                     max_height_px: 640.0,
+                    footer: None,
                     modal: true,
                     dismissible: true,
                     busy: ui_busy,
@@ -2243,6 +2271,7 @@ impl PlayWorkspace {
                     heading: SharedString::from(I18n::t(locale, "play-mode", "details")),
                     width_px: if preview_opt.is_some() { 700.0 } else { 540.0 },
                     max_height_px: 720.0,
+                    footer: None,
                     modal: true,
                     dismissible: true,
                     busy: ui_busy,
@@ -2345,6 +2374,7 @@ impl PlayWorkspace {
                         heading: SharedString::from(I18n::t(locale, "play-resign", "heading")),
                         width_px: 520.0,
                         max_height_px: 580.0,
+                        footer: None,
                         modal: true,
                         dismissible: true,
                         busy: ui_busy,
@@ -2413,6 +2443,7 @@ impl PlayWorkspace {
                         heading: SharedString::from(I18n::t(locale, "play-mode", "hint")),
                         width_px: if preview_opt.is_some() { 700.0 } else { 540.0 },
                         max_height_px: 720.0,
+                        footer: None,
                         modal: true,
                         dismissible: true,
                         busy: ui_busy,
@@ -2499,6 +2530,7 @@ impl PlayWorkspace {
                         heading: SharedString::from(I18n::t(locale, "play", "cubeDecision")),
                         width_px: 520.0,
                         max_height_px: 660.0,
+                        footer: None,
                         modal: true,
                         dismissible: false,
                         busy: ui_busy,
@@ -2547,6 +2579,7 @@ impl PlayWorkspace {
                         heading: SharedString::from(I18n::t(locale, "play-mode", mode_key)),
                         width_px: if preview_opt.is_some() { 700.0 } else { 540.0 },
                         max_height_px: 740.0,
+                        footer: None,
                         modal: true,
                         dismissible: false,
                         busy: ui_busy,
@@ -2691,6 +2724,7 @@ impl PlayWorkspace {
                         heading: SharedString::from(heading),
                         width_px: 520.0,
                         max_height_px: 640.0,
+                        footer: None,
                         modal: true,
                         dismissible: false,
                         busy: ui_busy,
@@ -2788,6 +2822,7 @@ impl Render for PlayWorkspace {
             ))
         });
 
+        let narrow = window.viewport_size().width < px(900.0);
         let history_panel = session.as_ref().map(|s| {
             let fb = play_feedback_state(Some(s));
             let money_finished = is_money_game_finished(Some(s));
@@ -2806,6 +2841,7 @@ impl Render for PlayWorkspace {
                 show_decisions,
                 show_review_actions,
                 s.paused,
+                narrow,
                 p,
                 PlayHistoryCallbacks {
                     on_select: {
@@ -2876,14 +2912,29 @@ impl Render for PlayWorkspace {
             None => None,
         };
 
-        let active_dialog = self.render_active_dialog(p, window, cx);
+        let mut keys = KeyContext::default();
+        if self.setup_open {
+            keys.add(CTX_PLAY_SETUP);
+        } else {
+            keys.add(CTX_PLAY);
+            keys.add(CTX_BOARD_REVIEW);
+        }
+        let dialog = self.render_active_dialog(p, window, cx);
+        let (setup_dialog, board_dialog) = if self.setup_open {
+            (dialog, None)
+        } else {
+            (None, dialog)
+        };
 
         div()
             .id("play-workspace")
             .test_support()
+            .relative()
             .track_focus(&self.focus_handle)
-            .key_context(CTX_PLAY)
-            .key_context(CTX_BOARD_REVIEW)
+            .key_context(keys)
+            .on_action(
+                cx.listener(|ws, _: &StartPlayMatch, window, cx| ws.start_setup_match(window, cx)),
+            )
             .on_action(cx.listener(Self::handle_primary_step))
             .on_action(cx.listener(Self::handle_offer_double))
             .on_action(cx.listener(Self::handle_request_hint))
@@ -2902,7 +2953,10 @@ impl Render for PlayWorkspace {
             .when_some(top_error_banner, |this, err| this.child(err))
             .child(
                 div()
-                    .h_flex()
+                    .flex()
+                    .when(narrow, |el| el.flex_col_reverse())
+                    .when(!narrow, |el| el.flex_row())
+                    .items_stretch()
                     .flex_1()
                     .min_h(px(0.0))
                     .gap(px(12.0))
@@ -2920,11 +2974,15 @@ impl Render for PlayWorkspace {
                             .when_some(review_toolbar, |this, tb| this.child(tb))
                             .when_some(coach_toolbar, |this, tb| this.child(tb))
                             .child(self.board_stage.clone())
-                            .when_some(active_dialog, |this, dlg| this.child(dlg)),
+                            .when_some(board_dialog, |this, dlg| this.child(dlg)),
                     ),
             )
+            .when_some(setup_dialog, |this, dlg| this.child(dlg))
     }
 }
+
+#[cfg(test)]
+mod layout_tests;
 
 #[cfg(test)]
 mod tests {
@@ -2950,7 +3008,7 @@ mod tests {
     use neondojo_rules::backgammon::initial_board;
     use std::time::{Duration, Instant};
 
-    fn make_session(phase: PlayPhase, mode: PlayMode) -> PlaySession {
+    pub(super) fn make_session(phase: PlayPhase, mode: PlayMode) -> PlaySession {
         let id = Uuid::new_v4();
         PlaySession {
             paused: false,

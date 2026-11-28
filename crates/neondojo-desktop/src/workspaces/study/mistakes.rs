@@ -17,8 +17,8 @@ use crate::ui::icons::ActionIconName;
 use crate::ui::modal::{ModalConfig, ModalSize, open_modal_dialog};
 use gpui_kit::{
     App, AppContext, Entity, FontWeight, InteractiveElement, IntoElement, ParentElement,
-    SharedString, Styled, TestSupportExt, Window, base::StyledExt, component::WindowExt, div,
-    prelude::FluentBuilder, px,
+    SharedString, StatefulInteractiveElement, Styled, TestSupportExt, Window, base::StyledExt,
+    component::WindowExt, div, prelude::FluentBuilder, px,
 };
 use neondojo::databases::Database;
 use neondojo::facade::BackendFacade;
@@ -101,7 +101,6 @@ impl RecurringMistakesState {
 }
 
 pub struct MistakesCallbacks {
-    pub on_select_player: UiCallback<String>,
     pub on_select_database: UiCallback<Option<Uuid>>,
     pub on_select_game_plan: UiCallback<Option<GamePlan>>,
     pub on_toggle_independent: UiAction,
@@ -115,6 +114,7 @@ pub struct MistakesCallbacks {
 /// Renders Study → Recurring Mistakes (filters, unanalyzed matches drawer, group table).
 pub fn render_recurring_mistakes(
     state: &RecurringMistakesState,
+    player_picker: impl IntoElement,
     selected_player: &str,
     independent_only: bool,
     palette: NeonPalette,
@@ -122,26 +122,6 @@ pub fn render_recurring_mistakes(
     cx: &App,
 ) -> impl IntoElement {
     let locale = current_locale(cx);
-    let players = state
-        .data
-        .as_ref()
-        .map(|d| d.players.as_slice())
-        .unwrap_or(&[]);
-
-    // ── Filters bar ─────────────────────────────────────────────────────────
-    let mut player_row = div().h_flex().flex_wrap().items_center().gap(px(6.0));
-    for (idx, name) in players.iter().take(12).enumerate() {
-        let nm = name.clone();
-        let on_p = cb.on_select_player.clone();
-        player_row = player_row.child(
-            ActionButton::new(SharedString::from(format!("mistakes-player-{idx}")))
-                .label(name.clone())
-                .active(name == selected_player)
-                .palette(palette)
-                .on_click(move |_, window, cx| on_p(nm.clone(), window, cx)),
-        );
-    }
-
     let mut db_row = div()
         .h_flex()
         .flex_wrap()
@@ -261,7 +241,7 @@ pub fn render_recurring_mistakes(
                         .on_click(move |_, window, cx| on_ref(window, cx)),
                 ),
         )
-        .when(!players.is_empty(), |this| this.child(player_row))
+        .child(player_picker)
         .child(db_row)
         .child(plan_row)
         .child(
@@ -358,6 +338,12 @@ pub fn render_recurring_mistakes(
 
     // Coverage & unanalyzed matches strip
     let on_un = cb.on_toggle_unanalyzed.clone();
+    let coverage = format!(
+        "{}: {} / {}",
+        I18n::t(locale, "recurring-mistakes", "analyzed"),
+        format_int(locale, data.analyzed_decisions as i64),
+        format_int(locale, data.analyzed_matches as i64)
+    );
     root = root.child(
         div()
             .h_flex()
@@ -369,15 +355,14 @@ pub fn render_recurring_mistakes(
             .bg(palette.surface_alt)
             .child(
                 div()
+                    .id("mistakes-player-coverage")
+                    .test_support()
+                    .role(gpui_kit::Role::Label)
+                    .aria_value(coverage.clone())
                     .text_meta()
                     .tabular_nums()
                     .text_color(palette.muted)
-                    .child(format!(
-                        "{}: {} / {}",
-                        I18n::t(locale, "recurring-mistakes", "analyzed"),
-                        format_int(locale, data.analyzed_decisions as i64),
-                        format_int(locale, data.analyzed_matches as i64)
-                    )),
+                    .child(coverage),
             )
             .when(data.unanalyzed_matches > 0, |this| {
                 this.child(

@@ -416,8 +416,8 @@ mod tests {
     use super::*;
     use crate::configure_app;
     use chrono::{Duration, TimeZone, Utc};
-    use gpui_kit::test::TestWindowExt;
     use gpui_kit::{Bounds, WindowBounds, WindowOptions, point, size};
+    use gpui_kit::{component::WindowExt, test::TestWindowExt};
 
     fn desktop_window_options() -> WindowOptions {
         WindowOptions {
@@ -730,6 +730,43 @@ mod tests {
         assert_eq!(state.deleted_undo.as_ref().map(|d| d.id), Some(saved_id));
     }
 
+    #[gpui_kit::test]
+    fn shell_activates_positions_on_first_visit(cx: &mut gpui_kit::TestAppContext) {
+        use crate::shell::{AppShell, WorkspaceId};
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            configure_app(LocalUiState::default(), false, cx);
+            let (window, shell) =
+                gpui_kit::open_window(desktop_window_options(), cx, |window, cx| {
+                    cx.new(|cx| AppShell::new(None, window, cx))
+                })
+                .unwrap();
+            cx.update_window(window, |_, window, cx| {
+                shell.update(cx, |s, cx| {
+                    s.select_workspace(WorkspaceId::Positions, window, cx)
+                });
+                assert!(
+                    shell
+                        .read(cx)
+                        .positions_workspace()
+                        .unwrap()
+                        .read(cx)
+                        .visible
+                );
+            })
+            .unwrap();
+            assert_eq!(
+                WorkspaceId::Positions.localized_label(Locale::En),
+                "Positions"
+            );
+            assert_eq!(
+                WorkspaceId::Positions.localized_label(Locale::De),
+                "Positionen"
+            );
+            assert_eq!(I18n::t(Locale::En, "workspace", "saved"), "Saved positions");
+        });
+    }
+
     #[test]
     fn decision_search_open_analysis_event_covers_both_checker_and_cube() {
         let checker = sample_decision_hit(true);
@@ -764,6 +801,18 @@ mod tests {
             }
             other => panic!("unexpected event for cube hit: {other:?}"),
         }
+
+        // Imported missed doubles may carry the following checker position's UUID.
+        let mut missed_double = cube;
+        missed_double.position.id = Uuid::new_v4();
+        assert!(matches!(
+            missed_double.to_open_analysis_event(),
+            Some(WorkspaceEvent::OpenMatchInAnalysis {
+                position_id: None,
+                decision_no: Some(14),
+                ..
+            })
+        ));
 
         // Draft filter inherits profile error loss when min_loss is None
         let draft = DecisionFilterDraft {
@@ -1029,6 +1078,28 @@ mod tests {
                 dv.open_hit_in_analysis(&checker_decision, cx);
                 dv.open_hit_in_analysis(&cube_decision, cx);
             });
+
+            // A rejected page must also retire the previous player's preview and bulk references.
+            for failed_page in [
+                Err("Search failed".into()),
+                Ok(neondojo::recurring_mistakes::DecisionSearchPage {
+                    items: vec![serde_json::json!({"kind":"checker"})],
+                    total: 1,
+                    page: 1,
+                    limit: 50,
+                }),
+            ] {
+                decisions_ent.update(cx, |view, cx| {
+                    view.set_items_for_test(vec![checker_decision.clone()], cx);
+                    view.apply_search_page(failed_page, cx);
+                    assert!(view.items().is_empty());
+                    assert!(view.practicable_page_items().is_empty());
+                });
+                window.render_frame(cx);
+                assert!(window.try_find("ds-preview-open-analysis").is_none());
+                window.click("ds-add-page-deck-btn", cx);
+                assert!(!window.has_active_dialog(cx));
+            }
 
             // 3. Switch to Similar Positions & Practice via TextNavBar click
             window.click("positions-tab-similar", cx);

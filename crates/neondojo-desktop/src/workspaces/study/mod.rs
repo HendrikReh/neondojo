@@ -14,6 +14,7 @@ pub mod fsrs_review;
 pub mod history;
 pub mod mistakes;
 pub mod overview;
+mod player_picker;
 pub mod reports;
 
 use self::common::{
@@ -42,6 +43,7 @@ use self::mistakes::{
 use self::overview::{
     OverviewCallbacks, StudyOverviewState, default_study_player, render_study_overview,
 };
+use self::player_picker::StudyPlayerPicker;
 use self::reports::{
     ReportDetailTab, ReportsCallbacks, StudyReportsState, build_learning_review_positions,
     render_study_reports,
@@ -103,6 +105,9 @@ pub struct StudyWorkspace {
     focus_handle: FocusHandle,
     configured_player: String,
     selected_player: String,
+    player_chosen_manually: bool,
+    overview_player_picker: StudyPlayerPicker,
+    mistakes_player_picker: StudyPlayerPicker,
     independent_only: bool,
     resumable_round_id: Option<Uuid>,
 
@@ -122,10 +127,11 @@ pub struct StudyWorkspace {
     // Abortable read guards & live push tasks
     _board_subs: Vec<Subscription>,
     _push_tasks: Vec<Task<()>>,
-    _overview_read: Option<ReadTask<()>>,
+    overview_read: Option<Task<()>>,
     _cards_read: Option<ReadTask<()>>,
     _reports_read: Option<ReadTask<()>>,
-    _mistakes_read: Option<ReadTask<()>>,
+    mistakes_read: Option<Task<()>>,
+    unanalyzed_read: Option<Task<()>>,
     _history_read: Option<ReadTask<()>>,
     initialized_backend: bool,
 }
@@ -213,6 +219,9 @@ impl StudyWorkspace {
             focus_handle: cx.focus_handle(),
             configured_player: String::new(),
             selected_player: String::new(),
+            player_chosen_manually: false,
+            overview_player_picker: StudyPlayerPicker::new(window, cx),
+            mistakes_player_picker: StudyPlayerPicker::new(window, cx),
             independent_only: local.study.independent_only,
             resumable_round_id,
             overview,
@@ -226,15 +235,16 @@ impl StudyWorkspace {
             active_mistake_modal: None,
             _board_subs: vec![fsrs_sub, round_sub],
             _push_tasks: Vec::new(),
-            _overview_read: None,
+            overview_read: None,
             _cards_read: None,
             _reports_read: None,
-            _mistakes_read: None,
+            mistakes_read: None,
+            unanalyzed_read: None,
             _history_read: None,
             initialized_backend: false,
         };
 
-        ws.try_init_backend(window, cx);
+        ws.try_init_backend(cx);
         ws
     }
 
@@ -332,7 +342,7 @@ impl StudyWorkspace {
             .update(cx, |v, cx| v.set_visible(show_preview_anki, cx));
     }
 
-    fn try_init_backend(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    fn try_init_backend(&mut self, cx: &mut Context<Self>) {
         if self.initialized_backend {
             return;
         }
@@ -341,7 +351,7 @@ impl StudyWorkspace {
         };
         self.initialized_backend = true;
         self.start_push_subscriptions(facade, cx);
-        self.load_overview(Some(window), cx);
+        self.load_overview(cx);
         self.load_decks_and_cards(cx);
         self.load_databases(cx);
     }
@@ -390,15 +400,15 @@ impl StudyWorkspace {
         self._push_tasks = vec![assess_task, anki_task];
     }
 
-    pub fn select_tab(&mut self, tab: StudyTab, window: &mut Window, cx: &mut Context<Self>) {
+    pub fn select_tab(&mut self, tab: StudyTab, _window: &mut Window, cx: &mut Context<Self>) {
         if self.active_tab == tab {
             return;
         }
         self.active_tab = tab;
         self.sync_anki_webview_visibility(cx);
-        self.try_init_backend(window, cx);
+        self.try_init_backend(cx);
         match tab {
-            StudyTab::Overview => self.load_overview(Some(window), cx),
+            StudyTab::Overview => self.load_overview(cx),
             StudyTab::Flashcards => {
                 if self.flashcards.decks.is_empty() {
                     self.load_decks_and_cards(cx);
@@ -424,12 +434,13 @@ impl StudyWorkspace {
 
     // ── Data Loaders ────────────────────────────────────────────────────────
 
-    fn load_overview(&mut self, window: Option<&mut Window>, cx: &mut Context<Self>) {
+    fn load_overview(&mut self, cx: &mut Context<Self>) {
         let Some(facade) = Self::facade(cx) else {
             return;
         };
         self.overview.summary_loading = true;
         self.overview.mistakes_loading = true;
+        self.overview.mistakes = None;
         self.overview.summary_error = None;
         self.overview.mistakes_error = None;
         cx.notify();
@@ -464,9 +475,7 @@ impl StudyWorkspace {
             (summary, prefs, cfg_player, mistakes)
         });
 
-        let has_window = window.is_some();
-        let _ = has_window;
-        cx.spawn(async move |this, cx| {
+        self.overview_read = Some(cx.spawn(async move |this, cx| {
             let Ok((summary, prefs, cfg_player, mistakes)) = read.await else {
                 return;
             };
@@ -490,17 +499,22 @@ impl StudyWorkspace {
                     ws.overview.new_cards_per_day = clamp_new_cards_per_day(p.new_cards_per_day);
                 }
                 match mistakes {
-                    Ok(m) => {
-                        if ws.selected_player.is_empty() {
-                            let auto = m.resolved_player.clone().unwrap_or_else(|| {
-                                default_study_player(&ws.configured_player, &m.players)
-                            });
-                            if !auto.is_empty() {
-                                ws.selected_player = auto;
-                                ws.overview.mistakes = Some(m);
-                                ws.load_overview(None, cx);
-                                return;
+                    Ok(mut m) => {
+                        let players = std::mem::take(&mut m.players);
+                        let default_player = m.resolved_player.clone().unwrap_or_else(|| {
+                            default_study_player(&ws.configured_player, &players)
+                        });
+                        ws.overview_player_picker.set_players(players);
+                        if !ws.player_chosen_manually
+                            && ws.selected_player.is_empty()
+                            && !default_player.is_empty()
+                        {
+                            ws.selected_player = default_player;
+                            ws.load_overview(cx);
+                            if ws.active_tab == StudyTab::Mistakes {
+                                ws.load_mistakes(cx);
                             }
+                            return;
                         }
                         ws.overview.mistakes = Some(m);
                     }
@@ -510,8 +524,7 @@ impl StudyWorkspace {
                 }
                 cx.notify();
             });
-        })
-        .detach();
+        }));
     }
 
     fn save_new_cards_per_day(&mut self, value: i32, window: &mut Window, cx: &mut Context<Self>) {
@@ -565,8 +578,9 @@ impl StudyWorkspace {
         if self.selected_player == player {
             return;
         }
+        self.player_chosen_manually = true;
         self.selected_player = player;
-        self.load_overview(None, cx);
+        self.load_overview(cx);
         self.load_mistakes(cx);
         cx.notify();
     }
@@ -575,7 +589,7 @@ impl StudyWorkspace {
         self.independent_only = !self.independent_only;
         let next = self.independent_only;
         update_local_ui_state(cx, |s| s.study.independent_only = next);
-        self.load_overview(None, cx);
+        self.load_overview(cx);
         self.load_mistakes(cx);
         cx.notify();
     }
@@ -950,7 +964,7 @@ impl StudyWorkspace {
                         ws.fsrs.conflict_notice = None;
                         ws.fsrs.idempotency.reset();
                         ws.load_next_fsrs_card(cx);
-                        ws.load_overview(None, cx);
+                        ws.load_overview(cx);
                     }
                     Err(err) if err.kind == ErrorKind::Conflict => {
                         ws.fsrs
@@ -1433,7 +1447,7 @@ impl StudyWorkspace {
                 ));
                 ws.flashcards.transfer_error = last_error;
                 ws.load_decks_and_cards(cx);
-                ws.load_overview(None, cx);
+                ws.load_overview(cx);
                 cx.notify();
             });
         })
@@ -1532,7 +1546,7 @@ impl StudyWorkspace {
                             ],
                         ));
                         ws.load_decks_and_cards(cx);
-                        ws.load_overview(None, cx);
+                        ws.load_overview(cx);
                     }
                     Err(err) => {
                         ws.flashcards.transfer_status = None;
@@ -2437,7 +2451,7 @@ impl StudyWorkspace {
                         }
                         ws.flashcards.transfer_error = None;
                         ws.load_decks_and_cards(cx);
-                        ws.load_overview(None, cx);
+                        ws.load_overview(cx);
                     }
                     Err(err) => {
                         ws.flashcards.transfer_error = Some(format_domain_error(locale, &err));
@@ -2968,6 +2982,7 @@ impl StudyWorkspace {
             return;
         };
         self.mistakes.loading = true;
+        self.mistakes.data = None;
         self.mistakes.error = None;
         let query = self.mistakes.build_query(
             &self.selected_player,
@@ -2980,23 +2995,32 @@ impl StudyWorkspace {
         let read = spawn_facade_read(cx, move || async move {
             facade.list_recurring_mistakes(query).await
         });
-        cx.spawn(async move |this, cx| {
+        self.mistakes_read = Some(cx.spawn(async move |this, cx| {
             let Ok(res) = read.await else {
                 return;
             };
             let _ = this.update(cx, |ws, cx| {
                 ws.mistakes.loading = false;
                 match res {
-                    Ok(data) => ws.mistakes.data = Some(data),
+                    Ok(mut data) => {
+                        ws.mistakes_player_picker
+                            .set_players(std::mem::take(&mut data.players));
+                        ws.mistakes.data = Some(data);
+                    }
                     Err(err) => ws.mistakes.error = Some(format_domain_error(locale, &err)),
                 }
                 cx.notify();
             });
-        })
-        .detach();
+        }));
+        if self.mistakes.unanalyzed_open {
+            self.load_unanalyzed_matches(cx);
+        }
     }
 
     fn load_unanalyzed_matches(&mut self, cx: &mut Context<Self>) {
+        self.unanalyzed_read = None;
+        self.mistakes.unanalyzed.clear();
+        self.mistakes.unanalyzed_loading = false;
         if self.selected_player.trim().is_empty() {
             return;
         }
@@ -3013,16 +3037,16 @@ impl StudyWorkspace {
                 .list_unanalyzed_matches(&player, db, indep, Some(100))
                 .await
         });
-        cx.spawn(async move |this, cx| {
-            if let Ok(Ok(items)) = read.await {
-                let _ = this.update(cx, |ws, cx| {
-                    ws.mistakes.unanalyzed_loading = false;
+        self.unanalyzed_read = Some(cx.spawn(async move |this, cx| {
+            let items = read.await;
+            let _ = this.update(cx, |ws, cx| {
+                ws.mistakes.unanalyzed_loading = false;
+                if let Ok(Ok(items)) = items {
                     ws.mistakes.unanalyzed = items;
-                    cx.notify();
-                });
-            }
-        })
-        .detach();
+                }
+                cx.notify();
+            });
+        }));
     }
 
     fn launch_mistake_practice(
@@ -3325,7 +3349,7 @@ impl Render for StudyWorkspace {
         if !self.visible {
             return div().id("study-workspace-hidden").test_support();
         }
-        self.try_init_backend(window, cx);
+        self.try_init_backend(cx);
 
         let palette = NeonTheme::current_palette(cx);
         let locale = current_locale(cx);
@@ -3408,22 +3432,30 @@ impl Render for StudyWorkspace {
                             ws.update(cx, |w, cx| w.save_new_cards_per_day(val, window, cx))
                         }
                     }),
-                    on_select_player: Rc::new({
-                        let ws = ws_entity.clone();
-                        move |p, _, cx| ws.update(cx, |w, cx| w.set_selected_player(p, cx))
-                    }),
                     on_toggle_independent: Rc::new({
                         let ws = ws_entity.clone();
                         move |_, cx| ws.update(cx, |w, cx| w.toggle_independent_only(cx))
                     }),
                     on_refresh: Rc::new({
                         let ws = ws_entity.clone();
-                        move |window, cx| ws.update(cx, |w, cx| w.load_overview(Some(window), cx))
+                        move |_, cx| ws.update(cx, |w, cx| w.load_overview(cx))
                     }),
                 };
+                let player = self
+                    .overview_player_picker
+                    .available_player(&self.selected_player);
+                let picker = self.overview_player_picker.render(
+                    "study-overview-player",
+                    player,
+                    locale,
+                    palette,
+                    window,
+                    cx,
+                );
                 render_study_overview(
                     &self.overview,
-                    &self.selected_player,
+                    picker,
+                    player,
                     self.independent_only,
                     palette,
                     cb,
@@ -4281,10 +4313,6 @@ impl Render for StudyWorkspace {
             }
             StudyTab::Mistakes => {
                 let cb = MistakesCallbacks {
-                    on_select_player: Rc::new({
-                        let ws = ws_entity.clone();
-                        move |p, _, cx| ws.update(cx, |w, cx| w.set_selected_player(p, cx))
-                    }),
                     on_select_database: Rc::new({
                         let ws = ws_entity.clone();
                         move |db, _, cx| {
@@ -4353,9 +4381,21 @@ impl Render for StudyWorkspace {
                         }
                     }),
                 };
+                let player = self
+                    .mistakes_player_picker
+                    .available_player(&self.selected_player);
+                let picker = self.mistakes_player_picker.render(
+                    "mistakes-player",
+                    player,
+                    locale,
+                    palette,
+                    window,
+                    cx,
+                );
                 render_recurring_mistakes(
                     &self.mistakes,
-                    &self.selected_player,
+                    picker,
+                    player,
                     self.independent_only,
                     palette,
                     cb,
@@ -4791,6 +4831,82 @@ mod tests {
                 assert_eq!(reports[1].game_no, Some(2));
             }
             _ => panic!("expected grouped money session first"),
+        }
+    }
+
+    #[gpui_kit::test]
+    async fn headless_study_selects_last_player_in_both_reports(cx: &mut gpui_kit::TestAppContext) {
+        use gpui_kit::{Bounds, WindowBounds, point, size};
+        let (window, study) = cx.update(|cx| {
+            gpui_kit::init(cx);
+            configure_app(LocalUiState::default(), false, cx);
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    point(px(0.), px(0.)),
+                    size(px(1000.), px(680.)),
+                ))),
+                ..WindowOptions::default()
+            };
+            gpui_kit::open_window(options, cx, |window, cx| {
+                cx.new(|cx| {
+                    let mut ws = StudyWorkspace::new(window, cx);
+                    let players: Vec<_> = (1..=20).map(|i| format!("Player {i:02}")).collect();
+                    ws.selected_player = players[0].clone();
+                    ws.overview_player_picker.set_players(players.clone());
+                    ws.mistakes_player_picker.set_players(players);
+                    ws
+                })
+            })
+            .unwrap()
+        });
+
+        for (tab_id, picker_id) in [
+            ("study-tab-overview", "study-overview-player"),
+            ("study-tab-mistakes", "mistakes-player"),
+        ] {
+            cx.update_window(window, |_, window, cx| {
+                window.render_frame(cx);
+                window.click(tab_id, cx);
+                window.render_frame(cx);
+                window.click(picker_id, cx);
+                assert_eq!(window.find(picker_id).expanded(), Some(true));
+                window.input("Player 01", cx);
+            })
+            .unwrap();
+            cx.run_until_parked();
+            cx.executor().advance_clock(Duration::from_millis(150));
+            cx.update_window(window, |_, window, cx| window.press("enter", cx))
+                .unwrap();
+            cx.run_until_parked();
+            cx.update_window(window, |_, window, cx| {
+                window.render_frame(cx);
+                assert_eq!(window.find(picker_id).value(), Some("Player 01"));
+                window.click(picker_id, cx);
+                // The last option is below the initial popup viewport.
+                for _ in 1..20 {
+                    window.press("down", cx);
+                }
+                window.press("enter", cx);
+            })
+            .unwrap();
+            cx.run_until_parked();
+            cx.update_window(window, |_, window, cx| {
+                window.render_frame(cx);
+                assert_eq!(window.find(picker_id).expanded(), Some(false));
+                assert_eq!(window.find(picker_id).value(), Some("Player 20"));
+                let workspace = study.read(cx);
+                assert_eq!(workspace.selected_player, "Player 20");
+                if workspace.active_tab == StudyTab::Mistakes {
+                    let query = workspace.mistakes.build_query(
+                        &workspace.selected_player,
+                        workspace.independent_only,
+                        None,
+                        cx,
+                    );
+                    assert_eq!(query.player.as_deref(), Some("Player 20"));
+                }
+            })
+            .unwrap();
         }
     }
 

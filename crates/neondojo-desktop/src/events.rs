@@ -17,6 +17,8 @@ pub enum WorkspaceEvent {
     },
     /// Open or resume a live/paused play session in the Play workspace.
     OpenPlaySession { session_id: Uuid, resume: bool },
+    /// Open the specified database in the Match Library.
+    OpenLibraryDatabase { database_id: Uuid },
     /// Jump to Match Library with an exact GNUbg Position ID filter applied.
     SearchPositionInLibrary { position_id: String },
     /// Start bulk match analysis in Match Library for the given match IDs.

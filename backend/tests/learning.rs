@@ -1873,6 +1873,28 @@ async fn nocube_statistics_and_cards_follow_source_rules(pool: PgPool) {
     assert_eq!(status, 200, "{current}");
     assert!(current["needs_cube_rule_reanalysis"].is_null());
 
+    let position = store::positions(&pool, Some(imported.r#match.id), None, None, 1)
+        .await
+        .unwrap()
+        .items
+        .remove(0);
+    let position_job = store::create_job(&pool, position.id, "analysis", 1)
+        .await
+        .unwrap();
+    assert!(jobs::run_one(&state).await.unwrap());
+    for job_id in [job.id, position_job.id] {
+        let path = format!(
+            "/api/positions/{}/analysis-result?analysis_id=job:{job_id}",
+            position.id
+        );
+        let (status, saved) = call(app.clone(), "GET", &path, Value::Null).await;
+        assert_eq!(status, 200, "{saved}");
+        assert_eq!(saved["native_checker_equity_kind"], "cubeless", "{saved}");
+        if job_id == position_job.id {
+            assert_eq!(saved["analysis"]["cube_enabled"], false, "{saved}");
+        }
+    }
+
     for player in game["summary"]["players"].as_array().unwrap() {
         assert_eq!(player["cube_decisions"], 0);
         assert_eq!(player["checker_decisions"], 1);

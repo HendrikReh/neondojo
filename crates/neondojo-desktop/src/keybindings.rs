@@ -8,6 +8,7 @@ use neondojo_i18n::{I18n, Locale};
 /// Key context identifiers matching NeonDojo's focus hierarchy.
 pub const CTX_APP: &str = "NeonApp";
 pub const CTX_PLAY: &str = "NeonPlay";
+pub const CTX_PLAY_SETUP: &str = "NeonPlaySetup";
 pub const CTX_ANALYSIS: &str = "NeonAnalysis";
 pub const CTX_STUDY_EXERCISE: &str = "NeonStudyExercise";
 pub const CTX_BOARD_REVIEW: &str = "NeonBoardReview";
@@ -69,6 +70,7 @@ actions!(
         ShowInitialBoard,
         ShowFinalBoard,
         // Playing
+        StartPlayMatch,
         PrimaryPlayStep,
         OfferDouble,
         RequestHint,
@@ -106,7 +108,7 @@ actions!(
 
 /// Registers all global, workspace, review, modal, and control keybindings.
 pub fn register_keybindings(cx: &mut App) {
-    let play_ctx = Some("NeonPlay && !Input && !NeonModal");
+    let play_ctx = Some("NeonPlay && !NeonPlaySetup && !Input && !NeonModal");
     let analysis_ctx = Some("NeonAnalysis && !Input && !NeonModal");
     let study_ctx = Some("NeonStudyExercise && !Input");
     let review_ctx = Some("NeonBoardReview && !Input && !NeonModal");
@@ -140,6 +142,8 @@ pub fn register_keybindings(cx: &mut App) {
         KeyBinding::new("right", ShowFinalBoard, review_ctx),
         // Playing shortcuts
         KeyBinding::new("enter", PrimaryPlayStep, play_ctx),
+        KeyBinding::new("cmd-enter", StartPlayMatch, Some(CTX_PLAY_SETUP)),
+        KeyBinding::new("escape", ReturnToLiveGame, Some(CTX_PLAY_SETUP)),
         KeyBinding::new("d", OfferDouble, play_ctx),
         KeyBinding::new("h", RequestHint, play_ctx),
         KeyBinding::new("z", UndoCheckerStep, play_ctx),
@@ -286,8 +290,11 @@ pub fn build_app_menus(state: &MenuState) -> Vec<Menu> {
                     .checked(state.active_workspace_index == Some(1)),
                 MenuItem::action(I18n::t(l, "workspace", "learning"), SelectWorkspaceStudy)
                     .checked(state.active_workspace_index == Some(2)),
-                MenuItem::action(I18n::t(l, "workspace", "saved"), SelectWorkspacePositions)
-                    .checked(state.active_workspace_index == Some(3)),
+                MenuItem::action(
+                    I18n::t(l, "workspace", "positions"),
+                    SelectWorkspacePositions,
+                )
+                .checked(state.active_workspace_index == Some(3)),
                 MenuItem::action(I18n::t(l, "workspace", "database"), SelectWorkspaceLibrary)
                     .checked(state.active_workspace_index == Some(4)),
                 MenuItem::action(I18n::t(l, "workspace", "players"), SelectWorkspacePlayers)

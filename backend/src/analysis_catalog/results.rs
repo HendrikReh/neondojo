@@ -17,6 +17,33 @@ use serde_json::Value;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
+#[derive(Clone, Copy, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum NativeCheckerEquityKind {
+    Cubeful,
+    Cubeless,
+    NormalizedCubeful,
+}
+
+impl NativeCheckerEquityKind {
+    fn from_rules(saved: Option<bool>, source: Option<bool>, cubeful: Self) -> Option<Self> {
+        // The source rule alone cannot identify how an old cube-disabled game was evaluated.
+        match saved.or(source.filter(|enabled| *enabled)) {
+            Some(true) => Some(cubeful),
+            Some(false) => Some(Self::Cubeless),
+            None => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Cubeful => "cubeful",
+            Self::Cubeless => "cubeless",
+            Self::NormalizedCubeful => "normalized_cubeful",
+        }
+    }
+}
+
 #[derive(Debug, Default, Deserialize, IntoParams)]
 #[into_params(parameter_in=Query)]
 pub struct PositionResultQuery {
@@ -29,6 +56,9 @@ pub struct SelectedPositionAnalysis {
     pub position_id: Uuid,
     pub engine: String,
     pub depth: Option<String>,
+    /// Applied unit of native checker candidates, absent for imports or unverified legacy jobs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_checker_equity_kind: Option<NativeCheckerEquityKind>,
     /// Original imported candidates, cube values, units and perspective.
     pub records: Vec<ImportedAnalysisRecord>,
     /// Native match/game decision with best, played, and alternatives when recorded.
@@ -43,12 +73,16 @@ pub(crate) async fn load_position_result(
     analysis_id: Option<&str>,
 ) -> Result<Option<SelectedPositionAnalysis>, DomainError> {
     let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
-    let position: Position = sqlx::query_as("SELECT * FROM positions WHERE id=$1")
-        .bind(id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(anyhow::Error::from)?
-        .ok_or_else(DomainError::missing)?;
+    let position: Position = sqlx::query_as(
+        "SELECT p.*,g.cube_enabled FROM positions p
+         LEFT JOIN match_games g ON g.match_uuid=p.match_uuid AND g.game_no=p.game_no
+         WHERE p.id=$1",
+    )
+    .bind(id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?
+    .ok_or_else(DomainError::missing)?;
     crate::play::require_review_available_on(&mut *tx, position.match_uuid).await?;
     let imported_loaded: bool =
         sqlx::query_scalar("SELECT imported_analysis_loaded FROM matches WHERE id=$1")
@@ -73,6 +107,7 @@ pub(crate) async fn load_position_result(
         position_id: id,
         engine: entry.engine,
         depth: entry.depth,
+        native_checker_equity_kind: None,
         records: vec![],
         decision: None,
         analysis: None,
@@ -89,18 +124,49 @@ pub(crate) async fn load_position_result(
             if job.position_uuid != Some(id) {
                 return Ok(None);
             }
-            response.analysis = job
-                .result
-                .and_then(|data| serde_json::from_value::<Analysis>(data).ok())
-                .filter(|a| !a.candidates.is_empty());
-            if response.analysis.is_none() {
+            let Some(data) = job.result else {
                 return Ok(None);
-            }
+            };
+            let Some(analysis) = serde_json::from_value::<Analysis>(data)
+                .ok()
+                .filter(|a| !a.candidates.is_empty())
+            else {
+                return Ok(None);
+            };
+            // Historical NeonGammon results record the applied mode in their engine identity.
+            let engine_rule = || {
+                let snapshot = job.engine_snapshot.as_ref()?.open_sage.as_ref()?;
+                [("cubeful", true), ("cubeless", false)]
+                    .into_iter()
+                    .find_map(|(mode, enabled)| {
+                        (analysis.engine == snapshot.describe(mode)).then_some(enabled)
+                    })
+            };
+            response.native_checker_equity_kind = NativeCheckerEquityKind::from_rules(
+                analysis.cube_enabled.or_else(engine_rule),
+                position.cube_enabled,
+                NativeCheckerEquityKind::Cubeful,
+            );
+            response.analysis = Some(analysis);
         }
         SelectedAnalysis::Job(job) => {
-            let row:Option<(Value,f64)>=sqlx::query_as("SELECT a.data,a.equity_loss FROM move_analyses a JOIN match_analysis_games c ON c.job_id=a.job_id AND c.game_no=a.game_no WHERE a.job_id=$1 AND a.position_uuid=$2 AND a.game_no=$3 AND a.player=$4 AND a.kind='checker' AND ($5::integer IS NULL OR a.game_no=$5) ORDER BY a.id LIMIT 1")
-                .bind(job.id).bind(id).bind(position.game_no).bind(position.player).bind(job.game_no).fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?;
-            let Some((data, loss)) = row else {
+            let row: Option<(Value, f64, Option<bool>)> = sqlx::query_as(
+                "SELECT a.data, a.equity_loss, (c.summary->>'cube_enabled')::boolean
+                 FROM move_analyses a
+                 JOIN match_analysis_games c ON c.job_id=a.job_id AND c.game_no=a.game_no
+                 WHERE a.job_id=$1 AND a.position_uuid=$2 AND a.game_no=$3 AND a.player=$4
+                   AND a.kind='checker' AND ($5::integer IS NULL OR a.game_no=$5)
+                 ORDER BY a.id LIMIT 1",
+            )
+            .bind(job.id)
+            .bind(id)
+            .bind(position.game_no)
+            .bind(position.player)
+            .bind(job.game_no)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(anyhow::Error::from)?;
+            let Some((data, loss, checkpoint_rule)) = row else {
                 return Ok(None);
             };
             if crate::move_assessments::native_checker_loss(&position, &data, loss).is_none() {
@@ -110,7 +176,20 @@ pub(crate) async fn load_position_result(
             if response.decision.is_none() {
                 return Ok(None);
             }
+            response.native_checker_equity_kind = NativeCheckerEquityKind::from_rules(
+                checkpoint_rule,
+                position.cube_enabled,
+                NativeCheckerEquityKind::NormalizedCubeful,
+            );
         }
+    }
+    if let (Some(depth), Some(unit)) = (&mut response.depth, response.native_checker_equity_kind) {
+        depth.push_str(match unit {
+            NativeCheckerEquityKind::Cubeless => " cubeless",
+            NativeCheckerEquityKind::Cubeful | NativeCheckerEquityKind::NormalizedCubeful => {
+                " cubeful"
+            }
+        });
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Some(response))

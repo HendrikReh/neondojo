@@ -31,8 +31,8 @@ use dialogs::{
 };
 use gpui_kit::{
     App, AppContext, Context, Entity, EventEmitter, FontWeight, Hsla, InteractiveElement,
-    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
-    Subscription, Task, TestSupportExt, Window,
+    IntoElement, ParentElement, Render, ScrollHandle, SharedString, StatefulInteractiveElement,
+    Styled, Subscription, Task, TestSupportExt, Window,
     base::StyledExt,
     component::input::{Input, InputEvent, InputState},
     div,
@@ -126,6 +126,7 @@ pub struct PlayersWorkspace {
     selection: Option<PlayerSelection>,
     details: Option<SelectedDetails>,
     details_loading: bool,
+    detail_scroll: ScrollHandle,
     trend_views: Vec<Entity<PlayerRatingTrendView>>,
     // Matches & Opponent Breakdown
     databases: Vec<Database>,
@@ -182,6 +183,7 @@ impl PlayersWorkspace {
             selection: None,
             details: None,
             details_loading: false,
+            detail_scroll: ScrollHandle::new(),
             trend_views: Vec::new(),
             databases: Vec::new(),
             selected_database_id: None,
@@ -319,6 +321,12 @@ impl PlayersWorkspace {
     }
 
     pub fn select_entry(&mut self, selection: PlayerSelection, cx: &mut Context<Self>) {
+        if self.selection != Some(selection) {
+            self.detail_scroll.set_offset(Default::default());
+            self.details = None;
+            self.matches.clear();
+            self.matches_total = 0;
+        }
         self.selection = Some(selection);
         self.selected_database_id = None;
         self.matches_page = 1;
@@ -847,6 +855,7 @@ impl PlayersWorkspace {
                 rows = rows.child(
                     div()
                         .id(SharedString::from(format!("player-row-{pid}")))
+                        .test_support()
                         .v_flex()
                         .gap(px(2.0))
                         .px(px(10.0))
@@ -995,6 +1004,9 @@ impl PlayersWorkspace {
         cx: &Context<Self>,
     ) -> impl IntoElement {
         let entity = cx.entity().clone();
+        let error_banner = self.error_message.clone().map(|msg| {
+            StatusBanner::new("players-error-banner", BannerKind::Error, msg).palette(p)
+        });
         let Some(details) = &self.details else {
             let msg = if self.details_loading {
                 I18n::t(locale, "player-directory", "loading")
@@ -1007,11 +1019,13 @@ impl PlayersWorkspace {
                 .p(px(24.0))
                 .text_body()
                 .text_color(p.muted)
-                .child(msg)
+                .when(error_banner.is_none(), |this| this.child(msg))
+                .children(error_banner)
                 .into_any_element();
         };
 
         let (
+            profile_id,
             title,
             match_count,
             rateable_count,
@@ -1022,6 +1036,7 @@ impl PlayersWorkspace {
             is_me,
         ) = match details {
             SelectedDetails::Real(d) => (
+                d.profile.id,
                 d.profile.display_name.clone(),
                 d.profile.match_count,
                 d.rateable_match_count,
@@ -1032,6 +1047,7 @@ impl PlayersWorkspace {
                 false,
             ),
             SelectedDetails::Virtual(v) => (
+                v.profile.id,
                 v.profile.name.clone(),
                 v.profile.match_count,
                 v.profile.rateable_match_count,
@@ -1426,9 +1442,24 @@ impl PlayersWorkspace {
             trends_section = trends_section.child(trend.clone());
         }
 
-        // Opponent Breakdown table
+        // The opponent breakdown and match list share one database-filtered page.
+        let matches_last_page = (self.matches_total.max(0) as usize)
+            .div_ceil(MATCHES_PAGE_SIZE as usize)
+            .max(1);
+        let match_pagination = |id: &'static str| {
+            let ent = entity.clone();
+            NumberedSearchPagination::new(id, self.matches_page, matches_last_page)
+                .disabled(self.matches_loading)
+                .palette(p)
+                .on_select(move |page, _, cx| {
+                    ent.update(cx, |ws, cx| {
+                        ws.matches_page = page;
+                        ws.load_selected_matches(cx);
+                    });
+                })
+        };
         let opponents = compute_opponent_breakdown(&self.matches);
-        let opponent_section = (!opponents.is_empty()).then(|| {
+        let opponent_section = (!opponents.is_empty() || matches_last_page > 1).then(|| {
             let mut tbl = div()
                 .v_flex()
                 .gap(px(4.0))
@@ -1437,11 +1468,21 @@ impl PlayersWorkspace {
                 .border_1()
                 .border_color(p.border)
                 .bg(p.surface)
-                .child(div().text_panel().text_color(p.text).child(I18n::t(
-                    locale,
-                    "position-browser",
-                    "opponent",
-                )))
+                .child(
+                    div()
+                        .h_flex()
+                        .items_center()
+                        .justify_between()
+                        .flex_wrap()
+                        .child(div().text_panel().text_color(p.text).child(I18n::t(
+                            locale,
+                            "player-directory",
+                            "opponentsOnMatchPage",
+                        )))
+                        .when(matches_last_page > 1, |header| {
+                            header.child(match_pagination("player-opponents-pagination"))
+                        }),
+                )
                 .child(
                     div()
                         .h_flex()
@@ -1475,8 +1516,15 @@ impl PlayersWorkspace {
                         ))),
                 );
 
-            for (idx, opp) in opponents.iter().take(12).enumerate() {
+            for opp in opponents {
                 let opp_id = opp.opponent_id;
+                let row_id = match opp_id {
+                    Some(id) => format!("opponent-breakdown-row-{id}"),
+                    None => format!(
+                        "opponent-breakdown-name-{}",
+                        opp.name.trim().to_ascii_lowercase()
+                    ),
+                };
                 let opp_name = opp.name.clone();
                 let ent = entity.clone();
                 let record = if opp.draws > 0 {
@@ -1486,7 +1534,7 @@ impl PlayersWorkspace {
                 };
                 tbl = tbl.child(
                     div()
-                        .id(SharedString::from(format!("opponent-breakdown-row-{idx}")))
+                        .id(SharedString::from(row_id))
                         .test_support()
                         .h_flex()
                         .items_center()
@@ -1510,7 +1558,7 @@ impl PlayersWorkspace {
                                 .flex_1()
                                 .font_weight(FontWeight::MEDIUM)
                                 .text_color(p.accent)
-                                .child(opp.name.clone()),
+                                .child(opp.name),
                         )
                         .child(
                             div()
@@ -1532,10 +1580,6 @@ impl PlayersWorkspace {
         });
 
         // Match list with database filter + pagination
-        let matches_last_page = ((self.matches_total.max(0) + MATCHES_PAGE_SIZE - 1)
-            / MATCHES_PAGE_SIZE)
-            .max(1) as usize;
-
         let mut db_bar = div().h_flex().items_center().gap(px(4.0)).flex_wrap();
         {
             let ent = entity.clone();
@@ -1761,23 +1805,12 @@ impl PlayersWorkspace {
         }
 
         if matches_last_page > 1 {
-            let page_ent = entity.clone();
             match_table = match_table.child(
-                div().h_flex().justify_center().pt(px(8.0)).child(
-                    NumberedSearchPagination::new(
-                        "player-matches-pagination",
-                        self.matches_page,
-                        matches_last_page,
-                    )
-                    .disabled(self.matches_loading)
-                    .palette(p)
-                    .on_select(move |page, _, cx| {
-                        page_ent.update(cx, |ws, cx| {
-                            ws.matches_page = page;
-                            ws.load_selected_matches(cx);
-                        });
-                    }),
-                ),
+                div()
+                    .h_flex()
+                    .justify_center()
+                    .pt(px(8.0))
+                    .child(match_pagination("player-matches-pagination")),
             );
         }
 
@@ -1785,6 +1818,8 @@ impl PlayersWorkspace {
 
         div()
             .id("players-detail-pane")
+            .test_support()
+            .track_scroll(&self.detail_scroll)
             .v_flex()
             .flex_1()
             .h_full()
@@ -1813,11 +1848,7 @@ impl PlayersWorkspace {
                         ),
                 )
             })
-            .when_some(self.error_message.clone(), |this, msg| {
-                this.child(
-                    StatusBanner::new("players-error-banner", BannerKind::Error, msg).palette(p),
-                )
-            })
+            .children(error_banner)
             // Header card
             .child(
                 div()
@@ -1845,7 +1876,14 @@ impl PlayersWorkspace {
                                             .items_center()
                                             .gap(px(8.0))
                                             .child(
-                                                div().text_page().text_color(p.text).child(title),
+                                                div()
+                                                    .id(SharedString::from(format!(
+                                                        "player-profile-title-{profile_id}"
+                                                    )))
+                                                    .test_support()
+                                                    .text_page()
+                                                    .text_color(p.text)
+                                                    .child(title),
                                             )
                                             .when(is_virtual, |this| {
                                                 this.child(
@@ -2060,7 +2098,7 @@ mod tests {
     }
 
     #[gpui_kit::test]
-    async fn clicking_opponent_breakdown_row_switches_selection_and_virtual_profile_renders(
+    async fn thirteenth_opponent_on_a_match_page_opens_their_real_profile(
         cx: &mut gpui_kit::TestAppContext,
     ) {
         use chrono::Utc;
@@ -2081,7 +2119,6 @@ mod tests {
 
         let vp_id = Uuid::new_v4();
         let member_id = Uuid::new_v4();
-        let opp_id = Uuid::new_v4();
 
         let vp_details = VirtualPlayerDetails {
             profile: VirtualPlayerProfile {
@@ -2090,67 +2127,70 @@ mod tests {
                 is_me: true,
                 version: 2,
                 member_count: 1,
-                match_count: 5,
-                rateable_match_count: 5,
-                game_count: 25,
+                match_count: 13,
+                rateable_match_count: 13,
+                game_count: 65,
             },
             members: vec![VirtualPlayerMember {
                 id: member_id,
                 display_name: "Hendrik".into(),
                 aliases: Vec::new(),
-                match_count: 5,
+                match_count: 13,
             }],
             ratings: Vec::new(),
             rating_history: Vec::new(),
         };
 
-        let match_row = DatabaseMatch {
-            occurrence: None,
-            player_sides: Some(vec![0]),
-            opponent_player_id: Some(opp_id),
-            id: Uuid::new_v4(),
-            source_available: true,
-            play_session_id: None,
-            play_paused: false,
-            study_report_id: None,
-            play_phase: None,
-            play_mode: None,
-            play_assisted: false,
-            match_no: 7,
-            filename: "club.xg".into(),
-            format: "xg".into(),
-            white: "Hendrik".into(),
-            black: "Opponent Alice".into(),
-            match_length: 7,
-            position_count: 88,
-            created_at: Utc::now(),
-            database_id: Uuid::new_v4(),
-            display_name: "club".into(),
-            played_on: NaiveDate::from_ymd_opt(2026, 3, 15),
-            tournament: None,
-            round: None,
-            place: None,
-            result_state: "white_won".into(),
-            white_score: Some(7),
-            black_score: Some(4),
-            white_pr: Some(3.9),
-            black_pr: Some(5.4),
-            pr_method: None,
-            pr_profile: None,
-            analysis_status: Some("completed".into()),
-            game_count: 5,
-            import_warning_count: 0,
-            tags: Vec::new(),
-            comment: String::new(),
-            version: 1,
-        };
+        let matches = (1..=13)
+            .rev()
+            .map(|index| DatabaseMatch {
+                occurrence: None,
+                player_sides: Some(vec![0]),
+                opponent_player_id: Some(Uuid::from_u128(index)),
+                id: Uuid::new_v4(),
+                source_available: true,
+                play_session_id: None,
+                play_paused: false,
+                study_report_id: None,
+                play_phase: None,
+                play_mode: None,
+                play_assisted: false,
+                match_no: 7,
+                filename: "club.xg".into(),
+                format: "xg".into(),
+                white: "Hendrik".into(),
+                black: format!("Opponent {index:02}"),
+                match_length: 7,
+                position_count: 88,
+                created_at: Utc::now(),
+                database_id: Uuid::new_v4(),
+                display_name: "club".into(),
+                played_on: NaiveDate::from_ymd_opt(2026, 3, 15),
+                tournament: None,
+                round: None,
+                place: None,
+                result_state: "white_won".into(),
+                white_score: Some(7),
+                black_score: Some(4),
+                white_pr: Some(3.9),
+                black_pr: Some(5.4),
+                pr_method: None,
+                pr_profile: None,
+                analysis_status: Some("completed".into()),
+                game_count: 5,
+                import_warning_count: 0,
+                tags: Vec::new(),
+                comment: String::new(),
+                version: 1,
+            })
+            .collect::<Vec<_>>();
 
         cx.update_window(window, |_, window, cx| {
             workspace.update(cx, |ws, cx| {
                 ws.virtuals = vec![vp_details.profile.clone()];
                 ws.on_virtual_profile_saved(vp_details, cx);
-                ws.matches = vec![match_row];
-                ws.matches_total = 1;
+                ws.matches_total = matches.len() as i64;
+                ws.matches = matches;
                 cx.notify();
             });
             window.render_frame(cx);
@@ -2164,13 +2204,28 @@ mod tests {
                     .visible()
             );
 
-            // Clicking the opponent breakdown row switches selection directly to that opponent!
-            window.click("opponent-breakdown-row-0", cx);
+            let opp_id = Uuid::from_u128(13);
+            let row = SharedString::from(format!("opponent-breakdown-row-{opp_id}"));
+            for _ in 0..20 {
+                let viewport = window.find("players-detail-pane").bounds();
+                if window.try_find(row.clone()).is_some_and(|target| {
+                    target.visible() && viewport.contains(&target.bounds().center())
+                }) {
+                    break;
+                }
+                window.scroll(
+                    "players-detail-pane",
+                    gpui_kit::ScrollDelta::Pixels(gpui_kit::point(px(0.), px(-150.))),
+                    cx,
+                );
+            }
+            window.click(row, cx);
             window.render_frame(cx);
             assert_eq!(
                 workspace.read(cx).current_selection(),
                 Some(PlayerSelection::Real(opp_id))
             );
+            assert_eq!(workspace.read(cx).detail_scroll.offset().y, px(0.));
         })
         .expect("update players window for opponent switch");
     }

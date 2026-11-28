@@ -110,6 +110,56 @@ async fn position_job(pool: &PgPool, position: Uuid, plies: i32) -> Job {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn library_job_notifications_resolve_game_and_position_analysis_to_the_visible_match(
+    pool: PgPool,
+) {
+    let (_, match_id, positions) = setup(&pool).await;
+    let facade = neondojo::facade::BackendFacade::new(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let visible = [match_id];
+    let other = [Uuid::new_v4()];
+    let position = position_job(&pool, positions[0], 1).await;
+    let game = match_job(
+        &pool,
+        match_id,
+        positions[0],
+        Some(1),
+        "GNU Backgammon",
+        2,
+        "completed",
+    )
+    .await;
+    for job in [position.id, game.id] {
+        assert_eq!(
+            facade
+                .library_analysis_statuses(&visible, Some(job))
+                .await
+                .unwrap(),
+            [(match_id, Some("partial".into()))]
+        );
+        assert!(
+            facade
+                .library_analysis_statuses(&other, Some(job))
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let dice = store::create_job(&pool, positions[0], "dice", 1)
+        .await
+        .unwrap();
+    assert!(
+        facade
+            .library_analysis_statuses(&visible, Some(dice.id))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn deleting_a_saved_analysis_removes_only_that_result_and_clears_its_selection(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
@@ -404,6 +454,7 @@ async fn exact_position_results_preserve_candidates_units_and_source_revision(po
     )
     .await;
     assert_eq!(result["analysis"]["candidates"][0]["equity"], 0.314159265);
+    assert_eq!(result["native_checker_equity_kind"], "cubeful");
     assert_eq!(
         result["analysis"]["candidates"].as_array().unwrap().len(),
         1
@@ -414,6 +465,48 @@ async fn exact_position_results_preserve_candidates_units_and_source_revision(po
     )
     .await;
     assert_eq!(saved[0]["id"], hint.id.to_string());
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn cubeless_checker_results_use_the_job_and_game_checkpoint_provenance(pool: PgPool) {
+    let (app, id, p) = setup(&pool).await;
+    let position_job = position_job(&pool, p[0], 1).await;
+    let game_job = match_job(&pool, id, p[0], Some(1), "GNU Backgammon", 1, "completed").await;
+    let path = |job: &Job| {
+        format!(
+            "/api/positions/{}/analysis-result?analysis_id=job:{}",
+            p[0], job.id
+        )
+    };
+    assert_eq!(
+        get(&app, &path(&game_job)).await.1["native_checker_equity_kind"],
+        "normalized_cubeful"
+    );
+    sqlx::query("UPDATE match_games SET cube_enabled=false WHERE match_uuid=$1 AND game_no=1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    for job in [&position_job, &game_job] {
+        let (status, result) = get(&app, &path(job)).await;
+        assert_eq!(status, 200);
+        assert!(!result.is_null());
+        assert!(result["native_checker_equity_kind"].is_null());
+        assert_eq!(result["depth"], "1-ply");
+    }
+    sqlx::query("UPDATE jobs SET result=result || '{\"cube_enabled\": false}'::jsonb WHERE id=$1")
+        .bind(position_job.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE match_analysis_games SET summary='{\"cube_enabled\": false}'::jsonb WHERE job_id=$1 AND game_no=1")
+        .bind(game_job.id).execute(&pool).await.unwrap();
+    for job in [&position_job, &game_job] {
+        let (status, result) = get(&app, &path(job)).await;
+        assert_eq!(status, 200);
+        assert_eq!(result["native_checker_equity_kind"], "cubeless");
+        assert_eq!(result["depth"], "1-ply cubeless");
+    }
 }
 
 #[sqlx::test(migrations = "./migrations")]
@@ -855,4 +948,111 @@ fn aggregates_relation(node: &Value, relation: &str) -> bool {
         || node["Plans"]
             .as_array()
             .is_some_and(|plans| plans.iter().any(|plan| aggregates_relation(plan, relation)))
+}
+
+mod library_job_watcher {
+    use super::*;
+    use neondojo::{
+        api::AppState,
+        facade::{BackendFacade, LibraryJobScope, LibraryJobSnapshot},
+    };
+    use std::time::Duration;
+    use tokio::sync::mpsc;
+
+    // Each expected transition must arrive before the 15 s safety read.
+    async fn expect_snapshot(
+        rx: &mut mpsc::Receiver<LibraryJobSnapshot>,
+        match_id: Uuid,
+        job_id: Uuid,
+        status: &str,
+        progress: i32,
+    ) {
+        tokio::time::timeout(Duration::from_secs(6), async {
+            while let Some(snapshot) = rx.recv().await {
+                if snapshot
+                    .bulk
+                    .iter()
+                    .any(|job| job.id == job_id && job.status == status && job.progress == progress)
+                {
+                    assert_eq!(snapshot.rows, vec![(match_id, Some(status.into()))]);
+                    return;
+                }
+            }
+            panic!("Library watcher ended before {status} {progress}");
+        })
+        .await
+        .unwrap_or_else(|_| panic!("Library stayed stale at {status} {progress}"));
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn row_and_bulk_follow_commits_and_reconcile_after_listener_reconnect(pool: PgPool) {
+        let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
+        let imported = store::import_match(
+            &pool,
+            "watch.sgf",
+            "sgf",
+            sgf.as_bytes(),
+            sgf,
+            &import::parse_sgf(sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+        let match_id = imported.r#match.id;
+        let job = store::create_match_job(&pool, match_id, 1, 1)
+            .await
+            .unwrap();
+        let facade = BackendFacade::new(AppState::new(pool.clone(), Engine::new("unused".into())));
+        let (tx, mut rx) = mpsc::channel(1);
+        let watch = LibraryJobScope {
+            rows: vec![match_id],
+            bulk: vec![job.id],
+            pending: true,
+        };
+        let reader = tokio::spawn({
+            let facade = facade.clone();
+            async move { facade.follow_library_jobs(&watch, tx).await }
+        });
+        expect_snapshot(&mut rx, match_id, job.id, "queued", 0).await;
+
+        for (event, status, progress) in [
+            ("running", "running", 0),
+            ("progress", "running", 40),
+            ("completed", "completed", 100),
+        ] {
+            let mut tx = pool.begin().await.unwrap();
+            sqlx::query("UPDATE jobs SET status=$2, progress=$3 WHERE id=$1")
+                .bind(job.id)
+                .bind(status)
+                .bind(progress)
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            if status == "completed" {
+                sqlx::query("UPDATE jobs SET completed_games=total_games WHERE id=$1")
+                    .bind(job.id)
+                    .execute(&mut *tx)
+                    .await
+                    .unwrap();
+                sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,1,'{\"completed_games\":1,\"total_games\":1}')")
+                    .bind(job.id).execute(&mut *tx).await.unwrap();
+                // The connection misses the terminal notification. Its new LISTEN
+                // must reconcile the committed result even without another event.
+                sqlx::query("ALTER TABLE job_events DISABLE TRIGGER job_events_notify")
+                    .execute(&mut *tx)
+                    .await
+                    .unwrap();
+            }
+            sqlx::query("INSERT INTO job_events(job_id,event,data) VALUES($1,$2,jsonb_build_object('status',$3::text,'progress',$4::int))")
+                .bind(job.id).bind(event).bind(status).bind(progress).execute(&mut *tx).await.unwrap();
+            tx.commit().await.unwrap();
+            if status == "completed" {
+                let stopped: Vec<bool> = sqlx::query_scalar("SELECT pg_terminate_backend(pid,5000) FROM pg_stat_activity WHERE datname=current_database() AND application_name='neondojo-job-events'")
+                    .fetch_all(&pool).await.unwrap();
+                assert_eq!(stopped, [true]);
+            }
+            expect_snapshot(&mut rx, match_id, job.id, status, progress).await;
+        }
+        reader.abort();
+        facade.state().shutdown.cancel();
+    }
 }

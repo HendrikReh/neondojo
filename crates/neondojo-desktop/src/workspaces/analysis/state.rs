@@ -8,10 +8,11 @@ use gpui_kit::{App, ClickEvent, Window};
 use neondojo::{
     analysis_catalog::AnalysisCatalogEntry,
     analysis_timing::{AnalysisRemainingTime, RemainingTimeState},
-    annotations::{Annotation, AnnotationKind},
+    annotations::{Annotation, AnnotationKind, AnnotationUpdate},
     api::MatchAnalysisEngine,
     domain_error::{DomainError, ErrorKind},
     engine::{Candidate, Distribution},
+    facade::BackendFacade,
     model::{Job, MatchGame, MoveSeverity, Position},
     move_assessments::MoveAssessment,
     move_catalog::StoredMove,
@@ -455,12 +456,15 @@ impl From<Distribution> for DiceDistributionSnapshot {
     }
 }
 
+/// Matches both orderings of a dice combination.
+pub(super) fn same_roll([a, b]: [i32; 2], [c, d]: [i32; 2]) -> bool {
+    (a == c && b == d) || (a == d && b == c)
+}
+
 impl DiceDistributionSnapshot {
     /// Looks up the unordered pair `(max(a, b), min(a, b))` or `(min, max)` for cell `(row, col)`.
     pub fn find_roll(&self, d1: i32, d2: i32) -> Option<&DiceRollEntry> {
-        self.rolls
-            .iter()
-            .find(|r| (r.dice[0] == d1 && r.dice[1] == d2) || (r.dice[0] == d2 && r.dice[1] == d1))
+        self.rolls.iter().find(|r| same_roll(r.dice, [d1, d2]))
     }
 }
 
@@ -905,15 +909,47 @@ impl NoteDraft {
     }
 
     pub fn set_comment(&mut self, comment: String) -> Result<(), String> {
-        if comment.chars().count() > MAX_COMMENT_CHARS {
-            return Err(format!("Comment exceeds {MAX_COMMENT_CHARS} characters"));
-        }
         if self.comment != comment {
             self.comment = comment;
             self.dirty = true;
         }
+        if self.comment.chars().count() > MAX_COMMENT_CHARS {
+            return Err(format!("Comment exceeds {MAX_COMMENT_CHARS} characters"));
+        }
         Ok(())
     }
+
+    pub fn prepare_update(&mut self, comment: String) -> Result<AnnotationUpdate, String> {
+        self.set_comment(comment)?;
+        Ok(AnnotationUpdate {
+            tags: self.tags.clone(),
+            comment: self.comment.clone(),
+            expected_version: self.base_version,
+        })
+    }
+}
+
+/// Return the submitted text and tags along with the server's normalized result.
+pub(super) async fn save_note(
+    facade: BackendFacade,
+    key: NoteTargetKey,
+    submitted: AnnotationUpdate,
+) -> Result<(Annotation, AnnotationUpdate), DomainError> {
+    run_facade(move || async move {
+        let saved = facade
+            .save_annotations(
+                key.kind,
+                key.target_id,
+                AnnotationUpdate {
+                    tags: submitted.tags.clone(),
+                    comment: submitted.comment.clone(),
+                    expected_version: submitted.expected_version,
+                },
+            )
+            .await?;
+        Ok((saved, submitted))
+    })
+    .await
 }
 
 /// Workspace-scoped cache keeping drafts alive across game/position/tab navigation.
@@ -949,12 +985,15 @@ impl NotesDraftCache {
             kind: ann.target_kind,
             target_id: ann.target_id,
         };
-        let should_replace = self.drafts.get(&key).is_none_or(|d| !d.dirty);
+        let should_replace = self
+            .drafts
+            .get(&key)
+            .is_none_or(|d| !d.dirty && ann.version >= d.base_version);
         if should_replace {
             self.drafts.insert(key, NoteDraft::from_annotation(ann));
         } else if let Some(draft) = self.drafts.get_mut(&key) {
             // Track latest server snapshot if it drifted while user had local edits.
-            if ann.version != draft.base_version {
+            if ann.version > draft.base_version {
                 draft.server_latest = Some(ServerNoteSnapshot {
                     tags: ann.tags.clone(),
                     comment: ann.comment.clone(),
@@ -965,13 +1004,27 @@ impl NotesDraftCache {
         self.drafts.get(&key).expect("entry just inserted")
     }
 
-    /// Records a successful save, advancing `base_version` and clearing dirty/conflict flags.
-    pub fn mark_saved(&mut self, ann: &Annotation) {
+    /// Keep edits made while the write was in flight, using the returned version for the next save.
+    pub fn mark_saved(&mut self, ann: &Annotation, submitted: &AnnotationUpdate) {
         let key = NoteTargetKey {
             kind: ann.target_kind,
             target_id: ann.target_id,
         };
-        self.drafts.insert(key, NoteDraft::from_annotation(ann));
+        let Some(draft) = self.drafts.get_mut(&key) else {
+            return;
+        };
+        let changed_comment = draft.comment != submitted.comment;
+        let changed_tags = draft.tags != submitted.tags;
+        if !changed_comment {
+            draft.comment.clone_from(&ann.comment);
+        }
+        if !changed_tags {
+            draft.tags.clone_from(&ann.tags);
+        }
+        draft.dirty = changed_comment || changed_tags;
+        draft.base_version = ann.version;
+        draft.server_latest = None;
+        draft.conflict_error = None;
     }
 
     /// Records an HTTP 409 `ErrorKind::Conflict` while preserving the user's unsaved draft.
@@ -1003,8 +1056,8 @@ impl NotesDraftCache {
         self.drafts.get(&key).is_some_and(|d| d.dirty)
     }
 
-    pub fn clear_for_match(&mut self) {
-        self.drafts.clear();
+    pub fn retain_unsaved(&mut self) {
+        self.drafts.retain(|_, draft| draft.dirty);
     }
 }
 
@@ -1159,138 +1212,10 @@ impl CompareEngineSlot {
 
     pub const fn label(self) -> &'static str {
         match self {
-            Self::Xg => "XG / Imported",
+            Self::Xg => "XG",
             Self::Gnubg => "GNUbg",
             Self::NeonGammon => "NeonGammon",
         }
-    }
-}
-
-/// One candidate cell inside a 3-engine comparison row.
-#[derive(Debug, Clone)]
-pub struct CompareSlotValue {
-    pub rank: i32,
-    pub notation: String,
-    pub equity: f64,
-    pub loss: f64,
-    pub plies: Option<i32>,
-}
-
-/// One canonical move aligned across up to 3 engines by resulting board state.
-#[derive(Debug, Clone)]
-pub struct CandidateCompareRow {
-    pub canonical_key: String,
-    pub display_notation: String,
-    pub played: bool,
-    pub slots: [Option<CompareSlotValue>; 3],
-    /// Maximum pairwise equity/loss spread `|Δ|` across present engines.
-    pub max_delta: f64,
-}
-
-/// Computes canonical move alignment across up to 3 candidate lists by resulting board.
-pub fn build_candidate_compare_rows(
-    position: &Position,
-    slot_candidates: [&[Candidate]; 3],
-    sort_by_delta: bool,
-) -> Vec<CandidateCompareRow> {
-    let board_arr: Option<[i32; 26]> = position.board.as_slice().try_into().ok();
-    let played_key = board_arr
-        .as_ref()
-        .and_then(|b| project_board_key(b, position.player, &position.dice, &position.notation))
-        .unwrap_or_else(|| position.notation.trim().to_lowercase());
-
-    let mut by_key: BTreeMap<String, CandidateCompareRow> = BTreeMap::new();
-
-    for (slot_idx, list) in slot_candidates.iter().enumerate() {
-        let best_eq = list
-            .iter()
-            .find(|c| c.rank == 1)
-            .or_else(|| list.first())
-            .map(|c| c.equity)
-            .unwrap_or(0.0);
-
-        for cand in *list {
-            let key = board_arr
-                .as_ref()
-                .and_then(|b| project_board_key(b, position.player, &position.dice, &cand.notation))
-                .unwrap_or_else(|| cand.notation.trim().to_lowercase());
-            let loss = (best_eq - cand.equity).max(0.0);
-            let entry = by_key
-                .entry(key.clone())
-                .or_insert_with(|| CandidateCompareRow {
-                    canonical_key: key.clone(),
-                    display_notation: cand.notation.clone(),
-                    played: key == played_key,
-                    slots: [None, None, None],
-                    max_delta: 0.0,
-                });
-            if entry.slots[slot_idx].is_none() {
-                entry.slots[slot_idx] = Some(CompareSlotValue {
-                    rank: cand.rank,
-                    notation: cand.notation.clone(),
-                    equity: cand.equity,
-                    loss,
-                    plies: cand.plies,
-                });
-            }
-        }
-    }
-
-    let mut rows: Vec<CandidateCompareRow> = by_key
-        .into_values()
-        .map(|mut row| {
-            let losses: Vec<f64> = row.slots.iter().flatten().map(|s| s.loss).collect();
-            if losses.len() >= 2 {
-                let min_l = losses.iter().copied().fold(f64::INFINITY, f64::min);
-                let max_l = losses.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                row.max_delta = (max_l - min_l).abs();
-            }
-            row
-        })
-        .collect();
-
-    if sort_by_delta {
-        rows.sort_by(|a, b| {
-            b.max_delta
-                .total_cmp(&a.max_delta)
-                .then_with(|| best_rank_of(a).cmp(&best_rank_of(b)))
-        });
-    } else {
-        rows.sort_by(|a, b| {
-            best_rank_of(a)
-                .cmp(&best_rank_of(b))
-                .then_with(|| b.max_delta.total_cmp(&a.max_delta))
-        });
-    }
-    rows
-}
-
-fn best_rank_of(row: &CandidateCompareRow) -> i32 {
-    row.slots
-        .iter()
-        .flatten()
-        .map(|s| s.rank)
-        .min()
-        .unwrap_or(i32::MAX)
-}
-
-fn project_board_key(
-    board: &[i32; 26],
-    player: i32,
-    dice: &[i32],
-    notation: &str,
-) -> Option<String> {
-    let player_u8 = u8::try_from(player).ok()?;
-    let dice_u8: Vec<u8> = dice.iter().filter_map(|&d| u8::try_from(d).ok()).collect();
-    match neondojo_board::project_move(board, player_u8, &dice_u8, notation) {
-        neondojo_board::MovePreview::Ok { board: after, .. } => Some(
-            after
-                .iter()
-                .map(i32::to_string)
-                .collect::<Vec<_>>()
-                .join(","),
-        ),
-        neondojo_board::MovePreview::Unavailable(_) => None,
     }
 }
 

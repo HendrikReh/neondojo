@@ -37,8 +37,8 @@ pub(crate) use browse::{
 };
 use repo::*;
 pub(crate) use repo::{
-    database_matches, require_library_database, require_library_database_invalid,
-    require_library_destination,
+    database_matches, library_analysis_statuses, library_bulk_job_statuses,
+    require_library_database, require_library_database_invalid, require_library_destination,
 };
 pub use routes::{DatabaseDoc, routes};
 pub(crate) use routes::{
@@ -91,6 +91,29 @@ pub struct DatabaseDelete {
 pub struct DatabaseVersion {
     pub version: i64,
 }
+/// Lightweight progress for a tracked whole-match job. A deleted or
+/// review-restricted job has status `missing` and no disclosed progress.
+#[derive(Debug, Clone, PartialEq, Eq, sqlx::FromRow)]
+pub struct LibraryBulkJobStatus {
+    pub id: Uuid,
+    pub status: String,
+    pub progress: i32,
+    pub completed_games: i32,
+    pub total_games: i32,
+}
+
+impl From<&crate::model::Job> for LibraryBulkJobStatus {
+    fn from(job: &crate::model::Job) -> Self {
+        Self {
+            id: job.id,
+            status: job.status.clone(),
+            progress: job.progress,
+            completed_games: job.completed_games,
+            total_games: job.total_games,
+        }
+    }
+}
+
 /// One stored occurrence of the searched checker position.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct LibraryOccurrence {
