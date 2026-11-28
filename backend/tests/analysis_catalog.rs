@@ -906,3 +906,108 @@ fn aggregates_relation(node: &Value, relation: &str) -> bool {
             .as_array()
             .is_some_and(|plans| plans.iter().any(|plan| aggregates_relation(plan, relation)))
 }
+
+mod library_job_watcher {
+    use super::*;
+    use neondojo::{
+        api::AppState,
+        facade::{BackendFacade, LibraryJobScope, LibraryJobSnapshot},
+    };
+    use std::time::Duration;
+    use tokio::sync::mpsc;
+
+    // Each expected transition must arrive before the 15 s safety read.
+    async fn expect_snapshot(
+        rx: &mut mpsc::Receiver<LibraryJobSnapshot>,
+        match_id: Uuid,
+        job_id: Uuid,
+        status: &str,
+        progress: i32,
+    ) {
+        tokio::time::timeout(Duration::from_secs(6), async {
+            while let Some(snapshot) = rx.recv().await {
+                if snapshot
+                    .bulk
+                    .iter()
+                    .any(|job| job.id == job_id && job.status == status && job.progress == progress)
+                {
+                    assert_eq!(snapshot.rows, vec![(match_id, Some(status.into()))]);
+                    return;
+                }
+            }
+            panic!("Library watcher ended before {status} {progress}");
+        })
+        .await
+        .unwrap_or_else(|_| panic!("Library stayed stale at {status} {progress}"));
+    }
+
+    #[sqlx::test(migrations = "./migrations")]
+    async fn row_and_bulk_follow_commits_and_reconcile_after_listener_reconnect(pool: PgPool) {
+        let sgf = "(;GM[6]FF[4]MI[length:5][ws:0][bs:0];W[31hefe])";
+        let imported = store::import_match(
+            &pool,
+            "watch.sgf",
+            "sgf",
+            sgf.as_bytes(),
+            sgf,
+            &import::parse_sgf(sgf).unwrap(),
+        )
+        .await
+        .unwrap();
+        let match_id = imported.r#match.id;
+        let job = store::create_match_job(&pool, match_id, 1, 1)
+            .await
+            .unwrap();
+        let facade = BackendFacade::new(AppState::new(pool.clone(), Engine::new("unused".into())));
+        let (tx, mut rx) = mpsc::channel(1);
+        let watch = LibraryJobScope {
+            rows: vec![match_id],
+            bulk: vec![job.id],
+            pending: true,
+        };
+        let reader = tokio::spawn({
+            let facade = facade.clone();
+            async move { facade.follow_library_jobs(&watch, tx).await }
+        });
+        expect_snapshot(&mut rx, match_id, job.id, "queued", 0).await;
+
+        for (event, status, progress) in [
+            ("running", "running", 0),
+            ("progress", "running", 40),
+            ("completed", "completed", 100),
+        ] {
+            let mut tx = pool.begin().await.unwrap();
+            sqlx::query("UPDATE jobs SET status=$2, progress=$3 WHERE id=$1")
+                .bind(job.id)
+                .bind(status)
+                .bind(progress)
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            if status == "completed" {
+                sqlx::query("UPDATE jobs SET completed_games=total_games WHERE id=$1")
+                    .bind(job.id)
+                    .execute(&mut *tx)
+                    .await
+                    .unwrap();
+                sqlx::query("INSERT INTO match_analysis_games(job_id,game_no,summary) VALUES($1,1,'{\"completed_games\":1,\"total_games\":1}')")
+                    .bind(job.id).execute(&mut *tx).await.unwrap();
+                // The connection misses the terminal notification. Its new LISTEN
+                // must reconcile the committed result even without another event.
+                sqlx::query("ALTER TABLE job_events DISABLE TRIGGER job_events_notify")
+                    .execute(&mut *tx)
+                    .await
+                    .unwrap();
+                let stopped: Vec<bool> = sqlx::query_scalar("SELECT pg_terminate_backend(pid,5000) FROM pg_stat_activity WHERE datname=current_database() AND application_name='neondojo-job-events'")
+                    .fetch_all(&mut *tx).await.unwrap();
+                assert_eq!(stopped, [true]);
+            }
+            sqlx::query("INSERT INTO job_events(job_id,event,data) VALUES($1,$2,jsonb_build_object('status',$3::text,'progress',$4::int))")
+                .bind(job.id).bind(event).bind(status).bind(progress).execute(&mut *tx).await.unwrap();
+            tx.commit().await.unwrap();
+            expect_snapshot(&mut rx, match_id, job.id, status, progress).await;
+        }
+        reader.abort();
+        facade.state().shutdown.cancel();
+    }
+}

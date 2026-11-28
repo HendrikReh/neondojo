@@ -9,6 +9,8 @@
 mod analysis;
 mod extras;
 mod library;
+mod library_jobs;
+pub use library_jobs::{LibraryJobScope, LibraryJobSnapshot};
 mod play;
 mod players;
 mod positions;
@@ -78,11 +80,6 @@ impl BackendFacade {
     ) -> Result<impl Stream<Item = JobEvent> + Send + 'static + use<>, DomainError> {
         let _guard = self.db_access_guard()?;
         api::watch_job_events_checked(&self.state, id, after).await
-    }
-
-    /// A committed job event, or `None` to reconcile after LISTEN reconnects.
-    pub fn subscribe_job_updates(&self) -> broadcast::Receiver<Option<Uuid>> {
-        self.state.subscribe_job_updates()
     }
 
     pub fn subscribe_benchmark_updates(&self) -> broadcast::Receiver<Uuid> {
