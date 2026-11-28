@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 use utoipa::ToSchema;
 
-pub(super) const RELEASES_JSON: &str = include_str!("../../../shared/neongammon-releases.json");
+pub(super) const RELEASES_JSON: &str = neondojo_rules::options::NEONGAMMON_RELEASES_JSON;
 
 #[derive(Deserialize)]
 struct Release {
@@ -821,6 +821,12 @@ mod tests {
             .expect("release v3.2.2 is recognized");
         assert_eq!(fork.repository, "HendrikReh/neongammon");
         assert_eq!(fork.revision, "81aec61a20131185269cdb2d2deedd243596b007");
+
+        let fork = snapshot("ed317baac01ab5920e45fdb7b46e7d504a3219d05a2a7f0214500ff06ab7196a")
+            .known_fork()
+            .expect("release v4.0.0 is recognized");
+        assert_eq!(fork.repository, "HendrikReh/neongammon");
+        assert_eq!(fork.revision, "b59fd863675613881183b9923635392060ddd880");
     }
 
     #[test]

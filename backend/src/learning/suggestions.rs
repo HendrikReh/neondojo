@@ -12,55 +12,73 @@ use std::collections::{HashMap, HashSet};
 const MAX_SUGGESTIONS: usize = 10;
 const MAX_RECURRING_PICKS: usize = 3;
 
-#[derive(Deserialize, IntoParams)]
+#[derive(Debug, Deserialize, IntoParams)]
 #[serde(deny_unknown_fields)]
 #[into_params(parameter_in = Query)]
-pub(super) struct SuggestionQuery {
-    match_id: Uuid,
-    player: Option<i32>,
-    min_loss: f64,
+pub struct SuggestionQuery {
+    pub match_id: Uuid,
+    pub player: Option<i32>,
+    pub min_loss: f64,
 }
 
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Deserialize, Serialize, ToSchema,
 )]
 #[serde(deny_unknown_fields)]
-pub(super) struct SuggestionReference {
-    job_id: Uuid,
-    game_no: i32,
-    decision_no: i32,
+pub struct SuggestionReference {
+    pub job_id: Uuid,
+    pub game_no: i32,
+    pub decision_no: i32,
 }
 
-#[derive(Serialize, ToSchema)]
-pub(super) struct CardSuggestion {
-    reference: SuggestionReference,
-    position: Position,
-    player_name: String,
-    mistake_kind: MistakeKind,
-    game_plan: GamePlan,
-    equity_loss: f64,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CardSuggestion {
+    pub reference: SuggestionReference,
+    pub position: Position,
+    pub player_name: String,
+    pub mistake_kind: MistakeKind,
+    pub game_plan: GamePlan,
+    pub equity_loss: f64,
     /// Includes the current match when the group occurs in multiple matches.
-    recurring_matches: usize,
+    pub recurring_matches: usize,
     #[schema(required = true)]
-    card_id: Option<Uuid>,
-    in_deck: bool,
+    pub card_id: Option<Uuid>,
+    pub in_deck: bool,
 }
 
-#[derive(Serialize, ToSchema)]
-pub(super) struct CardSuggestions {
-    items: Vec<CardSuggestion>,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CardSuggestions {
+    pub items: Vec<CardSuggestion>,
     /// False when no completed native analysis is available for any game.
-    has_analysis: bool,
+    pub has_analysis: bool,
     /// False when the history exceeds the recurring-mistake query bounds.
-    history_available: bool,
+    pub history_available: bool,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct SaveSuggestions {
-    match_id: Uuid,
+pub struct SaveSuggestions {
+    pub match_id: Uuid,
     #[schema(min_items = 1, max_items = 10)]
-    decisions: Vec<SuggestionReference>,
+    pub decisions: Vec<SuggestionReference>,
+}
+
+pub(crate) async fn preview_suggestions_service(
+    state: &AppState,
+    deck_id: Uuid,
+    query: SuggestionQuery,
+) -> Result<CardSuggestions, crate::domain_error::DomainError> {
+    let Json(result) = preview(State(state.clone()), Path(deck_id), Query(query)).await?;
+    Ok(result)
+}
+
+pub(crate) async fn save_suggestions_service(
+    state: &AppState,
+    deck_id: Uuid,
+    body: SaveSuggestions,
+) -> Result<AddCardsResult, crate::domain_error::DomainError> {
+    let Json(result) = save(State(state.clone()), Path(deck_id), Json(body)).await?;
+    Ok(result)
 }
 
 #[derive(FromRow)]

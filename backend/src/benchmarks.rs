@@ -1,6 +1,7 @@
 //! Reproducible engine timing; independent of the match library. Saved runs
 //! are immutable snapshots that the user may delete once they are finished.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::domain_error::DomainError;
 use crate::engine::{GnubgMoveFilter, resolve_binary_async};
 use crate::engines::EngineId;
 use crate::json_errors::{Json, Path};
@@ -17,7 +18,7 @@ use sqlx::{FromRow, PgPool, types::Json as SqlJson};
 use utoipa::{OpenApi, ToSchema};
 use uuid::Uuid;
 
-pub(crate) mod estimate;
+pub mod estimate;
 mod machine;
 mod play_latency;
 mod runner;
@@ -195,25 +196,33 @@ pub(crate) fn routes() -> Router<AppState> {
         .route("/api/benchmarks/{id}", delete(remove))
         .route("/api/benchmarks/{id}/cancel", post(cancel))
 }
+pub(crate) async fn list_history(pool: &PgPool) -> Result<BenchmarkHistory, DomainError> {
+    let runs: Vec<BenchmarkRun> = sqlx::query_as(
+        "SELECT * FROM benchmark_runs ORDER BY created_at DESC,queue_no DESC LIMIT 1000",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let active = has_active(pool).await?;
+    Ok(BenchmarkHistory { runs, active })
+}
+
+pub(crate) async fn read_status(pool: &PgPool) -> Result<BenchmarkStatus, DomainError> {
+    let active = has_active(pool).await?;
+    Ok(BenchmarkStatus { active })
+}
+
 #[utoipa::path(get, path="/api/benchmarks/reference", responses((status=200,body=BenchmarkReference)),tag="Benchmark")]
 async fn get_reference() -> Json<BenchmarkReference> {
     Json(reference())
 }
 #[utoipa::path(get, path="/api/benchmarks", responses((status=200,body=BenchmarkHistory)),tag="Benchmark")]
 async fn history(State(state): State<AppState>) -> ApiResult<Json<BenchmarkHistory>> {
-    let runs: Vec<BenchmarkRun> = sqlx::query_as(
-        "SELECT * FROM benchmark_runs ORDER BY created_at DESC,queue_no DESC LIMIT 1000",
-    )
-    .fetch_all(&state.pool)
-    .await
-    .map_err(anyhow::Error::from)?;
-    let active = has_active(&state.pool).await?;
-    Ok(Json(BenchmarkHistory { runs, active }))
+    Ok(Json(list_history(&state.pool).await?))
 }
 #[utoipa::path(get,path="/api/benchmarks/status",responses((status=200,body=BenchmarkStatus)),tag="Benchmark")]
 async fn status(State(state): State<AppState>) -> ApiResult<Json<BenchmarkStatus>> {
-    let active = has_active(&state.pool).await?;
-    Ok(Json(BenchmarkStatus { active }))
+    Ok(Json(read_status(&state.pool).await?))
 }
 
 async fn has_active(pool: &PgPool) -> anyhow::Result<bool> {
@@ -270,11 +279,10 @@ pub(crate) async fn running_engine_version(
     Ok(None)
 }
 
-#[utoipa::path(post, path="/api/benchmarks",request_body=BenchmarkRequest,responses((status=202,body=Vec<BenchmarkRun>),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
-async fn create(
-    State(state): State<AppState>,
-    Json(request): Json<BenchmarkRequest>,
-) -> ApiResult<(StatusCode, Json<Vec<BenchmarkRun>>)> {
+pub(crate) async fn start_analysis_benchmarks(
+    state: &AppState,
+    request: BenchmarkRequest,
+) -> Result<Vec<BenchmarkRun>, DomainError> {
     if request.plies.is_empty()
         || request.plies.len() > 5
         || request.plies.iter().any(|p| {
@@ -286,17 +294,41 @@ async fn create(
             .enumerate()
             .any(|(i, p)| request.plies[..i].contains(p))
     {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "Select an available engine and distinct analysis depths it supports",
         ));
     }
-    let runs = enqueue(
-        &state,
-        &request.engine_id,
-        Workload::Analysis(request.plies),
-    )
-    .await?;
-    Ok((StatusCode::ACCEPTED, Json(runs)))
+    Ok(enqueue(state, &request.engine_id, Workload::Analysis(request.plies)).await?)
+}
+
+pub(crate) async fn start_play_benchmark(
+    state: &AppState,
+    request: Option<PlayBenchmarkRequest>,
+) -> Result<BenchmarkRun, DomainError> {
+    let settings = crate::settings::load(state).await?;
+    let request = request.unwrap_or(PlayBenchmarkRequest {
+        engine_id: settings.play_engine,
+        plies: settings.play_plies,
+    });
+    if !crate::configuration::engine_depths(&request.engine_id, "play").contains(&request.plies) {
+        return Err(DomainError::invalid("Unsupported play benchmark profile"));
+    }
+    let mut runs = enqueue(state, &request.engine_id, Workload::Play(request.plies)).await?;
+    let run = runs
+        .pop()
+        .ok_or_else(|| anyhow::anyhow!("Missing queued play benchmark"))?;
+    Ok(run)
+}
+
+#[utoipa::path(post, path="/api/benchmarks",request_body=BenchmarkRequest,responses((status=202,body=Vec<BenchmarkRun>),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
+async fn create(
+    State(state): State<AppState>,
+    Json(request): Json<BenchmarkRequest>,
+) -> ApiResult<(StatusCode, Json<Vec<BenchmarkRun>>)> {
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(start_analysis_benchmarks(&state, request).await?),
+    ))
 }
 
 #[utoipa::path(post, path="/api/benchmarks/play", request_body=Option<PlayBenchmarkRequest>, responses((status=202,body=BenchmarkRun),(status=422,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
@@ -304,21 +336,10 @@ async fn create_play(
     State(state): State<AppState>,
     payload: Option<Json<PlayBenchmarkRequest>>,
 ) -> ApiResult<(StatusCode, Json<BenchmarkRun>)> {
-    let settings = crate::settings::load(&state).await?;
-    let request = payload
-        .map(|payload| payload.0)
-        .unwrap_or(PlayBenchmarkRequest {
-            engine_id: settings.play_engine,
-            plies: settings.play_plies,
-        });
-    if !crate::configuration::engine_depths(&request.engine_id, "play").contains(&request.plies) {
-        return Err(ApiError::invalid("Unsupported play benchmark profile"));
-    }
-    let mut runs = enqueue(&state, &request.engine_id, Workload::Play(request.plies)).await?;
-    let run = runs
-        .pop()
-        .ok_or_else(|| anyhow::anyhow!("Missing queued play benchmark"))?;
-    Ok((StatusCode::ACCEPTED, Json(run)))
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(start_play_benchmark(&state, payload.map(|payload| payload.0)).await?),
+    ))
 }
 
 enum Workload {
@@ -428,23 +449,25 @@ async fn enqueue(
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
     state.wake.notify_one();
+    for run in &runs {
+        state.notify_benchmark_update(run.id);
+    }
     Ok(runs)
 }
-#[utoipa::path(post,path="/api/benchmarks/{id}/cancel",params(("id"=Uuid,Path)),responses((status=200,body=BenchmarkRun),(status=404,body=ErrorBody)),tag="Benchmark")]
-async fn cancel(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<BenchmarkRun>> {
+
+pub(crate) async fn cancel_benchmark(
+    state: &AppState,
+    id: Uuid,
+) -> Result<BenchmarkRun, DomainError> {
     let run: Option<BenchmarkRun> = sqlx::query_as("UPDATE benchmark_runs SET status=CASE WHEN status IN ('queued','running') THEN 'cancelled' ELSE status END, finished_at=CASE WHEN status IN ('queued','running') THEN now() ELSE finished_at END WHERE id=$1 RETURNING *")
         .bind(id).fetch_optional(&state.pool).await.map_err(anyhow::Error::from)?;
     state.wake.notify_one();
-    Ok(Json(run.ok_or_else(ApiError::missing)?))
+    let run = run.ok_or_else(DomainError::missing)?;
+    state.notify_benchmark_update(run.id);
+    Ok(run)
 }
-/// Deletes one finished run from the history. Queued and running runs must be
-/// cancelled first so the worker never loses the row it is measuring. Analysis
-/// timings that used the run keep their copied average (`ON DELETE SET NULL`).
-#[utoipa::path(delete,path="/api/benchmarks/{id}",params(("id"=Uuid,Path)),responses((status=204),(status=404,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
-async fn remove(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+
+pub(crate) async fn remove_benchmark(state: &AppState, id: Uuid) -> Result<(), DomainError> {
     let deleted = sqlx::query(
         "DELETE FROM benchmark_runs WHERE id=$1 AND status NOT IN ('queued','running')",
     )
@@ -454,7 +477,8 @@ async fn remove(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResul
     .map_err(anyhow::Error::from)?
     .rows_affected();
     if deleted > 0 {
-        return Ok(StatusCode::NO_CONTENT);
+        state.notify_benchmark_update(id);
+        return Ok(());
     }
     let exists: bool =
         sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM benchmark_runs WHERE id=$1)")
@@ -463,13 +487,26 @@ async fn remove(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResul
             .await
             .map_err(anyhow::Error::from)?;
     Err(if exists {
-        ApiError(
-            StatusCode::CONFLICT,
-            "Cancel the benchmark before deleting it".into(),
-        )
+        DomainError::conflict("Cancel the benchmark before deleting it")
     } else {
-        ApiError::missing()
+        DomainError::missing()
     })
+}
+
+#[utoipa::path(post,path="/api/benchmarks/{id}/cancel",params(("id"=Uuid,Path)),responses((status=200,body=BenchmarkRun),(status=404,body=ErrorBody)),tag="Benchmark")]
+async fn cancel(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<BenchmarkRun>> {
+    Ok(Json(cancel_benchmark(&state, id).await?))
+}
+/// Deletes one finished run from the history. Queued and running runs must be
+/// cancelled first so the worker never loses the row it is measuring. Analysis
+/// timings that used the run keep their copied average (`ON DELETE SET NULL`).
+#[utoipa::path(delete,path="/api/benchmarks/{id}",params(("id"=Uuid,Path)),responses((status=204),(status=404,body=ErrorBody),(status=409,body=ErrorBody)),tag="Benchmark")]
+async fn remove(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    remove_benchmark(&state, id).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 #[derive(OpenApi)]
 #[openapi(

@@ -118,14 +118,13 @@ fn sanitize(error: &str, key: Option<&str>) -> String {
         .collect()
 }
 
-#[utoipa::path(post,path="/api/decks/{id}/send-to-anki",params(("id"=Uuid,Path)),request_body=ExportQuery,responses((status=204),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=502,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Learning")]
-pub(in crate::learning) async fn send(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Json(query): Json<ExportQuery>,
-) -> ApiResult<StatusCode> {
-    let _transfer = reserve(&state)?;
-    let bytes = build_deck_package(&state, id, query).await?;
+pub(crate) async fn send_deck_service(
+    state: &AppState,
+    id: Uuid,
+    query: ExportQuery,
+) -> Result<(), crate::domain_error::DomainError> {
+    let _transfer = reserve(state)?;
+    let bytes = build_deck_package(state, id, query).await?;
     let directory = crate::async_temp_dir::AsyncTempDir::new().await?;
     let package = directory.path().join("neondojo.apkg");
     tokio::fs::write(&package, bytes)
@@ -136,6 +135,16 @@ pub(in crate::learning) async fn send(
     let reply = client.request("/", &body, None).await?;
     confirm_import(&reply, client.key.as_deref())
         .map_err(|error| upstream_error(error.to_string()))?;
+    Ok(())
+}
+
+#[utoipa::path(post,path="/api/decks/{id}/send-to-anki",params(("id"=Uuid,Path)),request_body=ExportQuery,responses((status=204),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=429,body=ErrorBody),(status=502,body=ErrorBody),(status=503,body=ErrorBody),(status=504,body=ErrorBody)),tag="Learning")]
+pub(in crate::learning) async fn send(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Json(query): Json<ExportQuery>,
+) -> ApiResult<StatusCode> {
+    send_deck_service(&state, id, query).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

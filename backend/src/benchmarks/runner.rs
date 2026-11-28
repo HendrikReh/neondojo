@@ -40,14 +40,19 @@ pub async fn run_one(state: &AppState) -> Result<bool> {
     let Some(run) = run else {
         return Ok(false);
     };
+    state.notify_benchmark_update(run.id);
     let result = tokio::select! {
         result = benchmark_exclusive(measure(state, &run, token)) => result,
         watched = worker_lease::watch(Owner::Benchmark, &state.pool, run.id, token, claimed_at) => match watched {
-            Ok(()) => return Ok(true),
+            Ok(()) => {
+                state.notify_benchmark_update(run.id);
+                return Ok(true);
+            }
             Err(error) => Err(error),
         },
     };
     finish(&state.pool, run.id, token, result).await?;
+    state.notify_benchmark_update(run.id);
     Ok(true)
 }
 
@@ -81,7 +86,7 @@ pub(super) async fn mark_started(pool: &PgPool, id: Uuid, token: Uuid) -> Result
 
 async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f64> {
     if run.play_reference.is_some() {
-        return super::play_latency::measure(&state.pool, run, token).await;
+        return super::play_latency::measure(state, run, token).await;
     }
     let reference = run
         .reference
@@ -185,6 +190,7 @@ async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f6
         let changed = sqlx::query("UPDATE benchmark_runs SET completed_games=$3,analyzed_moves=$4 WHERE id=$1 AND worker_token=$2 AND status='running' AND lease_until>now()")
             .bind(run.id).bind(token).bind(game_no).bind(moves).execute(&state.pool).await?;
         ensure!(changed.rows_affected() == 1, "Benchmark cancelled");
+        state.notify_benchmark_update(run.id);
     }
     ensure!(
         moves == reference.total_moves && elapsed_ms > 0.0 && elapsed_ms.is_finite(),

@@ -20,79 +20,85 @@ use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
 mod history;
-pub(crate) use history::SimilarPracticeHistoryDoc;
+pub use history::{
+    HistoryQuery, SaveSimilarPracticeSummary, SimilarPracticeHistory, SimilarPracticeSummary,
+};
+pub(crate) use history::{
+    SimilarPracticeHistoryDoc, list_similar_practice_history_service,
+    save_similar_practice_summary_service,
+};
 
 const RESULT_LIMIT: usize = 50;
 const REVIEW_BLOCKED: &str = crate::play::review_blocked_sql!("m.id");
 
-#[derive(Deserialize, IntoParams)]
+#[derive(Debug, Default, Deserialize, IntoParams)]
 #[serde(deny_unknown_fields)]
 #[into_params(parameter_in = Query)]
-struct SimilarQuery {
+pub struct SimilarQuery {
     /// Include other occurrences from the source match and its copies. Defaults to false.
     #[serde(default)]
-    include_current_match: bool,
+    pub include_current_match: bool,
     /// Require the same unordered dice pair as the target.
     #[serde(default)]
-    same_dice: bool,
+    pub same_dice: bool,
     /// Require the same match length, score from the mover's perspective, and Crawford state.
     /// For a money game target, require a money game.
     #[serde(default)]
-    same_score: bool,
+    pub same_score: bool,
     /// Require the same cube value and ownership relative to the player on roll.
     #[serde(default)]
-    same_cube: bool,
+    pub same_cube: bool,
 }
 
-#[derive(Serialize, ToSchema, FromRow)]
-struct SimilarHit {
+#[derive(Debug, Serialize, ToSchema, FromRow)]
+pub struct SimilarHit {
     #[sqlx(flatten)]
-    position: Position,
-    match_name: String,
-    white: String,
-    black: String,
+    pub position: Position,
+    pub match_name: String,
+    pub white: String,
+    pub black: String,
     /// Minimum checker-pips needed to transform one arrangement into the other.
-    distance: i32,
+    pub distance: i32,
     /// Loss of the played move in the match's displayed native analysis;
     /// null without one.
     #[schema(required = true)]
-    equity_loss: Option<f64>,
+    pub equity_loss: Option<f64>,
 }
 
-#[derive(Serialize, ToSchema)]
-struct SimilarPositions {
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SimilarPositions {
     /// Up to 50 checker occurrences, nearest first.
-    items: Vec<SimilarHit>,
+    pub items: Vec<SimilarHit>,
 }
 
-#[derive(Serialize, ToSchema)]
-struct CheckerPracticeAnswer {
-    best: String,
-    engine: String,
-    depth: Option<String>,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CheckerPracticeAnswer {
+    pub best: String,
+    pub engine: String,
+    pub depth: Option<String>,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-struct CheckerPracticeMove {
+pub struct CheckerPracticeMove {
     /// Complete ordered checker steps in board coordinates. An empty list is a forced pass.
     #[schema(max_items = 4)]
-    steps: Vec<PlayStep>,
+    pub steps: Vec<PlayStep>,
 }
 
 /// A checker move graded like a Study answer: by the configured analysis
 /// engine at no more than its practice depth. A forced pass is not evaluated
 /// and has no engine, depth or equities.
-#[derive(Serialize, ToSchema)]
-struct CheckerPracticeScore {
-    best: String,
-    engine: Option<String>,
-    depth: Option<String>,
-    played: String,
-    best_equity: Option<f64>,
-    played_equity: Option<f64>,
+#[derive(Debug, Serialize, ToSchema)]
+pub struct CheckerPracticeScore {
+    pub best: String,
+    pub engine: Option<String>,
+    pub depth: Option<String>,
+    pub played: String,
+    pub best_equity: Option<f64>,
+    pub played_equity: Option<f64>,
     /// Best minus played normalized cubeful equity, from the mover's perspective.
-    equity_loss: f64,
+    pub equity_loss: f64,
 }
 
 #[derive(FromRow)]
@@ -112,15 +118,11 @@ pub(crate) fn routes() -> Router<AppState> {
         .merge(history::routes())
 }
 
-#[utoipa::path(get, path="/api/positions/{id}/similar",
-    params(("id"=Uuid, Path, description="Target checker occurrence"), SimilarQuery),
-    responses((status=200,body=SimilarPositions),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),
-    tag="Positions")]
-async fn search(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Query(query): Query<SimilarQuery>,
-) -> ApiResult<Json<SimilarPositions>> {
+pub(crate) async fn find_similar(
+    state: &AppState,
+    id: Uuid,
+    query: SimilarQuery,
+) -> Result<SimilarPositions, crate::domain_error::DomainError> {
     let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     let target: Target = sqlx::query_as(&format!(
         "SELECT p.board,p.player,coalesce(m.source_match_id,m.id) AS source_match,
@@ -132,14 +134,17 @@ async fn search(
     .fetch_optional(&mut *tx)
     .await
     .map_err(anyhow::Error::from)?
-    .ok_or_else(ApiError::missing)?;
+    .ok_or_else(crate::domain_error::DomainError::missing)?;
     if target.review_blocked {
-        return Err(ApiError::invalid(
+        return Err(crate::domain_error::DomainError::invalid(
             "Complete the competition match before requesting analysis",
         ));
     }
-    let origin = profile(&target.board, target.player)
-        .ok_or_else(|| ApiError::invalid("Target position has an invalid checker arrangement"))?;
+    let origin = profile(&target.board, target.player).ok_or_else(|| {
+        crate::domain_error::DomainError::invalid(
+            "Target position has an invalid checker arrangement",
+        )
+    })?;
 
     // Read only board vectors while ranking. Keep the closest 50 in memory and
     // load their full decision context from the same snapshot afterward.
@@ -190,7 +195,29 @@ async fn search(
     .await
     .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(SimilarPositions { items }))
+    Ok(SimilarPositions { items })
+}
+
+#[utoipa::path(get, path="/api/positions/{id}/similar",
+    params(("id"=Uuid, Path, description="Target checker occurrence"), SimilarQuery),
+    responses((status=200,body=SimilarPositions),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),
+    tag="Positions")]
+async fn search(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<SimilarQuery>,
+) -> ApiResult<Json<SimilarPositions>> {
+    Ok(Json(find_similar(&state, id, query).await?))
+}
+
+pub(crate) async fn reveal_practice_answer(
+    state: &AppState,
+    id: Uuid,
+) -> Result<CheckerPracticeAnswer, crate::domain_error::DomainError> {
+    let position = practice_position(state, id).await?;
+    let answer = checker_answer(state, &position).await?;
+    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
+    Ok(answer)
 }
 
 #[utoipa::path(post, path="/api/positions/{id}/practice-answer",
@@ -201,10 +228,7 @@ async fn reveal(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<CheckerPracticeAnswer>> {
-    let position = practice_position(&state, id).await?;
-    let answer = checker_answer(&state, &position).await?;
-    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
-    Ok(Json(answer))
+    Ok(Json(reveal_practice_answer(&state, id).await?))
 }
 
 async fn practice_position(state: &AppState, id: Uuid) -> ApiResult<Position> {
@@ -218,6 +242,33 @@ async fn practice_position(state: &AppState, id: Uuid) -> ApiResult<Position> {
     Ok(position)
 }
 
+pub(crate) async fn score_practice_move(
+    state: &AppState,
+    id: Uuid,
+    input: CheckerPracticeMove,
+) -> Result<CheckerPracticeScore, crate::domain_error::DomainError> {
+    let position = practice_position(state, id).await?;
+    let evaluation = evaluate_now(
+        state,
+        "checker",
+        &position,
+        &PracticeAnswer::Checker { steps: input.steps },
+    )
+    .await?;
+    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
+    let (engine, plies) = evaluation.source();
+    let (played_equity, best_equity) = evaluation.equities();
+    Ok(CheckerPracticeScore {
+        best: evaluation.best().to_owned(),
+        engine: engine.map(str::to_owned),
+        depth: plies.map(|plies| format!("{plies}-ply")),
+        played: evaluation.chosen().to_owned(),
+        best_equity,
+        played_equity,
+        equity_loss: evaluation.equity_loss(),
+    })
+}
+
 #[utoipa::path(post, path="/api/positions/{id}/practice-score",
     params(("id"=Uuid, Path, description="Checker occurrence to score")),
     request_body=CheckerPracticeMove,
@@ -228,26 +279,7 @@ async fn score(
     Path(id): Path<Uuid>,
     Json(input): Json<CheckerPracticeMove>,
 ) -> ApiResult<Json<CheckerPracticeScore>> {
-    let position = practice_position(&state, id).await?;
-    let evaluation = evaluate_now(
-        &state,
-        "checker",
-        &position,
-        &PracticeAnswer::Checker { steps: input.steps },
-    )
-    .await?;
-    crate::play::require_review_available(&state.pool, position.match_uuid).await?;
-    let (engine, plies) = evaluation.source();
-    let (played_equity, best_equity) = evaluation.equities();
-    Ok(Json(CheckerPracticeScore {
-        best: evaluation.best().to_owned(),
-        engine: engine.map(str::to_owned),
-        depth: plies.map(|plies| format!("{plies}-ply")),
-        played: evaluation.chosen().to_owned(),
-        best_equity,
-        played_equity,
-        equity_loss: evaluation.equity_loss(),
-    }))
+    Ok(Json(score_practice_move(&state, id, input).await?))
 }
 
 async fn checker_answer(state: &AppState, position: &Position) -> ApiResult<CheckerPracticeAnswer> {

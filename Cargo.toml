@@ -1,5 +1,12 @@
 [workspace]
-members = ["backend"]
+members = [
+    "backend",
+    "crates/neondojo-rules",
+    "crates/neondojo-i18n",
+    "crates/neondojo-board",
+    "crates/neondojo-desktop",
+]
+default-members = ["backend", "crates/neondojo-rules", "crates/neondojo-i18n"]
 resolver = "2"
 
 # Explicitly disable even Cargo's implicit debuginfo stripping. Older Rust/LLVM
@@ -9,5 +16,11 @@ resolver = "2"
 [profile.dev]
 strip = "none"
 
+[profile.dev.build-override]
+strip = "none"
+
 [profile.release]
+strip = "none"
+
+[profile.release.build-override]
 strip = "none"

@@ -1,7 +1,8 @@
 //! Durable confirmed work and read-only adaptive job estimates.
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Path};
 use crate::{
-    api::{ApiError, ApiResult, AppState, ErrorBody},
+    api::{ApiResult, AppState, ErrorBody},
     model::{Job, JobStatus},
     store,
 };
@@ -121,23 +122,25 @@ impl Sample {
 pub(crate) fn routes() -> Router<AppState> {
     Router::new().route("/api/jobs/{id}/remaining-time", get(remaining_time))
 }
-#[utoipa::path(get,path="/api/jobs/{id}/remaining-time",params(("id"=Uuid,Path)),responses((status=200,body=AnalysisRemainingTime),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
-async fn remaining_time(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> ApiResult<Json<AnalysisRemainingTime>> {
+pub(crate) async fn load_remaining_time(
+    state: &AppState,
+    id: Uuid,
+) -> Result<AnalysisRemainingTime, DomainError> {
     let job = store::get_job(&state.pool, id)
         .await?
-        .ok_or_else(ApiError::missing)?;
+        .ok_or_else(DomainError::missing)?;
     crate::play::require_job_review_available(&state.pool, &job).await?;
     if job.kind != "match" {
-        return Err(ApiError::invalid("This job is not a match analysis"));
+        return Err(DomainError::invalid("This job is not a match analysis"));
     }
-    let source = store::get_match(&state.pool, job.match_uuid.ok_or_else(ApiError::missing)?)
-        .await?
-        .ok_or_else(ApiError::missing)?;
+    let source = store::get_match(
+        &state.pool,
+        job.match_uuid.ok_or_else(DomainError::missing)?,
+    )
+    .await?
+    .ok_or_else(DomainError::missing)?;
     if !source.source_available {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "The source match was removed; analyze the saved position instead",
         ));
     }
@@ -165,8 +168,16 @@ async fn remaining_time(
         FROM sample
         "#)
         .bind(id).fetch_optional(&state.pool).await.map_err(anyhow::Error::from)?
-        .ok_or_else(ApiError::missing)?;
-    Ok(Json(sample.estimate()))
+        .ok_or_else(DomainError::missing)?;
+    Ok(sample.estimate())
+}
+
+#[utoipa::path(get,path="/api/jobs/{id}/remaining-time",params(("id"=Uuid,Path)),responses((status=200,body=AnalysisRemainingTime),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
+async fn remaining_time(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<AnalysisRemainingTime>> {
+    Ok(Json(load_remaining_time(&state, id).await?))
 }
 #[derive(OpenApi)]
 #[openapi(

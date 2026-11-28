@@ -73,9 +73,9 @@ pub struct MistakePracticeHistory {
     pub items: Vec<MistakePracticeDay>,
 }
 
-#[utoipa::path(get, path = "/api/study/mistakes/history",
-    responses((status = 200, body = MistakePracticeHistory)), tag = "Study")]
-pub(super) async fn list(State(s): State<AppState>) -> ApiResult<Json<MistakePracticeHistory>> {
+pub(crate) async fn list_history_service(
+    s: &AppState,
+) -> Result<MistakePracticeHistory, crate::domain_error::DomainError> {
     let items = sqlx::query_as(
         "SELECT attempted_at::date AS day,player,game_plan,mistake_kind,
                 count(*) AS attempts,
@@ -89,5 +89,11 @@ pub(super) async fn list(State(s): State<AppState>) -> ApiResult<Json<MistakePra
     .fetch_all(&s.pool)
     .await
     .map_err(anyhow::Error::from)?;
-    Ok(Json(MistakePracticeHistory { items }))
+    Ok(MistakePracticeHistory { items })
+}
+
+#[utoipa::path(get, path = "/api/study/mistakes/history",
+    responses((status = 200, body = MistakePracticeHistory)), tag = "Study")]
+pub(super) async fn list(State(s): State<AppState>) -> ApiResult<Json<MistakePracticeHistory>> {
+    Ok(Json(list_history_service(&s).await?))
 }

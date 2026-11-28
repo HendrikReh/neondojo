@@ -9,7 +9,6 @@ use anyhow::{Context, Result, ensure};
 use axum::{
     Router,
     extract::State,
-    http::StatusCode,
     routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
@@ -28,7 +27,10 @@ use keys::canonical_keys;
 pub(crate) use lookup::LookupCache;
 pub use lookup::{lookup, lookup_with_rules};
 pub use routes::OpeningBookDoc;
-pub(crate) use routes::routes;
+pub(crate) use routes::{
+    check_book_path, check_xg_book_path, install_book_path, install_xg_book_path,
+    lookup_position_book, read_settings, routes, write_settings,
+};
 use sqlite_book::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow, ToSchema)]

@@ -3,13 +3,14 @@ mod evidence;
 mod openai;
 pub(crate) use openai::OpenAi;
 
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Path, Query};
 use crate::{
-    api::{ApiError, ApiResult, AppState, ErrorBody},
+    api::{ApiResult, AppState, ErrorBody},
     configuration::ConfigurationLocale,
     play::PlaySession,
 };
-use axum::{Router, extract::State, http::StatusCode, routing::get};
+use axum::{Router, extract::State, routing::get};
 use serde::{Deserialize, Serialize};
 use sqlx::types::Json as DbJson;
 use utoipa::{IntoParams, OpenApi, ToSchema};
@@ -19,26 +20,26 @@ const PROMPT_VERSION: i32 = 1;
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct Assessment {
-    summary: String,
-    next_match_focus: String,
-    topics: Vec<Topic>,
-    key_decisions: Vec<KeyDecision>,
-    training: Vec<Training>,
-    limitations: Vec<String>,
+pub struct Assessment {
+    pub summary: String,
+    pub next_match_focus: String,
+    pub topics: Vec<Topic>,
+    pub key_decisions: Vec<KeyDecision>,
+    pub training: Vec<Training>,
+    pub limitations: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-struct Topic {
-    topic: TopicName,
-    observation: String,
-    evidence_refs: Vec<String>,
+pub struct Topic {
+    pub topic: TopicName,
+    pub observation: String,
+    pub evidence_refs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-enum TopicName {
+pub enum TopicName {
     Cube,
     Checker,
     Opening,
@@ -53,24 +54,24 @@ enum TopicName {
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-struct KeyDecision {
-    evidence_ref: String,
-    explanation: String,
-    next_question: String,
+pub struct KeyDecision {
+    pub evidence_ref: String,
+    pub explanation: String,
+    pub next_question: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-struct Training {
-    focus: String,
-    exercise: String,
-    success_criterion: String,
-    evidence_refs: Vec<String>,
+pub struct Training {
+    pub focus: String,
+    pub exercise: String,
+    pub success_criterion: String,
+    pub evidence_refs: Vec<String>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-enum Availability {
+pub enum Availability {
     Ready,
     MissingAnalysis,
     Unsupported,
@@ -79,7 +80,7 @@ enum Availability {
 
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-enum AssessmentStatus {
+pub enum AssessmentStatus {
     Queued,
     Running,
     Completed,
@@ -88,7 +89,7 @@ enum AssessmentStatus {
 
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
-enum Failure {
+pub enum Failure {
     Provider,
     InvalidReport,
     Interrupted,
@@ -97,18 +98,18 @@ enum Failure {
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-struct AssessmentState {
-    availability: Availability,
-    abbreviated_match: bool,
-    job: Option<AssessmentJob>,
+pub struct AssessmentState {
+    pub availability: Availability,
+    pub abbreviated_match: bool,
+    pub job: Option<AssessmentJob>,
 }
 
 #[derive(Debug, Serialize, ToSchema)]
-struct AssessmentJob {
-    status: AssessmentStatus,
-    model: String,
-    error: Option<Failure>,
-    result: Option<Assessment>,
+pub struct AssessmentJob {
+    pub status: AssessmentStatus,
+    pub model: String,
+    pub error: Option<Failure>,
+    pub result: Option<Assessment>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -178,6 +179,16 @@ fn availability(openai: &OpenAi, session: &PlaySession) -> Availability {
     }
 }
 
+pub(crate) async fn get_assessment_service(
+    state: &AppState,
+    id: Uuid,
+    language: ConfigurationLocale,
+) -> Result<AssessmentState, DomainError> {
+    let (session, _) = crate::study::report_checkpoint(&state.pool, id).await?;
+    let language = crate::configuration::validation::enum_string(&language);
+    Ok(load(state, id, &session, &language).await?)
+}
+
 #[utoipa::path(get, path="/api/study/reports/{id}/assessment",
     params(("id"=Uuid, Path), AssessmentQuery),
     responses((status=200,body=AssessmentState),(status=404,body=ErrorBody),(status=422,body=ErrorBody)), tag="Study")]
@@ -186,52 +197,41 @@ async fn get_assessment(
     Path(id): Path<Uuid>,
     Query(query): Query<AssessmentQuery>,
 ) -> ApiResult<Json<AssessmentState>> {
-    let (session, _) = crate::study::report_checkpoint(&state.pool, id).await?;
-    let language = crate::configuration::validation::enum_string(&query.language);
-    Ok(Json(load(&state, id, &session, &language).await?))
+    Ok(Json(
+        get_assessment_service(&state, id, query.language).await?,
+    ))
 }
 
-#[utoipa::path(post, path="/api/study/reports/{id}/assessment",
-    params(("id"=Uuid, Path), AssessmentQuery),
-    request_body=StartAssessment,
-    responses((status=200,body=AssessmentState),(status=404,body=ErrorBody),
-        (status=409,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)), tag="Study")]
-async fn start_assessment(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Query(query): Query<AssessmentQuery>,
-    Json(request): Json<StartAssessment>,
-) -> ApiResult<Json<AssessmentState>> {
+pub(crate) async fn start_assessment_service(
+    state: &AppState,
+    id: Uuid,
+    language: ConfigurationLocale,
+    report_version: i64,
+) -> Result<AssessmentState, DomainError> {
     let (session, _) = crate::study::report_checkpoint(&state.pool, id).await?;
-    if session.version != request.report_version {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "Learning report version changed".into(),
-        ));
+    if session.version != report_version {
+        return Err(DomainError::conflict("Learning report version changed"));
     }
-    let language = crate::configuration::validation::enum_string(&query.language);
-    let existing = load(&state, id, &session, &language).await?;
+    let language = crate::configuration::validation::enum_string(&language);
+    let existing = load(state, id, &session, &language).await?;
     if existing
         .job
         .as_ref()
         .is_some_and(|job| !matches!(job.status, AssessmentStatus::Failed))
     {
-        return Ok(Json(existing));
+        return Ok(existing);
     }
     match existing.availability {
         Availability::Unsupported => {
-            return Err(ApiError::invalid("Assessment requires a point match"));
+            return Err(DomainError::invalid("Assessment requires a point match"));
         }
         Availability::MissingAnalysis => {
-            return Err(ApiError::invalid(
+            return Err(DomainError::invalid(
                 "No evaluated decisions in the learning review",
             ));
         }
         Availability::NotConfigured => {
-            return Err(ApiError(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "OpenAI is not configured".into(),
-            ));
+            return Err(DomainError::unavailable("OpenAI is not configured"));
         }
         Availability::Ready => {}
     }
@@ -253,7 +253,24 @@ async fn start_assessment(
     .await
     .map_err(anyhow::Error::from)?;
     state.assessment_wake.notify_one();
-    Ok(Json(load(&state, id, &session, &language).await?))
+    state.notify_assessment_update(id);
+    Ok(load(state, id, &session, &language).await?)
+}
+
+#[utoipa::path(post, path="/api/study/reports/{id}/assessment",
+    params(("id"=Uuid, Path), AssessmentQuery),
+    request_body=StartAssessment,
+    responses((status=200,body=AssessmentState),(status=404,body=ErrorBody),
+        (status=409,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)), tag="Study")]
+async fn start_assessment(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<AssessmentQuery>,
+    Json(request): Json<StartAssessment>,
+) -> ApiResult<Json<AssessmentState>> {
+    Ok(Json(
+        start_assessment_service(&state, id, query.language, request.report_version).await?,
+    ))
 }
 
 async fn load(
@@ -331,6 +348,7 @@ async fn run_one(state: &AppState) -> anyhow::Result<bool> {
     .fetch_optional(&state.pool)
     .await?;
     let Some(job) = job else { return Ok(false) };
+    state.notify_assessment_update(job.report_id);
     let (status, result, error) = match execute(state, &job).await {
         Ok(output) => ("completed", Some(DbJson(output)), None),
         Err(code) => ("failed", None, Some(code)),
@@ -347,6 +365,7 @@ async fn run_one(state: &AppState) -> anyhow::Result<bool> {
     .bind(error)
     .execute(&state.pool)
     .await?;
+    state.notify_assessment_update(job.report_id);
     Ok(true)
 }
 

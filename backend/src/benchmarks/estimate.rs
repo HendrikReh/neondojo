@@ -3,9 +3,10 @@ use super::{
     BenchmarkRun, Machine, known_protocol_id, machine, reference, reference_for,
     running_engine_version,
 };
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Path, Query};
 use crate::{
-    api::{ApiError, ApiResult, AppState, ErrorBody},
+    api::{ApiResult, AppState, ErrorBody},
     engine::{Engine, GnubgMoveFilter, resolve_binary_async},
     engines::EngineId,
     store,
@@ -18,7 +19,7 @@ use std::time::Duration;
 use utoipa::{IntoParams, OpenApi, ToSchema};
 use uuid::Uuid;
 
-#[derive(Deserialize, IntoParams)]
+#[derive(Debug, Default, Deserialize, IntoParams)]
 pub struct EstimateQuery {
     #[param(minimum = 1, maximum = 5)]
     pub plies: Option<i32>,
@@ -54,9 +55,9 @@ pub struct AnalysisTimeEstimate {
     pub benchmark: Option<EstimateBenchmark>,
 }
 impl AnalysisTimeEstimate {
-    fn unavailable(mut self, reason: EstimateUnavailableReason) -> Json<Self> {
+    fn unavailable(mut self, reason: EstimateUnavailableReason) -> Self {
         self.unavailable_reason = Some(reason);
-        Json(self)
+        self
     }
 }
 pub(super) fn routes() -> Router<AppState> {
@@ -117,18 +118,17 @@ async fn legacy_game_in_scope(sgf: String, game_no: i32) -> anyhow::Result<bool>
     Ok((1..=count).contains(&game_no))
 }
 
-#[utoipa::path(get,path="/api/matches/{id}/analysis/estimate",params(("id"=Uuid,Path),EstimateQuery),responses((status=200,body=AnalysisTimeEstimate),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
-async fn estimate(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Query(query): Query<EstimateQuery>,
-) -> ApiResult<Json<AnalysisTimeEstimate>> {
+pub(crate) async fn estimate_match_analysis(
+    state: &AppState,
+    id: Uuid,
+    query: EstimateQuery,
+) -> Result<AnalysisTimeEstimate, DomainError> {
     crate::play::require_review_available(&state.pool, id).await?;
     let source = store::get_match(&state.pool, id)
         .await?
-        .ok_or_else(ApiError::missing)?;
+        .ok_or_else(DomainError::missing)?;
     if !source.source_available {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "The source match was removed; analyze the saved position instead",
         ));
     }
@@ -149,7 +149,7 @@ async fn estimate(
     let Some(provider) =
         EngineId::parse(&engine_id).filter(|provider| provider.depths("analysis").contains(&plies))
     else {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "Depth is not verified for the selected engine",
         ));
     };
@@ -168,13 +168,13 @@ async fn estimate(
                 .fetch_optional(&state.pool)
                 .await
                 .map_err(anyhow::Error::from)?;
-            let sgf = sgf.ok_or_else(ApiError::missing)?;
+            let sgf = sgf.ok_or_else(DomainError::missing)?;
             legacy_game_in_scope(sgf, game_no).await?
         } else {
             games.contains(&game_no)
         };
         if !in_scope {
-            return Err(ApiError::invalid("game_no is outside this match"));
+            return Err(DomainError::invalid("game_no is outside this match"));
         }
     }
     let count:i64=sqlx::query_scalar("SELECT count(*) FROM positions WHERE match_uuid=$1 AND ($2::integer IS NULL OR game_no=$2)")
@@ -265,10 +265,19 @@ async fn estimate(
         if elapsed.is_finite() && elapsed > 0.0 {
             result.estimated_ms = Some(elapsed);
             result.benchmark = Some(benchmark);
-            return Ok(Json(result));
+            return Ok(result);
         }
     }
     Ok(result.unavailable(EstimateUnavailableReason::NoMatchingBenchmark))
+}
+
+#[utoipa::path(get,path="/api/matches/{id}/analysis/estimate",params(("id"=Uuid,Path),EstimateQuery),responses((status=200,body=AnalysisTimeEstimate),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Match analysis")]
+async fn estimate(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<EstimateQuery>,
+) -> ApiResult<Json<AnalysisTimeEstimate>> {
+    Ok(Json(estimate_match_analysis(&state, id, query).await?))
 }
 
 /// Shared read-only compatibility lookup. Callers supply their saved engine basis.

@@ -1,0 +1,9 @@
+[package]
+name = "neondojo-rules"
+version = "1.5.1"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+serde_json = "1"

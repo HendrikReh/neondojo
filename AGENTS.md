@@ -21,11 +21,16 @@ Prioritize backgammon correctness, preservation of user data, database performan
 
 ## Architecture and module boundaries
 
-- The headless backend uses Rust, Tokio, Axum, and PostgreSQL via SQLx. The React and TypeScript client uses Vite and communicates over REST and SSE. Keep this boundary intact for a future Tauri shell. Use the existing npm scripts and lockfile.
-- Keep transport, domain logic, persistence, and engine integration separate. Use the existing domain module that owns the behavior and keep HTTP handlers and React components focused on their roles.
-- Backend ownership:
+- The headless backend uses Rust, Tokio, Axum, and PostgreSQL via SQLx. The native macOS desktop client (`crates/neondojo-desktop`) runs on GPUI (`gpui-kit`) directly in-process over `CoreRuntime` and `BackendFacade`, sharing pure rules (`crates/neondojo-rules`), localization (`crates/neondojo-i18n`), and GPU board rendering (`crates/neondojo-board`). The React and TypeScript client (`web/`) remains intact over REST and SSE. Keep transport, domain logic, persistence, and engine integration separate. Use the existing npm scripts and lockfile for `web/`.
+- Keep transport, domain logic, persistence, and engine integration separate. Use the existing domain module that owns the behavior and keep HTTP handlers, GPUI workspaces, and React components focused on their roles.
+- Workspace & backend ownership:
+  - `crates/neondojo-rules/`: pure backgammon rules, legal checker turns, GNUbg IDs, notation, and embedded configuration options (no async/DB dependencies)
+  - `crates/neondojo-i18n/`: EN/DE translation catalog, ICU formatting, and locale-aware formatters
+  - `crates/neondojo-board/`: GPU-rendered `BoardView`, built-in & BGBlitz ZIP themes, animation, and `rodio` audio
+  - `crates/neondojo-desktop/`: native macOS GPUI shell (`AppShell`), `TokioBridge`, `NeonTheme`, `Settings`, shared `review/`, 7 workspaces, and scoped `WKWebView` for third-party Anki cards
+  - `backend/src/facade/`: typed in-process `BackendFacade` + push broadcast channels over `CoreRuntime`
   - `backend/src/api.rs`: REST, SSE, and OpenAPI
-  - `backend/src/backgammon/`: boards, legal checker turns, and GNUbg identifiers; depends on no other module
+  - `backend/src/backgammon/`: re-exports `neondojo_rules::backgammon`
   - `backend/src/import/`: import formats, replay, and match validation
   - `backend/src/engine.rs` and `backend/src/match_analysis.rs`: isolated GNUbg processes and native analysis
   - `backend/src/engines/`: engine providers, capability probes, and NeonGammon sidecar (`worker.py`)
@@ -75,6 +80,7 @@ Run focused tests first, then the checks relevant to the change (see [Verificati
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 DATABASE_URL=postgres://neondojo:neondojo_local@127.0.0.1:54329/postgres cargo test --workspace
+./tools/build_local_desktop.sh        # release macOS GPUI NeonDojo.app bundle
 npm run api:types --prefix web        # after REST/OpenAPI changes
 npm test --prefix web
 npm run typecheck:e2e --prefix web    # Playwright strips types; catches drifted E2E mocks

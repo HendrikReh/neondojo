@@ -769,7 +769,7 @@ mod tests {
                         _ if side == -1 => i32::from(c - b'a' + 1),
                         _ => i32::from(b'x' - c + 1),
                     };
-                    for (i, pair) in b[2..].chunks_exact(2).enumerate() {
+                    for (i, pair) in b[2..].as_chunks::<2>().0.iter().enumerate() {
                         from[i] = point(pair[0]);
                         to[i] = point(pair[1]);
                     }
@@ -837,7 +837,7 @@ mod tests {
                 };
                 let mut from = [-1; 4];
                 let mut to = [-1; 4];
-                for (i, pair) in play[2..].chunks_exact(2).enumerate() {
+                for (i, pair) in play[2..].as_chunks::<2>().0.iter().enumerate() {
                     from[i] = point(pair[0]);
                     to[i] = point(pair[1]);
                 }

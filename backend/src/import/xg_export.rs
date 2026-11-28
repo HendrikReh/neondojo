@@ -680,8 +680,10 @@ mod tests {
     fn records(xg: &[u8]) -> Vec<Vec<u8>> {
         main_records(xg)
             .unwrap()
-            .chunks_exact(RECORD_BYTES)
-            .map(<[u8]>::to_vec)
+            .as_chunks::<RECORD_BYTES>()
+            .0
+            .iter()
+            .map(|r| r.to_vec())
             .collect()
     }
     fn int(r: &[u8], at: usize) -> i32 {
@@ -707,8 +709,10 @@ mod tests {
             HEADER_MATCH => [622, 880, 1138, 1396, 1654]
                 .map(|at| {
                     bytes(r, at, 258)
-                        .chunks_exact(2)
-                        .map(|u| i32::from(u16::from_le_bytes([u[0], u[1]])))
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|&u| i32::from(u16::from_le_bytes(u)))
                         .take_while(|u| *u != 0)
                         .collect()
                 })

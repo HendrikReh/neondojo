@@ -1,7 +1,8 @@
 //! Checker marks use the same selected, validated decisions as review and statistics.
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Path, Query};
 use crate::{
-    api::{ApiError, ApiResult, AppState, ErrorBody},
+    api::{ApiResult, AppState, ErrorBody},
     engine::Analysis,
     match_analysis::Decision,
     model::{MoveSeverity, Position},
@@ -49,14 +50,13 @@ pub struct GameMoveAssessments {
 pub fn routes() -> Router<AppState> {
     Router::new().route("/api/matches/{id}/move-assessments", get(assessments))
 }
-#[utoipa::path(get,path="/api/matches/{id}/move-assessments",params(("id"=Uuid,Path),MoveAssessmentQuery),responses((status=200,body=GameMoveAssessments),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Match analysis")]
-async fn assessments(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Query(query): Query<MoveAssessmentQuery>,
-) -> ApiResult<Json<GameMoveAssessments>> {
+pub(crate) async fn load_move_assessments(
+    state: &AppState,
+    id: Uuid,
+    query: MoveAssessmentQuery,
+) -> Result<GameMoveAssessments, DomainError> {
     if query.game_no <= 0 {
-        return Err(ApiError::invalid("game_no must be positive"));
+        return Err(DomainError::invalid("game_no must be positive"));
     }
     let legacy = query.job_id.map(|id| format!("job:{id}"));
     if query.analysis_id.is_some()
@@ -64,12 +64,12 @@ async fn assessments(
             .as_ref()
             .is_some_and(|id| Some(id) != query.analysis_id.as_ref())
     {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "analysis_id and job_id must identify the same result",
         ));
     }
     let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
-    require_cataloged_on(&state, &mut tx, id).await?;
+    require_cataloged_on(state, &mut tx, id).await?;
     let selected = crate::analysis_catalog::resolve_selection_on(
         &mut tx,
         id,
@@ -80,7 +80,7 @@ async fn assessments(
         && let Some(crate::analysis_catalog::SelectedAnalysis::Job(job)) = &selected
         && job.game_no.is_some_and(|game| game != query.game_no)
     {
-        return Err(ApiError::invalid("Job belongs to another game"));
+        return Err(DomainError::invalid("Job belongs to another game"));
     }
     let analysis_id = selected.as_ref().map(|s| s.id());
     let mut items = Vec::new();
@@ -123,17 +123,26 @@ async fn assessments(
         .await
         .map_err(anyhow::Error::from)?;
         if !exists {
-            return Err(ApiError::missing());
+            return Err(DomainError::missing());
         }
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(GameMoveAssessments {
+    Ok(GameMoveAssessments {
         match_id: id,
         game_no: query.game_no,
         job_id: query.job_id,
         analysis_id,
         items,
-    }))
+    })
+}
+
+#[utoipa::path(get,path="/api/matches/{id}/move-assessments",params(("id"=Uuid,Path),MoveAssessmentQuery),responses((status=200,body=GameMoveAssessments),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Match analysis")]
+async fn assessments(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(query): Query<MoveAssessmentQuery>,
+) -> ApiResult<Json<GameMoveAssessments>> {
+    Ok(Json(load_move_assessments(&state, id, query).await?))
 }
 
 pub(crate) fn rounded_loss(played: f64, best: f64) -> Option<f64> {

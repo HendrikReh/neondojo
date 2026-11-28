@@ -3,6 +3,7 @@ use crate::play::engine_match::{DuelUnit, GameProgress};
 use serde::Serialize;
 use sqlx::{FromRow, PgPool};
 use std::time::{Duration, Instant};
+use tokio::sync::broadcast;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -41,6 +42,7 @@ pub(super) async fn load(pool: &PgPool, series: &Series) -> sqlx::Result<Option<
 
 pub(super) struct ProgressReporter<'a> {
     pool: &'a PgPool,
+    updates: Option<&'a broadcast::Sender<Uuid>>,
     series: &'a Series,
     token: Uuid,
     unit: DuelUnit,
@@ -50,9 +52,16 @@ pub(super) struct ProgressReporter<'a> {
 }
 
 impl<'a> ProgressReporter<'a> {
-    pub fn new(pool: &'a PgPool, series: &'a Series, token: Uuid, unit: DuelUnit) -> Self {
+    pub fn new(
+        pool: &'a PgPool,
+        updates: Option<&'a broadcast::Sender<Uuid>>,
+        series: &'a Series,
+        token: Uuid,
+        unit: DuelUnit,
+    ) -> Self {
         Self {
             pool,
+            updates,
             series,
             token,
             unit,
@@ -102,7 +111,13 @@ impl<'a> ProgressReporter<'a> {
                     now - self.started,
                 ),
             };
-            store(self.pool, self.series.id, self.token, progress)
+            store(
+                self.pool,
+                self.updates,
+                self.series.id,
+                self.token,
+                progress,
+            )
         });
         async move {
             if let Some(write) = write {
@@ -135,7 +150,13 @@ fn estimate(
     })
 }
 
-async fn store(pool: &PgPool, id: Uuid, token: Uuid, progress: LiveProgress) {
+async fn store(
+    pool: &PgPool,
+    updates: Option<&broadcast::Sender<Uuid>>,
+    id: Uuid,
+    token: Uuid,
+    progress: LiveProgress,
+) {
     // Lock the run before writing so cancellation or a new lease cannot race
     // a stale worker's upsert. A delayed progress write can be skipped.
     let write = sqlx::query(
@@ -162,6 +183,11 @@ async fn store(pool: &PgPool, id: Uuid, token: Uuid, progress: LiveProgress) {
     .bind(progress.estimated_remaining_seconds)
     .execute(pool);
     match tokio::time::timeout(WRITE_TIMEOUT, write).await {
+        Ok(Ok(result)) if result.rows_affected() > 0 => {
+            if let Some(tx) = updates {
+                let _ = tx.send(id);
+            }
+        }
         Ok(Ok(_)) => {}
         Ok(Err(error)) => {
             tracing::debug!(series = %id, %error, "Could not store live duel progress")

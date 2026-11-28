@@ -2,41 +2,79 @@ use super::*;
 use crate::annotations::normalize_tag;
 use std::collections::BTreeSet;
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct TagCard {
-    id: Uuid,
-    tags_version: i64,
+pub struct TagCard {
+    pub id: Uuid,
+    pub tags_version: i64,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct EditCardTags {
-    cards: Vec<TagCard>,
-    add: Vec<String>,
-    remove: Vec<String>,
+pub struct EditCardTags {
+    pub cards: Vec<TagCard>,
+    pub add: Vec<String>,
+    pub remove: Vec<String>,
 }
 
-#[derive(Serialize, ToSchema, FromRow)]
-pub(super) struct CardTags {
-    pub(super) id: Uuid,
-    tags: Vec<String>,
-    tags_version: i64,
+#[derive(Debug, Serialize, ToSchema, FromRow)]
+pub struct CardTags {
+    pub id: Uuid,
+    pub tags: Vec<String>,
+    pub tags_version: i64,
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct SaveCardTopic {
-    name: String,
-    filter: CardQuery,
+pub struct SaveCardTopic {
+    pub name: String,
+    pub filter: CardQuery,
 }
 
-#[derive(Serialize, ToSchema, FromRow)]
-pub(super) struct CardTopic {
-    id: Uuid,
-    name: String,
+#[derive(Debug, Serialize, ToSchema, FromRow)]
+pub struct CardTopic {
+    pub id: Uuid,
+    pub name: String,
     #[sqlx(json)]
-    filter: CardQuery,
+    pub filter: CardQuery,
+}
+
+pub(crate) async fn suggest_tags_service(
+    state: &AppState,
+) -> Result<Vec<String>, crate::domain_error::DomainError> {
+    let Json(tags) = suggest_tags(State(state.clone())).await?;
+    Ok(tags)
+}
+
+pub(crate) async fn edit_tags_service(
+    state: &AppState,
+    body: EditCardTags,
+) -> Result<Vec<CardTags>, crate::domain_error::DomainError> {
+    let Json(cards) = edit_tags(State(state.clone()), Json(body)).await?;
+    Ok(cards)
+}
+
+pub(crate) async fn list_topics_service(
+    state: &AppState,
+) -> Result<Vec<CardTopic>, crate::domain_error::DomainError> {
+    let Json(topics) = list_topics(State(state.clone())).await?;
+    Ok(topics)
+}
+
+pub(crate) async fn save_topic_service(
+    state: &AppState,
+    body: SaveCardTopic,
+) -> Result<CardTopic, crate::domain_error::DomainError> {
+    let (_, Json(topic)) = save_topic(State(state.clone()), Json(body)).await?;
+    Ok(topic)
+}
+
+pub(crate) async fn delete_topic_service(
+    state: &AppState,
+    id: Uuid,
+) -> Result<(), crate::domain_error::DomainError> {
+    delete_topic(State(state.clone()), Path(id)).await?;
+    Ok(())
 }
 
 pub(super) fn routes() -> Router<AppState> {

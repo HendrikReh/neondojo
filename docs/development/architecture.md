@@ -4,8 +4,13 @@
 
 | Path                                                                                                               | Responsibility                                                      |
 | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| [`backend/src/api.rs`](../../backend/src/api.rs)                                                                         | REST, SSE, and OpenAPI                                              |
-| [`backend/src/backgammon/`](../../backend/src/backgammon/) | Boards, legal checker turns, and GNUbg identifiers; depends on no other module |
+| [`backend/src/api.rs`](../../backend/src/api.rs)                                                                         | REST, SSE, and OpenAPI (thin HTTP wrapper over `CoreRuntime` / `BackendFacade`) |
+| [`backend/src/facade/`](../../backend/src/facade/) | Typed in-process `BackendFacade` (8 domain modules + broadcast push channels) used by the native GPUI desktop client |
+| [`crates/neondojo-rules/`](../../crates/neondojo-rules/) | Pure-Rust backgammon board rules, legal checker turns, GNUbg IDs, notation, and embedded configuration options (zero async/DB deps) |
+| [`crates/neondojo-i18n/`](../../crates/neondojo-i18n/) | Native EN/DE localization catalog (2,088 keys), ICU plural/variable formatter, live-retranslatable `AppError`, and locale-aware formatters |
+| [`crates/neondojo-board/`](../../crates/neondojo-board/) | GPU-accelerated GPUI `BoardView`, 9 built-in themes + direct Rust BGBlitz ZIP loader, `ThemeAtlasCache`, 60–120fps animation state, and `rodio` play audio |
+| [`crates/neondojo-desktop/`](../../crates/neondojo-desktop/) | Native macOS GPUI desktop shell (`AppShell`), `TokioBridge`, `NeonTheme` (6 palettes), `Settings`, shared `review/`, all 7 workspaces, and scoped `WKWebView` for third-party HTML/JS Anki cards |
+| [`backend/src/backgammon/`](../../backend/src/backgammon/) | Re-exports `neondojo_rules::backgammon` for backend callers |
 | [`backend/src/import/`](../../backend/src/import/) | Import formats, replay, and match validation. [`format.rs`](../../backend/src/import/format.rs) is the one list of match formats and of what differs between them |
 | [`backend/src/engine.rs`](../../backend/src/engine.rs), [`backend/src/match_analysis.rs`](../../backend/src/match_analysis.rs) | Isolated GNUbg processes and native checker and cube analysis       |
 | [`backend/src/engines/`](../../backend/src/engines/) | Engine providers, capability checks, and NeonGammon sidecar (`worker.py`) |
@@ -18,13 +23,7 @@
 | [`web/src/`](../../web/src/)                                                                                             | React client, SVG board, and generated API types                    |
 | [`web/e2e/`](../../web/e2e/), [`web/playwright.setup.ts`](../../web/playwright.setup.ts) | Browser workflows; one isolated PostgreSQL database, backend and Vite server per Playwright worker ([`web/e2e/helpers/stack.ts`](../../web/e2e/helpers/stack.ts)) |
 
-The Rust backend runs independently of the browser. The CLI starts it through
-[`neondojo::runtime::start`](../../backend/src/runtime.rs). A host embedding the
-runtime supplies database connection options and can bind to port zero, then
-use `RunningServer::local_addr()` to find the HTTP endpoint. Calling
-`RunningServer::shutdown().await` drains HTTP requests and background workers.
-Each running server owns its opening-book caches and its Study, Play, and Anki
-operation limits.
+The Rust backend runs independently of the browser and desktop UI. [`neondojo::runtime::CoreRuntime::start`](../../backend/src/runtime.rs) starts the PostgreSQL pool, migrations, backfills, and background workers and exposes a typed in-process [`BackendFacade`](../../backend/src/facade/mod.rs) for the native GPUI app (`crates/neondojo-desktop`). The CLI HTTP server wraps `CoreRuntime` via [`neondojo::runtime::start`](../../backend/src/runtime.rs), binding an Axum listener (including port zero for tests) and draining HTTP requests and background workers on `RunningServer::shutdown().await`. Each running instance owns its opening-book caches and its Study, Play, and Anki operation limits.
 
 ### Engine providers
 
@@ -64,7 +63,7 @@ Stored snapshots, settings and HTTP contracts keep the engine ID strings `gnubg`
 
 Before migrating, [`schema_migrations.rs`](../../backend/src/schema_migrations.rs) adopts a database that was migrated with the former files. If its `_sqlx_migrations` records match versions 0001–0084 and their checksums exactly, it replaces them with the baseline record in one transaction and leaves tables and rows unchanged. A database from NeonDojo 1.0.0 records 0001–0083; it first receives the former 0084, embedded in `schema_migrations/`, in the same transaction. A database with any other incomplete or changed history fails to start; update it with a NeonDojo version from before the consolidation first.
 
-The backup fingerprint in [`database_backup.rs`](../../backend/src/database_backup.rs) expands the baseline record back to the former 0001–0084 checksums, so backups made before and after the consolidation stay compatible. The fingerprint skips migrations listed in `ARCHIVE_COMPATIBLE_MIGRATIONS`, currently 0089–0094, 0096 and 0097. These migrations preserve the archived column layout. Migration 0094 also prunes finished jobs’ progress events. Older archives can still restore those rows. Migration 0095 introduced a new layout for game cube rules. When restoring the previous layout, NeonDojo recovers each game’s cube rule from its saved SGF.
+The backup fingerprint in [`database_backup.rs`](../../backend/src/database_backup.rs) expands the baseline record back to the former 0001–0084 checksums, so backups made before and after the consolidation stay compatible. The fingerprint skips migrations listed in `ARCHIVE_COMPATIBLE_MIGRATIONS`, currently 0089–0094 and 0096–0098. These migrations preserve the archived column layout. Migration 0094 also prunes finished jobs’ progress events. Older archives can still restore those rows. Migration 0095 introduced a new layout for game cube rules. When restoring the previous layout, NeonDojo recovers each game’s cube rule from its saved SGF.
 
 The backup tests apply each allowlisted migration and compare the fingerprint and the names, types and order of the columns used by PostgreSQL COPY. The restore fixtures exercise both the 0094 game-rule conversion and a 0095 archive with an explicitly selected imported analysis restored on 0096. [Restore integration tests](../../backend/tests/database_backup.rs)
 

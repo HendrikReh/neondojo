@@ -1,5 +1,5 @@
 //! Stable played-event identities, independent of engine analysis runs.
-use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::api::{ApiResult, AppState, ErrorBody};
 use crate::json_errors::{Json, Path};
 use anyhow::{Context, Result};
 use axum::{Router, extract::State, routing::get};
@@ -140,11 +140,11 @@ pub async fn ensure_catalog(pool: &PgPool, match_id: Uuid) -> Result<bool> {
     Ok(true)
 }
 
-#[utoipa::path(get,path="/api/matches/{id}/games/{game_no}/decisions",params(("id"=Uuid,Path),("game_no"=i32,Path)),responses((status=200,body=GameDecisions),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Library")]
-async fn game_decisions(
-    State(state): State<AppState>,
-    Path((id, game_no)): Path<(Uuid, i32)>,
-) -> ApiResult<Json<GameDecisions>> {
+pub(crate) async fn load_game_decisions(
+    state: &AppState,
+    id: Uuid,
+    game_no: i32,
+) -> Result<GameDecisions, crate::domain_error::DomainError> {
     let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
     crate::play::require_review_available_on(&mut *tx, id).await?;
     let cataloged: Option<bool> =
@@ -154,13 +154,10 @@ async fn game_decisions(
             .await
             .map_err(anyhow::Error::from)?;
     let Some(cataloged) = cataloged else {
-        return Err(ApiError::missing());
+        return Err(crate::domain_error::DomainError::missing());
     };
     if !cataloged {
-        return Err(crate::browse_indexes::preparing(
-            &state,
-            "The match move catalog",
-        ));
+        return Err(crate::browse_indexes::preparing(state, "The match move catalog").into());
     }
     let game_id: Option<Uuid> =
         sqlx::query_scalar("SELECT id FROM match_games WHERE match_uuid=$1 AND game_no=$2")
@@ -169,7 +166,7 @@ async fn game_decisions(
             .fetch_optional(&mut *tx)
             .await
             .map_err(anyhow::Error::from)?;
-    let game_id = game_id.ok_or_else(ApiError::missing)?;
+    let game_id = game_id.ok_or_else(crate::domain_error::DomainError::missing)?;
     let items = sqlx::query_as(
         "SELECT * FROM match_moves WHERE match_uuid=$1 AND game_no=$2 ORDER BY move_no",
     )
@@ -179,11 +176,33 @@ async fn game_decisions(
     .await
     .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(GameDecisions {
+    Ok(GameDecisions {
         game_id,
         game_no,
         items,
-    }))
+    })
+}
+
+#[utoipa::path(get,path="/api/matches/{id}/games/{game_no}/decisions",params(("id"=Uuid,Path),("game_no"=i32,Path)),responses((status=200,body=GameDecisions),(status=404,body=ErrorBody),(status=422,body=ErrorBody),(status=503,body=ErrorBody)),tag="Library")]
+async fn game_decisions(
+    State(state): State<AppState>,
+    Path((id, game_no)): Path<(Uuid, i32)>,
+) -> ApiResult<Json<GameDecisions>> {
+    Ok(Json(load_game_decisions(&state, id, game_no).await?))
+}
+
+pub(crate) async fn load_move(
+    state: &AppState,
+    id: Uuid,
+) -> Result<StoredMove, crate::domain_error::DomainError> {
+    let event: Option<StoredMove> = sqlx::query_as("SELECT * FROM match_moves WHERE id=$1")
+        .bind(id)
+        .fetch_optional(&state.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+    let event = event.ok_or_else(crate::domain_error::DomainError::missing)?;
+    crate::play::require_review_available(&state.pool, event.match_uuid).await?;
+    Ok(event)
 }
 
 #[utoipa::path(get,path="/api/moves/{id}",params(("id"=Uuid,Path)),responses((status=200,body=StoredMove),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Library")]
@@ -191,14 +210,7 @@ async fn get_move(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<StoredMove>> {
-    let event: Option<StoredMove> = sqlx::query_as("SELECT * FROM match_moves WHERE id=$1")
-        .bind(id)
-        .fetch_optional(&state.pool)
-        .await
-        .map_err(anyhow::Error::from)?;
-    let event = event.ok_or_else(ApiError::missing)?;
-    crate::play::require_review_available(&state.pool, event.match_uuid).await?;
-    Ok(Json(event))
+    Ok(Json(load_move(&state, id).await?))
 }
 
 #[derive(OpenApi)]

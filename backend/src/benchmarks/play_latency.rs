@@ -1,9 +1,8 @@
 use super::BenchmarkRun;
-use crate::{engine::Engine, play::benchmark_checker_turn};
+use crate::{api::AppState, engine::Engine, play::benchmark_checker_turn};
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
 use std::time::Instant;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -50,7 +49,8 @@ pub(super) fn reference_for(engine: &str, plies: i32) -> Result<PlayBenchmarkRef
     Ok(value)
 }
 
-pub(super) async fn measure(pool: &PgPool, run: &BenchmarkRun, token: Uuid) -> Result<f64> {
+pub(super) async fn measure(state: &AppState, run: &BenchmarkRun, token: Uuid) -> Result<f64> {
+    let pool = &state.pool;
     let expected = reference_for(&run.engine_id, run.plies)?;
     ensure!(
         run.play_reference.as_ref() == Some(&expected),
@@ -108,6 +108,7 @@ pub(super) async fn measure(pool: &PgPool, run: &BenchmarkRun, token: Uuid) -> R
         let updated = sqlx::query("UPDATE benchmark_runs SET completed_turns=$3 WHERE id=$1 AND worker_token=$2 AND status='running' AND lease_until>now()")
             .bind(run.id).bind(token).bind(i32::try_from(index + 1)?).execute(pool).await?;
         ensure!(updated.rows_affected() == 1, "Benchmark cancelled");
+        state.notify_benchmark_update(run.id);
     }
     ensure!(
         elapsed_ms.is_finite() && elapsed_ms > 0.0,

@@ -4,7 +4,7 @@
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
 use crate::backgammon::ids::{Field, MatchId};
 use crate::json_errors::Json;
-use crate::practice::evaluation::CubeChances;
+pub use crate::practice::evaluation::CubeChances;
 use axum::{Router, extract::State, routing::post};
 use serde::{Deserialize, Serialize};
 use std::sync::OnceLock;

@@ -1,9 +1,10 @@
 //! Personal plaintext Markdown notes and tags, addressed by imported target UUIDs.
 use crate::api::{ApiError, ApiResult, AppState, ErrorBody};
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Path, Query};
 use crate::search::literal_pattern;
 use anyhow::{Result, bail};
-use axum::{Router, extract::State, http::StatusCode, routing::get};
+use axum::{Router, extract::State, routing::get};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, PgPool, Postgres, QueryBuilder, Row};
@@ -88,27 +89,27 @@ pub struct AnnotationPage {
     pub total: Option<i64>,
 }
 
-#[derive(Deserialize, IntoParams)]
-struct SearchQuery {
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct SearchQuery {
     /// Literal substring, 3–200 characters. Omit only when supplying an exact tag.
-    q: Option<String>,
+    pub q: Option<String>,
     /// Exact normalized tag; can be combined with the text and kind filters.
-    tag: Option<String>,
-    kind: Option<AnnotationKind>,
-    after: Option<Uuid>,
+    pub tag: Option<String>,
+    pub kind: Option<AnnotationKind>,
+    pub after: Option<Uuid>,
     /// One-based result page. Mutually exclusive with `after`.
-    page: Option<i64>,
-    limit: Option<i64>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
     /// Restrict all note scopes to one logical database.
-    database_id: Option<Uuid>,
+    pub database_id: Option<Uuid>,
 }
 
-#[derive(Deserialize, IntoParams)]
-struct TagQuery {
+#[derive(Debug, Default, Deserialize, IntoParams)]
+pub struct TagQuery {
     /// Optional literal tag substring, at most 64 characters.
-    q: Option<String>,
-    limit: Option<i64>,
-    database_id: Option<Uuid>,
+    pub q: Option<String>,
+    pub limit: Option<i64>,
+    pub database_id: Option<Uuid>,
 }
 
 pub fn routes() -> Router<AppState> {
@@ -252,16 +253,61 @@ async fn load_annotation(pool: &PgPool, kind: AnnotationKind, id: Uuid) -> Resul
     }))
 }
 
+pub(crate) async fn load_target_annotation(
+    state: &AppState,
+    kind: AnnotationKind,
+    id: Uuid,
+) -> Result<Annotation, DomainError> {
+    let (kind, id) = canonical_target(&state.pool, kind, id).await?;
+    if !target_exists(&state.pool, kind, id).await? {
+        return Err(DomainError::missing());
+    }
+    Ok(load_annotation(&state.pool, kind, id).await?)
+}
+
+/// Fetch all saved position and move annotations belonging to one source game.
+pub(crate) async fn load_game_move_annotations(
+    state: &AppState,
+    match_id: Uuid,
+    game_no: i32,
+) -> Result<Vec<Annotation>, DomainError> {
+    if game_no <= 0 {
+        return Err(DomainError::invalid("game_no must be positive"));
+    }
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
+    crate::play::require_review_available_on(&mut *tx, match_id).await?;
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM match_games WHERE match_uuid=$1 AND game_no=$2)",
+    )
+    .bind(match_id)
+    .bind(game_no)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    if !exists {
+        return Err(DomainError::missing());
+    }
+    let rows = sqlx::query_as::<_, Annotation>(&format!(
+        "SELECT {ANNOTATION_COLUMNS} FROM annotations
+         WHERE position_uuid IN (SELECT id FROM positions WHERE match_uuid=$1 AND game_no=$2)
+            OR move_uuid IN (SELECT id FROM match_moves WHERE match_uuid=$1 AND game_no=$2)
+         ORDER BY target_kind, target_id"
+    ))
+    .bind(match_id)
+    .bind(game_no)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(rows)
+}
+
 async fn get_target_annotation(
     state: AppState,
     kind: AnnotationKind,
     id: Uuid,
 ) -> ApiResult<Json<Annotation>> {
-    let (kind, id) = canonical_target(&state.pool, kind, id).await?;
-    if !target_exists(&state.pool, kind, id).await? {
-        return Err(ApiError::missing());
-    }
-    Ok(Json(load_annotation(&state.pool, kind, id).await?))
+    Ok(Json(load_target_annotation(&state, kind, id).await?))
 }
 
 #[utoipa::path(get, path="/api/matches/{id}/annotation", params(("id"=Uuid, Path)), responses((status=200,body=Annotation),(status=404,body=ErrorBody)), tag="Annotations")]
@@ -339,14 +385,13 @@ fn validate_update(mut update: AnnotationUpdate) -> ApiResult<AnnotationUpdate> 
     Ok(update)
 }
 
-async fn put_target_annotation(
-    state: AppState,
+pub(crate) async fn save_target_annotation(
+    state: &AppState,
     kind: AnnotationKind,
     id: Uuid,
-    payload: Result<Json<AnnotationUpdate>, ApiError>,
-) -> ApiResult<Json<Annotation>> {
+    update: AnnotationUpdate,
+) -> Result<Annotation, DomainError> {
     let (kind, id) = canonical_target(&state.pool, kind, id).await?;
-    let Json(update) = payload?;
     let update = validate_update(update)?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     // Hold the parent alive while saving, including the first annotation insert.
@@ -362,7 +407,7 @@ async fn put_target_annotation(
         .await
         .map_err(anyhow::Error::from)?;
     if target.is_none() {
-        return Err(ApiError::missing());
+        return Err(DomainError::missing());
     }
     let saved = if update.expected_version == 0 {
         sqlx::query_as::<_, Annotation>(&format!("INSERT INTO annotations(id,match_uuid,position_uuid,game_uuid,move_uuid,tags,comment,version) VALUES($1,$2,$3,$4,$5,$6,$7,1) ON CONFLICT(target_kind,target_id) DO NOTHING RETURNING {ANNOTATION_COLUMNS}"))
@@ -377,14 +422,22 @@ async fn put_target_annotation(
             .bind(&update.tags).bind(&update.comment).bind(kind.as_str()).bind(id).bind(update.expected_version)
             .fetch_optional(&mut *tx).await.map_err(anyhow::Error::from)?
     };
-    let saved = saved.ok_or_else(|| {
-        ApiError(
-            StatusCode::CONFLICT,
-            "Annotation changed; reload before saving".into(),
-        )
-    })?;
+    let saved =
+        saved.ok_or_else(|| DomainError::conflict("Annotation changed; reload before saving"))?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(saved))
+    Ok(saved)
+}
+
+async fn put_target_annotation(
+    state: AppState,
+    kind: AnnotationKind,
+    id: Uuid,
+    payload: Result<Json<AnnotationUpdate>, ApiError>,
+) -> ApiResult<Json<Annotation>> {
+    let Json(update) = payload?;
+    Ok(Json(
+        save_target_annotation(&state, kind, id, update).await?,
+    ))
 }
 
 #[utoipa::path(put, path="/api/matches/{id}/annotation", params(("id"=Uuid, Path)), request_body=AnnotationUpdate, responses((status=200,body=Annotation),(status=404,body=ErrorBody),(status=409,body=ErrorBody),(status=422,body=ErrorBody)), tag="Annotations")]
@@ -431,17 +484,16 @@ fn limit(value: Option<i64>) -> ApiResult<i64> {
     Ok(limit)
 }
 
-#[utoipa::path(get, path="/api/annotations/search", params(SearchQuery), responses((status=200,body=AnnotationPage),(status=422,body=ErrorBody)), tag="Annotations")]
-async fn search_annotations(
-    State(state): State<AppState>,
-    Query(query): Query<SearchQuery>,
-) -> ApiResult<Json<AnnotationPage>> {
+pub(crate) async fn run_search_annotations(
+    state: &AppState,
+    query: SearchQuery,
+) -> Result<AnnotationPage, DomainError> {
     let raw_q = query.q.as_deref().unwrap_or("");
     let q = raw_q.trim();
     if raw_q.chars().any(char::is_control)
         || (!q.is_empty() && !(3..=200).contains(&q.chars().count()))
     {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "Search needs 3–200 characters without control characters",
         ));
     }
@@ -452,7 +504,7 @@ async fn search_annotations(
         .transpose()?
         .filter(|s| !s.is_empty());
     if q.is_empty() && tag.is_none() {
-        return Err(ApiError::invalid("Supply search text or an exact tag"));
+        return Err(DomainError::invalid("Supply search text or an exact tag"));
     }
     let limit = limit(query.limit)?;
     let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
@@ -514,11 +566,32 @@ async fn search_annotations(
     } else {
         None
     };
-    Ok(Json(AnnotationPage {
+    Ok(AnnotationPage {
         items,
         next_cursor,
         total,
-    }))
+    })
+}
+
+#[utoipa::path(get, path="/api/annotations/search", params(SearchQuery), responses((status=200,body=AnnotationPage),(status=422,body=ErrorBody)), tag="Annotations")]
+async fn search_annotations(
+    State(state): State<AppState>,
+    Query(query): Query<SearchQuery>,
+) -> ApiResult<Json<AnnotationPage>> {
+    Ok(Json(run_search_annotations(&state, query).await?))
+}
+
+pub(crate) async fn list_annotation_tags(
+    state: &AppState,
+    query: TagQuery,
+) -> Result<Vec<String>, DomainError> {
+    let q = normalize_tag(query.q.as_deref().unwrap_or(""))?;
+    let limit = limit(query.limit)?;
+    let tags = sqlx::query_scalar(&format!(
+        "SELECT DISTINCT tag FROM {ANNOTATION_MATCH_JOIN_SQL} JOIN matches m ON m.id={ANNOTATION_MATCH_UUID_EXPR} CROSS JOIN LATERAL unnest(a.tags) AS tag WHERE tag LIKE $1 AND ($3::uuid IS NULL OR m.database_id=$3) ORDER BY tag LIMIT $2"
+    ))
+        .bind(literal_pattern(&q)).bind(limit).bind(query.database_id).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
+    Ok(tags)
 }
 
 #[utoipa::path(get, path="/api/tags", params(TagQuery), responses((status=200,body=Vec<String>),(status=422,body=ErrorBody)), tag="Annotations")]
@@ -526,13 +599,7 @@ async fn tags(
     State(state): State<AppState>,
     Query(query): Query<TagQuery>,
 ) -> ApiResult<Json<Vec<String>>> {
-    let q = normalize_tag(query.q.as_deref().unwrap_or(""))?;
-    let limit = limit(query.limit)?;
-    let tags = sqlx::query_scalar(&format!(
-        "SELECT DISTINCT tag FROM {ANNOTATION_MATCH_JOIN_SQL} JOIN matches m ON m.id={ANNOTATION_MATCH_UUID_EXPR} CROSS JOIN LATERAL unnest(a.tags) AS tag WHERE tag LIKE $1 AND ($3::uuid IS NULL OR m.database_id=$3) ORDER BY tag LIMIT $2"
-    ))
-        .bind(literal_pattern(&q)).bind(limit).bind(query.database_id).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
-    Ok(Json(tags))
+    Ok(Json(list_annotation_tags(&state, query).await?))
 }
 
 #[derive(OpenApi)]

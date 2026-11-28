@@ -12,6 +12,76 @@ pub(in crate::learning) struct AnkiUpload {
     file: String,
 }
 
+async fn import_deck_apkg_bytes(
+    state: &AppState,
+    id: Uuid,
+    bytes: axum::body::Bytes,
+    permit: tokio::sync::OwnedSemaphorePermit,
+) -> Result<AddCardsResult, crate::domain_error::DomainError> {
+    let cards = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        read_package(&bytes)
+    })
+    .await
+    .map_err(anyhow::Error::from)?
+    .map_err(|error| {
+        crate::domain_error::DomainError::invalid(format!(
+            "Cannot import this Anki package: {error}"
+        ))
+    })?;
+    let unique: BTreeMap<_, _> = cards
+        .into_iter()
+        .map(|(content, tags)| (card_signature(&content), (content, tags)))
+        .collect();
+    let written = write_cards_with_policy(
+        &state.pool,
+        id,
+        unique,
+        CardConflictPolicy::PreserveExistingPayload,
+    )
+    .await?;
+    Ok(written.summary())
+}
+
+pub(crate) async fn import_deck_apkg_from_path(
+    state: &AppState,
+    id: Uuid,
+    path: &std::path::Path,
+) -> Result<AddCardsResult, crate::domain_error::DomainError> {
+    let metadata = tokio::fs::metadata(path).await.map_err(|error| {
+        if error.kind() == std::io::ErrorKind::NotFound {
+            crate::domain_error::DomainError::missing()
+        } else {
+            crate::domain_error::DomainError::invalid(format!("Cannot read Anki package: {error}"))
+        }
+    })?;
+    if !metadata.is_file() {
+        return Err(crate::domain_error::DomainError::invalid(
+            "Select an Anki package file",
+        ));
+    }
+    if metadata.len() > MAX_DB_BYTES {
+        return Err(crate::domain_error::DomainError::payload_too_large(
+            "Anki package exceeds 32 MiB",
+        ));
+    }
+    require_deck(&state.pool, id).await?;
+    let permit = state
+        .anki_limits
+        .decision_imports
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| {
+            crate::domain_error::DomainError::too_many_requests(
+                "Two Anki imports are already in progress",
+            )
+        })?;
+    let bytes = tokio::fs::read(path).await.map_err(|error| {
+        crate::domain_error::DomainError::invalid(format!("Cannot read Anki package: {error}"))
+    })?;
+    import_deck_apkg_bytes(state, id, axum::body::Bytes::from(bytes), permit).await
+}
+
 #[utoipa::path(post,path="/api/decks/{id}/import.apkg",params(("id"=Uuid,Path)),request_body(content=AnkiUpload,content_type="multipart/form-data"),responses((status=200,body=AddCardsResult),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(in crate::learning) async fn import(
     State(state): State<AppState>,
@@ -40,25 +110,9 @@ pub(in crate::learning) async fn import(
         .bytes()
         .await
         .map_err(|e| ApiError(e.status(), e.body_text().into()))?;
-    let cards = tokio::task::spawn_blocking(move || {
-        let _permit = permit;
-        read_package(&bytes)
-    })
-    .await
-    .map_err(anyhow::Error::from)?
-    .map_err(|error| ApiError::invalid(format!("Cannot import this Anki package: {error}")))?;
-    let unique: BTreeMap<_, _> = cards
-        .into_iter()
-        .map(|(content, tags)| (card_signature(&content), (content, tags)))
-        .collect();
-    let written = write_cards_with_policy(
-        &state.pool,
-        id,
-        unique,
-        CardConflictPolicy::PreserveExistingPayload,
-    )
-    .await?;
-    Ok(Json(written.summary()))
+    Ok(Json(
+        import_deck_apkg_bytes(&state, id, bytes, permit).await?,
+    ))
 }
 
 pub(super) fn read_package(bytes: &[u8]) -> anyhow::Result<Vec<(CardContent, BTreeSet<String>)>> {

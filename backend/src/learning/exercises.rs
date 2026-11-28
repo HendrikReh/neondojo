@@ -1,38 +1,71 @@
 use super::*;
 use crate::{backgammon::ids, practice};
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct PipAnswer {
+pub struct PipAnswer {
+    pub card_id: Uuid,
+    pub counts: [i32; 2],
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct PipResult {
+    pub counts: [i32; 2],
+    pub bar_pips: [i32; 2],
+    pub correct: [bool; 2],
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ScoreQuestion {
+    pub index: usize,
+    pub card: CardQuestion,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ScorePractice {
+    pub id: Uuid,
+    pub questions: Vec<ScoreQuestion>,
+}
+
+#[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ScoreAnswer {
+    pub index: usize,
+    pub practice_id: Uuid,
+    pub answer: PracticeAnswer,
+}
+
+pub(crate) async fn check_pips_service(
+    state: &AppState,
+    body: PipAnswer,
+) -> Result<PipResult, crate::domain_error::DomainError> {
+    let Json(result) = pips(State(state.clone()), Json(body)).await?;
+    Ok(result)
+}
+
+pub(crate) async fn score_questions_service(
+    state: &AppState,
     card_id: Uuid,
-    counts: [i32; 2],
+) -> Result<ScorePractice, crate::domain_error::DomainError> {
+    let Json(result) = score_questions(State(state.clone()), Path(card_id)).await?;
+    Ok(result)
 }
 
-#[derive(Serialize, ToSchema)]
-pub(super) struct PipResult {
-    counts: [i32; 2],
-    bar_pips: [i32; 2],
-    correct: [bool; 2],
+pub(crate) async fn score_answer_service(
+    state: &AppState,
+    card_id: Uuid,
+    body: ScoreAnswer,
+) -> Result<PracticeEvaluation, crate::domain_error::DomainError> {
+    let Json(result) = score_answer(State(state.clone()), Path(card_id), Json(body)).await?;
+    Ok(result)
 }
 
-#[derive(Serialize, ToSchema)]
-pub(super) struct ScoreQuestion {
-    index: usize,
-    card: CardQuestion,
-}
-
-#[derive(Serialize, ToSchema)]
-pub(super) struct ScorePractice {
-    id: Uuid,
-    questions: Vec<ScoreQuestion>,
-}
-
-#[derive(Deserialize, ToSchema)]
-#[serde(deny_unknown_fields)]
-pub(super) struct ScoreAnswer {
-    index: usize,
-    practice_id: Uuid,
-    answer: PracticeAnswer,
+pub(crate) async fn preview_card_service(
+    state: &AppState,
+    card_id: Uuid,
+) -> Result<CardAnswer, crate::domain_error::DomainError> {
+    let Json(result) = preview(State(state.clone()), Path(card_id)).await?;
+    Ok(result)
 }
 
 pub(super) fn routes() -> Router<AppState> {

@@ -44,10 +44,9 @@ impl From<crate::engines::EngineId> for ConfigurationEngine {
     }
 }
 
-pub(crate) static OPTIONS: std::sync::LazyLock<Value> = std::sync::LazyLock::new(|| {
-    serde_json::from_str(include_str!("../../shared/configuration-options.json"))
-        .expect("valid embedded configuration options")
-});
+pub(crate) use neondojo_rules::options::{
+    OPTIONS, engine_default_threads, engine_depths, engine_min_threads, parallel_analysis_jobs,
+};
 
 /// Inclusive lower bounds of the four grades, measured in normalized equity.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -122,44 +121,6 @@ pub(crate) fn available_cpu_threads() -> Option<i32> {
     std::thread::available_parallelism()
         .ok()
         .and_then(|count| i32::try_from(count.get()).ok())
-}
-
-/// Inclusive range and default for simultaneously running analysis jobs.
-pub(crate) fn parallel_analysis_jobs() -> (i32, i32, i32) {
-    let option = |name: &str| {
-        OPTIONS["parallel_analysis_jobs"][name]
-            .as_i64()
-            .and_then(|number| i32::try_from(number).ok())
-            .expect("parallel analysis job option is a valid integer")
-    };
-    (option("min"), option("max"), option("default"))
-}
-
-pub(crate) fn engine_min_threads(engine: &str) -> i32 {
-    OPTIONS["engine_threads"][engine]["min"]
-        .as_i64()
-        .and_then(|number| i32::try_from(number).ok())
-        .expect("valid embedded minimum thread count")
-}
-
-pub(crate) fn engine_default_threads(engine: &str, purpose: &str) -> i32 {
-    OPTIONS["engine_threads"][engine]["default"][purpose]
-        .as_i64()
-        .and_then(|number| i32::try_from(number).ok())
-        .expect("valid embedded default thread count")
-}
-
-/// Verified provider profiles, shared with client normalization and catalogs.
-pub(crate) fn engine_depths(engine: &str, purpose: &str) -> Vec<i32> {
-    OPTIONS["engine_profiles"][engine][purpose]
-        .as_array()
-        .map(|values| {
-            values
-                .iter()
-                .filter_map(|v| v.as_i64().and_then(|n| i32::try_from(n).ok()))
-                .collect()
-        })
-        .unwrap_or_default()
 }
 string_enum!(ConfigurationScope { Game=>"game", Match=>"match" });
 string_enum!(ConfigurationSearchFilter { EngineDefault=>"engine_default" });
@@ -543,20 +504,24 @@ pub(crate) fn routes() -> Router<AppState> {
             get(configuration_availability),
         )
 }
+pub(crate) async fn availability(app: &AppState) -> Result<ConfigurationAvailability> {
+    let mut tx = store::begin(app).await?;
+    let current = store::state(&mut tx).await?;
+    let issues =
+        validation::resources(app, &mut tx, &current.current_configuration, true, true).await?;
+    tx.commit().await?;
+    Ok(ConfigurationAvailability {
+        revision: current.revision,
+        valid: issues.is_empty(),
+        issues,
+    })
+}
+
 #[utoipa::path(get,path="/api/configuration/availability",responses((status=200,body=ConfigurationAvailability),(status=409,body=ErrorBody)),tag="Configuration")]
 async fn configuration_availability(
     State(app): State<AppState>,
 ) -> Result<Json<ConfigurationAvailability>> {
-    let mut tx = store::begin(&app).await?;
-    let current = store::state(&mut tx).await?;
-    let issues =
-        validation::resources(&app, &mut tx, &current.current_configuration, true, true).await?;
-    tx.commit().await?;
-    Ok(Json(ConfigurationAvailability {
-        revision: current.revision,
-        valid: issues.is_empty(),
-        issues,
-    }))
+    Ok(Json(availability(&app).await?))
 }
 #[utoipa::path(get,path="/api/configuration",responses((status=200,body=ConfigurationState),(status=409,body=ErrorBody)),tag="Configuration")]
 async fn get_configuration(State(state): State<AppState>) -> Result<Json<ConfigurationState>> {

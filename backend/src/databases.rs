@@ -41,6 +41,11 @@ pub(crate) use repo::{
     require_library_destination,
 };
 pub use routes::{DatabaseDoc, routes};
+pub(crate) use routes::{
+    apply_actions_service, clear_database_service, create_database_service,
+    delete_database_service, export_to_path_service, get_metadata_service, list_databases_service,
+    update_database_service, update_metadata_service,
+};
 pub use source_metadata::{SourceMetadata, backfill_source_metadata, source_metadata};
 
 pub(crate) async fn default_database_id(pool: &PgPool) -> Result<Uuid, sqlx::Error> {

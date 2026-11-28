@@ -1,4 +1,4 @@
-pub(crate) mod catalog;
+pub mod catalog;
 // Read-only statistics for exactly one native analysis job and its durable games.
 use crate::json_errors::{Json, Path};
 use crate::{

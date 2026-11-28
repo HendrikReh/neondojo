@@ -299,6 +299,72 @@ pub(super) async fn prepare_game_plans(pool: &PgPool, query: &CardQuery) -> ApiR
     }
     Ok(())
 }
+pub(crate) async fn search_cards_service(
+    state: &AppState,
+    deck_id: Option<Uuid>,
+    query: CardQuery,
+) -> Result<CardPage, crate::domain_error::DomainError> {
+    let Json(page) = load(state, deck_id, query).await?;
+    Ok(page)
+}
+
+pub(crate) async fn get_card_service(
+    state: &AppState,
+    id: Uuid,
+) -> Result<CardBrowseItem, crate::domain_error::DomainError> {
+    let mut tx = crate::database_pool::begin_read_snapshot(&state.pool).await?;
+    let row: CardRow = sqlx::query_as("SELECT * FROM learning_cards WHERE id=$1")
+        .bind(id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(crate::domain_error::DomainError::missing)?;
+    let mut context = CardBrowseContext {
+        card_tags: row.tags.clone(),
+        tags_version: row.tags_version,
+        ..CardBrowseContext::default()
+    };
+    let memberships: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT d.id,d.name FROM deck_cards dc JOIN decks d ON d.id=dc.deck_id WHERE dc.card_id=$1 ORDER BY lower(d.name),d.id",
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    context.decks = memberships
+        .into_iter()
+        .map(|(id, name)| CardDeck { id, name })
+        .collect();
+    let notes: Vec<(Vec<String>, String)> = sqlx::query_as(&format!(
+        "SELECT a.tags,a.comment FROM learning_cards c JOIN annotations a ON {NOTE_SCOPE} WHERE c.id=$1 ORDER BY a.target_kind,a.id"
+    ))
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(anyhow::Error::from)?;
+    let mut tags = BTreeSet::new();
+    for (values, comment) in notes {
+        tags.extend(values);
+        if !comment.trim().is_empty() && context.comment_excerpt.chars().count() < 280 {
+            let separator = if context.comment_excerpt.is_empty() {
+                ""
+            } else {
+                "\n\n"
+            };
+            let remaining = 280 - context.comment_excerpt.chars().count();
+            context
+                .comment_excerpt
+                .extend(separator.chars().chain(comment.chars()).take(remaining));
+        }
+    }
+    context.tags = tags.into_iter().collect();
+    tx.commit().await.map_err(anyhow::Error::from)?;
+    Ok(CardBrowseItem {
+        card: row.question(),
+        browse: context,
+    })
+}
+
 #[utoipa::path(get,path="/api/cards",params(CardQuery),responses((status=200,body=CardPage),(status=404,body=ErrorBody),(status=422,body=ErrorBody)),tag="Learning")]
 pub(super) async fn all_cards(
     State(state): State<AppState>,

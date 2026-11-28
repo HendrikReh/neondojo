@@ -525,6 +525,34 @@ pub(super) async fn coverage(
     Ok((count(matches), count(unanalyzed)))
 }
 
+/// Player matches in scope that have no indexed decision yet.
+pub(super) async fn unanalyzed_matches(
+    connection: &mut PgConnection,
+    database: Option<Uuid>,
+    player: &[String],
+    independent_only: bool,
+    limit: i64,
+) -> ApiResult<Vec<crate::model::MatchSummary>> {
+    let rows = sqlx::query_as(&format!(
+        "SELECT m.id, NOT m.collection_only AS source_available, m.filename, m.format,
+                m.white, m.black, m.match_length, m.position_count, m.created_at
+         FROM matches m
+         WHERE NOT m.collection_only AND ($1::uuid IS NULL OR m.database_id=$1)
+           AND (lower(btrim(m.white))=ANY($2) OR lower(btrim(m.black))=ANY($2))
+           AND (NOT $3 OR {INDEPENDENT_MATCH})
+           AND NOT EXISTS(SELECT 1 FROM decision_index d WHERE d.match_id=m.id)
+         ORDER BY m.created_at DESC, m.id DESC LIMIT $4"
+    ))
+    .bind(database)
+    .bind(player)
+    .bind(independent_only)
+    .bind(limit)
+    .fetch_all(&mut *connection)
+    .await
+    .map_err(anyhow::Error::from)?;
+    Ok(rows)
+}
+
 /// Of the given matches, those played without learning aids.
 pub(super) async fn independent_matches(
     pool: &PgPool,

@@ -4,28 +4,43 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct TransferRequest {
-    player: String,
-    database_id: Option<Uuid>,
-    game_plan: GamePlan,
-    kind: CardKind,
+pub struct TransferRequest {
+    pub player: String,
+    pub database_id: Option<Uuid>,
+    pub game_plan: GamePlan,
+    pub kind: CardKind,
     #[serde(default)]
-    follow_up: bool,
+    pub follow_up: bool,
 }
 
-#[derive(Serialize, ToSchema, FromRow)]
-pub(super) struct TransferSummary {
-    id: Uuid,
+#[derive(Debug, Serialize, ToSchema, FromRow)]
+pub struct TransferSummary {
+    pub id: Uuid,
     #[sqlx(json)]
-    scope: TransferRequest,
-    completed_at: DateTime<Utc>,
-    scored: i64,
-    correct: i64,
-    revealed: i64,
-    mean_loss: Option<f64>,
-    duration_seconds: i64,
-    unsure: i64,
-    lessons: Vec<String>,
+    pub scope: TransferRequest,
+    pub completed_at: DateTime<Utc>,
+    pub scored: i64,
+    pub correct: i64,
+    pub revealed: i64,
+    pub mean_loss: Option<f64>,
+    pub duration_seconds: i64,
+    pub unsure: i64,
+    pub lessons: Vec<String>,
+}
+
+pub(crate) async fn start_transfer_service(
+    state: &AppState,
+    body: TransferRequest,
+) -> Result<rounds::PracticeRound, crate::domain_error::DomainError> {
+    let (_, Json(round)) = start(State(state.clone()), Json(body)).await?;
+    Ok(round)
+}
+
+pub(crate) async fn transfer_history_service(
+    state: &AppState,
+) -> Result<Vec<TransferSummary>, crate::domain_error::DomainError> {
+    let Json(rows) = history(State(state.clone())).await?;
+    Ok(rows)
 }
 
 pub(super) fn routes() -> Router<AppState> {

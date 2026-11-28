@@ -1,4 +1,295 @@
 use super::*;
+use crate::domain_error::DomainError;
+
+pub(crate) fn compute_checker_turns(
+    board: &[i32; 26],
+    player: i32,
+    dice: [i32; 2],
+) -> Result<Vec<CheckerTurn>, DomainError> {
+    crate::backgammon::checker_paths(board, player, dice)
+        .map(|paths| {
+            paths
+                .into_iter()
+                .map(|path| CheckerTurn::from_path(path, player))
+                .collect()
+        })
+        .map_err(|error| DomainError::invalid(error.to_string()))
+}
+
+pub(crate) async fn list_sessions_service(
+    state: &AppState,
+) -> Result<Vec<PlaySession>, DomainError> {
+    let rows = recent_sessions(&state.pool).await?;
+    let mut sessions = Vec::with_capacity(rows.len());
+    for (session, sgf) in rows {
+        // Keep the list bounded: only one source replay is queued at a time.
+        sessions.push(present_with_results(session, sgf).await?);
+    }
+    Ok(sessions)
+}
+
+pub(crate) async fn get_session_service(
+    state: &AppState,
+    id: Uuid,
+) -> Result<PlaySession, DomainError> {
+    let row = saved(state, id).await?;
+    let session = present_with_results(row.state.0, row.sgf).await?;
+    open_sage::schedule_warmup(&session, state);
+    Ok(session)
+}
+
+pub(crate) async fn history_snapshots_service(
+    state: &AppState,
+    id: Uuid,
+    version: i64,
+) -> Result<PlayHistorySnapshots, DomainError> {
+    // Fetch state and its exact raw checkpoint together. No archive lookup or
+    // native replay: detached sessions and unavailable engines remain readable.
+    let checkpoint = saved(state, id).await?;
+    if checkpoint.state.version != version {
+        return Err(DomainError::conflict("Session changed; refresh history"));
+    }
+    let response = tokio::task::spawn_blocking(move || {
+        build_history_snapshots(&checkpoint.state, &checkpoint.sgf)
+    })
+    .await
+    .map_err(anyhow::Error::from)??;
+    Ok(response)
+}
+
+pub(crate) async fn create_session_service(
+    state: &AppState,
+    request: CreatePlaySession,
+) -> Result<PlaySession, DomainError> {
+    let session = crate::engine::try_play_start(start_session(state.clone(), request))
+        .await
+        .ok_or_else(benchmark_conflict)??;
+    Ok(session)
+}
+
+pub(crate) async fn act_in_session_service(
+    state: &AppState,
+    id: Uuid,
+    request: PlayActionRequest,
+) -> Result<PlaySession, DomainError> {
+    let Json(session) = perform_action(state, id, request).await?;
+    Ok(session)
+}
+
+pub(crate) async fn change_mode_service(
+    state: &AppState,
+    id: Uuid,
+    request: PlayModeRequest,
+) -> Result<PlaySession, DomainError> {
+    let previous = saved(state, id).await?;
+    let mut session = previous.state.0;
+    check_session_version(
+        request.version,
+        session.version,
+        "Session changed; reload before changing playing mode",
+    )?;
+    pause::require_active(&session)?;
+    if matches!(session.phase, PlayPhase::MatchOver) || reports::money_finished(&session) {
+        return Err(DomainError::invalid(
+            "Completed matches keep their playing mode",
+        ));
+    }
+    if let Some(threshold) = validate_tutor_threshold(request.tutor_threshold)? {
+        session.tutor_threshold = threshold;
+    }
+    session.learning_used |=
+        session.play_mode != PlayMode::Competition || request.play_mode != PlayMode::Competition;
+    session.game_learning_used |=
+        session.play_mode != PlayMode::Competition || request.play_mode != PlayMode::Competition;
+    session.play_mode = request.play_mode;
+    if let Some(pending) = session.pending_decision.as_mut() {
+        if session.play_mode == PlayMode::Coach
+            || (session.play_mode == PlayMode::Training && session.training_auto_analysis)
+        {
+            pending.revealed = true;
+        }
+        pending.warning = session.play_mode == PlayMode::Tutor
+            && pending.action.is_some()
+            && pending
+                .loss
+                .is_some_and(|loss| loss >= session.tutor_threshold);
+    }
+    session.version += 1;
+    let Json(updated) = persist_session(
+        state,
+        &session,
+        &previous.sgf,
+        &previous.native_id,
+        request.version,
+        false,
+    )
+    .await?;
+    Ok(updated)
+}
+
+pub(crate) async fn update_feedback_service(
+    state: &AppState,
+    id: Uuid,
+    request: PlayFeedbackRequest,
+) -> Result<PlaySession, DomainError> {
+    let previous = saved(state, id).await?;
+    let mut session = previous.state.0;
+    check_session_version(
+        request.version,
+        session.version,
+        "Session changed; reload before requesting feedback",
+    )?;
+    pause::require_active(&session)?;
+    if session.play_mode == PlayMode::Competition {
+        return Err(DomainError::invalid(
+            "Feedback is available after a competition match",
+        ));
+    }
+    if !(matches!(session.phase, PlayPhase::Move | PlayPhase::DoubleResponse)
+        || matches!(session.phase, PlayPhase::Roll) && session.can_double)
+    {
+        return Err(DomainError::invalid(
+            "No human decision available for feedback",
+        ));
+    }
+    if let Some(decision_id) = request.decision_id
+        && session
+            .pending_decision
+            .as_ref()
+            .is_none_or(|d| d.id != decision_id)
+    {
+        return Err(DomainError::invalid(
+            "Feedback decision does not match pending decision",
+        ));
+    }
+    session.game_learning_used = true;
+    match request.operation {
+        FeedbackOperation::Hint => {
+            if session.pending_decision.is_none() {
+                let alternatives = analyze_decision(&session, &previous.gnubg_path)
+                    .await
+                    .map_err(native_error)?;
+                let mut decision = feedback::empty_decision(alternatives);
+                decision.game_no = session.game_no;
+                decision.history_index = session.history.len();
+                session.pending_decision = Some(decision);
+            }
+            let pending = session
+                .pending_decision
+                .as_mut()
+                .context("Hint analysis did not create a pending decision")?;
+            pending.revealed = true;
+            pending.assisted = true;
+        }
+        FeedbackOperation::Reveal => {
+            let pending = session
+                .pending_decision
+                .as_mut()
+                .ok_or_else(|| DomainError::invalid("No decision to reveal"))?;
+            pending.revealed = true;
+            pending.assisted = true;
+        }
+        FeedbackOperation::Retry => {
+            let pending = session
+                .pending_decision
+                .as_mut()
+                .ok_or_else(|| DomainError::invalid("No decision to retry"))?;
+            if pending.action.is_none() {
+                return Err(DomainError::invalid("Choose a move before retrying"));
+            }
+            pending.action = None;
+            pending.move_index = None;
+            pending.retry_count += 1;
+            pending.assisted = true;
+            pending.warning = false;
+        }
+    }
+    session.version += 1;
+    let Json(updated) = persist_session(
+        state,
+        &session,
+        &previous.sgf,
+        &previous.native_id,
+        request.version,
+        false,
+    )
+    .await?;
+    Ok(updated)
+}
+
+pub(crate) async fn review_session_service(
+    state: &AppState,
+    id: Uuid,
+    request: PlayReviewRequest,
+) -> Result<PlaySession, DomainError> {
+    let previous = saved(state, id).await?;
+    let mut session = previous.state.0;
+    check_session_version(
+        request.version,
+        session.version,
+        "Session changed; reload before reviewing",
+    )?;
+    pause::require_active(&session)?;
+    if !matches!(session.phase, PlayPhase::MatchOver) && !reports::money_finished(&session) {
+        return Err(DomainError::invalid(
+            "Complete the match or money game before reviewing",
+        ));
+    }
+    if session.review.is_some() {
+        return Ok(present_with_results(session, previous.sgf).await?);
+    }
+    reports::build(&mut session, &previous.sgf, &previous.gnubg_path)
+        .await
+        .map_err(native_error)?;
+
+    session.version += 1;
+    let Json(updated) = persist_session(
+        state,
+        &session,
+        &previous.sgf,
+        &previous.native_id,
+        request.version,
+        false,
+    )
+    .await?;
+    Ok(updated)
+}
+
+pub(crate) async fn export_session_sgf_service(
+    state: &AppState,
+    id: Uuid,
+) -> Result<String, DomainError> {
+    let row = saved(state, id).await?;
+    Ok(forfeit::annotate(
+        &row.state,
+        named_export(
+            &if row.sgf.is_empty() {
+                format!(
+                    "(;FF[4]GM[6]MI[length:{}][game:0][ws:0][bs:0]PW[White]PB[Black]RU[Crawford])\n",
+                    row.state.match_length
+                )
+            } else {
+                row.sgf
+            },
+            &row.state.human_name,
+            row.state.human_player,
+            row.state.bot_name(),
+        ),
+    ))
+}
+
+pub(crate) async fn delete_session_service(state: &AppState, id: Uuid) -> Result<(), DomainError> {
+    let deleted = sqlx::query("DELETE FROM play_sessions WHERE id=$1")
+        .bind(id)
+        .execute(&state.pool)
+        .await
+        .map_err(anyhow::Error::from)?;
+    if deleted.rows_affected() == 0 {
+        return Err(DomainError::missing());
+    }
+    state.browse_wake.notify_one();
+    Ok(())
+}
 
 pub(super) fn benchmark_conflict() -> ApiError {
     ApiError(

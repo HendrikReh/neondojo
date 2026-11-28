@@ -1,9 +1,10 @@
 use super::{
     Competitor, CreateSeries, DiceMode, DuelFormat, ENGINE_DUELS_DATABASE_ID, GameOutcomes,
-    MAX_BLOCK_GAMES, MatchResult, MoneyStatistics, Series, SeriesConfig, SeriesDetails,
-    SeriesEngines, SeriesPage, SeriesStatistics, SideCostSummary, checkpoint, dice, progress,
-    runner, summarize,
+    LiveProgress, MAX_BLOCK_GAMES, MatchResult, MoneyStatistics, Series, SeriesConfig,
+    SeriesDetails, SeriesEngines, SeriesPage, SeriesStatistics, SideCostSummary, checkpoint, dice,
+    progress, runner, summarize,
 };
+use crate::domain_error::DomainError;
 use crate::json_errors::{Json, Path, Query};
 use crate::{
     api::{ApiError, ApiResult, AppState, ErrorBody},
@@ -55,20 +56,19 @@ pub(crate) fn routes() -> Router<AppState> {
         )
 }
 
-#[utoipa::path(get, path="/api/engine-matches", params(("before"=Option<Uuid>, Query)), responses((status=200, body=SeriesPage),(status=422, body=ErrorBody)), tag="Engine matches")]
-async fn list(
-    State(state): State<AppState>,
-    Query(query): Query<HistoryQuery>,
-) -> ApiResult<Json<SeriesPage>> {
+pub(crate) async fn list_series(
+    pool: &PgPool,
+    before: Option<Uuid>,
+) -> Result<SeriesPage, DomainError> {
     let mut runs: Vec<Series> = sqlx::query_as(&format!(
         "{SERIES_QUERY}
          WHERE $1::uuid IS NULL OR (r.created_at,r.id) <
              (SELECT created_at,id FROM engine_match_runs WHERE id=$1)
          ORDER BY r.created_at DESC,r.id DESC LIMIT $2",
     ))
-    .bind(query.before)
+    .bind(before)
     .bind(PAGE_SIZE as i64 + 1)
-    .fetch_all(&state.pool)
+    .fetch_all(pool)
     .await
     .map_err(anyhow::Error::from)?;
     let next_cursor = if runs.len() > PAGE_SIZE {
@@ -77,16 +77,15 @@ async fn list(
     } else {
         None
     };
-    Ok(Json(SeriesPage { runs, next_cursor }))
+    Ok(SeriesPage { runs, next_cursor })
 }
 
-#[utoipa::path(post, path="/api/engine-matches", request_body=CreateSeries, responses((status=201, body=Series),(status=422, body=ErrorBody)), tag="Engine matches")]
-async fn create(
-    State(state): State<AppState>,
-    Json(request): Json<CreateSeries>,
-) -> ApiResult<(StatusCode, Json<Series>)> {
+pub(crate) async fn create_series(
+    state: &AppState,
+    request: CreateSeries,
+) -> Result<Series, DomainError> {
     if !(1..=1000).contains(&request.count) {
-        return Err(ApiError::invalid("Count must be 1–1000"));
+        return Err(DomainError::invalid("Count must be 1–1000"));
     }
     let valid_format = match request.format {
         DuelFormat::Match => {
@@ -100,7 +99,7 @@ async fn create(
         }
     };
     if !valid_format {
-        return Err(ApiError::invalid(
+        return Err(DomainError::invalid(
             "Matches need a length of 1–25 and no block size; cubeless money blocks need 1–1000 games and no match length",
         ));
     }
@@ -109,20 +108,22 @@ async fn create(
         if !EngineId::parse(&side.engine_id)
             .is_some_and(|engine| engine.depths("duel").contains(&side.plies))
         {
-            return Err(ApiError::invalid("Unsupported playing engine or strength"));
+            return Err(DomainError::invalid(
+                "Unsupported playing engine or strength",
+            ));
         }
     }
-    let settings = settings::load(&state).await?;
+    let settings = settings::load(state).await?;
     let path = resolve_binary_async(&settings.gnubg_path)
         .await
-        .map_err(|e| ApiError::invalid(e.to_string()))?;
+        .map_err(|e| DomainError::invalid(e.to_string()))?;
     let gnubg_threads = settings.gnubg_threads.filter(|&threads| threads != 1);
     let version = Engine::new(path.clone())
         .with_threads(gnubg_threads)
         .check_installation()
         .await
         .map_err(|error| {
-            ApiError::invalid(format!("GNUbg installation check failed: {error:#}"))
+            DomainError::invalid(format!("GNUbg installation check failed: {error:#}"))
         })?;
     crate::play::probe_native(
         &Engine::new(path.clone())
@@ -131,7 +132,7 @@ async fn create(
     )
     .await
     .map_err(|error| {
-        ApiError::invalid(format!("GNUbg play installation check failed: {error:#}"))
+        DomainError::invalid(format!("GNUbg play installation check failed: {error:#}"))
     })?;
     let sage_threads = settings.sage_analysis_threads();
     let snapshot = |side: &Competitor| {
@@ -139,12 +140,11 @@ async fn create(
         let version = version.clone();
         let id = side.engine_id.clone();
         let plies = side.plies;
-        let state = &state;
         async move {
             // The rules engine side reuses the installation checked above;
             // other engines (IDs checked against their duel depths) verify theirs.
             if EngineId::parse(&id).is_some_and(EngineId::is_rules_engine) {
-                Ok::<_, ApiError>(EngineSnapshot {
+                Ok::<_, DomainError>(EngineSnapshot {
                     engine_id: id,
                     gnubg_path: path,
                     engine_version: Some(version),
@@ -157,13 +157,13 @@ async fn create(
                     settings::snapshot_for(state, &id, &path, None, sage_threads, plies)
                         .await
                         .map_err(|error| {
-                            ApiError::invalid(format!(
+                            DomainError::invalid(format!(
                                 "NeonGammon installation check failed: {error:#}"
                             ))
                         })?;
                 if cubeless {
                     snapshot = settings::cubeless_sage(snapshot).await.map_err(|error| {
-                        ApiError::invalid(format!("NeonGammon cubeless check failed: {error:#}"))
+                        DomainError::invalid(format!("NeonGammon cubeless check failed: {error:#}"))
                     })?;
                 }
                 Ok(snapshot)
@@ -191,72 +191,64 @@ async fn create(
         mode: request.mode,
         seed: request.seed.unwrap_or_else(Uuid::new_v4),
     };
-    let series = sqlx::query_as("INSERT INTO engine_match_runs(id,configuration,engines,dice_version,total_matches) VALUES($1,$2,$3,$4,$5) RETURNING *")
+    let series: Series = sqlx::query_as("INSERT INTO engine_match_runs(id,configuration,engines,dice_version,total_matches) VALUES($1,$2,$3,$4,$5) RETURNING *")
         .bind(Uuid::new_v4())
         .bind(sqlx::types::Json(&configuration))
         .bind(sqlx::types::Json(&engines))
         .bind(dice::VERSION)
         .bind(configuration.count * configuration.mode.matches_per_unit())
         .fetch_one(&state.pool).await.map_err(anyhow::Error::from)?;
-    Ok((StatusCode::CREATED, Json(series)))
+    state.notify_engine_match_update(series.id);
+    Ok(series)
 }
 
-#[utoipa::path(get, path="/api/engine-matches/{id}", params(("id"=Uuid, Path), ("offset"=Option<i32>, Query)), responses((status=200, body=SeriesDetails),(status=404, body=ErrorBody),(status=422, body=ErrorBody)), tag="Engine matches")]
-async fn details(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-    Query(page): Query<ResultPage>,
-) -> ApiResult<Json<SeriesDetails>> {
-    if !(0..=2000).contains(&page.offset) {
-        return Err(ApiError::invalid("Invalid result offset"));
+pub(crate) async fn series_details(
+    pool: &PgPool,
+    id: Uuid,
+    offset: i32,
+) -> Result<SeriesDetails, DomainError> {
+    if !(0..=2000).contains(&offset) {
+        return Err(DomainError::invalid("Invalid result offset"));
     }
-    let offset = page.offset as usize;
-    let series = load(&state.pool, id).await?;
-    let live_progress = progress::load(&state.pool, &series)
+    let offset_usize = offset as usize;
+    let series = load(pool, id).await?;
+    let live_progress = progress::load(pool, &series)
         .await
         .map_err(anyhow::Error::from)?;
     // Read only committed results up to this version of the progress counter.
     let mut results: Vec<MatchResult> = sqlx::query_as("SELECT match_index,seed,score_a,score_b,games,cpu_us_a,wall_us_a,moves_a,cpu_us_b,wall_us_b,moves_b,outcomes FROM engine_match_results WHERE run_id=$1 AND match_index<$2 ORDER BY match_index")
-        .bind(id).bind(series.completed_matches).fetch_all(&state.pool).await.map_err(anyhow::Error::from)?;
+        .bind(id).bind(series.completed_matches).fetch_all(pool).await.map_err(anyhow::Error::from)?;
     let statistics = summarize(
         series.configuration.format,
         series.configuration.mode,
         &results,
     );
     let next_offset =
-        (offset.saturating_add(PAGE_SIZE) < results.len()).then(|| page.offset + PAGE_SIZE as i32);
-    let previous_offset = (offset > 0).then(|| (page.offset - PAGE_SIZE as i32).max(0));
+        (offset_usize.saturating_add(PAGE_SIZE) < results.len()).then(|| offset + PAGE_SIZE as i32);
+    let previous_offset = (offset_usize > 0).then(|| (offset - PAGE_SIZE as i32).max(0));
     let matches = results
-        .drain(offset.min(results.len())..)
+        .drain(offset_usize.min(results.len())..)
         .take(PAGE_SIZE)
         .collect();
-    Ok(Json(SeriesDetails {
+    Ok(SeriesDetails {
         series,
         live_progress,
         statistics,
         matches,
         next_offset,
         previous_offset,
-    }))
+    })
 }
 
-async fn load(pool: &PgPool, id: Uuid) -> ApiResult<Series> {
-    sqlx::query_as(&format!("{SERIES_QUERY} WHERE r.id=$1"))
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(anyhow::Error::from)?
-        .ok_or_else(ApiError::missing)
-}
-
-#[utoipa::path(post, path="/api/engine-matches/{id}/cancel", params(("id"=Uuid, Path)), responses((status=200, body=Series),(status=404, body=ErrorBody)), tag="Engine matches")]
-async fn cancel(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<Series>> {
+pub(crate) async fn cancel_series(state: &AppState, id: Uuid) -> Result<Series, DomainError> {
     sqlx::query("UPDATE engine_match_runs SET status='cancelled',lease_token=NULL,lease_until=NULL WHERE id=$1 AND status IN ('queued','running')")
         .bind(id).execute(&state.pool).await.map_err(anyhow::Error::from)?;
-    Ok(Json(load(&state.pool, id).await?))
+    let series = load(&state.pool, id).await?;
+    state.notify_engine_match_update(series.id);
+    Ok(series)
 }
 
-async fn resume_series(state: &AppState, id: Uuid) -> Result<Series, ApiError> {
+pub(crate) async fn resume_series(state: &AppState, id: Uuid) -> Result<Series, DomainError> {
     let series: Option<Series> = sqlx::query_as(
         "UPDATE engine_match_runs SET
              status='queued',error=NULL,attempts=0,lease_token=NULL,lease_until=NULL
@@ -268,21 +260,15 @@ async fn resume_series(state: &AppState, id: Uuid) -> Result<Series, ApiError> {
     .map_err(anyhow::Error::from)?;
     let Some(series) = series else {
         load(&state.pool, id).await?;
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "Only cancelled engine duels with unfinished matches or blocks can be resumed".into(),
+        return Err(DomainError::conflict(
+            "Only cancelled engine duels with unfinished matches or blocks can be resumed",
         ));
     };
+    state.notify_engine_match_update(series.id);
     Ok(series)
 }
 
-/// Queue a cancelled series from its last committed match or money block.
-#[utoipa::path(post, path="/api/engine-matches/{id}/resume", params(("id"=Uuid, Path)), responses((status=200, body=Series),(status=404, body=ErrorBody),(status=409, body=ErrorBody)), tag="Engine matches")]
-async fn resume(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<Series>> {
-    Ok(Json(resume_series(&state, id).await?))
-}
-
-async fn delete_series(state: &AppState, id: Uuid) -> Result<(), ApiError> {
+pub(crate) async fn delete_series(state: &AppState, id: Uuid) -> Result<(), DomainError> {
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     // Lock the series before reading its latest checkpoint so a concurrent
     // resume cannot add more games or archive the same unit during removal.
@@ -291,11 +277,10 @@ async fn delete_series(state: &AppState, id: Uuid) -> Result<(), ApiError> {
         .fetch_optional(&mut *tx)
         .await
         .map_err(anyhow::Error::from)?
-        .ok_or_else(ApiError::missing)?;
+        .ok_or_else(DomainError::missing)?;
     if matches!(series.status.as_str(), "queued" | "running") {
-        return Err(ApiError(
-            StatusCode::CONFLICT,
-            "Cancel the engine duel before deleting it".into(),
+        return Err(DomainError::conflict(
+            "Cancel the engine duel before deleting it",
         ));
     }
     if let Some(saved) = checkpoint::load(&mut *tx, id, series.completed_matches).await? {
@@ -312,7 +297,88 @@ async fn delete_series(state: &AppState, id: Uuid) -> Result<(), ApiError> {
         .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
     state.browse_wake.notify_one();
+    state.notify_engine_match_update(id);
     Ok(())
+}
+
+pub(crate) async fn series_sgf(pool: &PgPool, id: Uuid, index: i32) -> Result<String, DomainError> {
+    Ok(stored_sgf(pool, id, index).await?)
+}
+
+pub(crate) async fn series_library_match(
+    pool: &PgPool,
+    id: Uuid,
+    index: i32,
+) -> Result<MatchSummary, DomainError> {
+    let source = stored_sgf(pool, id, index).await?;
+    if let Some(entry) =
+        store::library_match_by_source(pool, source.as_bytes(), ENGINE_DUELS_DATABASE_ID).await?
+    {
+        return Ok(entry);
+    }
+    let parse_source = source.clone();
+    let imported = tokio::task::spawn_blocking(move || crate::import::parse_sgf(&parse_source))
+        .await
+        .map_err(anyhow::Error::from)??;
+    let restored = store::import_match_in_database(
+        pool,
+        &runner::archive_filename(id, index),
+        "sgf",
+        source.as_bytes(),
+        &source,
+        &imported,
+        ENGINE_DUELS_DATABASE_ID,
+    )
+    .await?;
+    Ok(restored.r#match)
+}
+
+#[utoipa::path(get, path="/api/engine-matches", params(("before"=Option<Uuid>, Query)), responses((status=200, body=SeriesPage),(status=422, body=ErrorBody)), tag="Engine matches")]
+async fn list(
+    State(state): State<AppState>,
+    Query(query): Query<HistoryQuery>,
+) -> ApiResult<Json<SeriesPage>> {
+    Ok(Json(list_series(&state.pool, query.before).await?))
+}
+
+#[utoipa::path(post, path="/api/engine-matches", request_body=CreateSeries, responses((status=201, body=Series),(status=422, body=ErrorBody)), tag="Engine matches")]
+async fn create(
+    State(state): State<AppState>,
+    Json(request): Json<CreateSeries>,
+) -> ApiResult<(StatusCode, Json<Series>)> {
+    Ok((
+        StatusCode::CREATED,
+        Json(create_series(&state, request).await?),
+    ))
+}
+
+#[utoipa::path(get, path="/api/engine-matches/{id}", params(("id"=Uuid, Path), ("offset"=Option<i32>, Query)), responses((status=200, body=SeriesDetails),(status=404, body=ErrorBody),(status=422, body=ErrorBody)), tag="Engine matches")]
+async fn details(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(page): Query<ResultPage>,
+) -> ApiResult<Json<SeriesDetails>> {
+    Ok(Json(series_details(&state.pool, id, page.offset).await?))
+}
+
+async fn load(pool: &PgPool, id: Uuid) -> ApiResult<Series> {
+    sqlx::query_as(&format!("{SERIES_QUERY} WHERE r.id=$1"))
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(anyhow::Error::from)?
+        .ok_or_else(ApiError::missing)
+}
+
+#[utoipa::path(post, path="/api/engine-matches/{id}/cancel", params(("id"=Uuid, Path)), responses((status=200, body=Series),(status=404, body=ErrorBody)), tag="Engine matches")]
+async fn cancel(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<Series>> {
+    Ok(Json(cancel_series(&state, id).await?))
+}
+
+/// Queue a cancelled series from its last committed match or money block.
+#[utoipa::path(post, path="/api/engine-matches/{id}/resume", params(("id"=Uuid, Path)), responses((status=200, body=Series),(status=404, body=ErrorBody),(status=409, body=ErrorBody)), tag="Engine matches")]
+async fn resume(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<Series>> {
+    Ok(Json(resume_series(&state, id).await?))
 }
 
 /// Remove a stopped series. Played games stay in the match database.
@@ -337,7 +403,7 @@ async fn sgf(
     State(state): State<AppState>,
     Path((id, index)): Path<(Uuid, i32)>,
 ) -> ApiResult<impl IntoResponse> {
-    let source = stored_sgf(&state.pool, id, index).await?;
+    let source = series_sgf(&state.pool, id, index).await?;
     Ok((
         [
             (header::CONTENT_TYPE, "application/x-go-sgf".to_string()),
@@ -359,28 +425,7 @@ async fn library_match(
     State(state): State<AppState>,
     Path((id, index)): Path<(Uuid, i32)>,
 ) -> ApiResult<Json<MatchSummary>> {
-    let source = stored_sgf(&state.pool, id, index).await?;
-    if let Some(entry) =
-        store::library_match_by_source(&state.pool, source.as_bytes(), ENGINE_DUELS_DATABASE_ID)
-            .await?
-    {
-        return Ok(Json(entry));
-    }
-    let parse_source = source.clone();
-    let imported = tokio::task::spawn_blocking(move || crate::import::parse_sgf(&parse_source))
-        .await
-        .map_err(anyhow::Error::from)??;
-    let restored = store::import_match_in_database(
-        &state.pool,
-        &runner::archive_filename(id, index),
-        "sgf",
-        source.as_bytes(),
-        &source,
-        &imported,
-        ENGINE_DUELS_DATABASE_ID,
-    )
-    .await?;
-    Ok(Json(restored.r#match))
+    Ok(Json(series_library_match(&state.pool, id, index).await?))
 }
 
 #[derive(OpenApi)]
@@ -394,7 +439,7 @@ async fn library_match(
         SeriesConfig,
         SeriesEngines,
         Series,
-        progress::LiveProgress,
+        LiveProgress,
         MatchResult,
         MoneyStatistics,
         GameOutcomes,

@@ -97,25 +97,21 @@ pub(super) async fn database_exists<'e>(
     Ok(())
 }
 
-#[utoipa::path(get,path="/api/position-browser",params(PositionBrowserQuery),responses((status=200,body=PositionBrowserPage),(status=422,body=ErrorBody),(status=503,body=ErrorBody,description="The saved-position index is being prepared")),tag="Positions")]
-pub(super) async fn search(
-    State(s): State<AppState>,
-    Query(query): Query<PositionBrowserQuery>,
-) -> ApiResult<Json<PositionBrowserPage>> {
-    let filters = match query.filters {
-        Some(value) if value.len() <= 16000 => {
-            serde_json::from_str::<PositionFilterDefinition>(&value)
-                .map_err(|e| ApiError::invalid(format!("Invalid position filters: {e}")))?
-        }
-        Some(_) => return Err(ApiError::invalid("Position filter definition is too large")),
-        None => PositionFilterDefinition::default(),
-    }
-    .validate()?;
-    let limit = query.limit.unwrap_or(25);
+pub(crate) async fn search_saved_positions(
+    s: &AppState,
+    filters: PositionFilterDefinition,
+    after: Option<String>,
+    page: Option<i64>,
+    limit: Option<i64>,
+) -> Result<PositionBrowserPage, crate::domain_error::DomainError> {
+    let filters = filters.validate()?;
+    let limit = limit.unwrap_or(25);
     if !(1..=100).contains(&limit) {
-        return Err(ApiError::invalid("limit must be 1–100"));
+        return Err(crate::domain_error::DomainError::invalid(
+            "limit must be 1–100",
+        ));
     }
-    let offset = crate::search::page_offset(query.page, query.after.is_some(), limit)?;
+    let offset = crate::search::page_offset(page, after.is_some(), limit)?;
     let mut tx = crate::database_pool::begin_read_snapshot(&s.pool).await?;
     database_exists(&mut *tx, filters.database_id).await?;
     let scope = format!(
@@ -128,7 +124,7 @@ pub(super) async fn search(
             PositionBrowserSort::Match | PositionBrowserSort::Loss
         );
     let direction = browse_direction(&filters);
-    let cursor = if let Some(after) = query.after {
+    let cursor = if let Some(after) = after {
         let cursor: BrowserCursor = crate::cursor::decode(
             &after,
             crate::cursor::DEFAULT_MAX_LEN,
@@ -143,7 +139,7 @@ pub(super) async fn search(
             BrowserCursor::Table(cursor) => !legacy_order && cursor.scope == scope,
         };
         if !valid {
-            return Err(ApiError::invalid(
+            return Err(crate::domain_error::DomainError::invalid(
                 "Cursor does not match the position filters and sort",
             ));
         }
@@ -161,19 +157,13 @@ pub(super) async fn search(
             .await
             .map_err(anyhow::Error::from)?
     {
-        return Err(crate::browse_indexes::preparing(
-            &s,
-            "The saved game-plan index",
-        ));
+        return Err(crate::browse_indexes::preparing(s, "The saved game-plan index").into());
     }
     if crate::imported_analysis::projections::pending(&mut tx, filters.database_id)
         .await
         .map_err(anyhow::Error::from)?
     {
-        return Err(crate::browse_indexes::preparing(
-            &s,
-            "The saved analysis index",
-        ));
+        return Err(crate::browse_indexes::preparing(s, "The saved analysis index").into());
     }
     let mut sql = QueryBuilder::<Postgres>::new("");
     push_browse_query(&mut sql, &filters, direction, limit, offset, anchor);
@@ -187,7 +177,7 @@ pub(super) async fn search(
             .first()
             .is_some_and(|row| !row.get::<bool, _>("anchor_exists"))
         {
-            return Err(ApiError::invalid(
+            return Err(crate::domain_error::DomainError::invalid(
                 "Position cursor anchor no longer matches the filters",
             ));
         }
@@ -271,11 +261,29 @@ pub(super) async fn search(
     }
     load_notes(&s.pool, &mut items).await?;
     load_deck_memberships(&s.pool, &mut items).await?;
-    Ok(Json(PositionBrowserPage {
+    Ok(PositionBrowserPage {
         items,
         next_cursor,
         total,
-    }))
+    })
+}
+
+#[utoipa::path(get,path="/api/position-browser",params(PositionBrowserQuery),responses((status=200,body=PositionBrowserPage),(status=422,body=ErrorBody),(status=503,body=ErrorBody,description="The saved-position index is being prepared")),tag="Positions")]
+pub(super) async fn search(
+    State(s): State<AppState>,
+    Query(query): Query<PositionBrowserQuery>,
+) -> ApiResult<Json<PositionBrowserPage>> {
+    let filters = match query.filters {
+        Some(value) if value.len() <= 16000 => {
+            serde_json::from_str::<PositionFilterDefinition>(&value)
+                .map_err(|e| ApiError::invalid(format!("Invalid position filters: {e}")))?
+        }
+        Some(_) => return Err(ApiError::invalid("Position filter definition is too large")),
+        None => PositionFilterDefinition::default(),
+    };
+    Ok(Json(
+        search_saved_positions(&s, filters, query.after, query.page, query.limit).await?,
+    ))
 }
 
 /// Omitted: loss descending; all other columns ascending.

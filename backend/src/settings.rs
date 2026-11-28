@@ -1,5 +1,6 @@
 //! Persisted preferences and immutable engine configuration for new work.
 pub(crate) mod open_sage;
+use crate::domain_error::DomainError;
 use crate::engines::{AnalysisEngine, EngineFork, EngineId, SageEngine, SageSnapshot};
 use crate::json_errors::Json;
 use crate::{
@@ -12,6 +13,7 @@ use axum::{
     http::StatusCode,
     routing::{get, post},
 };
+pub use open_sage::Installation as OpenSageInstallation;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::FromRow;
@@ -165,9 +167,9 @@ struct EngineCheckRequest {
     #[schema(minimum = 1)]
     threads: Option<i32>,
 }
-#[derive(Serialize, ToSchema)]
-struct EngineCheckResponse {
-    version: String,
+#[derive(Debug, Clone, Serialize, ToSchema)]
+pub struct EngineCheckResponse {
+    pub version: String,
 }
 
 /// Internal job payload, never derived again from mutable application settings.
@@ -453,11 +455,26 @@ async fn get_settings(State(state): State<AppState>) -> ApiResult<Json<AppSettin
     Ok(Json(load(&state).await?))
 }
 
-#[utoipa::path(put, path="/api/settings", request_body=AppSettings, responses((status=200,body=AppSettings),(status=409,body=ErrorBody),(status=422,body=ErrorBody)), tag="Settings")]
-async fn put_settings(
-    State(state): State<AppState>,
-    Json(update): Json<SettingsUpdate>,
-) -> ApiResult<Json<AppSettings>> {
+pub(crate) async fn save_settings(
+    state: &AppState,
+    settings: AppSettings,
+) -> Result<AppSettings, DomainError> {
+    let update = SettingsUpdate {
+        play_top_two: Some(settings.play_top_two),
+        gnubg_threads: Some(settings.gnubg_threads),
+        gnubg_play_threads: Some(settings.gnubg_play_threads),
+        open_sage_threads: Some(settings.open_sage_threads),
+        open_sage_play_threads: Some(settings.open_sage_play_threads),
+        parallel_analysis_jobs: Some(settings.parallel_analysis_jobs),
+        settings,
+    };
+    save_settings_update(state, update).await
+}
+
+async fn save_settings_update(
+    state: &AppState,
+    update: SettingsUpdate,
+) -> Result<AppSettings, DomainError> {
     let SettingsUpdate {
         mut settings,
         play_top_two,
@@ -469,9 +486,9 @@ async fn put_settings(
     } = update;
     settings.play_top_two = play_top_two.unwrap_or(false);
     validate(&settings)?;
-    let current = load(&state).await?;
+    let current = load(state).await?;
     if current.version != settings.version {
-        return Err(conflict());
+        return Err(conflict().into());
     }
     if play_top_two.is_none() && supports_top_two(&settings.play_engine, settings.play_plies) {
         settings.play_top_two = current.play_top_two;
@@ -488,7 +505,7 @@ async fn put_settings(
     {
         let (minimum, maximum, _) = crate::configuration::parallel_analysis_jobs();
         if !(minimum..=maximum).contains(&jobs) {
-            return Err(ApiError::invalid(format!(
+            return Err(DomainError::invalid(format!(
                 "parallel_analysis_jobs must be between {minimum} and {maximum}"
             )));
         }
@@ -526,7 +543,7 @@ async fn put_settings(
         .gnubg()
         .check_installation()
         .await
-        .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
+        .map_err(|e| DomainError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
     if settings.gnubg_play_threads != current.gnubg_play_threads
         && settings.gnubg_play_threads != settings.gnubg_threads
     {
@@ -534,11 +551,13 @@ async fn put_settings(
             .with_threads(settings.gnubg_play_threads)
             .check_installation()
             .await
-            .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
+            .map_err(|e| DomainError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
     }
     open_sage::verify_settings(&state.pool, &current, &settings)
         .await
-        .map_err(|e| ApiError::invalid(format!("NeonGammon installation check failed: {e:#}")))?;
+        .map_err(|e| {
+            DomainError::invalid(format!("NeonGammon installation check failed: {e:#}"))
+        })?;
     let mut tx = state.pool.begin().await.map_err(anyhow::Error::from)?;
     crate::configuration::store::lock(&mut tx)
         .await
@@ -549,7 +568,7 @@ async fn put_settings(
             .await
             .map_err(anyhow::Error::from)?;
     if latest != Some(settings.version) {
-        return Err(conflict());
+        return Err(conflict().into());
     }
     crate::configuration::store::save_app(&mut tx, &settings).await?;
     // The rest belongs to this installation, not to a profile.
@@ -566,7 +585,15 @@ async fn put_settings(
         .await
         .map_err(anyhow::Error::from)?;
     tx.commit().await.map_err(anyhow::Error::from)?;
-    Ok(Json(saved))
+    Ok(saved)
+}
+
+#[utoipa::path(put, path="/api/settings", request_body=AppSettings, responses((status=200,body=AppSettings),(status=409,body=ErrorBody),(status=422,body=ErrorBody)), tag="Settings")]
+async fn put_settings(
+    State(state): State<AppState>,
+    Json(update): Json<SettingsUpdate>,
+) -> ApiResult<Json<AppSettings>> {
+    Ok(Json(save_settings_update(&state, update).await?))
 }
 fn conflict() -> ApiError {
     ApiError(
@@ -575,9 +602,8 @@ fn conflict() -> ApiError {
     )
 }
 
-#[utoipa::path(get, path="/api/engines", responses((status=200,body=Vec<EngineInfo>)), tag="Settings")]
-async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo>>> {
-    let saved = load_row(&state).await?;
+pub(crate) async fn list_engines(state: &AppState) -> Result<Vec<EngineInfo>, DomainError> {
+    let saved = load_row(state).await?;
     let settings = saved.settings;
     let running = crate::benchmarks::has_live_run(&state.pool).await?;
     let version = if running {
@@ -635,7 +661,7 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
     } else {
         None
     };
-    Ok(Json(vec![
+    Ok(vec![
         EngineInfo {
             id: EngineId::Gnubg.id().into(),
             name: EngineId::Gnubg.display_name().into(),
@@ -659,20 +685,35 @@ async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo
             ),
             max_parallel_threads: cpu_threads,
         },
-    ]))
+    ])
 }
+
+#[utoipa::path(get, path="/api/engines", responses((status=200,body=Vec<EngineInfo>)), tag="Settings")]
+async fn engines(State(state): State<AppState>) -> ApiResult<Json<Vec<EngineInfo>>> {
+    Ok(Json(list_engines(&state).await?))
+}
+
+pub(crate) async fn check_gnubg_installation(
+    path: String,
+    threads: Option<i32>,
+) -> Result<EngineCheckResponse, DomainError> {
+    validate_path(&path)?;
+    validate_threads(EngineId::Gnubg, threads).await?;
+    let version = Engine::new(path)
+        .with_threads(threads)
+        .check_installation()
+        .await
+        .map_err(|e| DomainError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
+    Ok(EngineCheckResponse { version })
+}
+
 #[utoipa::path(post, path="/api/engines/gnubg/check", request_body=EngineCheckRequest, responses((status=200,body=EngineCheckResponse),(status=422,body=ErrorBody)), tag="Settings")]
 async fn check_engine(
     Json(request): Json<EngineCheckRequest>,
 ) -> ApiResult<Json<EngineCheckResponse>> {
-    validate_path(&request.path)?;
-    validate_threads(EngineId::Gnubg, request.threads).await?;
-    let version = Engine::new(request.path)
-        .with_threads(request.threads)
-        .check_installation()
-        .await
-        .map_err(|e| ApiError::invalid(format!("GNUbg installation check failed: {e:#}")))?;
-    Ok(Json(EngineCheckResponse { version }))
+    Ok(Json(
+        check_gnubg_installation(request.path, request.threads).await?,
+    ))
 }
 
 #[derive(OpenApi)]

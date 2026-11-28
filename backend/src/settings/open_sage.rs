@@ -107,6 +107,28 @@ pub(super) async fn verify_settings(
     Ok(())
 }
 
+pub(crate) async fn verify_installation(
+    state: &AppState,
+    version: i64,
+    path: String,
+) -> Result<Installation, DomainError> {
+    if version < 0 || version == i64::MAX {
+        return Err(DomainError::invalid("Invalid installation revision"));
+    }
+    if load(&state.pool).await?.version != version {
+        return Err(conflict().into());
+    }
+    validate_path(&path)?;
+    let snapshot = SageEngine::probe(path, sage_default_analysis_threads())
+        .await
+        .map_err(|e| {
+            DomainError::invalid(format!("NeonGammon installation check failed: {e:#}"))
+        })?;
+    let saved = sqlx::query_as("UPDATE engine_installations SET version=version+1,python_path=$2,snapshot=$3 WHERE engine_id='bgsage' AND version=$1 RETURNING version,python_path,snapshot")
+        .bind(version).bind(&snapshot.python).bind(sqlx::types::Json(&snapshot)).fetch_optional(&state.pool).await.map_err(anyhow::Error::from)?;
+    saved.ok_or_else(|| conflict().into())
+}
+
 #[utoipa::path(get,path="/api/engines/bgsage",responses((status=200,body=Installation)),tag="Settings")]
 async fn get_installation(State(state): State<AppState>) -> ApiResult<Json<Installation>> {
     Ok(Json(load(&state.pool).await?))
@@ -116,19 +138,9 @@ async fn put_installation(
     State(state): State<AppState>,
     Json(request): Json<InstallationRequest>,
 ) -> ApiResult<Json<Installation>> {
-    if request.version < 0 || request.version == i64::MAX {
-        return Err(ApiError::invalid("Invalid installation revision"));
-    }
-    if load(&state.pool).await?.version != request.version {
-        return Err(conflict());
-    }
-    validate_path(&request.path)?;
-    let snapshot = SageEngine::probe(request.path, sage_default_analysis_threads())
-        .await
-        .map_err(|e| ApiError::invalid(format!("NeonGammon installation check failed: {e:#}")))?;
-    let saved = sqlx::query_as("UPDATE engine_installations SET version=version+1,python_path=$2,snapshot=$3 WHERE engine_id='bgsage' AND version=$1 RETURNING version,python_path,snapshot")
-        .bind(request.version).bind(&snapshot.python).bind(sqlx::types::Json(&snapshot)).fetch_optional(&state.pool).await.map_err(anyhow::Error::from)?;
-    Ok(Json(saved.ok_or_else(conflict)?))
+    Ok(Json(
+        verify_installation(&state, request.version, request.path).await?,
+    ))
 }
 #[derive(OpenApi)]
 #[openapi(

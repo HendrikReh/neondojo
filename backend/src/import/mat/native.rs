@@ -68,7 +68,9 @@ pub(crate) fn normalize_native_sgf(
                 );
                 let dice = [i32::from(bytes[0] - b'0'), i32::from(bytes[1] - b'0')];
                 let runs = bytes[2..]
-                    .chunks_exact(2)
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
                     .map(|pair| {
                         Ok((
                             decode_point(pair[0], player)?,

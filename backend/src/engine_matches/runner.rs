@@ -12,6 +12,7 @@ use anyhow::{Context, Result, bail, ensure};
 use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 use std::time::Duration;
+use tokio::sync::broadcast;
 use uuid::Uuid;
 
 pub(crate) const ENGINE_DUELS_DATABASE_ID: Uuid = Uuid::from_u128(5);
@@ -27,7 +28,7 @@ pub async fn worker(state: AppState) {
                 else {
                     return Ok(false);
                 };
-                run_one(&state.pool).await
+                run_one_with_updates(&state.pool, Some(&state.engine_match_updates)).await
             } => match result {
                 Ok(true) => { state.browse_wake.notify_one(); continue; },
                 Ok(false) => {}
@@ -41,15 +42,31 @@ pub async fn worker(state: AppState) {
     }
 }
 
+#[cfg(test)]
 pub(super) async fn run_one(pool: &PgPool) -> Result<bool> {
+    run_one_with_updates(pool, None).await
+}
+
+async fn run_one_with_updates(
+    pool: &PgPool,
+    updates: Option<&broadcast::Sender<Uuid>>,
+) -> Result<bool> {
     let token = Uuid::new_v4();
     let Some((series, claimed_at)) = claim(pool, token).await? else {
         return Ok(false);
     };
+    if let Some(tx) = updates {
+        let _ = tx.send(series.id);
+    }
     let result = tokio::select! {
-        result = execute(pool, &series, token) => result,
+        result = execute(pool, &series, token, updates) => result,
         lost = crate::worker_lease::watch(crate::worker_lease::Owner::EngineDuel, pool, series.id, token, claimed_at) => match lost {
-            Ok(()) => return Ok(true),
+            Ok(()) => {
+                if let Some(tx) = updates {
+                    let _ = tx.send(series.id);
+                }
+                return Ok(true);
+            }
             Err(error) => Err(error),
         },
     };
@@ -64,6 +81,9 @@ pub(super) async fn run_one(pool: &PgPool) -> Result<bool> {
             // Cancelled, or another worker owns the series after a lost lease.
             tracing::info!(series = %series.id, error = %message, "Engine match worker stopped without owning the series");
         }
+    }
+    if let Some(tx) = updates {
+        let _ = tx.send(series.id);
     }
     Ok(true)
 }
@@ -86,7 +106,12 @@ async fn claim(pool: &PgPool, token: Uuid) -> Result<Option<(Series, tokio::time
     Ok(series.map(|series| (series, claimed_at)))
 }
 
-async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
+async fn execute(
+    pool: &PgPool,
+    series: &Series,
+    token: Uuid,
+    updates: Option<&broadcast::Sender<Uuid>>,
+) -> Result<()> {
     ensure!(
         series.dice_version == dice::VERSION,
         "Unsupported saved dice version"
@@ -108,7 +133,7 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
     }));
     let configuration = &series.configuration;
     let unit = configuration.unit()?;
-    let mut progress = ProgressReporter::new(pool, series, token, unit);
+    let mut progress = ProgressReporter::new(pool, updates, series, token, unit);
     for index in series.completed_matches..series.total_matches {
         let plan = match_plan(configuration, index);
         let mut sides = [(&a, configuration.a.plies), (&b, configuration.b.plies)];
@@ -203,6 +228,9 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
             .execute(&mut *tx)
             .await?;
         tx.commit().await?;
+        if let Some(tx) = updates {
+            let _ = tx.send(series.id);
+        }
     }
     workers.shutdown().await?;
     Ok(())

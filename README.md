@@ -8,7 +8,8 @@
 [![NeonDojo manual](https://img.shields.io/badge/NeonDojo%20manual-0969DA)](https://hendrikreh.github.io/neondojo/)
 [![NeonGammon manual](https://img.shields.io/badge/NeonGammon%20manual-0969DA)](https://hendrikreh.github.io/neongammon/)
 [![Platform: macOS on Apple Silicon](https://img.shields.io/badge/platform-macOS%20%7C%20Apple%20Silicon-000000?logo=apple&logoColor=white)](#requirements)
-[![Rust 1.93.1](https://img.shields.io/badge/Rust-1.93.1-CE422B?logo=rust&logoColor=white)](#requirements)
+[![Rust 1.100.1](https://img.shields.io/badge/Rust-1.100.1-CE422B?logo=rust&logoColor=white)](#requirements)
+[![GPUI Desktop](https://img.shields.io/badge/GPUI-native%20macOS-1F6FEB)](#native-macos-desktop-app-gpui)
 [![Node.js 22.12+ or 24+](https://img.shields.io/badge/Node.js-22.12%2B%20%7C%2024%2B-5FA04E?logo=nodedotjs&logoColor=white)](#requirements)
 [![PostgreSQL 17](https://img.shields.io/badge/PostgreSQL-17-4169E1?logo=postgresql&logoColor=white)](#database-and-engine)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](web/package.json)
@@ -23,7 +24,7 @@ NeonDojo is a local backgammon study app for Apple Silicon Macs. Import your mat
 
 We chose “Neon” as a nod to Arm’s Neon SIMD (single instruction, multiple data) instructions on Apple Silicon. They let the CPU apply the same operation to several values at once.
 
-NeonDojo’s headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The React and TypeScript client connects through REST and server-sent events (SSE).
+NeonDojo’s headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The native macOS desktop client (`crates/neondojo-desktop`) runs on GPUI directly against the backend in-process via `BackendFacade` (`CoreRuntime`). The React and TypeScript web client (`web/`) remains available over REST and server-sent events (SSE).
 
 ## Features
 
@@ -41,8 +42,9 @@ NeonDojo’s headless Rust backend uses Tokio, Axum, PostgreSQL, and SQLx. The R
 
 ### Requirements
 
-- Rust, tested with 1.93.1
-- Node.js 22.12 or later in the 22.x series, or Node.js 24 or later, with npm
+- Rust, tested with 1.100.1
+- Xcode (for Metal shader compilation when packaging the release macOS `.app` bundle; sandboxed development and test builds use `gpui-kit`'s runtime shaders)
+- Node.js 22.12 or later in the 22.x series, or Node.js 24 or later, with npm (for the web client)
 - Docker Compose for the bundled PostgreSQL 17 database, or an existing PostgreSQL server
 - Python 3.10 or later for the frontend build and development scripts
 - A local GNUbg installation with its neural network weights. Playing also requires GNUbg's embedded Python module. Analysis and playing were tested with GNUbg 1.08.003 on macOS. Earlier analysis checks used 1.05.002.
@@ -79,6 +81,20 @@ The backend reads these settings from its environment or from `.env` in its work
 | `OPENAI_API_KEY`, `NEONDOJO_ASSESSMENT_MODEL` | unset, `gpt-6.1-terra` | Optional AI assessment of saved reports. See [AI assessment](docs/reference/study.md#ai-assessment). |
 
 Docker Compose and the frontend tools also recognize three variables: `NEONDOJO_DB_PORT` (default `54329`, host port in [compose.yaml](compose.yaml)), `NEONDOJO_API_URL` (default `http://127.0.0.1:8787`, Vite `/api` proxy target), and `NEONDOJO_ALLOW_MISSING_THEMES` (default unset; set to `1` only to build the theme catalog without missing BGBlitz archives; `shared/configuration-options.json` stays unchanged unless preparation runs with `--update-options`).
+
+### Native macOS desktop app (GPUI)
+
+NeonDojo ships a native Apple Silicon macOS desktop application built on GPUI (`crates/neondojo-desktop`). It embeds `CoreRuntime` and `BackendFacade` in-process (connecting to the same PostgreSQL 17 database and local GNUbg / NeonGammon engines) and loads local BGBlitz `themes/*.zip` archives directly in Rust without Node.js or Python build scripts.
+
+```sh
+# Run in development
+cargo run -p neondojo-desktop
+
+# Build a signed local release NeonDojo.app bundle in target/local-desktop/NeonDojo.app
+./tools/build_local_desktop.sh
+```
+
+Desktop UI preferences and Finder-safe startup overrides (`DATABASE_URL`, `GNUBG_BINARY`, `custom_themes_dir`) are stored atomically in `~/Library/Application Support/NeonDojo/`.
 
 ### Local use with the built frontend
 
