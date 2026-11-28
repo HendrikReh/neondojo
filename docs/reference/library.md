@@ -158,6 +158,8 @@ Open **Player database** to find players by display name or imported alias. Your
 
 Select a row to see the profile and its matches alongside the results; both tables scroll independently. The profile header lists the player's other imported names and shows the PR per analysis profile above the matches; the analysis depth is visible, and the tooltip names the full engine profile. The match list shows the opponent, the score with the player's points first, the player's PR in that match, the match format, event and round, database, date and game count. Missing values show as a dash. Filter the matches by database above their table and change pages below it. Click a match row, or press Enter on it, to open the match; click the opponent's name to switch to that player's profile.
 
+The native desktop app also groups opponents on the current match page. Its counts, results and average PR cover the displayed page and database filter. Change match pages in the opponent table or the match list. Click a catalogued opponent to open their profile.
+
 Below the matches, from two fully analyzed matches on, the profile shows a chart of the PR per match with the average of the last ten matches, weighted by rated decisions. Dashed lines show the same average for checker play and for the cube. The checker value divides the saved checker losses by the unforced checker plays; the cube value divides the remaining loss by the close cube decisions.
 
 While matches of the profile have no PR, **Analyze unrated matches …** next to the rating collects those without a queued, running or completed analysis and opens the analysis dialog of the match database, where you choose the engine and depth before any job starts.

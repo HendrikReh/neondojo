@@ -285,7 +285,7 @@ pub struct OpponentBreakdownRow {
 }
 
 /// Aggregates opponent breakdown rows from a list of player matches, sorted by
-/// match count descending and then opponent name ascending (case-insensitive).
+/// match count descending, then case-insensitive name and profile ID ascending.
 pub fn compute_opponent_breakdown(matches: &[DatabaseMatch]) -> Vec<OpponentBreakdownRow> {
     #[derive(Hash, PartialEq, Eq)]
     enum Key {
@@ -361,11 +361,14 @@ pub fn compute_opponent_breakdown(matches: &[DatabaseMatch]) -> Vec<OpponentBrea
         .collect();
 
     rows.sort_by(|a, b| {
-        b.matches.cmp(&a.matches).then_with(|| {
-            a.name
-                .to_ascii_lowercase()
-                .cmp(&b.name.to_ascii_lowercase())
-        })
+        b.matches
+            .cmp(&a.matches)
+            .then_with(|| {
+                a.name
+                    .to_ascii_lowercase()
+                    .cmp(&b.name.to_ascii_lowercase())
+            })
+            .then_with(|| a.opponent_id.cmp(&b.opponent_id))
     });
     rows
 }
@@ -615,6 +618,38 @@ mod tests {
         assert!((rows[0].opponent_avg_pr.unwrap() - 5.5).abs() < 1e-6);
         assert_eq!(rows[1].opponent_id, Some(opp_b));
         assert_eq!(rows[1].wins, 1);
+    }
+
+    #[test]
+    fn opponent_breakdown_orders_same_name_profiles_by_id_as_matches_change() {
+        let profile_match = |id, name| {
+            sample_match(
+                Uuid::new_v4(),
+                "Me",
+                name,
+                vec![0],
+                Some(Uuid::from_u128(id)),
+                None,
+                None,
+                "completed",
+            )
+        };
+        let mut matches = vec![
+            profile_match(3, "alex"),
+            profile_match(1, "Alex"),
+            profile_match(2, "Alex"),
+        ];
+        let order = |matches: &[DatabaseMatch]| {
+            compute_opponent_breakdown(matches)
+                .iter()
+                .map(|row| row.opponent_id.unwrap().as_u128())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(order(&matches), [1, 2, 3]);
+        matches.reverse();
+        assert_eq!(order(&matches), [1, 2, 3]);
+        matches.push(profile_match(3, "alex"));
+        assert_eq!(order(&matches), [3, 1, 2]);
     }
 
     #[test]
