@@ -207,12 +207,12 @@ mod tests {
                     AppView::Workspace(WorkspaceId::Analysis)
                 );
                 assert_eq!(shell.read(cx).mounted_workspace_count(), 1);
-                let analysis_slot = shell
+                let analysis_meta = shell
                     .read(cx)
-                    .workspace_slot(WorkspaceId::Analysis)
-                    .expect("analysis slot lazily created");
-                assert_eq!(analysis_slot.read(cx).visit_count(), 1);
-                let analysis_id = analysis_slot.entity_id();
+                    .workspace_mount_meta(WorkspaceId::Analysis)
+                    .expect("analysis workspace lazily created");
+                assert_eq!(analysis_meta.visit_count, 1);
+                let analysis_id = analysis_meta.entity_id;
 
                 for (shortcut, expected) in [
                     ("cmd-1", WorkspaceId::Play),
@@ -231,10 +231,10 @@ mod tests {
                 window.render_frame(cx);
                 let retained = shell
                     .read(cx)
-                    .workspace_slot(WorkspaceId::Analysis)
-                    .expect("analysis slot retained");
-                assert_eq!(retained.entity_id(), analysis_id);
-                assert_eq!(retained.read(cx).visit_count(), 2);
+                    .workspace_mount_meta(WorkspaceId::Analysis)
+                    .expect("analysis workspace retained");
+                assert_eq!(retained.entity_id, analysis_id);
+                assert_eq!(retained.visit_count, 2);
 
                 window.press("cmd-0", cx);
                 window.render_frame(cx);
@@ -258,11 +258,11 @@ mod tests {
             window.render_frame(cx);
             let remounted = shell
                 .read(cx)
-                .workspace_slot(WorkspaceId::Analysis)
-                .expect("fresh analysis slot mounted");
-            assert_ne!(remounted.entity_id(), analysis_entity_id);
-            assert_eq!(remounted.read(cx).mount_generation(), 1);
-            assert_eq!(remounted.read(cx).visit_count(), 1);
+                .workspace_mount_meta(WorkspaceId::Analysis)
+                .expect("fresh analysis workspace mounted");
+            assert_ne!(remounted.entity_id, analysis_entity_id);
+            assert_eq!(remounted.mount_generation, 1);
+            assert_eq!(remounted.visit_count, 1);
         })
         .expect("update window for reset");
 
@@ -566,5 +566,285 @@ mod tests {
             write_completed.load(Ordering::SeqCst),
             "dropped write task must complete"
         );
+    }
+
+    #[gpui_kit::test]
+    async fn cross_workspace_events_route_end_to_end_through_app_shell(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        use crate::events::WorkspaceEvent;
+        use crate::workspaces::extras::ExtrasTool;
+        use crate::workspaces::study::common::StudyTab;
+        use uuid::Uuid;
+
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            configure_app(LocalUiState::default(), false, cx);
+        });
+
+        let (window, shell) = cx
+            .update(|cx| {
+                gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+                    cx.new(|cx| AppShell::new(None, window, cx))
+                })
+            })
+            .expect("open shell test window");
+
+        cx.update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            let match_id = Uuid::new_v4();
+            let session_id = Uuid::new_v4();
+
+            // OpenMatchInAnalysis routes to Analysis and records open match state
+            shell.update(cx, |s, cx| {
+                s.handle_workspace_event(
+                    WorkspaceEvent::OpenMatchInAnalysis {
+                        match_id,
+                        game_no: Some(2),
+                        position_id: None,
+                        decision_no: None,
+                    },
+                    window,
+                    cx,
+                );
+            });
+            window.render_frame(cx);
+            assert_eq!(
+                shell.read(cx).active_view(),
+                AppView::Workspace(WorkspaceId::Analysis)
+            );
+            assert!(shell.read(cx).has_open_match());
+
+            // OpenPlaySession routes to Play
+            shell.update(cx, |s, cx| {
+                s.handle_workspace_event(
+                    WorkspaceEvent::OpenPlaySession {
+                        session_id,
+                        resume: true,
+                    },
+                    window,
+                    cx,
+                );
+            });
+            window.render_frame(cx);
+            assert_eq!(
+                shell.read(cx).active_view(),
+                AppView::Workspace(WorkspaceId::Play)
+            );
+
+            // SearchPositionInLibrary routes to Library
+            shell.update(cx, |s, cx| {
+                s.handle_workspace_event(
+                    WorkspaceEvent::SearchPositionInLibrary {
+                        position_id: "4HPwATDgc/ABMA".into(),
+                    },
+                    window,
+                    cx,
+                );
+            });
+            window.render_frame(cx);
+            assert_eq!(
+                shell.read(cx).active_view(),
+                AppView::Workspace(WorkspaceId::Library)
+            );
+
+            // OpenExtrasTool normalizes "matches" -> Duels and "backup" -> Backup
+            shell.update(cx, |s, cx| {
+                s.handle_workspace_event(
+                    WorkspaceEvent::OpenExtrasTool {
+                        tool: "backup".into(),
+                    },
+                    window,
+                    cx,
+                );
+            });
+            window.render_frame(cx);
+            assert_eq!(
+                shell.read(cx).active_view(),
+                AppView::Workspace(WorkspaceId::Extras)
+            );
+            let extras = shell.read(cx).extras_workspace().expect("extras mounted");
+            assert_eq!(extras.read(cx).active_tool(), ExtrasTool::Backup);
+
+            // OpenStudyReport routes to Study -> Reports tab
+            shell.update(cx, |s, cx| {
+                s.handle_workspace_event(WorkspaceEvent::OpenStudyReport { match_id }, window, cx);
+            });
+            window.render_frame(cx);
+            assert_eq!(
+                shell.read(cx).active_view(),
+                AppView::Workspace(WorkspaceId::Study)
+            );
+            let study = shell.read(cx).study_workspace().expect("study mounted");
+            assert_eq!(study.read(cx).active_tab(), StudyTab::Reports);
+
+            // SetBenchmarkBusy toggles the global benchmark banner
+            shell.update(cx, |s, cx| {
+                s.handle_workspace_event(WorkspaceEvent::SetBenchmarkBusy(true), window, cx);
+            });
+            window.render_frame(cx);
+            assert!(shell.read(cx).is_benchmark_busy());
+            assert!(window.find("global-benchmark-busy-banner").visible());
+
+            // OpenSettings opens Settings at the requested category
+            shell.update(cx, |s, cx| {
+                s.handle_workspace_event(
+                    WorkspaceEvent::OpenSettings {
+                        category: SettingsCategory::Play,
+                    },
+                    window,
+                    cx,
+                );
+            });
+            window.render_frame(cx);
+            assert!(window.has_active_dialog(cx));
+            assert_eq!(
+                shell
+                    .read(cx)
+                    .active_settings_view()
+                    .expect("settings open")
+                    .read(cx)
+                    .category(),
+                SettingsCategory::Play
+            );
+            window.close_dialog(cx);
+            window.render_frame(cx);
+
+            // TriggerAppReset tears down every mounted workspace and clears open match
+            shell.update(cx, |s, cx| {
+                s.handle_workspace_event(
+                    WorkspaceEvent::TriggerAppReset {
+                        reason: "backup_restore".into(),
+                    },
+                    window,
+                    cx,
+                );
+            });
+            window.render_frame(cx);
+            assert_eq!(shell.read(cx).mounted_workspace_count(), 0);
+            assert_eq!(shell.read(cx).active_view(), AppView::Home);
+            assert!(!shell.read(cx).has_open_match());
+            assert_eq!(shell.read(cx).reset_generation(), 1);
+        })
+        .expect("route cross-workspace events");
+    }
+
+    #[gpui_kit::test]
+    async fn tier1_desktop_viewports_render_all_workspaces_without_overflow_or_overlap(
+        cx: &mut gpui_kit::TestAppContext,
+    ) {
+        use gpui_kit::point;
+
+        cx.update(|cx| {
+            gpui_kit::init(cx);
+            configure_app(LocalUiState::default(), false, cx);
+        });
+
+        for &(width, height) in &[(1800.0_f32, 1169.0_f32), (2560.0, 1440.0), (3840.0, 2160.0)] {
+            let options = WindowOptions {
+                window_bounds: Some(WindowBounds::Windowed(Bounds::new(
+                    point(px(0.0), px(0.0)),
+                    size(px(width), px(height)),
+                ))),
+                ..WindowOptions::default()
+            };
+
+            let (window, shell) = cx
+                .update(|cx| {
+                    gpui_kit::open_window(options, cx, |window, cx| {
+                        cx.new(|cx| AppShell::new(None, window, cx))
+                    })
+                })
+                .expect("open Tier-1 desktop viewport window");
+
+            cx.update_window(window, |_, window, cx| {
+                window.render_frame(cx);
+                let tol = px(1.5);
+
+                // Verify Home screen geometry
+                let header = window.find("app-header");
+                let home = window.find("home-screen");
+                let footer = window.find("app-footer");
+                assert!(header.visible(), "{width}x{height}: header visible");
+                assert!(home.visible(), "{width}x{height}: home visible");
+                assert!(footer.visible(), "{width}x{height}: footer visible");
+                assert!(
+                    header.bounds().right() <= px(width) + tol,
+                    "{width}x{height}: header overflows right ({:?})",
+                    header.bounds()
+                );
+                assert!(
+                    header.bounds().bottom() <= home.bounds().top() + tol,
+                    "{width}x{height}: header overlaps home"
+                );
+                assert!(
+                    home.bounds().bottom() <= footer.bounds().top() + tol,
+                    "{width}x{height}: home overlaps footer"
+                );
+                assert!(
+                    footer.bounds().bottom() <= px(height) + tol,
+                    "{width}x{height}: footer overflows viewport ({:?})",
+                    footer.bounds()
+                );
+
+                // Verify all 7 real GPUI workspaces fit cleanly with zero overlap or overflow
+                for &ws in WorkspaceId::ALL {
+                    shell.update(cx, |s, cx| s.select_workspace(ws, window, cx));
+                    window.render_frame(cx);
+
+                    let panel_id = format!("workspace-panel-{}", ws.id());
+                    let h = window.find("app-header");
+                    let panel = window.find(gpui_kit::SharedString::from(panel_id.clone()));
+                    let f = window.find("app-footer");
+
+                    assert!(
+                        panel.visible(),
+                        "{width}x{height}: {panel_id} must be visible"
+                    );
+                    assert!(
+                        panel.bounds().size.width >= px(width * 0.9),
+                        "{width}x{height}: {panel_id} width too narrow ({:?})",
+                        panel.bounds()
+                    );
+                    assert!(
+                        panel.bounds().size.height >= px(height * 0.6),
+                        "{width}x{height}: {panel_id} height too short ({:?})",
+                        panel.bounds()
+                    );
+                    assert!(
+                        panel.bounds().right() <= px(width) + tol,
+                        "{width}x{height}: {panel_id} overflows right ({:?})",
+                        panel.bounds()
+                    );
+                    assert!(
+                        h.bounds().bottom() <= panel.bounds().top() + tol,
+                        "{width}x{height}: header overlaps {panel_id}"
+                    );
+                    assert!(
+                        panel.bounds().bottom() <= f.bounds().top() + tol,
+                        "{width}x{height}: {panel_id} overlaps footer"
+                    );
+                    assert!(
+                        f.bounds().bottom() <= px(height) + tol,
+                        "{width}x{height}: footer overflows viewport on {panel_id}"
+                    );
+                }
+
+                // Verify Settings modal fits inside every Tier-1 desktop viewport
+                shell.update(cx, |s, cx| s.open_settings_modal(window, cx));
+                window.render_frame(cx);
+                let modal = window.find("settings-modal-body");
+                assert!(modal.visible(), "{width}x{height}: settings modal visible");
+                assert!(
+                    modal.bounds().right() <= px(width) + tol
+                        && modal.bounds().bottom() <= px(height) + tol,
+                    "{width}x{height}: settings modal overflows viewport ({:?})",
+                    modal.bounds()
+                );
+                window.close_dialog(cx);
+                window.render_frame(cx);
+            })
+            .expect("verify Tier-1 desktop layout bounds");
+        }
     }
 }

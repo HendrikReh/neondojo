@@ -53,8 +53,11 @@ if [ -n "${CARGO_PROFILE_RELEASE_STRIP:-}" ] && [ "${CARGO_PROFILE_RELEASE_STRIP
     exit 1
 fi
 
-# Rebuild neondojo so sqlx::migrate! always embeds this checkout's migrations.
-cargo clean --release --package neondojo --target-dir "$target"
+# Rebuild neondojo so sqlx::migrate! always embeds this checkout's migrations
+# when reusing an existing Cargo target directory.
+if [ -f "$target/CACHEDIR.TAG" ]; then
+    cargo clean --release --package neondojo --target-dir "$target"
+fi
 cargo build --release --package neondojo-desktop --bin neondojo-desktop --target-dir "$target" "$@"
 
 binary="$target/release/neondojo-desktop"

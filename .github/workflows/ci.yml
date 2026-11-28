@@ -58,8 +58,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy -p neondojo -p neondojo-rules --all-targets -- -D warnings
-      - run: cargo test -p neondojo -p neondojo-rules
+      - run: cargo clippy -p neondojo -p neondojo-rules -p neondojo-i18n --all-targets -- -D warnings
+      - run: cargo test -p neondojo -p neondojo-rules -p neondojo-i18n
 
   desktop:
     name: Desktop (macOS GPUI)
@@ -76,8 +76,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
-      - run: cargo clippy -p neondojo-desktop --all-targets -- -D warnings
-      - run: cargo test -p neondojo-desktop
+      - run: cargo clippy -p neondojo-board -p neondojo-desktop --all-targets -- -D warnings
+      - run: cargo test -p neondojo-board -p neondojo-desktop
 
   python-tools:
     name: Python tools

@@ -10,18 +10,20 @@
 //!   re-translatable `AppNotice` / `AppError` banners.
 //! - Complete Settings & Profiles dialog (`src/settings/`) with 3-destination
 //!   dirty tracking and `SettingsDraftGuardDialog`.
-//! - Lazy `Option<Entity<WorkspaceSlotView>>` workspace slots preserving state
-//!   across tab switches, plus an `AppResetEvent` hook for backup restores.
+//! - Lazy `Option<Entity<...Workspace>>` workspace instances preserving state
+//!   across tab switches, full [`crate::events::WorkspaceEvent`] cross-workspace
+//!   routing, plus an `AppResetEvent` hook for backup restores.
 
 use crate::app_context::{BackendConnectionState, DesktopAppContext};
+use crate::events::WorkspaceEvent;
 use crate::i18n::{current_locale, format_error};
 use crate::keybindings::{
-    CTX_ANALYSIS, CTX_APP, CTX_PLAY, CTX_STUDY_EXERCISE, GoHome, ImportMatchFiles,
-    ImportMatchFolder, ManageProfiles, MenuState, NewPlayMatch, OpenAbout, OpenDatabaseBackup,
-    OpenNeonGammonManual, OpenSettings, OpenUserGuide, SelectWorkspaceAnalysis,
-    SelectWorkspaceExtras, SelectWorkspaceLibrary, SelectWorkspacePlay, SelectWorkspacePlayers,
-    SelectWorkspacePositions, SelectWorkspaceStudy, SetModeDark, SetModeLight, SetModeSystem,
-    SetPaletteClub, SetPaletteGraphite, SetPalettePaper, ShowProfileChanges, install_app_menus,
+    CTX_APP, GoHome, ImportMatchFiles, ImportMatchFolder, ManageProfiles, MenuState, NewPlayMatch,
+    OpenAbout, OpenDatabaseBackup, OpenNeonGammonManual, OpenSettings, OpenUserGuide,
+    SelectWorkspaceAnalysis, SelectWorkspaceExtras, SelectWorkspaceLibrary, SelectWorkspacePlay,
+    SelectWorkspacePlayers, SelectWorkspacePositions, SelectWorkspaceStudy, SetModeDark,
+    SetModeLight, SetModeSystem, SetPaletteClub, SetPaletteGraphite, SetPalettePaper,
+    ShowProfileChanges, install_app_menus,
 };
 use crate::local_state::LocalUiState;
 use crate::settings::draft_guard::SettingsCategory;
@@ -31,15 +33,22 @@ use crate::theme::{
 };
 use crate::tokio_bridge::TokioBridge;
 use crate::ui::action_button::{ActionButton, ActionButtonVariant};
-use crate::ui::banners::{BannerKind, EmptyState, EngineHealth, EngineStatusDot, StatusBanner};
+use crate::ui::banners::{BannerKind, EngineHealth, EngineStatusDot, StatusBanner};
 use crate::ui::drop_zone::{DroppedMatchBatch, MatchDropZone};
-use crate::ui::icons::{ActionIconName, action_icon, brand_logo};
+use crate::ui::icons::{ActionIconName, brand_logo};
 use crate::ui::modal::{ModalBusyLock, ModalConfig, ModalSize, open_modal_dialog};
 use crate::ui::text_nav::{TextNavBar, TextNavDensity, TextNavItem};
+use crate::workspaces::analysis::AnalysisWorkspace;
+use crate::workspaces::extras::ExtrasWorkspace;
+use crate::workspaces::library::LibraryWorkspace;
+use crate::workspaces::play::PlayWorkspace;
+use crate::workspaces::players::PlayersWorkspace;
+use crate::workspaces::positions::PositionsWorkspace;
+use crate::workspaces::study::StudyWorkspace;
 use gpui_kit::{
-    App, AppContext, Context, Entity, EventEmitter, FocusHandle, Focusable, FontWeight,
-    InteractiveElement, IntoElement, ParentElement, Render, SharedString,
-    StatefulInteractiveElement, Styled, TestSupportExt, Window,
+    AnyElement, App, AppContext, Context, Entity, EntityId, EventEmitter, FocusHandle, Focusable,
+    FontWeight, InteractiveElement, IntoElement, ParentElement, PathPromptOptions, Render,
+    SharedString, StatefulInteractiveElement, Styled, TestSupportExt, Window,
     base::StyledExt,
     component::WindowExt,
     component::input::{Input, InputState},
@@ -190,9 +199,9 @@ impl WorkspaceId {
 
     pub const fn key_context(self) -> Option<&'static str> {
         match self {
-            Self::Play => Some(CTX_PLAY),
-            Self::Analysis => Some(CTX_ANALYSIS),
-            Self::Study => Some(CTX_STUDY_EXERCISE),
+            Self::Play => Some(crate::keybindings::CTX_PLAY),
+            Self::Analysis => Some(crate::keybindings::CTX_ANALYSIS),
+            Self::Study => Some(crate::keybindings::CTX_STUDY_EXERCISE),
             Self::Positions | Self::Library | Self::Players | Self::Extras => None,
         }
     }
@@ -320,158 +329,39 @@ impl FooterEngineStatus {
     }
 }
 
-/// Lazily mounted workspace slot view retained across workspace tab switches.
-pub struct WorkspaceSlotView {
-    workspace: WorkspaceId,
-    mount_generation: u64,
-    visit_count: usize,
-    active: bool,
-    note: SharedString,
-}
-
-impl WorkspaceSlotView {
-    pub fn new(workspace: WorkspaceId, mount_generation: u64) -> Self {
-        Self {
-            workspace,
-            mount_generation,
-            visit_count: 1,
-            active: true,
-            note: SharedString::default(),
-        }
-    }
-
-    pub fn workspace(&self) -> WorkspaceId {
-        self.workspace
-    }
-
-    pub fn mount_generation(&self) -> u64 {
-        self.mount_generation
-    }
-
-    pub fn visit_count(&self) -> usize {
-        self.visit_count
-    }
-
-    pub fn is_active(&self) -> bool {
-        self.active
-    }
-
-    pub fn set_active(&mut self, active: bool, cx: &mut Context<Self>) {
-        if active && !self.active {
-            self.visit_count += 1;
-        }
-        self.active = active;
-        cx.notify();
-    }
-
-    pub fn set_note(&mut self, note: impl Into<SharedString>, cx: &mut Context<Self>) {
-        self.note = note.into();
-        cx.notify();
-    }
-}
-
-impl Render for WorkspaceSlotView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let locale = current_locale(cx);
-        let p = NeonTheme::current_palette(cx);
-        let ws_label = self.workspace.localized_label(locale);
-        let subtitle = if self.note.is_empty() {
-            format!(
-                "{ws_label} (gen {}, visits: {})",
-                self.mount_generation, self.visit_count
-            )
-        } else {
-            self.note.to_string()
-        };
-
-        div()
-            .id(SharedString::from(format!(
-                "workspace-panel-{}",
-                self.workspace.id()
-            )))
-            .test_support()
-            .v_flex()
-            .flex_1()
-            .size_full()
-            .p(px(24.0))
-            .gap(px(16.0))
-            .when_some(self.workspace.key_context(), |this, ctx| {
-                this.key_context(ctx)
-            })
-            .child(
-                div()
-                    .h_flex()
-                    .items_center()
-                    .justify_between()
-                    .pb(px(12.0))
-                    .border_b_1()
-                    .border_color(p.border)
-                    .child(
-                        div()
-                            .h_flex()
-                            .items_center()
-                            .gap(px(10.0))
-                            .child(action_icon(self.workspace.icon(), 20.0, p.accent))
-                            .child(div().text_page().text_color(p.text).child(ws_label)),
-                    )
-                    .child(
-                        div()
-                            .text_meta()
-                            .tabular_nums()
-                            .text_color(p.muted)
-                            .child(format!(
-                                "{} · #{}",
-                                self.workspace.shortcut_label(),
-                                self.visit_count
-                            )),
-                    ),
-            )
-            .child(
-                EmptyState::new(
-                    SharedString::from(format!("workspace-empty-{}", self.workspace.id())),
-                    ws_label,
-                    subtitle,
-                )
-                .icon(self.workspace.icon())
-                .palette(p),
-            )
-    }
+/// Lifecycle metadata tracked per lazily mounted workspace entity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorkspaceMountMeta {
+    pub workspace: WorkspaceId,
+    pub entity_id: EntityId,
+    pub mount_generation: u64,
+    pub visit_count: usize,
+    pub active: bool,
 }
 
 #[derive(Default)]
-struct WorkspaceSlots {
-    play: Option<Entity<WorkspaceSlotView>>,
-    analysis: Option<Entity<WorkspaceSlotView>>,
-    study: Option<Entity<WorkspaceSlotView>>,
-    positions: Option<Entity<WorkspaceSlotView>>,
-    library: Option<Entity<WorkspaceSlotView>>,
-    players: Option<Entity<WorkspaceSlotView>>,
-    extras: Option<Entity<WorkspaceSlotView>>,
+struct WorkspaceEntities {
+    play: Option<Entity<PlayWorkspace>>,
+    analysis: Option<Entity<AnalysisWorkspace>>,
+    study: Option<Entity<StudyWorkspace>>,
+    positions: Option<Entity<PositionsWorkspace>>,
+    library: Option<Entity<LibraryWorkspace>>,
+    players: Option<Entity<PlayersWorkspace>>,
+    extras: Option<Entity<ExtrasWorkspace>>,
+    meta: [Option<WorkspaceMountMeta>; 7],
 }
 
-impl WorkspaceSlots {
-    fn get(&self, id: WorkspaceId) -> Option<&Entity<WorkspaceSlotView>> {
-        match id {
-            WorkspaceId::Play => self.play.as_ref(),
-            WorkspaceId::Analysis => self.analysis.as_ref(),
-            WorkspaceId::Study => self.study.as_ref(),
-            WorkspaceId::Positions => self.positions.as_ref(),
-            WorkspaceId::Library => self.library.as_ref(),
-            WorkspaceId::Players => self.players.as_ref(),
-            WorkspaceId::Extras => self.extras.as_ref(),
-        }
+impl WorkspaceEntities {
+    fn meta(&self, id: WorkspaceId) -> Option<WorkspaceMountMeta> {
+        self.meta[id.index()]
     }
 
-    fn slot_mut(&mut self, id: WorkspaceId) -> &mut Option<Entity<WorkspaceSlotView>> {
-        match id {
-            WorkspaceId::Play => &mut self.play,
-            WorkspaceId::Analysis => &mut self.analysis,
-            WorkspaceId::Study => &mut self.study,
-            WorkspaceId::Positions => &mut self.positions,
-            WorkspaceId::Library => &mut self.library,
-            WorkspaceId::Players => &mut self.players,
-            WorkspaceId::Extras => &mut self.extras,
-        }
+    fn is_mounted(&self, id: WorkspaceId) -> bool {
+        self.meta[id.index()].is_some()
+    }
+
+    fn mounted_count(&self) -> usize {
+        self.meta.iter().filter(|m| m.is_some()).count()
     }
 
     fn clear_all(&mut self) {
@@ -482,13 +372,79 @@ impl WorkspaceSlots {
         self.library = None;
         self.players = None;
         self.extras = None;
+        self.meta = [None; 7];
     }
 
-    fn mounted_count(&self) -> usize {
-        WorkspaceId::ALL
-            .iter()
-            .filter(|&&id| self.get(id).is_some())
-            .count()
+    fn set_visible(&mut self, id: WorkspaceId, visible: bool, cx: &mut App) {
+        if let Some(meta) = &mut self.meta[id.index()] {
+            if visible && !meta.active {
+                meta.visit_count += 1;
+            }
+            meta.active = visible;
+        }
+        match id {
+            WorkspaceId::Play => {
+                if let Some(ws) = &self.play {
+                    ws.update(cx, |w, cx| w.set_visible(visible, cx));
+                }
+            }
+            WorkspaceId::Analysis => {
+                if let Some(ws) = &self.analysis {
+                    ws.update(cx, |w, cx| w.set_visible(visible, cx));
+                }
+            }
+            WorkspaceId::Study => {
+                if let Some(ws) = &self.study {
+                    ws.update(cx, |w, cx| w.set_visible(visible, cx));
+                }
+            }
+            WorkspaceId::Positions => {
+                if let Some(ws) = &self.positions {
+                    ws.update(cx, |w, cx| w.set_visible(visible, cx));
+                }
+            }
+            WorkspaceId::Library => {
+                if let Some(ws) = &self.library {
+                    ws.update(cx, |w, cx| w.set_visible(visible, cx));
+                }
+            }
+            WorkspaceId::Players => {
+                if let Some(ws) = &self.players {
+                    ws.update(cx, |w, cx| w.set_visible(visible, cx));
+                }
+            }
+            WorkspaceId::Extras => {
+                if let Some(ws) = &self.extras {
+                    ws.update(cx, |w, cx| w.set_visible(visible, cx));
+                }
+            }
+        }
+    }
+
+    fn render_workspace(&self, id: WorkspaceId) -> Option<AnyElement> {
+        let inner = match id {
+            WorkspaceId::Play => self.play.clone().map(IntoElement::into_any_element),
+            WorkspaceId::Analysis => self.analysis.clone().map(IntoElement::into_any_element),
+            WorkspaceId::Study => self.study.clone().map(IntoElement::into_any_element),
+            WorkspaceId::Positions => self.positions.clone().map(IntoElement::into_any_element),
+            WorkspaceId::Library => self.library.clone().map(IntoElement::into_any_element),
+            WorkspaceId::Players => self.players.clone().map(IntoElement::into_any_element),
+            WorkspaceId::Extras => self.extras.clone().map(IntoElement::into_any_element),
+        }?;
+
+        Some(
+            div()
+                .id(SharedString::from(format!("workspace-panel-{}", id.id())))
+                .test_support()
+                .v_flex()
+                .flex_1()
+                .size_full()
+                .min_w(px(0.0))
+                .min_h(px(0.0))
+                .when_some(id.key_context(), |this, ctx| this.key_context(ctx))
+                .child(inner)
+                .into_any_element(),
+        )
     }
 }
 
@@ -503,7 +459,7 @@ pub struct AppShell {
     focus_handle: FocusHandle,
     version: VersionInfo,
     view: AppView,
-    slots: WorkspaceSlots,
+    workspaces: WorkspaceEntities,
     reset_generation: u64,
     notices: Vec<AppNotice>,
     benchmark_busy: bool,
@@ -540,7 +496,7 @@ impl AppShell {
             focus_handle,
             version: version_info(),
             view: AppView::Home,
-            slots: WorkspaceSlots::default(),
+            workspaces: WorkspaceEntities::default(),
             reset_generation: 0,
             notices: Vec::new(),
             benchmark_busy: false,
@@ -628,6 +584,9 @@ impl AppShell {
                                 } else {
                                     EngineHealth::Unavailable
                                 };
+                            }
+                            if let Some(lib) = shell.workspaces.library.clone() {
+                                lib.update(cx, |ws, cx| ws.refresh_on_library_mutated(cx));
                             }
                             shell.sync_menus(cx);
                         }
@@ -724,11 +683,47 @@ impl AppShell {
     }
 
     pub fn mounted_workspace_count(&self) -> usize {
-        self.slots.mounted_count()
+        self.workspaces.mounted_count()
     }
 
-    pub fn workspace_slot(&self, id: WorkspaceId) -> Option<Entity<WorkspaceSlotView>> {
-        self.slots.get(id).cloned()
+    pub fn workspace_mount_meta(&self, id: WorkspaceId) -> Option<WorkspaceMountMeta> {
+        self.workspaces.meta(id)
+    }
+
+    pub fn play_workspace(&self) -> Option<Entity<PlayWorkspace>> {
+        self.workspaces.play.clone()
+    }
+
+    pub fn analysis_workspace(&self) -> Option<Entity<AnalysisWorkspace>> {
+        self.workspaces.analysis.clone()
+    }
+
+    pub fn study_workspace(&self) -> Option<Entity<StudyWorkspace>> {
+        self.workspaces.study.clone()
+    }
+
+    pub fn positions_workspace(&self) -> Option<Entity<PositionsWorkspace>> {
+        self.workspaces.positions.clone()
+    }
+
+    pub fn library_workspace(&self) -> Option<Entity<LibraryWorkspace>> {
+        self.workspaces.library.clone()
+    }
+
+    pub fn players_workspace(&self) -> Option<Entity<PlayersWorkspace>> {
+        self.workspaces.players.clone()
+    }
+
+    pub fn extras_workspace(&self) -> Option<Entity<ExtrasWorkspace>> {
+        self.workspaces.extras.clone()
+    }
+
+    pub fn is_benchmark_busy(&self) -> bool {
+        self.benchmark_busy
+    }
+
+    pub fn has_open_match(&self) -> bool {
+        self.has_open_match
     }
 
     pub fn reset_generation(&self) -> u64 {
@@ -778,12 +773,216 @@ impl AppShell {
         cx.notify();
     }
 
-    /// Navigates to the Home landing screen while preserving all mounted workspace slots.
+    fn subscribe_workspace<W: EventEmitter<WorkspaceEvent> + 'static>(
+        entity: &Entity<W>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        cx.subscribe_in(
+            entity,
+            window,
+            |shell, _emitter, event: &WorkspaceEvent, window, cx| {
+                shell.handle_workspace_event(event.clone(), window, cx);
+            },
+        )
+        .detach();
+    }
+
+    fn ensure_workspace(
+        &mut self,
+        target: WorkspaceId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.workspaces.is_mounted(target) {
+            return;
+        }
+        let generation = self.reset_generation;
+        let entity_id = match target {
+            WorkspaceId::Play => {
+                let entity = cx.new(|cx| PlayWorkspace::new(window, cx));
+                Self::subscribe_workspace(&entity, window, cx);
+                let id = entity.entity_id();
+                self.workspaces.play = Some(entity);
+                id
+            }
+            WorkspaceId::Analysis => {
+                let entity = cx.new(|cx| AnalysisWorkspace::new(window, cx));
+                Self::subscribe_workspace(&entity, window, cx);
+                let id = entity.entity_id();
+                self.workspaces.analysis = Some(entity);
+                id
+            }
+            WorkspaceId::Study => {
+                let entity = cx.new(|cx| StudyWorkspace::new(window, cx));
+                Self::subscribe_workspace(&entity, window, cx);
+                let id = entity.entity_id();
+                self.workspaces.study = Some(entity);
+                id
+            }
+            WorkspaceId::Positions => {
+                let entity = cx.new(|cx| PositionsWorkspace::new(window, cx));
+                Self::subscribe_workspace(&entity, window, cx);
+                let id = entity.entity_id();
+                self.workspaces.positions = Some(entity);
+                id
+            }
+            WorkspaceId::Library => {
+                let entity = cx.new(|cx| LibraryWorkspace::new(window, cx));
+                Self::subscribe_workspace(&entity, window, cx);
+                let id = entity.entity_id();
+                self.workspaces.library = Some(entity);
+                id
+            }
+            WorkspaceId::Players => {
+                let entity = cx.new(|cx| PlayersWorkspace::new(window, cx));
+                Self::subscribe_workspace(&entity, window, cx);
+                let id = entity.entity_id();
+                self.workspaces.players = Some(entity);
+                id
+            }
+            WorkspaceId::Extras => {
+                let entity = cx.new(|cx| ExtrasWorkspace::new(window, cx));
+                Self::subscribe_workspace(&entity, window, cx);
+                let id = entity.entity_id();
+                self.workspaces.extras = Some(entity);
+                id
+            }
+        };
+        self.workspaces.meta[target.index()] = Some(WorkspaceMountMeta {
+            workspace: target,
+            entity_id,
+            mount_generation: generation,
+            visit_count: 1,
+            active: true,
+        });
+    }
+
+    /// Routes typed [`WorkspaceEvent`]s emitted by any mounted workspace.
+    pub fn handle_workspace_event(
+        &mut self,
+        event: WorkspaceEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        match event {
+            WorkspaceEvent::OpenMatchInAnalysis {
+                match_id,
+                game_no,
+                position_id,
+                decision_no,
+            } => {
+                self.has_open_match = true;
+                self.select_workspace(WorkspaceId::Analysis, window, cx);
+                if let Some(analysis) = self.workspaces.analysis.clone() {
+                    analysis.update(cx, |ws, cx| {
+                        ws.open_match(match_id, game_no, position_id, decision_no, window, cx);
+                    });
+                }
+            }
+            WorkspaceEvent::OpenPlaySession { session_id, resume } => {
+                self.select_workspace(WorkspaceId::Play, window, cx);
+                if let Some(play) = self.workspaces.play.clone() {
+                    play.update(cx, |ws, cx| {
+                        ws.open_session(session_id, resume, window, cx);
+                    });
+                }
+            }
+            WorkspaceEvent::SearchPositionInLibrary { position_id } => {
+                self.select_workspace(WorkspaceId::Library, window, cx);
+                if let Some(library) = self.workspaces.library.clone() {
+                    library.update(cx, |ws, cx| {
+                        ws.apply_position_search(position_id, cx);
+                    });
+                }
+            }
+            WorkspaceEvent::StartBulkAnalysis { match_ids } => {
+                self.select_workspace(WorkspaceId::Library, window, cx);
+                if let Some(library) = self.workspaces.library.clone() {
+                    library.update(cx, |ws, cx| {
+                        ws.start_bulk_analysis(match_ids, cx);
+                    });
+                }
+            }
+            WorkspaceEvent::OpenExtrasTool { tool } => {
+                self.select_workspace(WorkspaceId::Extras, window, cx);
+                if let Some(extras) = self.workspaces.extras.clone() {
+                    extras.update(cx, |ws, cx| {
+                        ws.select_tool(tool.as_ref(), cx);
+                    });
+                }
+            }
+            WorkspaceEvent::OpenSettings { category } => {
+                self.open_settings_modal_at(category, window, cx);
+            }
+            WorkspaceEvent::OpenStudyReport { match_id } => {
+                self.select_workspace(WorkspaceId::Study, window, cx);
+                if let Some(study) = self.workspaces.study.clone() {
+                    study.update(cx, |ws, cx| {
+                        ws.open_report_for_match(match_id, cx);
+                    });
+                }
+            }
+            WorkspaceEvent::LibraryMutated
+            | WorkspaceEvent::AnalysisJobChanged { .. }
+            | WorkspaceEvent::AnnotationSaved { .. } => {
+                if let Some(library) = self.workspaces.library.clone() {
+                    library.update(cx, |ws, cx| ws.refresh_on_library_mutated(cx));
+                }
+            }
+            WorkspaceEvent::PlaySwitchedToCompetition { match_id } => {
+                if let Some(analysis) = self.workspaces.analysis.clone() {
+                    analysis.update(cx, |ws, cx| ws.invalidate_match(match_id, cx));
+                }
+            }
+            WorkspaceEvent::TriggerAppReset { reason } => {
+                self.trigger_app_reset(reason, cx);
+            }
+            WorkspaceEvent::ShowNotice(notice) => {
+                self.push_notice(notice, cx);
+            }
+            WorkspaceEvent::SetBenchmarkBusy(busy) => {
+                self.set_benchmark_busy(busy, cx);
+            }
+        }
+    }
+
+    /// Prompts via native macOS file/folder picker and imports selected paths
+    /// directly through [`LibraryWorkspace`].
+    pub fn prompt_import_paths(
+        &mut self,
+        directories: bool,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.select_workspace(WorkspaceId::Library, window, cx);
+        let receiver = cx.prompt_for_paths(PathPromptOptions {
+            files: !directories,
+            directories,
+            multiple: true,
+            prompt: None,
+        });
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(Ok(Some(paths))) = receiver.await else {
+                return;
+            };
+            if paths.is_empty() {
+                return;
+            }
+            let _ = this.update_in(cx, |shell, window, cx| {
+                shell.select_workspace(WorkspaceId::Library, window, cx);
+                if let Some(library) = shell.workspaces.library.clone() {
+                    library.update(cx, |ws, cx| ws.import_paths(paths, cx));
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// Navigates to the Home landing screen while preserving all mounted workspaces.
     pub fn go_home(&mut self, cx: &mut Context<Self>) {
-        if let AppView::Workspace(prev) = self.view
-            && let Some(slot) = self.slots.get(prev).cloned()
-        {
-            slot.update(cx, |s, cx| s.set_active(false, cx));
+        if let AppView::Workspace(prev) = self.view {
+            self.workspaces.set_visible(prev, false, cx);
         }
         self.open_popover = None;
         self.view = AppView::Home;
@@ -791,26 +990,28 @@ impl AppShell {
         cx.notify();
     }
 
-    /// Navigates to a workspace, lazily creating its [`WorkspaceSlotView`] entity
-    /// on first visit and retaining it across subsequent switches.
-    pub fn select_workspace(&mut self, target: WorkspaceId, cx: &mut Context<Self>) {
+    /// Navigates to a workspace, lazily creating its entity on first visit
+    /// and retaining its state across subsequent tab switches.
+    pub fn select_workspace(
+        &mut self,
+        target: WorkspaceId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if let AppView::Workspace(prev) = self.view {
             if prev == target {
                 self.open_popover = None;
                 cx.notify();
                 return;
             }
-            if let Some(prev_slot) = self.slots.get(prev).cloned() {
-                prev_slot.update(cx, |s, cx| s.set_active(false, cx));
-            }
+            self.workspaces.set_visible(prev, false, cx);
         }
 
-        let generation = self.reset_generation;
-        if let Some(existing) = self.slots.get(target).cloned() {
-            existing.update(cx, |s, cx| s.set_active(true, cx));
+        let already_mounted = self.workspaces.is_mounted(target);
+        if already_mounted {
+            self.workspaces.set_visible(target, true, cx);
         } else {
-            let created = cx.new(|_| WorkspaceSlotView::new(target, generation));
-            *self.slots.slot_mut(target) = Some(created);
+            self.ensure_workspace(target, window, cx);
         }
 
         self.open_popover = None;
@@ -824,7 +1025,8 @@ impl AppShell {
     pub fn trigger_app_reset(&mut self, reason: impl Into<SharedString>, cx: &mut Context<Self>) {
         let reason = reason.into();
         self.reset_generation += 1;
-        self.slots.clear_all();
+        self.workspaces.clear_all();
+        self.has_open_match = false;
         self.notices.clear();
         self.open_popover = None;
         self.view = AppView::Home;
@@ -904,8 +1106,14 @@ impl AppShell {
         self.open_settings_modal_at(SettingsCategory::General, window, cx);
     }
 
-    /// Handles a dropped batch of match files on the Home screen.
-    pub fn handle_dropped_matches(&mut self, batch: DroppedMatchBatch, cx: &mut Context<Self>) {
+    /// Handles a dropped batch of match files on the Home screen by routing
+    /// accepted files straight into [`LibraryWorkspace::import_paths`].
+    pub fn handle_dropped_matches(
+        &mut self,
+        batch: DroppedMatchBatch,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         if batch.accepted.is_empty() {
             self.push_notice(
                 AppNotice {
@@ -925,7 +1133,12 @@ impl AppShell {
             return;
         }
         let count = batch.accepted.len();
-        self.last_dropped_files = batch.accepted;
+        let accepted = batch.accepted;
+        self.last_dropped_files = accepted.clone();
+        self.select_workspace(WorkspaceId::Library, window, cx);
+        if let Some(library) = self.workspaces.library.clone() {
+            library.update(cx, |ws, cx| ws.import_paths(accepted, cx));
+        }
         self.push_notice(
             AppNotice {
                 id: "drop-queued".into(),
@@ -1022,9 +1235,9 @@ impl AppShell {
             .active(active_ws_id)
             .density(TextNavDensity::Header)
             .palette(p)
-            .on_select(move |id, _window, cx| {
+            .on_select(move |id, window, cx| {
                 if let Some(ws) = WorkspaceId::from_id(id) {
-                    shell_for_nav.update(cx, |shell, cx| shell.select_workspace(ws, cx));
+                    shell_for_nav.update(cx, |shell, cx| shell.select_workspace(ws, window, cx));
                 }
             });
 
@@ -1322,9 +1535,9 @@ impl AppShell {
                                 div().v_flex().flex_1().min_w(px(0.0)).child(
                                     MatchDropZone::new("home-match-drop-zone")
                                         .palette(p)
-                                        .on_drop_batch(move |batch, _, cx| {
+                                        .on_drop_batch(move |batch, window, cx| {
                                             shell_drop.update(cx, |shell, cx| {
-                                                shell.handle_dropped_matches(batch, cx);
+                                                shell.handle_dropped_matches(batch, window, cx);
                                             });
                                         }),
                                 ),
@@ -1352,9 +1565,13 @@ impl AppShell {
                                             .shortcut("Cmd+1")
                                             .primary()
                                             .palette(p)
-                                            .on_click(move |_, _, cx| {
+                                            .on_click(move |_, window, cx| {
                                                 shell_play.update(cx, |s, cx| {
-                                                    s.select_workspace(WorkspaceId::Play, cx);
+                                                    s.select_workspace(
+                                                        WorkspaceId::Play,
+                                                        window,
+                                                        cx,
+                                                    );
                                                 });
                                             }),
                                     )
@@ -1364,9 +1581,13 @@ impl AppShell {
                                             .label(I18n::t(locale, "workspace", "analysis"))
                                             .shortcut("Cmd+2")
                                             .palette(p)
-                                            .on_click(move |_, _, cx| {
+                                            .on_click(move |_, window, cx| {
                                                 shell_analysis.update(cx, |s, cx| {
-                                                    s.select_workspace(WorkspaceId::Analysis, cx);
+                                                    s.select_workspace(
+                                                        WorkspaceId::Analysis,
+                                                        window,
+                                                        cx,
+                                                    );
                                                 });
                                             }),
                                     )
@@ -1376,9 +1597,13 @@ impl AppShell {
                                             .label(I18n::t(locale, "workspace", "cards"))
                                             .shortcut("Cmd+3")
                                             .palette(p)
-                                            .on_click(move |_, _, cx| {
+                                            .on_click(move |_, window, cx| {
                                                 shell_study.update(cx, |s, cx| {
-                                                    s.select_workspace(WorkspaceId::Study, cx);
+                                                    s.select_workspace(
+                                                        WorkspaceId::Study,
+                                                        window,
+                                                        cx,
+                                                    );
                                                 });
                                             }),
                                     )
@@ -1388,9 +1613,13 @@ impl AppShell {
                                             .label(I18n::t(locale, "workspace", "database"))
                                             .shortcut("Cmd+5")
                                             .palette(p)
-                                            .on_click(move |_, _, cx| {
+                                            .on_click(move |_, window, cx| {
                                                 shell_library.update(cx, |s, cx| {
-                                                    s.select_workspace(WorkspaceId::Library, cx);
+                                                    s.select_workspace(
+                                                        WorkspaceId::Library,
+                                                        window,
+                                                        cx,
+                                                    );
                                                 });
                                             }),
                                     )
@@ -1533,10 +1762,8 @@ impl Render for AppShell {
         let content = match self.view {
             AppView::Home => self.render_home(p, cx).into_any_element(),
             AppView::Workspace(id) => self
-                .slots
-                .get(id)
-                .cloned()
-                .map(|slot| slot.into_any_element())
+                .workspaces
+                .render_workspace(id)
                 .unwrap_or_else(|| div().into_any_element()),
         };
 
@@ -1550,26 +1777,30 @@ impl Render for AppShell {
             .bg(p.bg)
             .text_color(p.text)
             .on_action(cx.listener(|this, _: &GoHome, _, cx| this.go_home(cx)))
-            .on_action(cx.listener(|this, _: &SelectWorkspacePlay, _, cx| {
-                this.select_workspace(WorkspaceId::Play, cx);
+            .on_action(cx.listener(|this, _: &SelectWorkspacePlay, window, cx| {
+                this.select_workspace(WorkspaceId::Play, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &SelectWorkspaceAnalysis, _, cx| {
-                this.select_workspace(WorkspaceId::Analysis, cx);
+            .on_action(
+                cx.listener(|this, _: &SelectWorkspaceAnalysis, window, cx| {
+                    this.select_workspace(WorkspaceId::Analysis, window, cx);
+                }),
+            )
+            .on_action(cx.listener(|this, _: &SelectWorkspaceStudy, window, cx| {
+                this.select_workspace(WorkspaceId::Study, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &SelectWorkspaceStudy, _, cx| {
-                this.select_workspace(WorkspaceId::Study, cx);
+            .on_action(
+                cx.listener(|this, _: &SelectWorkspacePositions, window, cx| {
+                    this.select_workspace(WorkspaceId::Positions, window, cx);
+                }),
+            )
+            .on_action(cx.listener(|this, _: &SelectWorkspaceLibrary, window, cx| {
+                this.select_workspace(WorkspaceId::Library, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &SelectWorkspacePositions, _, cx| {
-                this.select_workspace(WorkspaceId::Positions, cx);
+            .on_action(cx.listener(|this, _: &SelectWorkspacePlayers, window, cx| {
+                this.select_workspace(WorkspaceId::Players, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &SelectWorkspaceLibrary, _, cx| {
-                this.select_workspace(WorkspaceId::Library, cx);
-            }))
-            .on_action(cx.listener(|this, _: &SelectWorkspacePlayers, _, cx| {
-                this.select_workspace(WorkspaceId::Players, cx);
-            }))
-            .on_action(cx.listener(|this, _: &SelectWorkspaceExtras, _, cx| {
-                this.select_workspace(WorkspaceId::Extras, cx);
+            .on_action(cx.listener(|this, _: &SelectWorkspaceExtras, window, cx| {
+                this.select_workspace(WorkspaceId::Extras, window, cx);
             }))
             .on_action(cx.listener(|this, _: &OpenSettings, window, cx| {
                 this.open_settings_modal(window, cx);
@@ -1577,8 +1808,14 @@ impl Render for AppShell {
             .on_action(cx.listener(|this, _: &OpenAbout, window, cx| {
                 this.open_about_modal(window, cx);
             }))
-            .on_action(cx.listener(|this, _: &OpenDatabaseBackup, _, cx| {
-                this.select_workspace(WorkspaceId::Extras, cx);
+            .on_action(cx.listener(|this, _: &OpenDatabaseBackup, window, cx| {
+                this.handle_workspace_event(
+                    WorkspaceEvent::OpenExtrasTool {
+                        tool: "backup".into(),
+                    },
+                    window,
+                    cx,
+                );
             }))
             .on_action(cx.listener(|this, _: &ManageProfiles, window, cx| {
                 this.open_settings_modal_at(SettingsCategory::Profiles, window, cx);
@@ -1586,14 +1823,17 @@ impl Render for AppShell {
             .on_action(cx.listener(|this, _: &ShowProfileChanges, window, cx| {
                 this.open_settings_modal_at(SettingsCategory::Profiles, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &ImportMatchFiles, _, cx| {
-                this.select_workspace(WorkspaceId::Library, cx);
+            .on_action(cx.listener(|this, _: &ImportMatchFiles, window, cx| {
+                this.prompt_import_paths(false, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &ImportMatchFolder, _, cx| {
-                this.select_workspace(WorkspaceId::Library, cx);
+            .on_action(cx.listener(|this, _: &ImportMatchFolder, window, cx| {
+                this.prompt_import_paths(true, window, cx);
             }))
-            .on_action(cx.listener(|this, _: &NewPlayMatch, _, cx| {
-                this.select_workspace(WorkspaceId::Play, cx);
+            .on_action(cx.listener(|this, _: &NewPlayMatch, window, cx| {
+                this.select_workspace(WorkspaceId::Play, window, cx);
+                if let Some(play) = this.workspaces.play.clone() {
+                    play.update(cx, |ws, cx| ws.open_new_match_setup(window, cx));
+                }
             }))
             .on_action(cx.listener(|this, _: &SetPaletteGraphite, window, cx| {
                 let mode = cx
