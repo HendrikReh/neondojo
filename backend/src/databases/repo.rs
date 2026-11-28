@@ -156,8 +156,14 @@ pub(crate) async fn library_analysis_statuses(
         .push_bind(match_ids)
         .push(")");
     if let Some(id) = changed_job {
-        query.push(" AND m.id=(SELECT match_uuid FROM jobs WHERE kind='match' AND game_no IS NULL AND id=")
-            .push_bind(id).push(")");
+        query
+            .push(
+                " AND m.id=(SELECT coalesce(j.match_uuid,p.match_uuid) FROM jobs j
+                   LEFT JOIN positions p ON p.id=j.position_uuid
+                   WHERE j.kind IN ('match','analysis') AND j.id=",
+            )
+            .push_bind(id)
+            .push(")");
     }
     Ok(query.build_query_as().fetch_all(pool).await?)
 }

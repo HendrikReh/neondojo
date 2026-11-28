@@ -110,6 +110,56 @@ async fn position_job(pool: &PgPool, position: Uuid, plies: i32) -> Job {
 }
 
 #[sqlx::test(migrations = "./migrations")]
+async fn library_job_notifications_resolve_game_and_position_analysis_to_the_visible_match(
+    pool: PgPool,
+) {
+    let (_, match_id, positions) = setup(&pool).await;
+    let facade = neondojo::facade::BackendFacade::new(api::AppState::new(
+        pool.clone(),
+        Engine::new("unused".into()),
+    ));
+    let visible = [match_id];
+    let other = [Uuid::new_v4()];
+    let position = position_job(&pool, positions[0], 1).await;
+    let game = match_job(
+        &pool,
+        match_id,
+        positions[0],
+        Some(1),
+        "GNU Backgammon",
+        2,
+        "completed",
+    )
+    .await;
+    for job in [position.id, game.id] {
+        assert_eq!(
+            facade
+                .library_analysis_statuses(&visible, Some(job))
+                .await
+                .unwrap(),
+            [(match_id, Some("partial".into()))]
+        );
+        assert!(
+            facade
+                .library_analysis_statuses(&other, Some(job))
+                .await
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let dice = store::create_job(&pool, positions[0], "dice", 1)
+        .await
+        .unwrap();
+    assert!(
+        facade
+            .library_analysis_statuses(&visible, Some(dice.id))
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[sqlx::test(migrations = "./migrations")]
 async fn deleting_a_saved_analysis_removes_only_that_result_and_clears_its_selection(pool: PgPool) {
     let (app, id, p) = setup(&pool).await;
     imported(&pool, id, p[0]).await;
