@@ -559,6 +559,7 @@ fn imported_and_native_comparison_retains_equities_depths_rank_paths_and_source_
         plies: Some(1),
     };
     result.analysis = Some(Analysis {
+        cube_enabled: None,
         engine: "GNUbg".into(),
         plies: 2,
         candidates: vec![
@@ -1021,6 +1022,7 @@ async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection
                 records: vec![],
                 decision: None,
                 analysis: Some(Analysis {
+                    cube_enabled: Some(true),
                     engine: "GNUbg".into(),
                     plies: 3,
                     candidates: vec![

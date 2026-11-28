@@ -12699,6 +12699,13 @@
               "$ref": "#/components/schemas/Candidate"
             }
           },
+          "cube_enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Actual checker evaluation mode, absent in older saved position jobs."
+          },
           "engine": {
             "type": "string"
           },

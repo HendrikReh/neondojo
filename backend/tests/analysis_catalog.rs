@@ -492,6 +492,7 @@ async fn cubeless_checker_results_use_the_job_and_game_checkpoint_provenance(poo
         assert_eq!(status, 200);
         assert!(!result.is_null());
         assert!(result["native_checker_equity_kind"].is_null());
+        assert_eq!(result["depth"], "1-ply");
     }
     sqlx::query("UPDATE jobs SET result=result || '{\"cube_enabled\": false}'::jsonb WHERE id=$1")
         .bind(position_job.id)
@@ -504,7 +505,7 @@ async fn cubeless_checker_results_use_the_job_and_game_checkpoint_provenance(poo
         let (status, result) = get(&app, &path(job)).await;
         assert_eq!(status, 200);
         assert_eq!(result["native_checker_equity_kind"], "cubeless");
-        assert_eq!(result["depth"], "1-ply");
+        assert_eq!(result["depth"], "1-ply cubeless");
     }
 }
 

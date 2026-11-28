@@ -198,7 +198,7 @@ for (const source of ['engine', 'file', 'book'] as const)
       (route) =>
         fulfillPositionAnalysisResult(route, {
           analysis_id: entry.id,
-          native_checker_equity_kind: source === 'file' ? null : 'cubeful',
+          native_checker_equity_kind: source === 'file' ? null : 'cubeless',
           position_id: positionId,
           engine: entry.engine,
           depth: entry.depth,
@@ -244,14 +244,15 @@ for (const source of ['engine', 'file', 'book'] as const)
     await expect(
       page.getByLabel('Displayed analysis', { exact: true }),
     ).toHaveValue(entry.id);
+    const candidateTab = page.getByRole('tabpanel', {
+      name: 'Candidate moves',
+    });
     if (source === 'book')
-      await page.locator('.analysis-book-reference > summary').click();
+      await candidateTab.locator('.analysis-book-reference > summary').click();
     const panel =
       source === 'book'
-        ? page.locator('.analysis-book-reference .source-analysis')
-        : source === 'file'
-          ? page.locator('.analysis-panel > .source-analysis')
-          : page.locator('.analysis-panel > .candidate-comparison');
+        ? candidateTab.locator('.analysis-book-reference')
+        : candidateTab;
     const rows = panel.locator('.candidates tbody tr');
     await expect(rows).toHaveCount(2);
     await expect(
@@ -274,7 +275,9 @@ for (const source of ['engine', 'file', 'book'] as const)
       rows.last().locator('td[data-outcome="total"] [data-probability="win"]'),
     ).toHaveText('52.0%');
     await expect(panel.locator('.candidate-metadata')).toContainText(
-      source === 'book' ? 'Normalized cubeful' : 'Cubeful',
+      { book: 'Normalized cubeful', file: 'Cubeful', engine: 'Cubeless' }[
+        source
+      ],
     );
     await expect(panel.locator('.candidate-metadata')).toContainText('Player');
     await expect(

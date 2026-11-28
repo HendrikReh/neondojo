@@ -127,7 +127,6 @@ pub(crate) async fn load_position_result(
             let Some(data) = job.result else {
                 return Ok(None);
             };
-            let stored_rule = data["cube_enabled"].as_bool();
             let Some(analysis) = serde_json::from_value::<Analysis>(data)
                 .ok()
                 .filter(|a| !a.candidates.is_empty())
@@ -144,7 +143,7 @@ pub(crate) async fn load_position_result(
                     })
             };
             response.native_checker_equity_kind = NativeCheckerEquityKind::from_rules(
-                stored_rule.or_else(engine_rule),
+                analysis.cube_enabled.or_else(engine_rule),
                 position.cube_enabled,
                 NativeCheckerEquityKind::Cubeful,
             );
@@ -183,6 +182,14 @@ pub(crate) async fn load_position_result(
                 NativeCheckerEquityKind::NormalizedCubeful,
             );
         }
+    }
+    if let (Some(depth), Some(unit)) = (&mut response.depth, response.native_checker_equity_kind) {
+        depth.push_str(match unit {
+            NativeCheckerEquityKind::Cubeless => " cubeless",
+            NativeCheckerEquityKind::Cubeful | NativeCheckerEquityKind::NormalizedCubeful => {
+                " cubeful"
+            }
+        });
     }
     tx.commit().await.map_err(anyhow::Error::from)?;
     Ok(Some(response))

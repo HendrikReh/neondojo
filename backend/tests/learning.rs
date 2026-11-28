@@ -1890,6 +1890,9 @@ async fn nocube_statistics_and_cards_follow_source_rules(pool: PgPool) {
         let (status, saved) = call(app.clone(), "GET", &path, Value::Null).await;
         assert_eq!(status, 200, "{saved}");
         assert_eq!(saved["native_checker_equity_kind"], "cubeless", "{saved}");
+        if job_id == position_job.id {
+            assert_eq!(saved["analysis"]["cube_enabled"], false, "{saved}");
+        }
     }
 
     for player in game["summary"]["players"].as_array().unwrap() {

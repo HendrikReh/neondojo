@@ -539,6 +539,7 @@ impl SageEngine {
         Ok(Analysis {
             engine: self.version.clone(),
             plies,
+            cube_enabled: Some(!self.snapshot.cubeless),
             candidates: self.ranked_candidates(candidates),
         })
     }
@@ -584,6 +585,7 @@ impl SageEngine {
                     analyses.push(Analysis {
                         engine: self.version.clone(),
                         plies,
+                        cube_enabled: Some(!self.snapshot.cubeless),
                         candidates: self.ranked_candidates(candidates),
                     });
                     evaluated(analyses.len()).await?;

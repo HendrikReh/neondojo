@@ -2816,6 +2816,8 @@ export interface components {
         };
         Analysis: {
             candidates: components["schemas"]["Candidate"][];
+            /** @description Actual checker evaluation mode, absent in older saved position jobs. */
+            cube_enabled?: boolean | null;
             engine: string;
             /** Format: int32 */
             plies: number;

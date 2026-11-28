@@ -134,6 +134,9 @@ pub struct Candidate {
 pub struct Analysis {
     pub engine: String,
     pub plies: i32,
+    /// Actual checker evaluation mode, absent in older saved position jobs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cube_enabled: Option<bool>,
     pub candidates: Vec<Candidate>,
 }
 
@@ -581,6 +584,7 @@ impl Engine {
         Ok(Analysis {
             engine,
             plies,
+            cube_enabled: Some(!self.cubeless_checker),
             candidates,
         })
     }
@@ -702,6 +706,7 @@ impl Engine {
             analyses[index] = Some(Analysis {
                 engine: engine.clone(),
                 plies,
+                cube_enabled: Some(!self.cubeless_checker),
                 candidates,
             });
         }
@@ -740,6 +745,7 @@ impl Engine {
         )
         .await?;
         Ok(Analysis {
+            cube_enabled: Some(!self.cubeless_checker),
             engine: output
                 .lines()
                 .find(|line| line.starts_with("GNU Backgammon "))
