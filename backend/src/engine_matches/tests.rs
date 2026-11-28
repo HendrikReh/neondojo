@@ -657,6 +657,80 @@ async fn cubeless_money_series_stores_blocks_and_points_per_game(pool: sqlx::PgP
     assert_eq!(body["configuration"]["block_games"], 4);
     assert_eq!(body["configuration"]["match_length"], 0);
     let id = body["id"].as_str().unwrap().to_owned();
+    let run_id = Uuid::parse_str(&id).unwrap();
+    let running = super::runner::run_one(&pool);
+    tokio::pin!(running);
+    tokio::select! {
+        result = &mut running => panic!("Duel ended before its second game could be saved: {result:?}"),
+        stopped = tokio::time::timeout(std::time::Duration::from_secs(20), async {
+            loop {
+                let last: Option<i32> = sqlx::query_scalar("SELECT max(game_number) FROM engine_match_game_checkpoints WHERE run_id=$1 AND unit_index=0")
+                    .bind(run_id).fetch_one(&pool).await.unwrap();
+                if last.is_some_and(|game| game >= 2) { break; }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            let cancel = Request::post(format!("/api/engine-matches/{id}/cancel")).body(Body::empty()).unwrap();
+            read_json(router.clone().oneshot(cancel).await.unwrap()).await
+        }) => {
+            let stopped = stopped.unwrap();
+            assert_eq!(stopped["status"], "cancelled");
+            assert_eq!(stopped["completed_matches"], 0);
+        }
+    }
+    assert!(running.await.unwrap());
+    let saved_games: Vec<i32> = sqlx::query_scalar("SELECT game_number FROM engine_match_game_checkpoints WHERE run_id=$1 ORDER BY game_number")
+        .bind(run_id).fetch_all(&pool).await.unwrap();
+    assert!(saved_games.starts_with(&[1, 2]), "{saved_games:?}");
+    let last_saved = *saved_games.last().unwrap();
+    let details_path = format!("/api/engine-matches/{id}");
+    let get = |path: &str| Request::get(path).body(Body::empty()).unwrap();
+    let paused = read_json(router.clone().oneshot(get(&details_path)).await.unwrap()).await;
+    assert_eq!(paused["series"]["saved_games_in_unit"], last_saved);
+    let prefix: i32 = sqlx::query_scalar("SELECT sgf_prefix_bytes FROM engine_match_game_checkpoints WHERE run_id=$1 AND unit_index=0 AND game_number=2")
+        .bind(run_id).fetch_one(&pool).await.unwrap();
+    assert!(
+        prefix > 0,
+        "GNUbg's second game should reuse the SGF prefix"
+    );
+
+    // Exercise removal on an independent series with the identical played games.
+    let removed = Uuid::new_v4();
+    sqlx::query("INSERT INTO engine_match_runs(id,configuration,engines,dice_version,status,total_matches)
+        SELECT $2,configuration,engines,dice_version,'cancelled',total_matches FROM engine_match_runs WHERE id=$1")
+        .bind(run_id).bind(removed).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO engine_match_game_checkpoints(run_id,unit_index,game_number,sgf_prefix_bytes,sgf_suffix,state)
+        SELECT $2,unit_index,game_number,sgf_prefix_bytes,sgf_suffix,state FROM engine_match_game_checkpoints WHERE run_id=$1")
+        .bind(run_id).bind(removed).execute(&pool).await.unwrap();
+    let remove = |id| {
+        Request::delete(format!("/api/engine-matches/{id}"))
+            .body(Body::empty())
+            .unwrap()
+    };
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(remove(removed))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(get(&format!("/api/engine-matches/{removed}")))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    let resume = Request::post(format!("/api/engine-matches/{id}/resume"))
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        router.clone().oneshot(resume).await.unwrap().status(),
+        StatusCode::OK
+    );
     while super::runner::run_one(&pool).await.unwrap() {}
     let detail = Request::get(format!("/api/engine-matches/{id}"))
         .body(Body::empty())
@@ -673,17 +747,24 @@ async fn cubeless_money_series_stores_blocks_and_points_per_game(pool: sqlx::PgP
         8
     );
     assert_eq!(body["matches"][0]["games"], 4);
-    let library = Request::get(format!(
+    let checkpoints: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM engine_match_game_checkpoints WHERE run_id=$1")
+            .bind(run_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(checkpoints, 0);
+    let library_path = format!(
         "/api/library/matches?database_id={}",
         super::ENGINE_DUELS_DATABASE_ID
-    ))
-    .body(Body::empty())
-    .unwrap();
-    let library = read_json(router.clone().oneshot(library).await.unwrap()).await;
+    );
+    let library = read_json(router.clone().oneshot(get(&library_path)).await.unwrap()).await;
     let archived = library["items"].as_array().unwrap();
-    assert_eq!(archived.len(), 2, "{library}");
+    assert_eq!(archived.len(), 3, "{library}");
     for entry in archived {
-        assert_eq!(entry["game_count"], 4, "{entry}");
+        let checkpoint_archive = entry["filename"] == super::runner::archive_filename(removed, 0);
+        let games = if checkpoint_archive { last_saved } else { 4 };
+        assert_eq!(entry["game_count"], games, "{entry}");
         // A money session has no final match result.
         assert_eq!(entry["result_state"], "unknown", "{entry}");
         assert_eq!(entry["match_length"], 0, "{entry}");
@@ -691,11 +772,100 @@ async fn cubeless_money_series_stores_blocks_and_points_per_game(pool: sqlx::PgP
     let sgf: String = sqlx::query_scalar(
         "SELECT sgf FROM engine_match_results WHERE run_id=$1 AND match_index=0",
     )
-    .bind(Uuid::parse_str(&id).unwrap())
+    .bind(run_id)
     .fetch_one(&pool)
     .await
     .unwrap();
     assert!(sgf.contains("EV[Duel GNUbg 1-ply vs. GNUbg 1-ply (money, cubeless)]"));
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(remove(run_id))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    let after_delete = read_json(router.oneshot(get(&library_path)).await.unwrap()).await;
+    assert_eq!(after_delete["items"], library["items"]);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn resume_requeues_the_same_series_and_preserves_committed_results(pool: sqlx::PgPool) {
+    let router = crate::api::router(crate::api::AppState::new(
+        pool.clone(),
+        Engine::new("gnubg".into()),
+    ));
+    let id = Uuid::new_v4();
+    let seed = Uuid::new_v4();
+    let side = serde_json::json!({"engine_id": "gnubg", "plies": 1});
+    let config = serde_json::json!({
+        "a": side, "b": side, "match_length": 1, "count": 1, "mode": "paired", "seed": seed,
+    });
+    let snapshot = serde_json::json!({"engine_id": "gnubg", "gnubg_path": "/test/gnubg"});
+    let engines = serde_json::json!({"a": snapshot, "b": snapshot, "rules_version": "test"});
+    sqlx::query(
+        "INSERT INTO engine_match_runs(id,configuration,engines,dice_version,status,total_matches,completed_matches,attempts,error)
+         VALUES($1,$2,$3,$4,'cancelled',2,1,3,'Interrupted by database restore')",
+    )
+    .bind(id).bind(config).bind(engines).bind(dice::VERSION).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO engine_match_results(run_id,match_index,seed,score_a,score_b,games,sgf) VALUES($1,0,$2,1,0,1,'saved result')")
+        .bind(id).bind(seed).execute(&pool).await.unwrap();
+
+    let get_details = || {
+        router.clone().oneshot(
+            Request::get(format!("/api/engine-matches/{id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+    };
+    let before = read_json(get_details().await.unwrap()).await;
+    assert_eq!(before["series"]["status"], "cancelled");
+    let resume = |id| {
+        router.clone().oneshot(
+            Request::post(format!("/api/engine-matches/{id}/resume"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+    };
+    let (first, second) = tokio::join!(resume(id), resume(id));
+    let (first, second) = (first.unwrap(), second.unwrap());
+    let (successful, duplicate) = if first.status() == StatusCode::OK {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    assert_eq!(successful.status(), StatusCode::OK);
+    assert_eq!(duplicate.status(), StatusCode::CONFLICT);
+    let resumed = read_json(successful).await;
+    assert_eq!(resumed["status"], "queued");
+    assert!(resumed["error"].is_null());
+    for field in [
+        "id",
+        "created_at",
+        "configuration",
+        "engines",
+        "dice_version",
+        "completed_matches",
+        "total_matches",
+    ] {
+        assert_eq!(resumed[field], before["series"][field], "{field}");
+    }
+    let after = read_json(get_details().await.unwrap()).await;
+    assert_eq!(after["matches"], before["matches"]);
+    assert_eq!(after["statistics"], before["statistics"]);
+    assert_eq!(
+        sqlx::query_scalar::<_, i32>("SELECT attempts FROM engine_match_runs WHERE id=$1")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        resume(Uuid::new_v4()).await.unwrap().status(),
+        StatusCode::NOT_FOUND
+    );
 }
 
 #[sqlx::test(migrations = "./migrations")]

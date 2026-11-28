@@ -105,11 +105,25 @@
 
 .engine-match-progress progress {
   accent-color: var(--ui-accent);
+  background: var(--ui-border);
   width: min(240px, 100%);
 }
 
-.engine-match-progress button:last-child {
+.engine-match-progress progress::-webkit-progress-bar {
+  background: var(--ui-border);
+}
+
+.engine-match-progress button:last-of-type {
   margin-inline-start: auto;
+}
+
+.engine-match-live-progress {
+  display: flex;
+  flex: 0 0 100%;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  font-size: var(--font-size-meta);
+  font-variant-numeric: tabular-nums;
 }
 
 .engine-match-archive button,

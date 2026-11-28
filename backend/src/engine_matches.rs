@@ -1,5 +1,7 @@
 //! Persisted head-to-head series, with a versioned dice schedule per match or pair.
+mod checkpoint;
 mod dice;
+mod progress;
 mod routes;
 mod runner;
 mod stats;
@@ -130,6 +132,9 @@ struct Series {
     status: String,
     total_matches: i32,
     completed_matches: i32,
+    /// Saved games in the unfinished match or block of an aborted series.
+    #[sqlx(default)]
+    pub saved_games_in_unit: Option<i32>,
     error: Option<String>,
     created_at: DateTime<Utc>,
 }
@@ -173,6 +178,7 @@ impl MatchCost {
 #[derive(Serialize, ToSchema)]
 struct SeriesDetails {
     series: Series,
+    live_progress: Option<progress::LiveProgress>,
     statistics: SeriesStatistics,
     matches: Vec<MatchResult>,
     next_offset: Option<i32>,

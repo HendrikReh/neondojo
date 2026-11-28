@@ -652,6 +652,9 @@ Engine duels let two engines play each other many times so you can compare their
 
 - **New series**: choose the engine and depth for each side, the format, the match length (1 to 25 points) and the number of matches or pairs, up to 1,000. **Money games without cube** plays blocks of cubeless money games instead.
 - **Paired with sides swapped** (default) plays every set of dice twice, with the engines on opposite sides. This reduces the luck factor considerably.
+- While a series runs, the results show the current match or block, the game within it, the current A–B score, and an estimated remaining time once enough play has been measured.
+- **Resume series** starts at the next game after the last saved game. Hover over a cancelled series to see its configuration and saved progress.
+- **Delete series** removes the series from the history. Played games stay in the Match database, including saved games in a partial block.
 - Results show each side's **match win rate**, the matches won, the **CPU time per move**, and a **95 % confidence interval** once the sample is large enough. The interval tells you whether the result could still be 50 %.
 - Each completed match is saved in **Match database → Engine Duels** and can be downloaded as SGF. **Analysis** in a result row opens the match directly in the Analysis workspace. **Repeat series …** runs the same settings and seed again.
 

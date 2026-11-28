@@ -28,6 +28,12 @@ export const cancelSeries = (id: string) =>
   request<Series>(`${path}/${encodeURIComponent(id)}/cancel`, {
     method: 'POST',
   });
+export const resumeSeries = (id: string) =>
+  request<Series>(`${path}/${encodeURIComponent(id)}/resume`, {
+    method: 'POST',
+  });
+export const deleteSeries = (id: string) =>
+  request<void>(`${path}/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const seriesSgf = (id: string, index: number) =>
   `/api${path}/${encodeURIComponent(id)}/matches/${index}/sgf`;
 /** Library entry of a played match or block; restored under Engine Duels if deleted. */

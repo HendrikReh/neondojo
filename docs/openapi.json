@@ -3873,6 +3873,49 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Engine matches"
+        ],
+        "summary": "Remove a stopped series. Played games stay in the match database.",
+        "operationId": "remove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": ""
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/engine-matches/{id}/cancel": {
@@ -4006,6 +4049,58 @@
             }
           },
           "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/engine-matches/{id}/resume": {
+      "post": {
+        "tags": [
+          "Engine matches"
+        ],
+        "summary": "Queue a cancelled series from its last committed match or money block.",
+        "operationId": "resume",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Series"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
             "description": "",
             "content": {
               "application/json": {
@@ -18919,6 +19014,49 @@
           }
         ]
       },
+      "LiveProgress": {
+        "type": "object",
+        "description": "The current unit's provisional score, in series A/B order.",
+        "required": [
+          "unit_number",
+          "game_number",
+          "completed_games",
+          "score_a",
+          "score_b"
+        ],
+        "properties": {
+          "completed_games": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "estimated_remaining_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "A wall-clock estimate from the current worker attempt, once it has samples."
+          },
+          "game_number": {
+            "type": "integer",
+            "format": "int32",
+            "description": "One-based game within the unit."
+          },
+          "score_a": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "score_b": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "unit_number": {
+            "type": "integer",
+            "format": "int32",
+            "description": "One-based index of the match or money block, counting both legs."
+          }
+        }
+      },
       "LossDirection": {
         "type": "string",
         "enum": [
@@ -23520,6 +23658,14 @@
             "type": "string",
             "format": "uuid"
           },
+          "saved_games_in_unit": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Saved games in the unfinished match or block of an aborted series."
+          },
           "status": {
             "type": "string"
           },
@@ -23583,6 +23729,16 @@
           "matches"
         ],
         "properties": {
+          "live_progress": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/LiveProgress"
+              }
+            ]
+          },
           "matches": {
             "type": "array",
             "items": {
