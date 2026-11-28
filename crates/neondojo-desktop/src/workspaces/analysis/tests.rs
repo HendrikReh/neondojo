@@ -844,6 +844,72 @@ fn init_headless_test_env(cx: &mut TestAppContext) {
 }
 
 #[gpui_kit::test]
+async fn catalog_pages_follow_checker_navigation_and_reject_stale_continuations(
+    cx: &mut TestAppContext,
+) {
+    use neondojo::analysis_catalog::AnalysisCatalogPage;
+    init_headless_test_env(cx);
+    let (window, workspace) = cx
+        .update(|cx| {
+            gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+                cx.new(|cx| AnalysisWorkspace::new(window, cx))
+            })
+        })
+        .unwrap();
+    let match_id = Uuid::new_v4();
+    let first = sample_position(match_id, 1, 1);
+    let second = sample_position(match_id, 1, 2);
+    let page = |id: &str, cursor: Option<&str>| AnalysisCatalogPage {
+        match_id,
+        source_revision: 1,
+        items: vec![AnalysisCatalogEntry {
+            id: id.into(),
+            source: "imported".into(),
+            scope: "match".into(),
+            engine: "XG".into(),
+            depth: None,
+            game_no: None,
+            position_id: None,
+            created_at: Utc::now(),
+            status: "completed".into(),
+            complete: true,
+            checker_count: 1,
+            cube_count: 0,
+            job: None,
+        }],
+        selected: None,
+        selected_id: Some("job:chosen".into()),
+        next_cursor: cursor.map(str::to_owned),
+    };
+    cx.update_window(window, |_, window, cx| {
+        workspace.update(cx, |ws, cx| {
+            ws.match_id = Some(match_id);
+            ws.positions = vec![first.clone(), second.clone()];
+            ws.select_checker_position(first.id, window, cx);
+            let (epoch, query) = ws.begin_catalog_read(None);
+            assert_eq!(query.position_id, Some(first.id));
+            assert!(ws.apply_catalog_page(epoch, page("xg", Some("first-next")), false));
+            assert_eq!(ws.effective_compare_ids(&first)[0].as_deref(), Some("xg"));
+            let (continuation, query) = ws.begin_catalog_read(ws.catalog_next_cursor.clone());
+            assert_eq!(query.position_id, Some(first.id));
+            assert_eq!(query.cursor.as_deref(), Some("first-next"));
+
+            ws.select_checker_position(second.id, window, cx);
+            assert!(ws.catalog_items.is_empty());
+            assert!(ws.catalog_next_cursor.is_none());
+            assert_eq!(ws.catalog_selected_id.as_deref(), Some("job:chosen"));
+            let (second_read, query) = ws.begin_catalog_read(None);
+            assert_eq!(query.position_id, Some(second.id));
+            ws.select_checker_position(first.id, window, cx);
+            assert!(!ws.apply_catalog_page(continuation, page("late append", None), true));
+            assert!(!ws.apply_catalog_page(second_read, page("late head", None), false));
+            assert!(ws.catalog_items.is_empty());
+        });
+    })
+    .unwrap();
+}
+
+#[gpui_kit::test]
 async fn headless_renders_welcome_drop_then_full_three_pane_tabs_dice_projection_notes_and_invalidation(
     cx: &mut TestAppContext,
 ) {

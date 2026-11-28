@@ -69,7 +69,9 @@ use gpui_kit::{
     div, px,
 };
 use neondojo::{
-    analysis_catalog::{AnalysisCatalogEntry, AnalysisCatalogQuery, SelectedPositionAnalysis},
+    analysis_catalog::{
+        AnalysisCatalogEntry, AnalysisCatalogPage, AnalysisCatalogQuery, SelectedPositionAnalysis,
+    },
     analysis_statistics::catalog::{CatalogStatisticsQuery, MatchAnalysisStatistics},
     annotations::{AnnotationKind, AnnotationUpdate},
     api::{MatchAnalysisEngine, PositionJobKind, PositionQuery},
@@ -150,6 +152,7 @@ pub struct AnalysisWorkspace {
     pub(crate) catalog_source_revision: i64,
     pub(crate) catalog_next_cursor: Option<String>,
     pub(crate) catalog_loading: bool,
+    catalog_epoch: u64,
 
     // Overview / Checker sub-tabs
     pub(crate) checker_subtab: CheckerSubTab,
@@ -322,6 +325,7 @@ impl AnalysisWorkspace {
             catalog_source_revision: 0,
             catalog_next_cursor: None,
             catalog_loading: false,
+            catalog_epoch: 0,
             checker_subtab: CheckerSubTab::Candidates,
             position_result: None,
             position_result_loading: false,
@@ -453,6 +457,7 @@ impl AnalysisWorkspace {
             self.catalog_selected = None;
             self.catalog_selected_id = None;
             self.catalog_next_cursor = None;
+            self.catalog_loading = false;
             self.position_result = None;
             self.opening_book = None;
             self.compare_slots = [Vec::new(), Vec::new(), Vec::new()];
@@ -772,6 +777,7 @@ impl AnalysisWorkspace {
             return;
         };
         let epoch = self.match_epoch;
+        let (catalog_epoch, catalog_query) = self.begin_catalog_read(None);
         let read = TokioBridge::spawn_read(cx, async move {
             run_facade(move || async move {
                 let summary = facade.get_match(match_id).await?;
@@ -782,14 +788,7 @@ impl AnalysisWorkspace {
                     .await
                     .unwrap_or_default();
                 let catalog = facade
-                    .list_analysis_catalog(
-                        match_id,
-                        AnalysisCatalogQuery {
-                            limit: Some(50),
-                            cursor: None,
-                            position_id: None,
-                        },
-                    )
+                    .list_analysis_catalog(match_id, catalog_query)
                     .await
                     .ok();
                 let decks = facade.list_decks().await.unwrap_or_default();
@@ -818,11 +817,7 @@ impl AnalysisWorkspace {
                     ws.selected_deck_id = ws.decks.first().map(|d| d.id);
                 }
                 if let Some(cat) = catalog {
-                    ws.catalog_items = cat.items;
-                    ws.catalog_selected = cat.selected;
-                    ws.catalog_selected_id = cat.selected_id;
-                    ws.catalog_source_revision = cat.source_revision;
-                    ws.catalog_next_cursor = cat.next_cursor;
+                    ws.apply_catalog_page(catalog_epoch, cat, false);
                 }
                 if retained && !ws.active_tab.available_when_retained() {
                     ws.active_tab = AnalysisDetailTab::Overview;
@@ -1030,7 +1025,7 @@ impl AnalysisWorkspace {
                     {
                         ws.select_cube_decision(cube_id, cube_dno, None, window, cx);
                     } else {
-                        ws.active_target = None;
+                        ws.set_board_target(None, window, cx);
                         ws.sync_board(cx);
                     }
                 }
@@ -1049,7 +1044,7 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.active_target = Some(ActiveBoardTarget::Checker { position_id });
+        self.set_board_target(Some(ActiveBoardTarget::Checker { position_id }), window, cx);
         self.preview.reset();
         self.selected_dice_cell = None;
         self.copied_feedback = false;
@@ -1074,11 +1069,12 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        self.active_target = Some(ActiveBoardTarget::Cube {
+        let target = ActiveBoardTarget::Cube {
             review_id,
             decision_no,
             return_position_id: return_position_id.or_else(|| self.active_checker_position_id()),
-        });
+        };
+        self.set_board_target(Some(target), window, cx);
         self.preview.reset();
         self.sync_board(cx);
         if self.active_tab == AnalysisDetailTab::Notes {
@@ -1099,9 +1095,27 @@ impl AnalysisWorkspace {
         self.cube_filter.reset();
         self.cube_filter.game_no = Some(game_no);
         self.active_tab = AnalysisDetailTab::Cube;
-        self.active_target = None;
+        self.set_board_target(None, window, cx);
         self.preview.reset();
         self.load_cube_page(match_id, Some(decision_no), window, cx);
+    }
+
+    fn set_board_target(
+        &mut self,
+        target: Option<ActiveBoardTarget>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let previous_position = self.active_checker_position_id();
+        self.active_target = target;
+        if previous_position != self.active_checker_position_id() {
+            // The selection belongs to the match. Only entries and the cursor are position-scoped.
+            self.catalog_items.clear();
+            self.catalog_next_cursor = None;
+            if let Some(match_id) = self.match_id {
+                self.refresh_catalog(match_id, None, window, cx);
+            }
+        }
     }
 
     fn effective_compare_ids(&self, pos: &Position) -> [Option<String>; 3] {
@@ -1239,6 +1253,35 @@ impl AnalysisWorkspace {
         .detach();
     }
 
+    fn begin_catalog_read(&mut self, cursor: Option<String>) -> (u64, AnalysisCatalogQuery) {
+        self.catalog_epoch = self.catalog_epoch.wrapping_add(1);
+        (
+            self.catalog_epoch,
+            AnalysisCatalogQuery {
+                limit: Some(50),
+                cursor,
+                position_id: self.active_checker_position_id(),
+            },
+        )
+    }
+
+    fn apply_catalog_page(&mut self, epoch: u64, page: AnalysisCatalogPage, append: bool) -> bool {
+        if self.catalog_epoch != epoch || self.match_id != Some(page.match_id) {
+            return false;
+        }
+        if append {
+            self.catalog_items.extend(page.items);
+        } else {
+            self.catalog_items = page.items;
+        }
+        self.catalog_selected = page.selected;
+        self.catalog_selected_id = page.selected_id;
+        self.catalog_source_revision = page.source_revision;
+        self.catalog_next_cursor = page.next_cursor;
+        self.catalog_loading = false;
+        true
+    }
+
     fn refresh_catalog(
         &mut self,
         match_id: Uuid,
@@ -1246,61 +1289,46 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        let append = cursor.is_some();
+        let (epoch, query) = self.begin_catalog_read(cursor);
         let Some(facade) = cx
             .try_global::<DesktopAppContext>()
             .and_then(|ctx| ctx.facade())
         else {
             return;
         };
-        let append = cursor.is_some();
         self.catalog_loading = true;
         let read = TokioBridge::spawn_read(cx, async move {
-            run_facade(move || async move {
-                facade
-                    .list_analysis_catalog(
-                        match_id,
-                        AnalysisCatalogQuery {
-                            limit: Some(50),
-                            cursor,
-                            position_id: None,
-                        },
-                    )
-                    .await
-            })
-            .await
+            run_facade(move || async move { facade.list_analysis_catalog(match_id, query).await })
+                .await
         });
 
         cx.spawn_in(window, async move |this, cx| {
             let Ok(Ok(page)) = read.await else {
                 let _ = this.update(cx, |ws, cx| {
-                    ws.catalog_loading = false;
-                    cx.notify();
+                    if ws.match_id == Some(match_id) && ws.catalog_epoch == epoch {
+                        ws.catalog_loading = false;
+                        cx.notify();
+                    }
                 });
                 return;
             };
             let _ = this.update_in(cx, |ws, window, cx| {
-                ws.catalog_loading = false;
-                if ws.match_id != Some(match_id) {
-                    return;
-                }
                 let previous = ws
                     .active_position()
                     .map(|pos| ws.effective_compare_ids(pos));
                 let previous_revision = ws.catalog_source_revision;
-                if append {
-                    ws.catalog_items.extend(page.items);
-                } else {
-                    ws.catalog_items = page.items;
+                let previous_selection = ws.catalog_selected.as_ref().map(|entry| entry.id.clone());
+                if !ws.apply_catalog_page(epoch, page, append) {
+                    return;
                 }
-                ws.catalog_selected = page.selected;
-                ws.catalog_selected_id = page.selected_id;
-                ws.catalog_source_revision = page.source_revision;
-                ws.catalog_next_cursor = page.next_cursor;
                 if (previous
                     != ws
                         .active_position()
                         .map(|pos| ws.effective_compare_ids(pos))
-                    || previous_revision != page.source_revision)
+                    || previous_revision != ws.catalog_source_revision
+                    || previous_selection.as_deref()
+                        != ws.catalog_selected.as_ref().map(|entry| entry.id.as_str()))
                     && let Some(id) = ws.active_checker_position_id()
                 {
                     ws.load_position_details(id, window, cx);
