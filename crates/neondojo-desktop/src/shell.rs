@@ -144,7 +144,7 @@ impl WorkspaceId {
             Self::Play => "play",
             Self::Analysis => "analysis",
             Self::Study => "learning",
-            Self::Positions => "saved",
+            Self::Positions => "positions",
             Self::Library => "database",
             Self::Players => "players",
             Self::Extras => "extras",
@@ -649,6 +649,12 @@ impl AppShell {
                             if let Some(lib) = shell.workspaces.library.clone() {
                                 lib.update(cx, |ws, cx| ws.refresh_on_library_mutated(cx));
                             }
+                            // A user can enter Positions while the runtime is still connecting.
+                            if shell.view == AppView::Workspace(WorkspaceId::Positions) {
+                                shell
+                                    .workspaces
+                                    .set_visible(WorkspaceId::Positions, true, cx);
+                            }
                             shell.sync_menus(cx);
                         }
                         Err(err) => {
@@ -1068,12 +1074,8 @@ impl AppShell {
             self.workspaces.set_visible(prev, false, cx);
         }
 
-        let already_mounted = self.workspaces.is_mounted(target);
-        if already_mounted {
-            self.workspaces.set_visible(target, true, cx);
-        } else {
-            self.ensure_workspace(target, window, cx);
-        }
+        self.ensure_workspace(target, window, cx);
+        self.workspaces.set_visible(target, true, cx);
 
         self.open_popover = None;
         self.view = AppView::Workspace(target);

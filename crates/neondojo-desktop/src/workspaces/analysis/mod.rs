@@ -213,7 +213,7 @@ pub struct AnalysisWorkspace {
     game_load_task: Option<ReadTask<()>>,
     position_load_task: Option<ReadTask<()>>,
     stats_load_task: Option<ReadTask<()>>,
-    cube_load_task: Option<ReadTask<()>>,
+    cube_load_task: Option<gpui_kit::Task<()>>,
     rolls_load_task: Option<ReadTask<()>>,
 }
 
@@ -411,6 +411,9 @@ impl AnalysisWorkspace {
         cx: &mut Context<Self>,
     ) {
         let same_match = self.match_id == Some(match_id);
+        if position_id.is_some() && self.active_tab == AnalysisDetailTab::Cube {
+            self.active_tab = AnalysisDetailTab::Overview;
+        }
         self.welcome_mode = false;
         self.game_menu_open = false;
         self.catalog_menu_open = false;
@@ -1084,18 +1087,15 @@ impl AnalysisWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if let Some(cube_id) = self
-            .cube_decisions
-            .iter()
-            .find(|c| {
-                c.decision.decision_no == decision_no
-                    && self.current_game_no.is_none_or(|g| c.game_no == g)
-            })
-            .map(|c| c.id.clone())
-        {
-            self.active_tab = AnalysisDetailTab::Cube;
-            self.select_cube_decision(cube_id, decision_no, None, window, cx);
-        }
+        let (Some(match_id), Some(game_no)) = (self.match_id, self.current_game_no) else {
+            return;
+        };
+        self.cube_filter.reset();
+        self.cube_filter.game_no = Some(game_no);
+        self.active_tab = AnalysisDetailTab::Cube;
+        self.active_target = None;
+        self.preview.reset();
+        self.load_cube_page(match_id, Some(decision_no), window, cx);
     }
 
     fn load_position_details(
@@ -1400,6 +1400,16 @@ impl AnalysisWorkspace {
     }
 
     fn load_cube_decisions(&mut self, match_id: Uuid, window: &mut Window, cx: &mut Context<Self>) {
+        self.load_cube_page(match_id, None, window, cx);
+    }
+
+    fn load_cube_page(
+        &mut self,
+        match_id: Uuid,
+        target: Option<i32>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         let Some(facade) = cx
             .try_global::<DesktopAppContext>()
             .and_then(|ctx| ctx.facade())
@@ -1407,7 +1417,7 @@ impl AnalysisWorkspace {
             return;
         };
         self.cube_loading = true;
-        let query = ReviewQuery {
+        let mut query = ReviewQuery {
             job_id: None,
             analysis_id: self.catalog_selected_id.clone(),
             game_no: self.cube_filter.game_no,
@@ -1417,28 +1427,78 @@ impl AnalysisWorkspace {
             errors_only: self.cube_filter.errors_only,
             limit: Some(100),
             after: None,
-            page: Some(1),
+            page: target.is_none().then_some(1),
         };
+        let epoch = self.game_epoch;
         let read = TokioBridge::spawn_read(cx, async move {
-            run_facade(move || async move { facade.list_review_decisions(match_id, query).await })
-                .await
+            run_facade(move || async move {
+                loop {
+                    let mut page = facade
+                        .list_review_decisions(match_id, query.clone())
+                        .await?;
+                    if target.is_none_or(|dno| {
+                        page.items.iter().any(|row| row.decision.decision_no == dno)
+                    }) || page.next_cursor.is_none()
+                    {
+                        return Ok(page);
+                    }
+                    query.after = page.next_cursor.take();
+                }
+            })
+            .await
         });
-        self.cube_load_task = Some(TokioBridge::spawn_read(cx, async move {}));
-
-        cx.spawn_in(window, async move |this, cx| {
-            let Ok(Ok(page)) = read.await else {
-                let _ = this.update(cx, |ws, cx| {
-                    ws.cube_loading = false;
-                    cx.notify();
-                });
-                return;
-            };
+        self.cube_load_task = Some(cx.spawn_in(window, async move |this, cx| {
+            let result = read.await;
             let _ = this.update_in(cx, |ws, window, cx| {
                 ws.cube_loading = false;
-                if ws.match_id != Some(match_id) {
+                if ws.match_id != Some(match_id)
+                    || (target.is_some()
+                        && (ws.game_epoch != epoch || ws.active_tab != AnalysisDetailTab::Cube))
+                {
                     return;
                 }
+                let page = match result {
+                    Ok(Ok(page)) => page,
+                    Ok(Err(err)) => {
+                        let message =
+                            crate::i18n::format_domain_error(crate::i18n::current_locale(cx), &err);
+                        cx.emit(WorkspaceEvent::ShowNotice(make_notice(
+                            "cube-load",
+                            BannerKind::Error,
+                            message,
+                        )));
+                        cx.notify();
+                        return;
+                    }
+                    Err(_) => {
+                        cx.notify();
+                        return;
+                    }
+                };
                 ws.cube_decisions = page.items;
+                if let Some(dno) = target {
+                    if let Some(id) = ws
+                        .cube_decisions
+                        .iter()
+                        .find(|row| row.decision.decision_no == dno)
+                        .map(|row| row.id.clone())
+                    {
+                        ws.select_cube_decision(id, dno, None, window, cx);
+                    } else {
+                        let message = neondojo_i18n::I18n::t(
+                            crate::i18n::current_locale(cx),
+                            "app",
+                            "error.positionMissing",
+                        );
+                        cx.emit(WorkspaceEvent::ShowNotice(make_notice(
+                            "cube-target-missing",
+                            BannerKind::Error,
+                            message,
+                        )));
+                    }
+                    cx.notify();
+                    return;
+                }
                 if ws.active_tab == AnalysisDetailTab::Cube {
                     let current_sel = match &ws.active_target {
                         Some(ActiveBoardTarget::Cube { review_id, .. }) => Some(review_id.as_str()),
@@ -1454,8 +1514,7 @@ impl AnalysisWorkspace {
                 }
                 cx.notify();
             });
-        })
-        .detach();
+        }));
     }
 
     fn load_statistics(&mut self, match_id: Uuid, cx: &mut Context<Self>) {

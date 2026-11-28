@@ -286,8 +286,11 @@ pub fn build_app_menus(state: &MenuState) -> Vec<Menu> {
                     .checked(state.active_workspace_index == Some(1)),
                 MenuItem::action(I18n::t(l, "workspace", "learning"), SelectWorkspaceStudy)
                     .checked(state.active_workspace_index == Some(2)),
-                MenuItem::action(I18n::t(l, "workspace", "saved"), SelectWorkspacePositions)
-                    .checked(state.active_workspace_index == Some(3)),
+                MenuItem::action(
+                    I18n::t(l, "workspace", "positions"),
+                    SelectWorkspacePositions,
+                )
+                .checked(state.active_workspace_index == Some(3)),
                 MenuItem::action(I18n::t(l, "workspace", "database"), SelectWorkspaceLibrary)
                     .checked(state.active_workspace_index == Some(4)),
                 MenuItem::action(I18n::t(l, "workspace", "players"), SelectWorkspacePlayers)
