@@ -169,7 +169,7 @@ impl CheckerCandidate {
     /// Display the outcome groups as total, gammon only, and backgammon.
     pub fn outcomes(&self) -> [Option<f64>; 6] {
         let mut p = self.probabilities;
-        for side in p.chunks_exact_mut(3) {
+        for side in p.as_chunks_mut::<3>().0 {
             let (total, gammon, bg) = (side[0], side[1], side[2]);
             // XG can store a total and its sub-outcomes as float32.
             let exceeds =
@@ -221,7 +221,9 @@ pub fn extract_candidates(
                     .as_ref()
                     .map(|d| (&d.checker_candidates, "normalized_cubeful"))
             });
-        if let Some((candidates, unit)) = native {
+        if let Some((candidates, unit)) = native
+            && !candidates.is_empty()
+        {
             return candidates
                 .iter()
                 .map(|c| CheckerCandidate::native(c, unit))

@@ -456,6 +456,60 @@ fn checker_result(candidates: serde_json::Value) -> SelectedPositionAnalysis {
 }
 
 #[test]
+fn compare_sources_use_the_deepest_completed_result_for_this_position_and_provider() {
+    use super::{candidate_data::comparison_options, state::CompareEngineSlot};
+    let pos = sample_position(Uuid::new_v4(), 1, 1);
+    let entry = |id: &str, source: &str, engine: &str, depth, game_no, status: &str| {
+        let mut job = sample_job(pos.id, status, None, None);
+        job.plies = depth;
+        AnalysisCatalogEntry {
+            id: id.into(),
+            source: source.into(),
+            scope: "game".into(),
+            engine: engine.into(),
+            depth: None,
+            game_no: Some(game_no),
+            position_id: None,
+            created_at: Utc::now(),
+            status: status.into(),
+            complete: true,
+            checker_count: 1,
+            cube_count: 0,
+            job: Some(job),
+        }
+    };
+    let entries = [
+        entry("wrong game", "native", "GNUbg", 5, 2, "completed"),
+        entry("in progress", "native", "GNU Backgammon", 5, 1, "running"),
+        entry(
+            "GNU import",
+            "imported",
+            "GNU Backgammon",
+            4,
+            1,
+            "completed",
+        ),
+        entry("XG import", "imported", "eXtreme Gammon", 3, 1, "completed"),
+        entry("deep", "native", "GNU Backgammon", 3, 1, "completed"),
+        entry("shallow", "native", "GNU Backgammon", 1, 1, "completed"),
+    ];
+    let mut selected = entry("most recent", "native", "GNU Backgammon", 3, 1, "completed");
+    selected.created_at = entries[4].created_at + chrono::Duration::seconds(1);
+    let ids = |slot| {
+        comparison_options(&entries, Some(&selected), &pos, slot)
+            .into_iter()
+            .map(|e| e.id.as_str())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(ids(CompareEngineSlot::Xg), ["XG import"]);
+    assert_eq!(
+        ids(CompareEngineSlot::Gnubg),
+        ["most recent", "deep", "shallow"]
+    );
+    assert!(ids(CompareEngineSlot::NeonGammon).is_empty());
+}
+
+#[test]
 fn imported_and_native_comparison_retains_equities_depths_rank_paths_and_source_units() {
     use super::candidate_data::{build_candidate_compare_rows, extract_candidates};
     use super::state::CompareEngineSlot::{Gnubg, Xg};

@@ -401,11 +401,7 @@ fn render_candidates_subtab(props: &CheckerViewProps<'_>, cx: &App) -> impl Into
                         div()
                             .w(px(52.0))
                             .text_right()
-                            .text_color(if loss.is_some_and(|v| v > 0.0005) {
-                                p.danger_text
-                            } else {
-                                p.muted
-                            })
+                            .text_color(p.text)
                             .id(SharedString::from(format!("candidate-loss-{ix}")))
                             .test_support()
                             .child(cand.difference_text(locale, loss, 3, false)),
