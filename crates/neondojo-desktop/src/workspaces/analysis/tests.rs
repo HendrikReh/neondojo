@@ -1090,29 +1090,41 @@ async fn headless_persists_per_tab_widths_emits_workspace_events_and_renders_com
         // Switch to Compare moves & Observed rolls sub-tabs.
         window.click("checker-subtab-compare", cx);
         window.render_frame(cx);
-        assert!(window.find("analysis-compare-matrix").visible());
-        let header = window.find("compare-move-header").bounds();
-        let played = window.find("compare-move-0").bounds();
-        assert_eq!(header.left(), played.left());
-        assert_eq!(header.right(), played.right());
-        assert!(played.size.width <= gpui_kit::px(130.0));
+    })
+    .unwrap();
 
-        entity.update(cx, |ws, cx| {
-            let notation = "24/21 24/21 13/10 13/10";
-            ws.positions[0].dice = vec![3, 3];
-            ws.positions[0].notation = notation.into();
-            ws.compare_slots[0][0].notation = notation.into();
-            ws.compare_slots[1].clear();
-            cx.notify();
-        });
-        window.render_frame(cx);
-        let long_move = window.find("compare-move-0").bounds();
-        assert!(long_move.size.width > played.size.width);
-        assert_eq!(
-            long_move.right(),
-            window.find("compare-move-header").bounds().right()
+    for width in [1440.0, 1920.0] {
+        cx.simulate_window_resize(
+            window,
+            gpui_kit::size(gpui_kit::px(width), gpui_kit::px(900.0)),
         );
-
+        cx.update_window(window, |_, window, cx| {
+            let mut short_width = gpui_kit::px(0.0);
+            for (notation, dice) in [("8/5 6/5", [3, 1]), ("24/21 24/21 13/10 13/10", [3, 3])] {
+                entity.update(cx, |ws, cx| {
+                    ws.positions[0].dice = dice.to_vec();
+                    ws.positions[0].notation = notation.into();
+                    ws.compare_slots[0][0].notation = notation.into();
+                    ws.compare_slots[1][0].notation = notation.into();
+                    cx.notify();
+                });
+                window.render_frame(cx);
+                assert!(window.find("analysis-compare-matrix").visible());
+                let header = window.find("compare-move-header").bounds();
+                let played = window.find("compare-move-0").bounds();
+                assert_eq!(header.left(), played.left());
+                assert_eq!(header.right(), played.right());
+                if dice[0] == dice[1] {
+                    assert!(played.size.width > short_width);
+                } else {
+                    assert!(played.size.width <= gpui_kit::px(130.0));
+                    short_width = played.size.width;
+                }
+            }
+        })
+        .unwrap();
+    }
+    cx.update_window(window, |_, window, cx| {
         window.click("checker-subtab-observed", cx);
         window.render_frame(cx);
         assert!(window.find("analysis-observed-rolls-bars").visible());

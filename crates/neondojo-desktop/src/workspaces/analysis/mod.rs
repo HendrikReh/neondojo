@@ -254,7 +254,11 @@ impl AnalysisWorkspace {
         let comment_input = cx.new(|cx| {
             TextareaState::new(window, cx)
                 .rows(4)
-                .placeholder("Write note in Markdown…")
+                .placeholder(neondojo_i18n::I18n::t(
+                    crate::i18n::current_locale(cx),
+                    "annotation",
+                    "commentPlaceholder",
+                ))
         });
         let new_deck_input = cx.new(|cx| InputState::new(window, cx).placeholder("New deck name…"));
 
@@ -820,6 +824,7 @@ impl AnalysisWorkspace {
                     ws.catalog_selected_id = cat.selected_id;
                     ws.catalog_source_revision = cat.source_revision;
                     ws.catalog_next_cursor = cat.next_cursor;
+                    ws.seed_default_compare_slots();
                 }
                 if retained && !ws.active_tab.available_when_retained() {
                     ws.active_tab = AnalysisDetailTab::Overview;
@@ -1250,7 +1255,7 @@ impl AnalysisWorkspace {
                 });
                 return;
             };
-            let _ = this.update_in(cx, |ws, _window, cx| {
+            let _ = this.update_in(cx, |ws, window, cx| {
                 ws.catalog_loading = false;
                 if ws.match_id != Some(match_id) {
                     return;
@@ -1264,7 +1269,13 @@ impl AnalysisWorkspace {
                 ws.catalog_selected_id = page.selected_id;
                 ws.catalog_source_revision = page.source_revision;
                 ws.catalog_next_cursor = page.next_cursor;
+                let previous = ws.compare_slot_ids.clone();
                 ws.seed_default_compare_slots();
+                if previous != ws.compare_slot_ids
+                    && let Some(id) = ws.active_checker_position_id()
+                {
+                    ws.load_position_details(id, window, cx);
+                }
                 cx.notify();
             });
         })
@@ -1463,13 +1474,17 @@ impl AnalysisWorkspace {
                 let page = match result {
                     Ok(Ok(page)) => page,
                     Ok(Err(err)) => {
-                        let message =
-                            crate::i18n::format_domain_error(crate::i18n::current_locale(cx), &err);
-                        cx.emit(WorkspaceEvent::ShowNotice(make_notice(
-                            "cube-load",
-                            BannerKind::Error,
-                            message,
-                        )));
+                        if target.is_some() || ws.active_tab == AnalysisDetailTab::Cube {
+                            let message = crate::i18n::format_domain_error(
+                                crate::i18n::current_locale(cx),
+                                &err,
+                            );
+                            cx.emit(WorkspaceEvent::ShowNotice(make_notice(
+                                "cube-load",
+                                BannerKind::Error,
+                                message,
+                            )));
+                        }
                         cx.notify();
                         return;
                     }

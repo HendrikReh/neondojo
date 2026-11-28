@@ -326,6 +326,12 @@ impl RenderOnce for ActionButton {
         let mut el = div()
             .id(self.id)
             .test_support()
+            .role(gpui_kit::accesskit::Role::Button)
+            .when_some(
+                self.label.clone().or_else(|| self.tooltip.clone()),
+                |el, label| el.aria_label(label),
+            )
+            .when_some(self.tooltip, |el, tooltip| el.aria_description(tooltip))
             .h_flex()
             .items_center()
             .justify_center()

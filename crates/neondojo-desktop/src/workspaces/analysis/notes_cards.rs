@@ -306,7 +306,7 @@ pub fn render_notes_inspector(props: NotesViewProps<'_>, cx: &App) -> impl IntoE
                         .text_label()
                         .font_weight(FontWeight::SEMIBOLD)
                         .text_color(p.text)
-                        .child("Comment (Markdown)"),
+                        .child(I18n::t(locale, "annotation", "comment")),
                 )
                 .child(
                     div()
@@ -319,7 +319,9 @@ pub fn render_notes_inspector(props: NotesViewProps<'_>, cx: &App) -> impl IntoE
                         )),
                 ),
         )
-        .child(Textarea::new(props.comment_input).aria_label("Comment (Markdown)"))
+        .child(div().id("note-comment").test_support().child(
+            Textarea::new(props.comment_input).aria_label(I18n::t(locale, "annotation", "comment")),
+        ))
         .child(
             div()
                 .h_flex()
@@ -343,11 +345,11 @@ pub fn render_notes_inspector(props: NotesViewProps<'_>, cx: &App) -> impl IntoE
                 )
                 .child(
                     ActionButton::new("note-save-btn")
-                        .label(if props.saving {
-                            "Saving…"
-                        } else {
-                            "Save note"
-                        })
+                        .label(I18n::t(
+                            locale,
+                            "annotation",
+                            if props.saving { "saving" } else { "save" },
+                        ))
                         .icon(ActionIconName::Save)
                         .primary()
                         .disabled(props.saving || props.target_key.is_none())
@@ -452,9 +454,11 @@ pub fn open_move_notes_dialog(
         bv
     });
     let comment_input = cx.new(|cx| {
-        TextareaState::new(window, cx)
-            .rows(4)
-            .placeholder("Move comment…")
+        TextareaState::new(window, cx).rows(4).placeholder(I18n::t(
+            current_locale(cx),
+            "annotation",
+            "commentPlaceholder",
+        ))
     });
     let tag_input = cx.new(|cx| InputState::new(window, cx).placeholder("Add tag…"));
 
@@ -651,12 +655,13 @@ pub fn open_move_notes_dialog(
                             }),
                         ))
                     })
-                    .child(
-                        div()
-                            .id("move-notes-comment")
-                            .test_support()
-                            .child(Textarea::new(&s.comment_input).aria_label("Move comment")),
-                    )
+                    .child(div().id("move-notes-comment").test_support().child(
+                        Textarea::new(&s.comment_input).aria_label(I18n::t(
+                            current_locale(cx),
+                            "annotation",
+                            "comment",
+                        )),
+                    ))
                     .child(
                         div()
                             .h_flex()
@@ -670,11 +675,11 @@ pub fn open_move_notes_dialog(
                             )
                             .child(
                                 ActionButton::new("move-notes-save")
-                                    .label(if saving {
-                                        "Saving…"
-                                    } else {
-                                        "Save move note"
-                                    })
+                                    .label(I18n::t(
+                                        current_locale(cx),
+                                        "annotation",
+                                        if saving { "saving" } else { "save" },
+                                    ))
                                     .primary()
                                     .disabled(saving)
                                     .palette(p)

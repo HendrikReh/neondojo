@@ -750,13 +750,12 @@ fn render_per_game_table(
                 .text_color(p.muted)
                 .child(
                     div()
-                        .w(px(72.0))
+                        .w(px(95.0))
                         .child(I18n::t(locale, "review-statistics", "games")),
                 )
                 .child(div().w(px(60.0)).child("Score"))
                 .child(div().flex_1().text_right().child("W PR"))
-                .child(div().flex_1().text_right().child("B PR"))
-                .child(div().w(px(116.0)).text_right().child("Action")),
+                .child(div().flex_1().text_right().child("B PR")),
         );
 
     for g in games {
@@ -770,56 +769,56 @@ fn render_per_game_table(
             .map(|r| (r.players[0].value, r.players[1].value))
             .unwrap_or((None, None));
 
-        table =
-            table.child(
-                div()
-                    .h_flex()
-                    .items_center()
-                    .gap(px(6.0))
-                    .px(px(8.0))
-                    .py(px(5.0))
-                    .border_b_1()
-                    .border_color(p.border)
-                    .text_table()
-                    .tabular_nums()
-                    .child(
-                        div()
-                            .h_flex()
-                            .items_center()
-                            .gap(px(4.0))
-                            .w(px(72.0))
-                            .text_color(p.text)
-                            .child(game_label)
-                            .when(g.needs_cube_rule_reanalysis, |el| {
-                                el.child(div().text_micro().text_color(p.warning_text).child("!"))
-                            }),
-                    )
-                    .child(div().w(px(60.0)).text_color(p.muted).child(format!(
-                        "{}–{}{}",
-                        g.white_score,
-                        g.black_score,
-                        if g.crawford { " Cr" } else { "" }
-                    )))
-                    .child(div().flex_1().text_right().text_color(p.text).child(
+        table = table.child(
+            div()
+                .h_flex()
+                .items_center()
+                .gap(px(6.0))
+                .px(px(8.0))
+                .py(px(5.0))
+                .border_b_1()
+                .border_color(p.border)
+                .text_table()
+                .tabular_nums()
+                .child(
+                    div()
+                        .h_flex()
+                        .items_center()
+                        .gap(px(4.0))
+                        .w(px(95.0))
+                        .text_color(p.text)
+                        .child(
+                            ActionButton::new(SharedString::from(format!("stats-open-game-{gno}")))
+                                .label(game_label)
+                                .tooltip(open_label)
+                                .tab_stop()
+                                .palette(p)
+                                .on_click(move |_, w, cx| on_open(gno, w, cx)),
+                        )
+                        .when(g.needs_cube_rule_reanalysis, |el| {
+                            el.child(div().text_micro().text_color(p.warning_text).child("!"))
+                        }),
+                )
+                .child(div().w(px(60.0)).text_color(p.muted).child(format!(
+                    "{}–{}{}",
+                    g.white_score,
+                    g.black_score,
+                    if g.crawford { " Cr" } else { "" }
+                )))
+                .child(
+                    div().flex_1().text_right().text_color(p.text).child(
                         wpr.map(|v| format_pr(locale, v)).unwrap_or_else(|| {
                             if g.analyzed { "—" } else { "Pending" }.to_string()
                         }),
-                    ))
-                    .child(
-                        div().flex_1().text_right().text_color(p.text).child(
-                            bpr.map(|v| format_pr(locale, v))
-                                .unwrap_or_else(|| "—".to_string()),
-                        ),
-                    )
-                    .child(
-                        div().w(px(116.0)).h_flex().justify_end().child(
-                            ActionButton::new(SharedString::from(format!("stats-open-game-{gno}")))
-                                .label(open_label)
-                                .palette(p)
-                                .on_click(move |_, w, cx| on_open(gno, w, cx)),
-                        ),
                     ),
-            );
+                )
+                .child(
+                    div().flex_1().text_right().text_color(p.text).child(
+                        bpr.map(|v| format_pr(locale, v))
+                            .unwrap_or_else(|| "—".to_string()),
+                    ),
+                ),
+        );
     }
 
     table.into_any_element()
