@@ -18,7 +18,7 @@ use super::state::{
     ActiveBoardTarget, AnalysisDetailTab, BoardWidthController, CubeAutoSelectState,
     DiceDistributionSnapshot, DiceTabState, DiceTransitionAction, InterleavedMoveRow,
     MAX_ANNOTATION_TAGS, MonotonicRemainingTimer, MoveHistoryFilter, NoteTargetKey,
-    NotesDraftCache, build_candidate_compare_rows, build_interleaved_move_rows, is_cube_only_game,
+    NotesDraftCache, build_interleaved_move_rows, is_cube_only_game,
 };
 use crate::configure_app;
 use crate::local_state::LocalUiState;
@@ -435,12 +435,155 @@ fn notes_drafts_survive_navigation_enforce_limits_and_preserve_draft_on_409_conf
 
 // ── 5. Pure Helpers: 3-Engine Compare, Monotonic ETA, Cube Auto-Select, Stats 2-Col ──
 
+fn checker_result(candidates: serde_json::Value) -> SelectedPositionAnalysis {
+    let position_id = Uuid::new_v4();
+    let record = serde_json::from_value(serde_json::json!({
+        "id": Uuid::new_v4(), "match_uuid": Uuid::new_v4(), "position_uuid": position_id,
+        "source_format":"xg", "game_no":1, "source_move_no":1, "kind":"checker", "player":0,
+        "played":"24/18 13/11", "engine":"eXtreme Gammon", "method":"evaluation", "raw":null,
+        "depth":"Mixed", "candidates": candidates
+    }))
+    .unwrap();
+    SelectedPositionAnalysis {
+        analysis_id: "imported".into(),
+        position_id,
+        engine: "eXtreme Gammon".into(),
+        depth: Some("Mixed".into()),
+        records: vec![record],
+        decision: None,
+        analysis: None,
+    }
+}
+
+#[test]
+fn imported_and_native_comparison_retains_equities_depths_rank_paths_and_source_units() {
+    use super::candidate_data::{build_candidate_compare_rows, extract_candidates};
+    use super::state::CompareEngineSlot::{Gnubg, Xg};
+    use neondojo_i18n::Locale::En;
+    use serde_json::json;
+    // The first decision of WC2014.xg, with the file's results deliberately out of equity order.
+    let mut pos = sample_position(Uuid::new_v4(), 1, 1);
+    pos.dice = vec![6, 2];
+    pos.notation = "24/18 13/11".into();
+    let mut result = checker_result(json!([
+        {"rank":1,"notation":"24/16","equity":-0.010413,"equity_kind":"cubeful","depth":"Opening Book V2","probabilities":{},"raw":null},
+        {"rank":2,"notation":"24/18 13/11","equity":0.014604,"equity_kind":"cubeful","depth":"Opening Book V2","probabilities":{"win":0.55,"win_gammon":0.11,"win_backgammon":0.01,"lose_gammon":0.13,"lose_backgammon":0.02},"raw":null},
+        {"rank":3,"notation":"24/18 6/4","equity":-0.122220,"equity_kind":"cubeful","depth":"3-ply","probabilities":{},"raw":null}
+    ]));
+    let mut opponent = result.records[0].clone();
+    opponent.data.player = 1;
+    opponent.data.candidates[0].notation = "opponent".into();
+    result.records.insert(0, opponent);
+    let xg = extract_candidates(&result, 0, Some(Xg));
+    assert_eq!(xg[0].rank(), 1);
+    assert_eq!(xg[0].notation, pos.notation);
+    assert_eq!(xg[0].depth.as_deref(), Some("Opening Book V2"));
+    assert_eq!(xg[2].depth.as_deref(), Some("3-ply"));
+    let outcomes = xg[0]
+        .outcomes()
+        .map(|p| neondojo_i18n::format_percent(En, p.unwrap(), 1));
+    assert_eq!(
+        outcomes,
+        ["55.0%", "10.0%", "1.0%", "45.0%", "11.0%", "2.0%"]
+    );
+    assert_eq!(
+        xg[1].difference_text(En, xg[1].loss(Some(&xg[0])), 6, false),
+        "0.025017"
+    );
+
+    let native = |rank, notation: &str, path: &str, equity| Candidate {
+        rank,
+        notation: notation.into(),
+        path: Some(path.into()),
+        equity,
+        probabilities: vec![],
+        plies: Some(1),
+    };
+    result.analysis = Some(Analysis {
+        engine: "GNUbg".into(),
+        plies: 2,
+        candidates: vec![
+            native(1, "24/18 13/11", "13/11 24/18", 0.015127),
+            native(2, "24/16", "24/18 18/16", 0.009203),
+        ],
+    });
+    let gnu = extract_candidates(&result, 0, Some(Gnubg));
+    assert_eq!(extract_candidates(&result, 0, None)[0].unit, "cubeful");
+    let rows = build_candidate_compare_rows(&pos, [&xg, &gnu, &[]], None);
+    assert_eq!(rows.len(), 3);
+    assert!(rows[0].played);
+    assert_eq!(rows[0].slots[1].unwrap().preview(), "13/11 24/18");
+    assert_eq!(gnu[0].depth.as_deref(), Some("1-ply"));
+    assert_eq!(gnu[0].equity_text(En, 6), "+0.015127");
+    assert_eq!(
+        gnu[0].difference_text(En, rows[0].delta(1), 6, true),
+        "+0.000523"
+    );
+    assert_eq!(
+        gnu[1].difference_text(En, rows[1].delta(1), 6, true),
+        "+0.019616"
+    );
+    assert!(rows[2].delta(1).is_none());
+    let sorted = build_candidate_compare_rows(&pos, [&xg, &gnu, &[]], Some(Gnubg));
+    assert_eq!(sorted[0].display_notation, "24/16");
+    assert_eq!(sorted[2].display_notation, "24/18 6/4");
+}
+
+#[test]
+fn candidate_comparison_preserves_missing_values_and_incompatible_units() {
+    use super::candidate_data::{
+        CheckerCandidate, build_candidate_compare_rows, extract_candidates,
+    };
+    use super::state::CompareEngineSlot::Xg;
+    use neondojo_i18n::Locale::En;
+    use serde_json::json;
+
+    let pos = sample_position(Uuid::new_v4(), 1, 1);
+    let result = checker_result(json!([
+        {"rank":1,"notation":"8/5 6/5","equity":0.50,"equity_kind":"mwc","depth":"XGRoller++","probabilities":[0.6,null,0.01,null,0.1,0.02],"raw":null},
+        {"rank":2,"notation":"13/10 6/5","equity":0.48,"equity_kind":"mwc","depth":null,"probabilities":{"win":0.5,"win_gammon":0.6,"win_backgammon":0.1},"raw":null},
+        {"rank":3,"notation":"8/4","equity":null,"equity_kind":"mwc","depth":null,"probabilities":{},"raw":null},
+        {"rank":4,"notation":"6/2","equity":0.0,"equity_kind":"unknown","depth":null,"probabilities":{},"raw":null}
+    ]));
+    let xg = extract_candidates(&result, 0, Some(Xg));
+    assert!(xg.iter().all(|c| c.xg_equity_rank.is_none()));
+    assert_eq!(xg[0].equity_text(En, 3), "50.000%");
+    assert_eq!(
+        xg[1].difference_text(En, xg[1].loss(Some(&xg[0])), 3, false),
+        "2.000 pp"
+    );
+    assert_eq!(xg[0].outcomes()[1], None);
+    assert_eq!(xg[0].outcomes()[2], Some(0.01));
+    assert_eq!(xg[0].outcomes()[3], Some(0.4));
+    assert_eq!(xg[1].outcomes()[0..3], [Some(0.5), None, None]);
+    assert_eq!(xg[2].equity_text(En, 6), "—");
+    assert_eq!(xg[2].loss(Some(&xg[0])), None);
+    assert_eq!(xg[2].depth, None);
+    assert_eq!(xg[3].loss(Some(&xg[3])), None);
+    let native = CheckerCandidate::native(
+        &Candidate {
+            rank: 1,
+            notation: "8/5 6/5".into(),
+            path: None,
+            equity: 0.500,
+            probabilities: vec![],
+            plies: None,
+        },
+        "normalized_cubeful",
+    );
+    let local = [native];
+    let rows = build_candidate_compare_rows(&pos, [&xg, &local, &[]], None);
+    assert_eq!(rows[0].delta(1), None);
+}
+
 #[test]
 fn compare_matrix_monotonic_eta_cube_auto_select_and_responsive_stats_work() {
+    use super::candidate_data::{CheckerCandidate, build_candidate_compare_rows};
+    use super::state::CompareEngineSlot;
     let match_id = Uuid::new_v4();
     let pos = sample_position(match_id, 1, 1);
 
-    let xg_cands = vec![
+    let xg_cands = [
         Candidate {
             rank: 1,
             notation: "8/5 6/5".into(),
@@ -458,7 +601,7 @@ fn compare_matrix_monotonic_eta_cube_auto_select_and_responsive_stats_work() {
             plies: Some(3),
         },
     ];
-    let gnubg_cands = vec![
+    let gnubg_cands = [
         Candidate {
             rank: 1,
             notation: "6/5 8/5".into(), // Same resulting board in different order!
@@ -476,15 +619,21 @@ fn compare_matrix_monotonic_eta_cube_auto_select_and_responsive_stats_work() {
             plies: Some(3),
         },
     ];
-    let rows = build_candidate_compare_rows(&pos, [&xg_cands, &gnubg_cands, &[]], true);
+    let xg_cands = xg_cands.map(|c| CheckerCandidate::native(&c, "cubeful"));
+    let gnubg_cands = gnubg_cands.map(|c| CheckerCandidate::native(&c, "normalized_cubeful"));
+    let rows = build_candidate_compare_rows(
+        &pos,
+        [&xg_cands, &gnubg_cands, &[]],
+        Some(CompareEngineSlot::Gnubg),
+    );
     assert_eq!(
         rows.len(),
         2,
         "equivalent notations align by resulting board"
     );
-    // Sorted by |Δ| descending: 13/10 6/5 has |0.080 - 0.030| = 0.050 > 0.000
+    // Sorted by |Δ| descending: 13/10 6/5 has 0.185 − 0.140 = 0.045.
     assert_eq!(rows[0].display_notation, "13/10 6/5");
-    assert!((rows[0].max_delta - 0.05).abs() < 1e-6);
+    assert!((rows[0].delta(1).unwrap() - 0.045).abs() < 1e-6);
 
     // Monotonic 1s countdown does not jump upward on minor poll jitter.
     let job_id = Uuid::new_v4();
@@ -1044,22 +1193,28 @@ async fn headless_persists_per_tab_widths_emits_workspace_events_and_renders_com
             ws.current_game_no = Some(1);
             ws.positions = vec![pos1.clone()];
             ws.compare_slots = [
-                vec![Candidate {
-                    rank: 1,
-                    notation: "8/5 6/5".into(),
-                    path: None,
-                    equity: 0.21,
-                    probabilities: vec![],
-                    plies: Some(3),
-                }],
-                vec![Candidate {
-                    rank: 1,
-                    notation: "8/5 6/5".into(),
-                    path: None,
-                    equity: 0.20,
-                    probabilities: vec![],
-                    plies: Some(3),
-                }],
+                vec![super::candidate_data::CheckerCandidate::native(
+                    &Candidate {
+                        rank: 1,
+                        notation: "8/5 6/5".into(),
+                        path: None,
+                        equity: 0.21,
+                        probabilities: vec![],
+                        plies: Some(3),
+                    },
+                    "cubeful",
+                )],
+                vec![super::candidate_data::CheckerCandidate::native(
+                    &Candidate {
+                        rank: 1,
+                        notation: "8/5 6/5".into(),
+                        path: None,
+                        equity: 0.20,
+                        probabilities: vec![],
+                        plies: Some(3),
+                    },
+                    "cubeful",
+                )],
                 vec![],
             ];
             ws.observed_rolls = Some(DiceStats {

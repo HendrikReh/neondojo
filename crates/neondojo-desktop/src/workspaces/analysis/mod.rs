@@ -8,6 +8,7 @@
 //! async `BackendFacade` loading.
 
 pub mod board_pane;
+mod candidate_data;
 pub mod candidates;
 pub mod cube_stats;
 pub mod header;
@@ -23,9 +24,8 @@ use self::board_pane::{
     BoardPaneCallbacks, BoardPaneProps, BoardPreviewState, HypotheticalDicePreview,
     compute_game_plans, render_board_pane, sync_board_view,
 };
-use self::candidates::{
-    CheckerCallbacks, CheckerViewProps, extract_candidates, render_checker_inspector,
-};
+use self::candidate_data::{CheckerCandidate, comparison_options, extract_candidates};
+use self::candidates::{CheckerCallbacks, CheckerViewProps, render_checker_inspector};
 use self::cube_stats::{
     CubeCallbacks, CubeViewProps, StatsCallbacks, StatsDrilldownTarget, StatsViewProps,
     render_cube_inspector, render_statistics_inspector,
@@ -75,7 +75,6 @@ use neondojo::{
     api::{MatchAnalysisEngine, PositionJobKind, PositionQuery},
     databases::DatabaseMatch,
     domain_error::ErrorKind,
-    engine::Candidate,
     learning::{
         AddCards, CardSuggestions, Deck, SaveSuggestions, SuggestionQuery, SuggestionReference,
     },
@@ -159,9 +158,9 @@ pub struct AnalysisWorkspace {
     pub(crate) opening_book: Option<BookLookup>,
     pub(crate) opening_book_expanded: bool,
     pub(crate) opening_book_loading: bool,
-    pub(crate) compare_slots: [Vec<Candidate>; 3],
+    pub(crate) compare_slots: [Vec<CheckerCandidate>; 3],
     pub(crate) compare_slot_ids: [Option<String>; 3],
-    pub(crate) compare_sort_delta: bool,
+    pub(crate) compare_sort_delta: Option<CompareEngineSlot>,
     pub(crate) dice_state: DiceTabState,
     pub(crate) selected_dice_cell: Option<[u8; 2]>,
     pub(crate) observed_rolls: Option<DiceStats>,
@@ -331,7 +330,7 @@ impl AnalysisWorkspace {
             opening_book_loading: false,
             compare_slots: [Vec::new(), Vec::new(), Vec::new()],
             compare_slot_ids: [None, None, None],
-            compare_sort_delta: false,
+            compare_sort_delta: None,
             dice_state: DiceTabState::Idle,
             selected_dice_cell: None,
             observed_rolls: None,
@@ -824,7 +823,6 @@ impl AnalysisWorkspace {
                     ws.catalog_selected_id = cat.selected_id;
                     ws.catalog_source_revision = cat.source_revision;
                     ws.catalog_next_cursor = cat.next_cursor;
-                    ws.seed_default_compare_slots();
                 }
                 if retained && !ws.active_tab.available_when_retained() {
                     ws.active_tab = AnalysisDetailTab::Overview;
@@ -1106,6 +1104,23 @@ impl AnalysisWorkspace {
         self.load_cube_page(match_id, Some(decision_no), window, cx);
     }
 
+    fn effective_compare_ids(&self, pos: &Position) -> [Option<String>; 3] {
+        CompareEngineSlot::ALL.map(|slot| {
+            let options = comparison_options(
+                &self.catalog_items,
+                self.catalog_selected.as_ref(),
+                pos,
+                slot,
+            );
+            let preferred = self.compare_slot_ids[slot as usize].as_deref();
+            options
+                .iter()
+                .find(|e| Some(e.id.as_str()) == preferred)
+                .or_else(|| options.first())
+                .map(|e| e.id.clone())
+        })
+    }
+
     fn load_position_details(
         &mut self,
         position_id: Uuid,
@@ -1118,6 +1133,11 @@ impl AnalysisWorkspace {
         else {
             return;
         };
+        let Some(pos) = self.active_position().filter(|pos| pos.id == position_id) else {
+            return;
+        };
+        let player = pos.player;
+        let compare_ids = self.effective_compare_ids(pos);
         self.position_epoch = self.position_epoch.wrapping_add(1);
         let epoch = self.position_epoch;
         self.position_result_loading = true;
@@ -1125,7 +1145,8 @@ impl AnalysisWorkspace {
 
         let analysis_id = self.catalog_selected_id.clone();
         let active_engine = self.active_engine(cx);
-        let compare_ids = self.compare_slot_ids.clone();
+        self.compare_slots = Default::default();
+        self.position_result = None;
 
         let read = TokioBridge::spawn_read(cx, async move {
             run_facade(move || async move {
@@ -1146,14 +1167,16 @@ impl AnalysisWorkspace {
                     .unwrap_or_default();
 
                 // Load 3-engine compare candidates if slot ids exist
-                let mut slot_cands: [Vec<Candidate>; 3] = [Vec::new(), Vec::new(), Vec::new()];
+                let mut slot_cands: [Vec<CheckerCandidate>; 3] =
+                    [Vec::new(), Vec::new(), Vec::new()];
                 for (si, cid) in compare_ids.iter().enumerate() {
                     if let Some(id) = cid.as_deref()
                         && let Ok(Some(res)) = facade
                             .get_position_analysis_result(position_id, Some(id))
                             .await
                     {
-                        slot_cands[si] = extract_candidates(&res);
+                        slot_cands[si] =
+                            extract_candidates(&res, player, Some(CompareEngineSlot::ALL[si]));
                     }
                 }
                 Ok((result, bookmarked, book, pos_jobs, slot_cands))
@@ -1260,6 +1283,10 @@ impl AnalysisWorkspace {
                 if ws.match_id != Some(match_id) {
                     return;
                 }
+                let previous = ws
+                    .active_position()
+                    .map(|pos| ws.effective_compare_ids(pos));
+                let previous_revision = ws.catalog_source_revision;
                 if append {
                     ws.catalog_items.extend(page.items);
                 } else {
@@ -1269,9 +1296,11 @@ impl AnalysisWorkspace {
                 ws.catalog_selected_id = page.selected_id;
                 ws.catalog_source_revision = page.source_revision;
                 ws.catalog_next_cursor = page.next_cursor;
-                let previous = ws.compare_slot_ids.clone();
-                ws.seed_default_compare_slots();
-                if previous != ws.compare_slot_ids
+                if (previous
+                    != ws
+                        .active_position()
+                        .map(|pos| ws.effective_compare_ids(pos))
+                    || previous_revision != page.source_revision)
                     && let Some(id) = ws.active_checker_position_id()
                 {
                     ws.load_position_details(id, window, cx);
@@ -1280,33 +1309,6 @@ impl AnalysisWorkspace {
             });
         })
         .detach();
-    }
-
-    fn seed_default_compare_slots(&mut self) {
-        if self.compare_slot_ids[0].is_none() {
-            self.compare_slot_ids[0] = self
-                .catalog_items
-                .iter()
-                .find(|e| e.source == "imported")
-                .map(|e| e.id.clone());
-        }
-        if self.compare_slot_ids[1].is_none() {
-            self.compare_slot_ids[1] = self
-                .catalog_items
-                .iter()
-                .find(|e| e.engine.to_ascii_lowercase().contains("gnu"))
-                .map(|e| e.id.clone());
-        }
-        if self.compare_slot_ids[2].is_none() {
-            self.compare_slot_ids[2] = self
-                .catalog_items
-                .iter()
-                .find(|e| {
-                    let l = e.engine.to_ascii_lowercase();
-                    l.contains("neongammon") || l.contains("sage")
-                })
-                .map(|e| e.id.clone());
-        }
     }
 
     fn select_displayed_analysis(
@@ -2161,21 +2163,24 @@ impl AnalysisWorkspace {
         let Some(res) = self.position_result.as_ref() else {
             return;
         };
-        let cands = extract_candidates(res);
+        let Some(pos) = self.active_position() else {
+            return;
+        };
+        let cands = extract_candidates(res, pos.player, None);
         if cands.is_empty() {
             return;
         }
         let cur_idx = self.preview.candidate_notation.as_deref().and_then(|n| {
             cands
                 .iter()
-                .position(|c| c.notation.eq_ignore_ascii_case(n))
+                .position(|c| c.preview().eq_ignore_ascii_case(n))
         });
         let next_idx = match cur_idx {
             Some(i) => (i as isize + delta).clamp(0, (cands.len() - 1) as isize) as usize,
             None => 0,
         };
         self.preview.hypothetical_dice = None;
-        self.preview.candidate_notation = Some(cands[next_idx].notation.clone());
+        self.preview.candidate_notation = Some(cands[next_idx].preview().to_owned());
         if self.preview.mode == BoardViewMode::Before {
             self.preview.mode = BoardViewMode::Arrows;
         }
@@ -3070,9 +3075,10 @@ impl Render for AnalysisWorkspace {
                     },
                     on_toggle_compare_sort_delta: {
                         let e = ent.clone();
-                        Rc::new(move |_, _, cx| {
+                        Rc::new(move |slot, _, cx| {
                             e.update(cx, |ws, cx| {
-                                ws.compare_sort_delta = !ws.compare_sort_delta;
+                                ws.compare_sort_delta =
+                                    (ws.compare_sort_delta != Some(slot)).then_some(slot);
                                 cx.notify();
                             })
                         })
@@ -3081,12 +3087,9 @@ impl Render for AnalysisWorkspace {
                         let e = ent.clone();
                         Rc::new(move |slot, id, w, cx| {
                             e.update(cx, |ws, cx| {
-                                let idx = match slot {
-                                    CompareEngineSlot::Xg => 0,
-                                    CompareEngineSlot::Gnubg => 1,
-                                    CompareEngineSlot::NeonGammon => 2,
-                                };
-                                ws.compare_slot_ids[idx] = id;
+                                ws.compare_slot_ids[slot as usize] = id;
+                                ws.preview.reset();
+                                ws.sync_board(cx);
                                 if let Some(pid) = ws.active_checker_position_id() {
                                     ws.load_position_details(pid, w, cx);
                                 }
@@ -3213,6 +3216,7 @@ impl Render for AnalysisWorkspace {
                             &self.compare_slot_ids[2],
                         ],
                         catalog_items: &self.catalog_items,
+                        catalog_selected: self.catalog_selected.as_ref(),
                         compare_sort_delta: self.compare_sort_delta,
                         dice_state: &self.dice_state,
                         selected_dice_cell: self.selected_dice_cell,
