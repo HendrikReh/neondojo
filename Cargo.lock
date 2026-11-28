@@ -4851,7 +4851,7 @@ dependencies = [
 
 [[package]]
 name = "neondojo"
-version = "1.4.2"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -4885,7 +4885,7 @@ dependencies = [
 
 [[package]]
 name = "neondojo-board"
-version = "1.4.2"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "gpui-kit",
@@ -4903,7 +4903,7 @@ dependencies = [
 
 [[package]]
 name = "neondojo-desktop"
-version = "1.4.2"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -4932,7 +4932,7 @@ dependencies = [
 
 [[package]]
 name = "neondojo-i18n"
-version = "1.4.2"
+version = "1.5.1"
 dependencies = [
  "chrono",
  "serde",
@@ -4941,7 +4941,7 @@ dependencies = [
 
 [[package]]
 name = "neondojo-rules"
-version = "1.4.2"
+version = "1.5.1"
 dependencies = [
  "anyhow",
  "base64",
