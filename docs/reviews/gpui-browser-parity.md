@@ -1,0 +1,49 @@
+# NeonDojo browser and GPUI parity review
+
+The baseline was `6920f97` for both clients. The browser used the React production build on localhost. The macOS desktop used GPUI, `BoardView`, shared rules, the EN/DE catalogs, and the in-process `BackendFacade`. All session creation, imports, engine output, and annotation writes used the separate PostgreSQL database `neondojo_e2e_gpui_parity_6920f97`.
+
+## Eight fixes and their evidence
+
+| Area | Confirmed cause and change | Verification |
+| --- | --- | --- |
+| Playing | The flex layout left the board canvas with effectively no height. The idle board painted at 1.45 × 1 logical pixels. The workspace now gives the board a definite rectangle, lays out the history and controls independently, and continues checker animations in the current window. | The fixed idle board painted at 1,143 × 790 in the 1440 × 900 shell. In the packaged Mac app, pointer clicks played **8/4 6/4** with 4–2. GNUbg replied **13/10 24/22**. History and turn controls remained visible at 1024 × 720. The browser screenshot reopens that exact saved session. |
+| Positions → All analyzed decisions | The shell missed the first activation of Positions. The subview consequently skipped profile resolution and search. Row decoding could discard individual hits silently. The shell now activates the workspace on first entry and backend connection. Search uses the resolved player from the facade, decodes the whole page, and distinguishes player selection, loading, zero results, and errors. Cube links now locate the requested decision within its game. | From a fresh client, the virtual player **WC parity profile** included Akiko Yazawa. Both clients used minimum loss 0.020, all decision kinds, default descending loss order, and page size 50. All **27 of 27** ordered references matched, including source UUIDs. Opening the checker play, cube response, and cube offer landed on game 7, decisions **22**, **26**, and **52** respectively. |
+| Playing → New Match | A vertical stack pushed the primary action beyond the viewport. The form uses two columns at desktop sizes and keeps its footer outside the scrolling body at smaller sizes. The dialog supports keyboard focus and Command-Return. | At 1440 × 900, geometry checks cover both languages, GNUbg and NeonGammon, and Training and Tutor with their extra controls. The entire form fits. At 680 × 520, scrolling the fields leaves Start match in place and the keyboard shortcut dispatches it. A separate OS-window capture shows the Coach configuration. |
+| Analysis → Compare moves | The Move column expanded with the window. Its header and rows now share a width measured from visible notation and the localized Played badge. Long entries can wrap. The initial catalog load also now seeds comparison sources, so imported candidates appear on first open. | Verified matching header and data bounds at widths 1440 and 1920 for **8/5 6/5** and **24/21 24/21 13/10 13/10**. The screenshots show the first checker play in game 1 of the imported WC2014 match. The equity presentation difference is recorded below. |
+| Analysis → Dice equity | The GPUI grid lacked the browser’s compact roll/equity layout and distinct actual and selected state indicators. The presentation now uses the existing distribution, highlights values relative to its mean, and projects the selected best play through the shared board. | Clicked all 36 cells on a completed GNUbg distribution covering 21 unordered outcomes. With actual roll **2–6**, both clients show **13/7 8/7**, equity **+0.137**, and **5.56%** for selected **1–6**. Both board previews draw the move. GPUI regression cases also cover mirrored cells, doubles, a blocked double-six forced pass, and a missing evaluation. |
+| Positions naming | The shell and saved collection shared a message key. The shell and native menu now use the workspace key. The collection still uses the saved-positions key. | Checked the English and German workspace and collection labels. The two levels now read **Positions / Saved positions** and **Positionen / Gemerkte Stellungen** in the current catalogs. |
+| Analysis → Statistics | The game action displayed an uninterpolated message. The game number now goes through the localized formatter for the visible button, tooltip, and accessibility description. Each button opens its own game number. | Imported a copy of reported match **#291** into the isolated database. Its one row reads **Game 1** or **Spiel 1** according to locale. The action descriptions are **Open game 1** and **Spiel 1 öffnen**. On the multi-game WC2014 fixture, clicking **Game 2** selected game 2 in Analysis. |
+| Analysis → Notes | Both comment editors used single-line inputs. Both now use four-row soft-wrapping text areas. Drafts are keyed by the annotation target and saves preserve edits made while a write is in flight. | Used Enter and clipboard paste, checked wrapping with a long paragraph, navigated between targets with an unsaved draft, then saved and reopened multiline annotations through PostgreSQL. Repeated the save/reopen check in the move-notes dialog. |
+
+## Scope of the live review
+
+All seven workspaces were opened in both clients. Playing used an actual macOS window and WindowServer pointer input. Analysis and Positions used the production shell, macOS Metal renderer, and live facade against the same fixtures. The review of Study covered its overview and player selection. Library covered its match list and opening a match. Players covered its directory, virtual profile, and match summary. Extras covered its benchmark landing screen and available tools.
+
+The four screenshot pairs use **1440 × 900 logical content pixels**. Playing and New Match use dark appearance. The Analysis pairs use light appearance. Browser is on the left. Native is on the right. The local evidence index includes both originals, smaller-window and German captures, and the ordered decision references.
+
+## Verification results
+
+- The focused desktop, board, and localization suites passed all 152 tests.
+- The complete Rust workspace passed 955 tests. The 175 opt-in tests marked ignored by the repository were skipped. SQLx used the maintenance database to create isolated test databases.
+- Workspace Clippy with warnings denied, Rust formatting, and the whitespace diff check passed.
+- The React production build and the native release build using `./tools/build_local_desktop.sh --offline` passed. macOS `codesign --verify --deep --strict` accepted the resulting app bundle.
+- The screenshot gallery and the ordered decision references are saved locally under `local-data/reviews/gpui-parity-6920f97/` in the main checkout. Open `screenshots.md` in that directory.
+
+## Remaining live checks
+
+- A full match against an installed NeonGammon opponent was outside this run. The isolated live match used GNUbg. The setup geometry tests used both engine choices.
+- Benchmark, engine duel, backup restore, and fresh training sessions were outside the seven-workspace navigation check. The larger-library cases below need targeted fixtures.
+
+## Prioritized migration backlog
+
+| Priority | Workspace | Gap and next acceptance check |
+| --- | --- | --- |
+| P1 | Analysis | Compare moves shows rank and **loss from the best move** in GPUI. React also displays the candidate’s actual equity and search depth. The native imported-candidate adapter expects a probability array, while the importer writes named fields, and it substitutes zero for missing equity. Compare an imported XG analysis and a native result side by side. Preserve missing values, label equity and loss separately, and show comparable units and depth. [Native comparison](../../crates/neondojo-desktop/src/workspaces/analysis/candidates.rs) · [Imported probabilities](../../backend/src/imported_analysis.rs) |
+| P1 | Library | The native row-job watcher opens the event stream at sequence zero, consumes one event, and resubscribes from zero. A replayed early event can prevent the UI from observing completion. Exercise a real queued → running → completed job while the list stays open and across a reconnect. Verify the row updates without a manual refresh. [Native job watcher](../../crates/neondojo-desktop/src/workspaces/library/mod.rs) |
+| P2 | Playing | React offers a **Paused matches** picker from New Match. GPUI’s setup action resumes the current session. With two paused matches, make either session reachable and verify restoration of its board, turn, and history. [Browser setup](../../web/src/workspaces/play/PlaySetupForm.tsx) · [Native setup](../../crates/neondojo-desktop/src/workspaces/play/setup_dialog.rs) |
+| P2 | Study | The native overview renders the first ten player choices and recurring mistakes renders the first twelve. With more eligible players, verify the last player can be selected and that the report uses that player. [Overview](../../crates/neondojo-desktop/src/workspaces/study/overview.rs) · [Recurring mistakes](../../crates/neondojo-desktop/src/workspaces/study/mistakes.rs) |
+| P2 | Players | GPUI’s opponent breakdown renders the first twelve rows. Verify access to the thirteenth opponent and navigation to that opponent’s profile on a representative library. [Native opponent breakdown](../../crates/neondojo-desktop/src/workspaces/players/mod.rs) |
+
+## Prompt for the next migration pass
+
+Review the highest-priority open item above against React on the same commit and fixture. Record the relevant profile, filters, and starting decision. Trace the browser result and native result through their existing interfaces to the owning backend type or rule. Implement the smallest native change that meets the stated acceptance check, using the existing facade, shared board and localization. Reproduce the original failure, run the focused regression, exercise the actual macOS workflow, and report both the matching result and any remaining difference.
