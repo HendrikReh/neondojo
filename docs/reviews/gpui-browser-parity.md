@@ -64,6 +64,13 @@ The browser and native clients used the same isolated library with two paused GN
 
 The [paired screenshots](gpui-player-and-match-parity.webp) show the resumed Indigo board, both Study reports, and opponent 30. All eight full-resolution pairs and the observed values are in `local-data/reviews/gpui-p2-e9427070/index.md` in the feature checkout. The integrated branch passed 962 enabled Rust tests, the opt-in PostgreSQL reconnect regression, and all 930 React unit tests. The standard workspace run skipped 176 opt-in tests. Workspace Clippy, formatting, the diff check, the release app build, and macOS signature verification passed.
 
+## Findings during PR review
+
+- **Analysis sources and units.** The native catalog now scopes position jobs before pagination. Moving between checker positions discards old pages and cursors. Both clients use the equity unit recorded for the calculation, including cubeless GNUbg analysis. They omit comparisons when a legacy result's unit cannot be established.
+- **Library progress.** A game or position job now refreshes its owning match, which can show **Partial** as soon as that result commits. The PostgreSQL reconnect regression runs in the default backend CI suite.
+- **Notes.** The inspector and Move notes dialog share drafts by annotation target. Switching matches or closing the dialog preserves unsaved text, including a paste over the save limit. A delayed conflict response cannot replace another target’s draft.
+- **Positions.** A failed or unreadable result page clears its decision references, preview and deck actions. The bookmark button reads membership for the selected occurrence before choosing Save or Remove.
+
 ## Prompt for the next migration pass
 
 Choose an unverified workflow from the remaining live checks above. Review it against React on the same commit and fixture. Record the relevant profile, filters, and starting decision. Trace the browser result and native result through their existing interfaces to the owning backend type or rule. For each confirmed gap, reproduce the failure and implement the smallest change using the existing facade, shared board and localization. Run the focused regression, exercise the actual macOS workflow, and report both the matching result and any remaining difference.
