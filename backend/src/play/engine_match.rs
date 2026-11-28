@@ -5,6 +5,7 @@ use crate::{
     engines::{AnalysisEngine, DuelWorkers, EngineCost},
 };
 use anyhow::{Context, Result, ensure};
+use serde::{Deserialize, Serialize};
 
 pub(crate) struct GameDice {
     pub opening: Vec<[u8; 2]>,
@@ -57,6 +58,43 @@ pub(crate) enum DuelUnit {
     MoneyCubeless { games: i32 },
 }
 
+#[derive(Clone, Copy, Default, Serialize, Deserialize)]
+pub(crate) struct GameProgress {
+    pub completed_games: i32,
+    pub scores: [i32; 2],
+    pub unit_finished: bool,
+}
+
+/// Durable state at the end of one verified game, in native side order.
+#[derive(Serialize, Deserialize)]
+pub(crate) struct GameCheckpoint {
+    pub progress: GameProgress,
+    native_id: String,
+    outcomes: Option<[[i32; 3]; 2]>,
+    costs: [Option<SideCost>; 2],
+    /// Global action ordinals and evaluations added by this game only.
+    pub(crate) evaluations: Vec<(usize, RetainedChecker)>,
+}
+
+/// The latest game with the reconstructed SGF and accumulated evaluations.
+pub(crate) struct SavedGame {
+    pub sgf: String,
+    pub state: GameCheckpoint,
+}
+
+impl SavedGame {
+    pub async fn into_sgf(self) -> Result<String> {
+        retained_sgf(self.sgf, self.state.evaluations).await
+    }
+}
+
+pub(crate) struct DuelPlayback<'a> {
+    pub rules: &'a Engine,
+    pub sides: [(&'a AnalysisEngine, i32); 2],
+    pub unit: DuelUnit,
+    pub swapped: bool,
+}
+
 pub(crate) struct FinishedMatch {
     /// Match score, or total points won in a money block, per native player.
     pub scores: [i32; 2],
@@ -72,7 +110,7 @@ pub(crate) struct FinishedMatch {
 /// Engine work of one side over a whole match. `moves` counts the side's
 /// checker turns, including forced moves and passes; cube decisions add cost
 /// but no moves.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct SideCost {
     pub cost: EngineCost,
     pub moves: i32,
@@ -107,7 +145,7 @@ impl CostMeter {
         }
     }
 
-    fn finish(self, history: &[super::PlayHistory]) -> [Option<SideCost>; 2] {
+    fn finish(&self, history: &[super::PlayHistory]) -> [Option<SideCost>; 2] {
         std::array::from_fn(|side| {
             self.totals[side].map(|cost| SideCost {
                 cost,
@@ -143,37 +181,80 @@ pub(crate) async fn play(
         AnalysisEngine::OpenSage(sage) => Some(sage.snapshot()),
         AnalysisEngine::Gnubg(_) => None,
     }));
-    let finished = play_with_workers(rules, bots, depths, unit, &workers, false, dice).await;
+    let sides = std::array::from_fn(|side| (bots[side], depths[side]));
+    let finished = play_with_workers(
+        DuelPlayback {
+            rules,
+            sides,
+            unit,
+            swapped: false,
+        },
+        &workers,
+        None,
+        dice,
+        |_, _, _| async { Ok(()) },
+    )
+    .await;
     let shutdown = workers.shutdown().await;
     finished.and_then(|match_result| shutdown.map(|()| match_result))
 }
 
-pub(crate) async fn play_with_workers(
-    rules: &Engine,
-    bots: [&AnalysisEngine; 2],
-    depths: [i32; 2],
-    unit: DuelUnit,
+pub(crate) async fn play_with_workers<F: Future<Output = Result<()>>>(
+    playback: DuelPlayback<'_>,
     workers: &DuelWorkers<'_>,
-    swapped: bool,
+    resume: Option<SavedGame>,
     dice: impl Fn(i32) -> Result<GameDice>,
+    mut save_game: impl FnMut(&str, &str, &GameCheckpoint) -> F,
 ) -> Result<FinishedMatch> {
+    let DuelPlayback {
+        rules,
+        sides,
+        unit,
+        swapped,
+    } = playback;
     let (length, last_game, cubeless) = match unit {
         // In a point match each completed game awards at least one point.
         DuelUnit::Match { length } => (length, 2 * length - 1, false),
         DuelUnit::MoneyCubeless { games } => (0, games, true),
     };
-    let mut outcomes = cubeless.then_some([[0; 3]; 2]);
-    let mut previous_scores = [0; 2];
-    let match_bots = Some(std::array::from_fn(|side| {
+    let (mut saved, mut progress, mut outcomes, mut meter, mut checker_evaluations) = match resume {
+        Some(SavedGame { sgf, state }) => {
+            let progress = state.progress;
+            ensure!(
+                (1..=last_game).contains(&progress.completed_games)
+                    && (progress.completed_games < last_game || progress.unit_finished)
+                    && state.outcomes.is_some() == cubeless,
+                "Invalid saved duel game checkpoint"
+            );
+            if progress.unit_finished {
+                return finish_match(sgf, state).await;
+            }
+            (
+                Some((state.native_id, sgf)),
+                progress,
+                state.outcomes,
+                CostMeter {
+                    totals: state.costs.map(|side| side.map(|cost| cost.cost)),
+                },
+                state.evaluations,
+            )
+        }
+        None => (
+            None,
+            GameProgress::default(),
+            cubeless.then_some([[0; 3]; 2]),
+            CostMeter::new(),
+            Vec::new(),
+        ),
+    };
+    let match_bots = Some(sides.map(|(bot, depth)| {
         // The rules engine plays its own turns; other bots yield to it.
-        bots[side].id().is_rules_engine().then_some(depths[side])
+        bot.id().is_rules_engine().then_some(depth)
     }));
     let native_bots = match_bots.map_or([false; 2], |bots| bots.map(|depth| depth.is_some()));
-    let mut saved: Option<(super::NativeSnapshot, String)> = None;
-    let mut checker_evaluations = Vec::new();
-    let mut meter = CostMeter::new();
-    for game in 1..=last_game {
+    for game in progress.completed_games + 1..=last_game {
         let schedule = dice(game)?;
+        let mut evaluations = Vec::new();
         let (snapshot, sgf) = crate::engine::with_shared_access(async {
             let request = NativeRequest {
                 new: saved.is_none(),
@@ -182,7 +263,7 @@ pub(crate) async fn play_with_workers(
                 human_player: 0,
                 match_length: length,
                 plies: 1,
-                native_id: saved.as_ref().map_or("", |(s, _)| s.native_id.as_str()),
+                native_id: saved.as_ref().map_or("", |(id, _)| id.as_str()),
                 action: "opening_roll",
                 notation: None,
                 resign_level: None,
@@ -230,14 +311,14 @@ pub(crate) async fn play_with_workers(
                     return Ok((snapshot, sgf));
                 }
                 let side = usize::try_from(snapshot.player)?;
-                let Some(AnalysisEngine::OpenSage(bot)) = bots.get(side) else {
+                let Some((AnalysisEngine::OpenSage(bot), _)) = sides.get(side) else {
                     anyhow::bail!("GNUbg did not yield to an external engine");
                 };
                 let chosen =
                     open_sage::choose(bot, &snapshot, false, Some(batches.for_side(side)?)).await?;
                 meter.add(side, chosen.cost);
                 if let Some(candidates) = chosen.checker {
-                    checker_evaluations.push((
+                    evaluations.push((
                         snapshot.history.len(),
                         RetainedChecker::new(
                             snapshot.native_id.clone(),
@@ -256,25 +337,47 @@ pub(crate) async fn play_with_workers(
                 matches!(snapshot.phase, PlayPhase::GameOver),
                 "Unexpected money match end"
             );
-            record_money_game(counts, previous_scores, snapshot.scores)?;
-            previous_scores = snapshot.scores;
+            record_money_game(counts, progress.scores, snapshot.scores)?;
             game == last_game
         } else {
             matches!(snapshot.phase, PlayPhase::MatchOver)
         };
+        progress = GameProgress {
+            completed_games: game,
+            scores: snapshot.scores,
+            unit_finished: finished,
+        };
+        let mut checkpoint = GameCheckpoint {
+            progress,
+            native_id: snapshot.native_id,
+            outcomes,
+            costs: meter.finish(&snapshot.history),
+            evaluations,
+        };
+        let previous_sgf = saved.as_ref().map_or("", |(_, sgf)| sgf.as_str());
+        save_game(previous_sgf, &sgf, &checkpoint).await?;
+        checker_evaluations.append(&mut checkpoint.evaluations);
         if finished {
-            return Ok(FinishedMatch {
-                scores: snapshot.scores,
-                games: game,
-                outcomes,
-                costs: meter.finish(&snapshot.history),
-                sgf: tokio::task::spawn_blocking(move || retain(&sgf, checker_evaluations))
-                    .await??,
-            });
+            checkpoint.evaluations = checker_evaluations;
+            return finish_match(sgf, checkpoint).await;
         }
-        saved = Some((snapshot, sgf));
+        saved = Some((checkpoint.native_id, sgf));
     }
     anyhow::bail!("Match game limit exceeded")
+}
+
+async fn finish_match(sgf: String, state: GameCheckpoint) -> Result<FinishedMatch> {
+    Ok(FinishedMatch {
+        scores: state.progress.scores,
+        games: state.progress.completed_games,
+        outcomes: state.outcomes,
+        costs: state.costs,
+        sgf: retained_sgf(sgf, state.evaluations).await?,
+    })
+}
+
+async fn retained_sgf(sgf: String, evaluations: Vec<(usize, RetainedChecker)>) -> Result<String> {
+    tokio::task::spawn_blocking(move || retain(&sgf, evaluations)).await?
 }
 
 /// Classifies one finished cubeless money game from the session score change:

@@ -1,11 +1,16 @@
 use super::super::{Competitor, DiceMode, DuelFormat, SeriesConfig, SeriesEngines, dice, runner};
 use crate::{engines::SageSnapshot, settings::EngineSnapshot};
+use axum::{
+    body::Body,
+    http::{Request, StatusCode},
+};
 use sqlx::PgPool;
 use std::{os::unix::fs::PermissionsExt, process::Stdio, time::Duration};
 use tokio::{
     process::Command,
     time::{sleep, timeout},
 };
+use tower::ServiceExt;
 use uuid::Uuid;
 
 // Run both profile workers through begin_batch and then stall GNUbg inside
@@ -95,6 +100,26 @@ else:
             while !directory.path().join("rules").is_file() { sleep(Duration::from_millis(10)).await; }
         }) => result.expect("worker never started the opening request"),
     }
+    let router = crate::api::router(crate::api::AppState::new(
+        pool.clone(),
+        crate::engine::Engine::new("gnubg".into()),
+    ));
+    let details = || {
+        router.clone().oneshot(
+            Request::get(format!("/api/engine-matches/{id}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+    };
+    let response = details().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let json = super::read_json(response).await;
+    assert_eq!(json["live_progress"]["unit_number"], 1);
+    assert_eq!(json["live_progress"]["game_number"], 1);
+    assert_eq!(json["live_progress"]["completed_games"], 0);
+    assert_eq!(json["live_progress"]["score_a"], 0);
+    assert_eq!(json["live_progress"]["score_b"], 0);
+    assert!(json["live_progress"]["estimated_remaining_seconds"].is_null());
 
     let held = worker.acquire().await.unwrap();
     let original: chrono::DateTime<chrono::Utc> =
@@ -129,6 +154,9 @@ else:
         .await
         .unwrap();
     assert!(timeout(Duration::from_secs(5), run).await.unwrap().unwrap());
+    let response = details().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(super::read_json(response).await["live_progress"].is_null());
     for file in ["2", "3", "rules"] {
         let pid = std::fs::read_to_string(directory.path().join(file)).unwrap();
         timeout(Duration::from_secs(3), async {

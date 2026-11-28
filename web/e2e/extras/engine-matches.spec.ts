@@ -6,6 +6,172 @@ import {
 import { expect, test } from '../helpers/test';
 import type { SeriesDetails } from '../../src/workspaces/extras/engine-match-api';
 
+test('resumes a cancelled 1,000-game block in the same series', async ({
+  page,
+}) => {
+  await gotoWorkspace(page, 'extras');
+  const side = { engine_id: 'gnubg', plies: 1 };
+  const response = await page.request.post('/api/engine-matches', {
+    data: {
+      a: side,
+      b: side,
+      format: 'money_cubeless',
+      block_games: 1_000,
+      count: 10,
+      mode: 'random',
+      seed: '00000000-0000-0000-0000-000000000000',
+    },
+  });
+  expect(response.status()).toBe(201);
+  const original: SeriesDetails['series'] = await response.json();
+  await page.locator('nav').getByText('Engine duels', { exact: true }).click();
+  const results = page.getByRole('region', { name: 'Series results' });
+  await expect(results.getByText('Block 1 of 10')).toBeVisible();
+  await expect(
+    results.getByText(/^Game (?:[2-9]|[1-9]\d+) of 1,000$/),
+  ).toBeVisible();
+  await expect(results.getByText(/^Score A–B (?!0–0)\d+–\d+$/)).toBeVisible();
+  await expect(results.getByText(/^Est\. time remaining /)).toBeVisible();
+  await expect(results.getByText('Running · 0 / 10 Blocks')).toBeVisible();
+  await results.getByRole('button', { name: 'Cancel series' }).click();
+  await expect(results.getByText('Cancelled · 0 / 10 Blocks')).toBeVisible();
+  await expect(results.getByText('Block 1 of 10')).toBeHidden();
+  const paused: SeriesDetails = await (
+    await page.request.get(`/api/engine-matches/${original.id}`)
+  ).json();
+  const saved = paused.series.saved_games_in_unit ?? 0;
+  expect(saved).toBeGreaterThan(0);
+  const savedLabel = `${saved} ${saved === 1 ? 'game' : 'games'} saved`;
+  await expect(results.getByText(savedLabel, { exact: true })).toBeVisible();
+  const archive = page.getByRole('region', { name: 'Series', exact: true });
+  await archive
+    .getByRole('button', { name: /GNUbg.*Cancelled/ })
+    .first()
+    .hover();
+  await expect(page.getByRole('tooltip')).toContainText(
+    'Games per block 1,000',
+  );
+  await expect(page.getByRole('tooltip')).toContainText(savedLabel);
+
+  await results.getByRole('button', { name: 'Resume series' }).click();
+  await expect(results.getByText('Block 1 of 10')).toBeVisible();
+  await expect(results.getByText('Running · 0 / 10 Blocks')).toBeVisible();
+  const resumed = await page.request.get(`/api/engine-matches/${original.id}`);
+  expect(resumed.ok()).toBe(true);
+  const details: SeriesDetails = await resumed.json();
+  expect(details.series.status).toBe('running');
+  expect(details.series.configuration).toEqual(original.configuration);
+  expect(details.series.completed_matches).toBe(0);
+  expect(details.live_progress?.completed_games).toBeGreaterThanOrEqual(saved);
+  await results.getByRole('button', { name: 'Cancel series' }).click();
+  await expect(results.getByText('Cancelled · 0 / 10 Blocks')).toBeVisible();
+});
+
+test('refreshes game progress and score before a money block is archived', async ({
+  page,
+}, testInfo) => {
+  const id = '30000000-0000-0000-0000-000000000000';
+  const side = { engine_id: 'gnubg', plies: 1 };
+  const snapshot = { engine_id: 'gnubg', gnubg_path: '' };
+  const details: SeriesDetails = {
+    series: {
+      id,
+      configuration: {
+        a: side,
+        b: side,
+        format: 'money_cubeless',
+        match_length: 0,
+        block_games: 1000,
+        count: 10,
+        mode: 'random',
+        seed: id,
+      },
+      engines: { a: snapshot, b: snapshot, rules_version: 'test' },
+      dice_version: 'test',
+      created_at: '2026-11-13T12:00:00Z',
+      total_matches: 10,
+      completed_matches: 0,
+      status: 'running',
+    },
+    statistics: { complete_pairs: 0, wins_a: 0, wins_b: 0 },
+    matches: [],
+    live_progress: {
+      unit_number: 1,
+      game_number: 1,
+      completed_games: 0,
+      score_a: 0,
+      score_b: 0,
+    },
+  };
+  let deleted = false;
+  await page.route('**/api/engine-matches', (route) =>
+    route.fulfill({ json: { runs: deleted ? [] : [details.series] } }),
+  );
+  await page.route(`**/api/engine-matches/${id}?*`, (route) =>
+    route.fulfill({ json: details }),
+  );
+  await page.route(`**/api/engine-matches/${id}`, (route) => {
+    expect(route.request().method()).toBe('DELETE');
+    deleted = true;
+    return route.fulfill({ status: 204 });
+  });
+  await gotoWorkspace(page, 'extras');
+  await page.locator('nav').getByText('Engine duels', { exact: true }).click();
+  const results = page.getByRole('region', { name: 'Series results' });
+  await expect(results.getByText('Block 1 of 10')).toBeVisible();
+  await expect(results.getByText('Game 1 of 1,000')).toBeVisible();
+  await expect(results.getByText('Estimating remaining time…')).toBeVisible();
+
+  details.live_progress = {
+    unit_number: 1,
+    game_number: 4,
+    completed_games: 3,
+    score_a: 2,
+    score_b: 3,
+    estimated_remaining_seconds: 31_500,
+  };
+  await expect(results.getByText('Game 4 of 1,000')).toBeVisible();
+  await expect(results.getByText('Score A–B 2–3')).toBeVisible();
+  await expect(results.getByText('Est. time remaining 8h 45m')).toBeVisible();
+  await expect(results.getByText('Running · 0 / 10 Blocks')).toBeVisible();
+  await expect(
+    results.getByRole('progressbar', { name: 'Blocks' }),
+  ).toHaveAttribute('value', '0.003');
+  for (const { width, height } of DESKTOP_VIEWPORTS) {
+    await page.setViewportSize({ width, height });
+    await expect(results.getByText('Game 4 of 1,000')).toBeInViewport();
+    await expect(
+      results.getByText('Est. time remaining 8h 45m'),
+    ).toBeInViewport();
+    await page.screenshot({
+      path: testInfo.outputPath(`live-duel-${width}.png`),
+    });
+  }
+
+  details.series.status = 'cancelled';
+  await expect(results.getByText('Cancelled · 0 / 10 Blocks')).toBeVisible();
+  await expect(results.getByText('Game 4 of 1,000')).toBeHidden();
+  await results
+    .getByRole('button', { name: 'Delete series', exact: true })
+    .click();
+  const removal = page.getByRole('dialog', { name: 'Delete series' });
+  await expect(
+    removal.getByText('Played games remain in the match database.', {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await removal.getByRole('button', { name: 'Keep series' }).click();
+  expect(deleted).toBe(false);
+  await results
+    .getByRole('button', { name: 'Delete series', exact: true })
+    .click();
+  await removal
+    .getByRole('button', { name: 'Delete series', exact: true })
+    .click();
+  await expect(page.getByText('No series yet.')).toBeVisible();
+  expect(deleted).toBe(true);
+});
+
 test('plays a seeded pair with the default dice mode and exports the return leg', async ({
   page,
 }, testInfo) => {

@@ -808,7 +808,8 @@ export interface paths {
         get: operations["details"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Remove a stopped series. Played games stay in the match database. */
+        delete: operations["remove"];
         options?: never;
         head?: never;
         patch?: never;
@@ -861,6 +862,23 @@ export interface paths {
         get: operations["sgf"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/engine-matches/{id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a cancelled series from its last committed match or money block. */
+        post: operations["resume"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4672,6 +4690,30 @@ export interface components {
             /** @description Index into this session revision's GNUbg legal move catalog. */
             move_index: number;
         };
+        /** @description The current unit's provisional score, in series A/B order. */
+        LiveProgress: {
+            /** Format: int32 */
+            completed_games: number;
+            /**
+             * Format: int64
+             * @description A wall-clock estimate from the current worker attempt, once it has samples.
+             */
+            estimated_remaining_seconds?: number | null;
+            /**
+             * Format: int32
+             * @description One-based game within the unit.
+             */
+            game_number: number;
+            /** Format: int32 */
+            score_a: number;
+            /** Format: int32 */
+            score_b: number;
+            /**
+             * Format: int32
+             * @description One-based index of the match or money block, counting both legs.
+             */
+            unit_number: number;
+        };
         /** @enum {string} */
         LossDirection: "asc" | "desc";
         Machine: {
@@ -6055,6 +6097,11 @@ export interface components {
             error?: string | null;
             /** Format: uuid */
             id: string;
+            /**
+             * Format: int32
+             * @description Saved games in the unfinished match or block of an aborted series.
+             */
+            saved_games_in_unit?: number | null;
             status: string;
             /** Format: int32 */
             total_matches: number;
@@ -6078,6 +6125,7 @@ export interface components {
             seed: string;
         };
         SeriesDetails: {
+            live_progress?: null | components["schemas"]["LiveProgress"];
             matches: components["schemas"]["MatchResult"][];
             /** Format: int32 */
             next_offset?: number | null;
@@ -9157,6 +9205,41 @@ export interface operations {
             };
         };
     };
+    remove: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     cancel: {
         parameters: {
             query?: never;
@@ -9237,6 +9320,43 @@ export interface operations {
                 };
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    resume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Series"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

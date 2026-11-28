@@ -1,9 +1,11 @@
-use super::{Competitor, DiceMode, Series, SeriesConfig, dice};
+use super::{
+    Competitor, DiceMode, Series, SeriesConfig, checkpoint, dice, progress::ProgressReporter,
+};
 use crate::{
     api::AppState,
     engine::Engine,
-    import::{parse_sgf, sgf::escape_value},
-    play::engine_match::{self, DuelUnit, GameDice, SideCost},
+    import::{ImportedMatch, parse_sgf, sgf::escape_value},
+    play::engine_match::{self, DuelPlayback, DuelUnit, GameDice, SideCost},
     store::{MatchImport, insert_match_import},
 };
 use anyhow::{Context, Result, bail, ensure};
@@ -106,35 +108,41 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
     }));
     let configuration = &series.configuration;
     let unit = configuration.unit()?;
-    let event = escape_value(&format!(
-        "Duel {} vs. {}{}",
-        competitor_label(&configuration.a)?,
-        competitor_label(&configuration.b)?,
-        match unit {
-            DuelUnit::Match { .. } => "",
-            DuelUnit::MoneyCubeless { .. } => " (money, cubeless)",
-        },
-    ));
+    let mut progress = ProgressReporter::new(pool, series, token, unit);
     for index in series.completed_matches..series.total_matches {
         let plan = match_plan(configuration, index);
-        let mut bots = [&a, &b];
-        let mut depths = [configuration.a.plies, configuration.b.plies];
+        let mut sides = [(&a, configuration.a.plies), (&b, configuration.b.plies)];
         if plan.swapped {
-            bots.swap(0, 1);
-            depths.swap(0, 1);
+            sides.swap(0, 1);
         }
+        let resume = checkpoint::load(pool, series.id, index).await?;
+        let initial = resume
+            .as_ref()
+            .map_or_else(Default::default, |saved| saved.state.progress);
+        progress.start_unit(index, plan.swapped, initial).await;
         let finished = engine_match::play_with_workers(
-            &rules,
-            bots,
-            depths,
-            unit,
+            DuelPlayback {
+                rules: &rules,
+                sides,
+                unit,
+                swapped: plan.swapped,
+            },
             &workers,
-            plan.swapped,
+            resume,
             |game| {
                 Ok(GameDice {
                     opening: dice::opening(plan.seed, game)?,
                     turns: dice::turns(plan.seed, game),
                 })
+            },
+            |previous, sgf, saved| {
+                let write = checkpoint::save(pool, series.id, token, index, previous, sgf, saved);
+                let report = progress.publish(index, plan.swapped, saved.progress);
+                async move {
+                    write.await?;
+                    report.await;
+                    Ok(())
+                }
             },
         )
         .await?;
@@ -168,49 +176,98 @@ async fn execute(pool: &PgPool, series: &Series, token: Uuid) -> Result<()> {
         }
         // Stored as A single, gammon, backgammon, then B; only for money blocks.
         let stored_outcomes = outcomes.map(|counts| counts.concat());
-        let a_name = format!(
-            "A {} {}-ply",
-            configuration.a.engine_id, configuration.a.plies
-        );
-        let b_name = format!(
-            "B {} {}-ply",
-            configuration.b.engine_id, configuration.b.plies
-        );
-        let mut sgf =
-            crate::play::named_export(&finished.sgf, &a_name, i32::from(plan.swapped), &b_name);
-        // Each run owns its played matches, even if a seed replay produces identical moves.
-        let root = sgf.find(';').context("Missing engine duel SGF root")?;
-        sgf.insert_str(
-            root + 1,
-            &format!("BGTDUEL[{}:{index}]EV[{event}]", series.id),
-        );
-        let (sgf, imported) = tokio::task::spawn_blocking(move || {
-            let imported = parse_sgf(&sgf).context("Invalid engine duel SGF")?;
-            Ok::<_, anyhow::Error>((sgf, imported))
-        })
-        .await??;
-        let filename = archive_filename(series.id, index);
-        let archive =
-            MatchImport::prepare(&filename, "sgf", sgf.as_bytes(), &sgf, &imported).await?;
+        let archive = prepare_archive(series, index, &finished.sgf).await?;
+        let prepared = archive.prepare().await?;
         let mut tx = pool.begin().await?;
-        insert_match_import(&mut tx, ENGINE_DUELS_DATABASE_ID, archive).await?;
         let updated = sqlx::query("UPDATE engine_match_runs SET completed_matches=$3+1, attempts=1, status=CASE WHEN $3+1=total_matches THEN 'completed' ELSE 'running' END,lease_token=CASE WHEN $3+1=total_matches THEN NULL ELSE lease_token END,lease_until=CASE WHEN $3+1=total_matches THEN NULL ELSE lease_until END WHERE id=$1 AND lease_token=$2 AND status='running' AND lease_until>clock_timestamp() AND completed_matches=$3")
             .bind(series.id).bind(token).bind(index).execute(&mut *tx).await?;
         ensure!(
             updated.rows_affected() == 1,
             "Engine match checkpoint lost its lease"
         );
+        insert_match_import(&mut tx, ENGINE_DUELS_DATABASE_ID, prepared).await?;
         sqlx::query("INSERT INTO engine_match_results(run_id,match_index,seed,score_a,score_b,games,sgf,cpu_us_a,wall_us_a,moves_a,cpu_us_b,wall_us_b,moves_b,outcomes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)")
             .bind(series.id).bind(index).bind(plan.seed).bind(scores[0]).bind(scores[1])
-            .bind(finished.games).bind(sgf)
+            .bind(finished.games).bind(archive.sgf)
             .bind(cost_a.map(|cost| cost.0)).bind(cost_a.map(|cost| cost.1)).bind(cost_a.map(|cost| cost.2))
             .bind(cost_b.map(|cost| cost.0)).bind(cost_b.map(|cost| cost.1)).bind(cost_b.map(|cost| cost.2))
             .bind(stored_outcomes)
             .execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM engine_match_progress WHERE run_id=$1")
+            .bind(series.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM engine_match_game_checkpoints WHERE run_id=$1 AND unit_index=$2")
+            .bind(series.id)
+            .bind(index)
+            .execute(&mut *tx)
+            .await?;
         tx.commit().await?;
     }
     workers.shutdown().await?;
     Ok(())
+}
+
+pub(super) struct DuelArchive {
+    filename: String,
+    sgf: String,
+    imported: ImportedMatch,
+}
+
+impl DuelArchive {
+    pub async fn prepare(&self) -> Result<MatchImport<'_>> {
+        MatchImport::prepare(
+            &self.filename,
+            "sgf",
+            self.sgf.as_bytes(),
+            &self.sgf,
+            &self.imported,
+        )
+        .await
+    }
+}
+
+pub(super) async fn prepare_archive(
+    series: &Series,
+    index: i32,
+    source: &str,
+) -> Result<DuelArchive> {
+    let configuration = &series.configuration;
+    let event = escape_value(&format!(
+        "Duel {} vs. {}{}",
+        competitor_label(&configuration.a)?,
+        competitor_label(&configuration.b)?,
+        match configuration.format {
+            super::DuelFormat::Match => "",
+            super::DuelFormat::MoneyCubeless => " (money, cubeless)",
+        },
+    ));
+    let a_name = format!(
+        "A {} {}-ply",
+        configuration.a.engine_id, configuration.a.plies
+    );
+    let b_name = format!(
+        "B {} {}-ply",
+        configuration.b.engine_id, configuration.b.plies
+    );
+    let swapped = configuration.mode == DiceMode::Paired && index % 2 == 1;
+    let mut sgf = crate::play::named_export(source, &a_name, i32::from(swapped), &b_name);
+    // Each run owns its played matches, even if a seed replay produces identical moves.
+    let root = sgf.find(';').context("Missing engine duel SGF root")?;
+    sgf.insert_str(
+        root + 1,
+        &format!("BGTDUEL[{}:{index}]EV[{event}]", series.id),
+    );
+    let (sgf, imported) = tokio::task::spawn_blocking(move || {
+        let imported = parse_sgf(&sgf).context("Invalid engine duel SGF")?;
+        Ok::<_, anyhow::Error>((sgf, imported))
+    })
+    .await??;
+    Ok(DuelArchive {
+        filename: archive_filename(series.id, index),
+        sgf,
+        imported,
+    })
 }
 
 /// Library filename of one archived duel match or money block.

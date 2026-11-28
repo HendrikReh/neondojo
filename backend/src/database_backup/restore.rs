@@ -88,7 +88,7 @@ async fn copy_tables(
     layout: ArchiveLayout,
 ) -> ApiResult<()> {
     let mut buffer = vec![0; 128 * 1024];
-    for (table, mut remaining) in TABLES.iter().zip(lengths) {
+    for (table, mut remaining) in layout.tables().iter().zip(lengths) {
         let columns = columns(connection, table, layout).await?;
         let name = relation(table);
         set_copy_triggers(connection, table, false).await?;

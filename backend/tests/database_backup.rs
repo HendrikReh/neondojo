@@ -100,6 +100,62 @@ async fn analysis_snapshot(pool: &PgPool, match_id: uuid::Uuid) -> serde_json::V
 }
 
 #[sqlx::test(migrations = false)]
+async fn restores_archive_layouts_before_and_after_duel_game_checkpoints(pool: PgPool) {
+    migrate_through(&pool, 98).await;
+    let app = router(AppState::new(pool.clone(), Engine::new("gnubg".into())));
+    let old_archive = export_archive(&app).await;
+    neondojo::schema_migrations::MIGRATOR
+        .run(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        check_result(&app, old_archive.clone()).await.1["status"],
+        "compatible"
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(restore(old_archive, true))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+
+    let id = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO engine_match_runs(id,configuration,engines,dice_version,status,total_matches)
+        VALUES($1,'{}','{}','test','cancelled',1)",
+    )
+    .bind(id)
+    .execute(&pool)
+    .await
+    .unwrap();
+    let state = vec![0_u8, 255, 128, 64];
+    sqlx::query("INSERT INTO engine_match_game_checkpoints VALUES($1,0,1,0,'(;GM[6])',$2)")
+        .bind(id)
+        .bind(&state)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let new_archive = export_archive(&app).await;
+    sqlx::query("DELETE FROM engine_match_runs WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert_eq!(
+        app.oneshot(restore(new_archive, true))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NO_CONTENT
+    );
+    let restored = sqlx::query_scalar::<_, Vec<u8>>("SELECT state FROM engine_match_game_checkpoints WHERE run_id=$1 AND unit_index=0 AND game_number=1")
+        .bind(id).fetch_one(&pool).await.unwrap();
+    assert_eq!(restored, state);
+}
+
+#[sqlx::test(migrations = false)]
 async fn restores_pre_cube_rule_archive_using_each_games_sgf(pool: PgPool) {
     // Export real pre-0095 COPY rows and their original manifest fingerprint.
     migrate_through(&pool, 94).await;

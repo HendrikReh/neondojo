@@ -1,4 +1,5 @@
 import options from '../../../../shared/configuration-options.json' with { type: 'json' };
+import type { MessageText } from '../../shared/i18n/messages';
 import type { EngineInfo } from '../../settings/settings-api';
 import type { CreateSeries, Series } from './engine-match-api';
 import type { EngineMatchLabel } from './engine-match-messages';
@@ -6,7 +7,7 @@ import type { EngineMatchLabel } from './engine-match-messages';
 export type Competitor = CreateSeries['a'];
 export type Mode = NonNullable<CreateSeries['mode']>;
 export type Format = NonNullable<CreateSeries['format']>;
-export type Text = (key: EngineMatchLabel) => string;
+export type Text = MessageText<EngineMatchLabel>;
 export type SeriesDraft = {
   a: Competitor;
   b: Competitor;

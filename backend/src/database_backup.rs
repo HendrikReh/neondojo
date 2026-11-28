@@ -31,8 +31,8 @@ const MEDIA_TYPE: &str = "application/vnd.neondojo.backup";
 const MAX_ARCHIVE_BYTES: u64 = 16 * 1024 * 1024 * 1024;
 const MAX_DATA_BYTES: u64 = 64 * 1024 * 1024 * 1024;
 
-/// Derived from the backed-up tables and rebuilt on demand. A restore clears
-/// them with the data they describe; they are never written to an archive.
+/// Derived read models and temporary progress. A restore clears them with the
+/// data they describe; they are never written to an archive.
 const DERIVED_TABLES: &[&str] = &[
     "decision_index",
     "decision_index_matches",
@@ -40,12 +40,13 @@ const DERIVED_TABLES: &[&str] = &[
     "imported_analysis_revisions",
     "review_hits",
     "review_hit_sets",
+    "engine_match_progress",
 ];
 // These migrations leave the backed-up table layout and format compatible
 // with earlier archives. They only affect derived data, notifications,
 // indexes, views, how long job progress events are kept (0094) or legacy
 // catalog labels (0097).
-const ARCHIVE_COMPATIBLE_MIGRATIONS: &[i64] = &[89, 90, 91, 92, 93, 94, 96, 97];
+const ARCHIVE_COMPATIBLE_MIGRATIONS: &[i64] = &[89, 90, 91, 92, 93, 94, 96, 97, 98];
 
 // Parent tables precede their children so foreign keys remain enforced. Host
 // installations and the benchmark machine identity belong to the destination.
@@ -104,6 +105,7 @@ const TABLES: &[&str] = &[
     "similar_practice_summaries",
     "engine_match_runs",
     "engine_match_results",
+    "engine_match_game_checkpoints",
 ];
 
 /// How long a restore waits for background work it cannot stop (see
@@ -287,19 +289,36 @@ struct Sequence {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ArchiveLayout {
     Current,
+    BeforeDuelGameCheckpoints,
     BeforeGameCubeRules,
+}
+
+impl ArchiveLayout {
+    fn tables(self) -> &'static [&'static str] {
+        match self {
+            Self::Current => TABLES,
+            // The game checkpoints are the final entry in the current format.
+            Self::BeforeDuelGameCheckpoints | Self::BeforeGameCubeRules => {
+                &TABLES[..TABLES.len() - 1]
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 struct ArchiveSchema {
     current: String,
+    current_layout: ArchiveLayout,
+    before_duel_game_checkpoints: Option<String>,
     before_game_cube_rules: Option<String>,
 }
 
 impl ArchiveSchema {
     fn layout(&self, fingerprint: &str) -> Option<ArchiveLayout> {
         if fingerprint == self.current {
-            Some(ArchiveLayout::Current)
+            Some(self.current_layout)
+        } else if self.before_duel_game_checkpoints.as_deref() == Some(fingerprint) {
+            Some(ArchiveLayout::BeforeDuelGameCheckpoints)
         } else if self.before_game_cube_rules.as_deref() == Some(fingerprint) {
             Some(ArchiveLayout::BeforeGameCubeRules)
         } else {
@@ -315,23 +334,38 @@ async fn schema(connection: &mut PgConnection) -> Result<ArchiveSchema> {
     .fetch_all(connection)
     .await?;
     let mut digest = Sha256::new();
+    let mut current_layout = ArchiveLayout::BeforeGameCubeRules;
     let mut before_game_cube_rules = None;
+    let mut before_duel_game_checkpoints = None;
     for (version, checksum) in crate::schema_migrations::expanded_history(migrations) {
         if ARCHIVE_COMPATIBLE_MIGRATIONS.contains(&version) {
             continue;
         }
-        // This adapter covers exactly one layout transition. A later change
-        // to a backed-up table invalidates it until compatibility is reviewed.
-        before_game_cube_rules = (version == 95
-            && crate::schema_migrations::MIGRATOR
-                .iter()
-                .any(|m| m.version == version && m.checksum.as_ref() == checksum))
-        .then(|| format!("{:x}", digest.clone().finalize()));
+        // Retain old formats only across explicitly supported migrations.
+        let known = crate::schema_migrations::MIGRATOR
+            .iter()
+            .any(|m| m.version == version && m.checksum.as_ref() == checksum);
+        match (version, known) {
+            (95, true) => {
+                before_game_cube_rules = Some(format!("{:x}", digest.clone().finalize()));
+                current_layout = ArchiveLayout::BeforeDuelGameCheckpoints;
+            }
+            (99, true) => {
+                before_duel_game_checkpoints = Some(format!("{:x}", digest.clone().finalize()));
+                current_layout = ArchiveLayout::Current;
+            }
+            _ => {
+                before_game_cube_rules = None;
+                before_duel_game_checkpoints = None;
+            }
+        }
         digest.update(version.to_be_bytes());
         digest.update(checksum);
     }
     Ok(ArchiveSchema {
         current: format!("{:x}", digest.finalize()),
+        current_layout,
+        before_duel_game_checkpoints,
         before_game_cube_rules,
     })
 }
