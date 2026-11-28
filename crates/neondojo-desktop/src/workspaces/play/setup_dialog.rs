@@ -266,6 +266,7 @@ pub struct PlaySetupCallbacks {
     pub on_open_settings: PlayVoidCallback,
     pub on_submit: PlayVoidCallback,
     pub on_resume: PlayVoidCallback,
+    pub on_open_paused_matches: PlayVoidCallback,
 }
 
 /// Renders the complete New Match setup form inside `PlayBoardDialog`.
@@ -532,6 +533,7 @@ pub fn render_play_setup_form(
     let on_settings = cb.on_open_settings.clone();
     let on_submit = cb.on_submit.clone();
     let on_resume = cb.on_resume.clone();
+    let on_open_paused_matches = cb.on_open_paused_matches;
 
     let column = || {
         div()
@@ -728,6 +730,15 @@ pub fn render_play_setup_form(
                     .on_click(move |_: &ClickEvent, window, cx| on_resume(window, cx)),
             )
         })
+        .child(
+            ActionButton::new("play-setup-paused-matches")
+                .icon(ActionIconName::Open)
+                .tab_stop()
+                .label(I18n::t(locale, "library", "pausedMatches"))
+                .disabled(busy)
+                .palette(p)
+                .on_click(move |_: &ClickEvent, window, cx| on_open_paused_matches(window, cx)),
+        )
         .into_any_element();
     (body, footer)
 }

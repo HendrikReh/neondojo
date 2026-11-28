@@ -85,7 +85,9 @@ use gpui_kit::{
     prelude::FluentBuilder,
     px,
 };
-use neondojo::play::{FeedbackOperation, PlayMode, PlayPhase, PlaySession};
+use neondojo::play::{
+    FeedbackOperation, PAUSED_MATCHES_DATABASE_ID, PlayMode, PlayPhase, PlaySession,
+};
 use neondojo::settings::EngineInfo;
 use neondojo_board::{
     BearoffDirection, BoardThemeConfig, BoardView, BoardViewMode, PlayFrame, PlayOrientation,
@@ -2012,6 +2014,16 @@ impl PlayWorkspace {
                     let w = weak.clone();
                     Rc::new(move |win, cx| {
                         let _ = w.update(cx, |ws, cx| ws.resume_match(win, cx));
+                    })
+                },
+                on_open_paused_matches: {
+                    let w = weak.clone();
+                    Rc::new(move |_win, cx| {
+                        let _ = w.update(cx, |_, cx| {
+                            cx.emit(WorkspaceEvent::OpenLibraryDatabase {
+                                database_id: PAUSED_MATCHES_DATABASE_ID,
+                            });
+                        });
                     })
                 },
             };

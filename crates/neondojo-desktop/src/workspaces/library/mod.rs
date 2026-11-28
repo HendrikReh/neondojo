@@ -560,7 +560,7 @@ impl LibraryWorkspace {
         }
     }
 
-    pub(super) fn select_database(&mut self, db_id: Option<Uuid>, cx: &mut Context<Self>) {
+    pub(crate) fn select_database(&mut self, db_id: Option<Uuid>, cx: &mut Context<Self>) {
         if self.selected_database_id == db_id {
             return;
         }

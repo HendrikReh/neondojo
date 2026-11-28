@@ -695,6 +695,106 @@ async fn headless_row_clicks_route_paused_and_competition_to_play_and_normal_to_
 }
 
 #[gpui_kit::test]
+async fn new_match_picker_opens_the_paused_database_and_resumes_either_row(
+    cx: &mut gpui_kit::TestAppContext,
+) {
+    use crate::shell::{AppShell, AppView, WorkspaceId};
+    use std::{cell::Cell, rc::Rc};
+
+    let (window, shell) = cx.update(|cx| {
+        gpui_kit::init(cx);
+        configure_app(LocalUiState::default(), false, cx);
+        gpui_kit::open_window(WindowOptions::default(), cx, |window, cx| {
+            cx.new(|cx| AppShell::new(None, window, cx))
+        })
+        .unwrap()
+    });
+    let rows = [
+        (Uuid::new_v4(), Uuid::new_v4()),
+        (Uuid::new_v4(), Uuid::new_v4()),
+    ];
+    let resumed = Rc::new(Cell::new(None));
+
+    cx.update_window(window, |_, window, cx| {
+        window.render_frame(cx);
+        window.click("workspace-tab-library", cx);
+        let library = shell.read(cx).library_workspace().unwrap();
+        library.update(cx, |ws, cx| {
+            let matches = rows
+                .iter()
+                .enumerate()
+                .map(|(i, &(match_id, session_id))| {
+                    let mut m = sample_match(match_id, i as i64 + 1, PAUSED_MATCHES_DATABASE_ID);
+                    m.play_paused = true;
+                    m.play_session_id = Some(session_id);
+                    m
+                })
+                .collect();
+            ws.seed_test_data(
+                vec![sample_database(
+                    PAUSED_MATCHES_DATABASE_ID,
+                    "Paused Matches",
+                    true,
+                    false,
+                    2,
+                )],
+                matches,
+            );
+            cx.notify();
+        });
+        let observed = resumed.clone();
+        cx.subscribe(&library, move |_, event, _| {
+            if let WorkspaceEvent::OpenPlaySession {
+                session_id,
+                resume: true,
+            } = event
+            {
+                observed.set(Some(*session_id));
+            }
+        })
+        .detach();
+
+        window.render_frame(cx);
+        window.click("workspace-tab-play", cx);
+    })
+    .unwrap();
+    for (match_id, session_id) in rows {
+        cx.update_window(window, |_, window, cx| {
+            window.press("cmd-n", cx);
+            window.render_frame(cx);
+            window.click("play-setup-paused-matches", cx);
+        })
+        .unwrap();
+        cx.update_window(window, |_, window, cx| {
+            window.render_frame(cx);
+            assert_eq!(
+                shell.read(cx).active_view(),
+                AppView::Workspace(WorkspaceId::Library)
+            );
+            assert_eq!(
+                shell
+                    .read(cx)
+                    .library_workspace()
+                    .unwrap()
+                    .read(cx)
+                    .selected_database_id,
+                Some(PAUSED_MATCHES_DATABASE_ID)
+            );
+            window.click(
+                SharedString::from(format!("library-row-open-{match_id}")),
+                cx,
+            );
+        })
+        .unwrap();
+        assert_eq!(resumed.get(), Some(session_id));
+        assert_eq!(
+            cx.update(|cx| shell.read(cx).active_view()),
+            AppView::Workspace(WorkspaceId::Play)
+        );
+    }
+}
+
+#[gpui_kit::test]
 async fn headless_position_search_occurrence_columns_column_picker_and_import_paths(
     cx: &mut gpui_kit::TestAppContext,
 ) {
