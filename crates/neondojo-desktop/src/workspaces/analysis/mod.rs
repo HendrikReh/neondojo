@@ -34,8 +34,8 @@ use self::header::{HeaderCallbacks, HeaderProps, render_analysis_header};
 use self::jobs::{AnalysisJobEvent, MatchAnalysisJobEntity};
 use self::move_history::{MoveHistoryCallbacks, render_move_history_pane};
 use self::notes_cards::{
-    CardsCallbacks, CardsViewProps, NotesCallbacks, NotesViewProps, open_move_notes_dialog,
-    render_cards_inspector, render_notes_inspector, sync_note_comment,
+    CardsCallbacks, CardsViewProps, NoteEditorBinding, NotesCallbacks, NotesViewProps,
+    open_move_notes_dialog, render_cards_inspector, render_notes_inspector,
 };
 use self::state::{
     ActiveBoardTarget, AnalysisDetailTab, BoardWidthController, CheckerSubTab, CompareEngineSlot,
@@ -107,6 +107,7 @@ pub struct AnalysisWorkspace {
     board_view: Entity<BoardView>,
     tag_input: Entity<InputState>,
     comment_input: Entity<TextareaState>,
+    comment_binding: NoteEditorBinding,
     new_deck_input: Entity<InputState>,
     _comment_input_sub: Subscription,
 
@@ -270,13 +271,11 @@ impl AnalysisWorkspace {
         let notes_drafts = cx.new(|_| NotesDraftCache::default());
         cx.observe_in(&notes_drafts, window, |ws, drafts, window, cx| {
             if ws.active_tab == AnalysisDetailTab::Notes {
-                if sync_note_comment(
-                    &drafts,
-                    ws.current_note_target_key(),
-                    &ws.comment_input,
-                    window,
-                    cx,
-                ) {
+                let key = ws.current_note_target_key();
+                if ws
+                    .comment_binding
+                    .sync(&drafts, key, &ws.comment_input, window, cx)
+                {
                     ws.notes_validation_error = None;
                     ws.notes_saved_feedback = false;
                 }
@@ -285,16 +284,11 @@ impl AnalysisWorkspace {
         })
         .detach();
         let comment_input_sub = cx.subscribe(&comment_input, |this, inp, event, cx| {
-            if matches!(event, InputEvent::Change)
-                && let Some(key) = this.current_note_target_key()
-            {
-                let value = inp.read(cx).value().to_string();
-                let res = this
-                    .notes_drafts
-                    .as_mut(cx)
-                    .ensure_entry(key)
-                    .set_comment(value);
-                this.notes_validation_error = res.err();
+            if matches!(event, InputEvent::Change) {
+                this.notes_validation_error = this
+                    .comment_binding
+                    .record_input(&inp, &this.notes_drafts, cx)
+                    .err();
                 this.notes_saved_feedback = false;
                 cx.notify();
             }
@@ -311,6 +305,7 @@ impl AnalysisWorkspace {
             board_view,
             tag_input,
             comment_input,
+            comment_binding: NoteEditorBinding::default(),
             new_deck_input,
             _comment_input_sub: comment_input_sub,
             match_id: None,
@@ -1727,13 +1722,9 @@ impl AnalysisWorkspace {
     // ── Notes Persistence & 409 Conflict Preservation ────────────────────────
 
     pub(crate) fn load_current_note(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        sync_note_comment(
-            &self.notes_drafts,
-            self.current_note_target_key(),
-            &self.comment_input,
-            window,
-            cx,
-        );
+        let key = self.current_note_target_key();
+        self.comment_binding
+            .sync(&self.notes_drafts, key, &self.comment_input, window, cx);
         let Some(key) = self.current_note_target_key() else {
             return;
         };

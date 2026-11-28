@@ -198,7 +198,12 @@ pub fn render_notes_inspector(props: NotesViewProps<'_>, cx: &App) -> impl IntoE
         );
     }
 
-    if let Some(val_err) = props.validation_error {
+    let validation = if comment_len > MAX_COMMENT_CHARS {
+        Some(I18n::t(locale, "annotation", "commentTooLong"))
+    } else {
+        props.validation_error
+    };
+    if let Some(val_err) = validation {
         root = root.child(
             StatusBanner::new(
                 "notes-validation-error",
@@ -418,22 +423,58 @@ fn format_import_warning(w: &ImportWarning) -> String {
 
 // ── MoveNotesDialog Modal ────────────────────────────────────────────────────
 
-pub(super) fn sync_note_comment(
-    drafts: &Entity<NotesDraftCache>,
+/// The last target and value put in a particular editor. GPUI may deliver a
+/// cache notification before the Change event for text already in the field.
+#[derive(Default)]
+pub(super) struct NoteEditorBinding {
     target: Option<NoteTargetKey>,
-    input: &Entity<TextareaState>,
-    window: &mut Window,
-    cx: &mut App,
-) -> bool {
-    let comment = target
-        .and_then(|key| drafts.read(cx).get(key))
-        .map_or("", |d| d.comment.as_str());
-    if input.read(cx).value().as_ref() == comment {
-        return false;
+    text: String,
+}
+
+impl NoteEditorBinding {
+    pub(super) fn record_input(
+        &mut self,
+        input: &Entity<TextareaState>,
+        drafts: &Entity<NotesDraftCache>,
+        cx: &mut App,
+    ) -> Result<(), String> {
+        let value = input.read(cx).value();
+        if value.as_ref() != self.text {
+            self.text = value.to_string();
+            if let Some(target) = self.target {
+                return drafts
+                    .as_mut(cx)
+                    .ensure_entry(target)
+                    .set_comment(self.text.clone());
+            }
+        }
+        Ok(())
     }
-    let text = comment.to_owned();
-    input.update(cx, |field, cx| field.set_value(text, window, cx));
-    true
+
+    pub(super) fn sync(
+        &mut self,
+        drafts: &Entity<NotesDraftCache>,
+        target: Option<NoteTargetKey>,
+        input: &Entity<TextareaState>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> bool {
+        // Preserve pending input for its original target before following the cache.
+        // Over-limit drafts also belong in the cache; Save validates them again.
+        let _ = self.record_input(input, drafts, cx);
+        self.target = target;
+        let comment = target
+            .and_then(|key| drafts.read(cx).get(key))
+            .map_or("", |d| d.comment.as_str());
+        if self.text == comment {
+            return false;
+        }
+        self.text = comment.to_owned();
+        input.update(cx, |field, cx| {
+            field.set_value(self.text.clone(), window, cx)
+        });
+        true
+    }
 }
 
 struct MoveNotesDialogState {
@@ -445,6 +486,7 @@ struct MoveNotesDialogState {
     status_msg: Option<String>,
     board_view: Entity<BoardView>,
     comment_input: Entity<TextareaState>,
+    comment_binding: NoteEditorBinding,
     _comment_subscription: Subscription,
     tag_input: Entity<InputState>,
 }
@@ -490,7 +532,9 @@ pub fn open_move_notes_dialog(
             window,
             |m: &mut MoveNotesDialogState, drafts, window, cx| {
                 let key = m.moves.get(m.selected_idx).map(move_note_key);
-                if sync_note_comment(&drafts, key, &m.comment_input, window, cx) {
+                if m.comment_binding
+                    .sync(&drafts, key, &m.comment_input, window, cx)
+                {
                     m.status_msg = None;
                 }
                 cx.notify();
@@ -500,16 +544,8 @@ pub fn open_move_notes_dialog(
         let subscription = cx.subscribe(
             &comment_input,
             |m: &mut MoveNotesDialogState, field, event, cx| {
-                if matches!(event, InputEvent::Change)
-                    && let Some(mv) = m.moves.get(m.selected_idx)
-                {
-                    let comment = field.read(cx).value().to_string();
-                    m.status_msg = m
-                        .drafts
-                        .as_mut(cx)
-                        .ensure_entry(move_note_key(mv))
-                        .set_comment(comment)
-                        .err();
+                if matches!(event, InputEvent::Change) {
+                    m.status_msg = m.comment_binding.record_input(&field, &m.drafts, cx).err();
                     cx.notify();
                 }
             },
@@ -523,6 +559,7 @@ pub fn open_move_notes_dialog(
             status_msg: None,
             board_view,
             comment_input,
+            comment_binding: NoteEditorBinding::default(),
             _comment_subscription: subscription,
             tag_input,
         }
@@ -587,7 +624,13 @@ pub fn open_move_notes_dialog(
                 let draft = s.drafts.read(cx).get(key);
                 let tags = draft.map(|d| d.tags.clone()).unwrap_or_default();
                 let saving = s.saving;
-                let status = s.status_msg.clone();
+                let over_limit =
+                    s.comment_input.read(cx).value().chars().count() > MAX_COMMENT_CHARS;
+                let status = if over_limit {
+                    Some(I18n::t(current_locale(cx), "annotation", "commentTooLong").to_owned())
+                } else {
+                    s.status_msg.clone()
+                };
 
                 div()
                     .v_flex()
@@ -717,11 +760,7 @@ pub fn open_move_notes_dialog(
                                         if saving { "saving" } else { "save" },
                                     ))
                                     .primary()
-                                    .disabled(
-                                        saving
-                                            || s.comment_input.read(cx).value().chars().count()
-                                                > MAX_COMMENT_CHARS,
-                                    )
+                                    .disabled(saving || over_limit)
                                     .palette(p)
                                     .on_click(move |_, _w, cx| {
                                         save_move_note_from_dialog(&st_save, key, cx);
@@ -804,7 +843,10 @@ fn load_move_notes_selection(
     let key = move_note_key(&mv);
     let move_id = mv.id;
     let drafts = state.read(cx).drafts.clone();
-    sync_note_comment(&drafts, Some(key), &comment_input, window, cx);
+    state.update(cx, |m, cx| {
+        m.comment_binding
+            .sync(&drafts, Some(key), &comment_input, window, cx);
+    });
 
     let Some(facade) = cx
         .try_global::<DesktopAppContext>()
