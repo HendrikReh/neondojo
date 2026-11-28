@@ -30,7 +30,7 @@ Prioritize backgammon correctness, preservation of user data, database performan
   - `crates/neondojo-desktop/`: native macOS GPUI shell (`AppShell`), `TokioBridge`, `NeonTheme`, `Settings`, shared `review/`, 7 workspaces, and scoped `WKWebView` for third-party Anki cards
   - `backend/src/facade/`: typed in-process `BackendFacade` + push broadcast channels over `CoreRuntime`
   - `backend/src/api.rs`: REST, SSE, and OpenAPI
-  - `backend/src/backgammon/`: re-exports `neondojo_rules::backgammon`
+  - `backend/src/lib.rs`: re-exports `neondojo_rules::backgammon`
   - `backend/src/import/`: import formats, replay, and match validation
   - `backend/src/engine.rs` and `backend/src/match_analysis.rs`: isolated GNUbg processes and native analysis
   - `backend/src/engines/`: engine providers, capability probes, and NeonGammon sidecar (`worker.py`)

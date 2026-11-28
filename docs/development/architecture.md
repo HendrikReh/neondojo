@@ -10,7 +10,7 @@
 | [`crates/neondojo-i18n/`](../../crates/neondojo-i18n/) | Native EN/DE localization catalog (2,088 keys), ICU plural/variable formatter, live-retranslatable `AppError`, and locale-aware formatters |
 | [`crates/neondojo-board/`](../../crates/neondojo-board/) | GPU-accelerated GPUI `BoardView`, 9 built-in themes + direct Rust BGBlitz ZIP loader, `ThemeAtlasCache`, 60–120fps animation state, and `rodio` play audio |
 | [`crates/neondojo-desktop/`](../../crates/neondojo-desktop/) | Native macOS GPUI desktop shell (`AppShell`), `TokioBridge`, `NeonTheme` (6 palettes), `Settings`, shared `review/`, all 7 workspaces, and scoped `WKWebView` for third-party HTML/JS Anki cards |
-| [`backend/src/backgammon/`](../../backend/src/backgammon/) | Re-exports `neondojo_rules::backgammon` for backend callers |
+| [`backend/src/lib.rs`](../../backend/src/lib.rs) | Re-exports `neondojo_rules::backgammon` for backend callers |
 | [`backend/src/import/`](../../backend/src/import/) | Import formats, replay, and match validation. [`format.rs`](../../backend/src/import/format.rs) is the one list of match formats and of what differs between them |
 | [`backend/src/engine.rs`](../../backend/src/engine.rs), [`backend/src/match_analysis.rs`](../../backend/src/match_analysis.rs) | Isolated GNUbg processes and native checker and cube analysis       |
 | [`backend/src/engines/`](../../backend/src/engines/) | Engine providers, capability checks, and NeonGammon sidecar (`worker.py`) |
